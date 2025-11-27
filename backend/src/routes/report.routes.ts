@@ -1,0 +1,56 @@
+import express from 'express';
+import {
+  getReports,
+  getReport,
+  createReport,
+  updateReport,
+  deleteReport,
+  generateReport,
+  scheduleReport,
+  sendReport,
+  getReportTemplates,
+  createReportTemplate,
+  updateReportTemplate,
+  deleteReportTemplate,
+  getReportHistory,
+  getReportStats
+} from '../controllers/report.controller';
+import { protect, authorize } from '../middleware/auth';
+import { UserRole } from '../models/User';
+
+const router = express.Router();
+
+// Apply protection to all routes
+router.use(protect);
+
+// Admin and Manager routes
+router.use(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]));
+
+router.route('/')
+  .get(getReports)
+  .post(createReport);
+
+router.route('/:id')
+  .get(getReport)
+  .put(updateReport)
+  .delete(deleteReport);
+
+router.post('/:id/generate', generateReport);
+router.post('/:id/schedule', scheduleReport);
+router.post('/:id/send', sendReport);
+
+router.get('/:id/history', getReportHistory);
+
+// Report Templates
+router.route('/templates')
+  .get(getReportTemplates)
+  .post(createReportTemplate);
+
+router.route('/templates/:id')
+  .put(updateReportTemplate)
+  .delete(deleteReportTemplate);
+
+// Statistics
+router.get('/stats/overview', getReportStats);
+
+export default router;
