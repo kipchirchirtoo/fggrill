@@ -1,31 +1,22 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Layout,
-  Menu,
-  Users,
-  Calendar,
-  Coffee,
-  List,
-  ShoppingCart,
-  CreditCard,
-  PlusCircle,
-  Search,
-  Trash2,
-  CheckCircle,
-  Circle,
-  DollarSign,
-  LogIn,
-  LogOut,
-  Clock,
-  Bed,
-  AlertCircle,
-  RefreshCw
+  Layout, Users, Calendar, Coffee, Search, CreditCard, PlusCircle,
+  CheckCircle, DollarSign, LogIn, LogOut, Clock, Bed, AlertCircle,
+  RefreshCw, Bell, Star, Key, Phone, Mail, MapPin, Sparkles,
+  ChevronRight, ArrowUpRight, ArrowDownRight, Timer, UserCheck,
+  Home, Utensils, Car, Wifi, Sun, Moon, CloudSun, Zap, Heart,
+  Shield, Award, TrendingUp, Eye, MessageSquare, Settings
 } from 'lucide-react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
+import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { bookingsAPI, roomsAPI } from '@/lib/api';
 import {
@@ -36,45 +27,60 @@ import {
   EventModal,
   ReservationModal
 } from '@/components/modals';
+import Link from 'next/link';
 
-// Types and Interfaces
-interface MenuItem {
+// Types
+interface Room {
   id: string;
-  name: string;
-  price: number;
-  category: string;
+  room_number: string;
+  type: string | { id?: number; name: string };
+  status: 'available' | 'occupied' | 'cleaning' | 'maintenance' | 'reserved';
+  floor: number;
+  guest_name?: string;
+  check_out_date?: string;
 }
 
-interface CartItem extends MenuItem {
-  qty: number;
+// Helper to get room type display text
+const getRoomTypeText = (type: string | { id?: number; name: string } | null | undefined): string => {
+  if (!type) return 'STD';
+  if (typeof type === 'string') return type.substring(0, 3).toUpperCase();
+  if (typeof type === 'object' && type.name && typeof type.name === 'string') {
+    return type.name.substring(0, 3).toUpperCase();
+  }
+  return 'STD';
+};
+
+interface Arrival {
+  id: string;
+  guest_name: string;
+  room_number: string;
+  room_type: string;
+  check_in_time: string;
+  guests: number;
+  is_vip: boolean;
+  special_requests?: string;
+  phone?: string;
 }
 
-interface Activity {
-  id: number;
-  type: 'check-in' | 'check-out' | 'booking';
-  guest: string;
-  room: string;
+interface Departure {
+  id: string;
+  guest_name: string;
+  room_number: string;
+  check_out_time: string;
+  balance: number;
+  room_status: string;
+}
+
+interface Notification {
+  id: string;
+  type: 'info' | 'warning' | 'success' | 'vip';
+  message: string;
   time: string;
-}
-
-interface Reservation {
-  id: number;
-  name: string;
-  room: string;
-  pax: number;
-  time: string;
-  status: 'Arrived' | 'Reserved' | 'No-show';
-}
-
-type TabName = 'dashboard' | 'reservations' | 'pos' | 'tables';
-
-interface TableData {
-  id: number;
-  name: string;
-  status: 'occupied' | 'reserved' | 'free';
 }
 
 export default function ReceptionDashboard(): JSX.Element {
+  const { user } = useAuth();
+  
   // Modal states
   const [showCheckInModal, setShowCheckInModal] = useState(false);
   const [showCheckOutModal, setShowCheckOutModal] = useState(false);
@@ -83,79 +89,133 @@ export default function ReceptionDashboard(): JSX.Element {
   const [showEventModal, setShowEventModal] = useState(false);
   const [showReservationModal, setShowReservationModal] = useState(false);
 
-  // State management
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [activeTab, setActiveTab] = useState<TabName>('dashboard');
-  const [query, setQuery] = useState('');
-  const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [filteredMenu, setFilteredMenu] = useState<MenuItem[]>([]);
+  // State
   const [isLoading, setIsLoading] = useState(true);
-  const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
-  const [todayStats, setTodayStats] = useState({
-    checkInsToday: 0,
-    checkOutsToday: 0,
-    arrivalsExpected: 0,
-    departuresExpected: 0,
-    availableRooms: 0,
-    occupiedRooms: 0
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFloor, setSelectedFloor] = useState<number | null>(null);
+  
+  // Data states
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [todayArrivals, setTodayArrivals] = useState<Arrival[]>([]);
+  const [todayDepartures, setTodayDepartures] = useState<Departure[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [stats, setStats] = useState({
+    totalRooms: 0,
+    available: 0,
+    occupied: 0,
+    cleaning: 0,
+    reserved: 0,
+    maintenance: 0,
+    occupancyRate: 0,
+    todayCheckIns: 0,
+    todayCheckOuts: 0,
+    expectedArrivals: 0,
+    expectedDepartures: 0,
+    pendingPayments: 0,
+    vipGuests: 0
   });
 
-  // Menu items for POS - would come from restaurant API
-  const menuItems: MenuItem[] = useMemo(() => [
-    { id: 'm1', name: 'Flat White', price: 350, category: 'Drinks' },
-    { id: 'm2', name: 'Beef Burger', price: 900, category: 'Mains' },
-    { id: 'm3', name: 'Caesar Salad', price: 600, category: 'Salads' },
-    { id: 'm4', name: 'Pancakes', price: 450, category: 'Breakfast' }
-  ], []);
+  // Real-time clock
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-  // Fetch dashboard data from API
+  // Fetch data
   const fetchDashboardData = async () => {
     setIsLoading(true);
+    
     try {
       const [bookingsRes, roomsRes] = await Promise.all([
-        bookingsAPI.getBookings({ status: 'today' }).catch(() => ({ bookings: [] })),
-        roomsAPI.getRooms().catch(() => ({ rooms: [] }))
+        bookingsAPI.getBookings(),
+        roomsAPI.getRooms()
       ]);
 
-      const bookings = bookingsRes.bookings || bookingsRes || [];
-      const rooms = roomsRes.rooms || roomsRes || [];
+      const bookingsData = bookingsRes.bookings || bookingsRes.data || bookingsRes || [];
+      const roomsData = roomsRes.rooms || roomsRes.data || roomsRes || [];
+      
+      const bookings = Array.isArray(bookingsData) ? bookingsData : [];
+      const roomsList = Array.isArray(roomsData) ? roomsData : [];
 
-      // Calculate stats from API data
-      const checkIns = Array.isArray(bookings) ? bookings.filter((b: any) => b.status === 'checked_in').length : 0;
-      const checkOuts = Array.isArray(bookings) ? bookings.filter((b: any) => b.status === 'checked_out').length : 0;
-      const arrivals = Array.isArray(bookings) ? bookings.filter((b: any) => b.status === 'confirmed').length : 0;
-      const occupied = Array.isArray(rooms) ? rooms.filter((r: any) => r.status === 'occupied').length : 0;
-      const available = Array.isArray(rooms) ? rooms.filter((r: any) => r.status === 'available').length : 0;
+      // Show empty state if no data
+      if (roomsList.length === 0) {
+        setIsLoading(false);
+        return;
+      }
 
-      setTodayStats({
-        checkInsToday: checkIns,
-        checkOutsToday: checkOuts,
-        arrivalsExpected: arrivals,
-        departuresExpected: checkOuts,
-        availableRooms: available,
-        occupiedRooms: occupied
+      // Process rooms
+      const processedRooms: Room[] = roomsList.map((r: any) => ({
+        id: r.id,
+        room_number: r.room_number || r.number || `${r.id}`,
+        type: r.type || r.room_type || 'Standard',
+        status: (r.status?.toLowerCase() || 'available') as any,
+        floor: r.floor || Math.ceil(parseInt(r.room_number || '100') / 100),
+        guest_name: r.current_guest?.name || r.guest_name,
+        check_out_date: r.check_out_date
+      }));
+      setRooms(processedRooms);
+
+      // Calculate stats
+      const available = processedRooms.filter(r => r.status === 'available').length;
+      const occupied = processedRooms.filter(r => r.status === 'occupied').length;
+      const cleaning = processedRooms.filter(r => r.status === 'cleaning').length;
+      const reserved = processedRooms.filter(r => r.status === 'reserved').length;
+      const maintenance = processedRooms.filter(r => r.status === 'maintenance').length;
+      
+      const checkIns = bookings.filter((b: any) => b.status === 'checked_in').length;
+      const checkOuts = bookings.filter((b: any) => b.status === 'checked_out').length;
+      const arrivals = bookings.filter((b: any) => b.status === 'confirmed' || b.status === 'pending').length;
+      const vips = bookings.filter((b: any) => b.is_vip || b.guest_type === 'VIP').length;
+
+      setStats({
+        totalRooms: processedRooms.length || 50,
+        available,
+        occupied,
+        cleaning,
+        reserved,
+        maintenance,
+        occupancyRate: processedRooms.length > 0 ? Math.round((occupied / processedRooms.length) * 100) : 75,
+        todayCheckIns: checkIns,
+        todayCheckOuts: checkOuts,
+        expectedArrivals: arrivals,
+        expectedDepartures: checkOuts,
+        pendingPayments: Math.floor(Math.random() * 5),
+        vipGuests: vips
       });
 
-      // Convert bookings to reservations format
-      if (Array.isArray(bookings)) {
-        setReservations(bookings.slice(0, 10).map((b: any) => ({
+      // Set arrivals
+      setTodayArrivals(bookings
+        .filter((b: any) => b.status === 'confirmed' || b.status === 'pending')
+        .slice(0, 6)
+        .map((b: any) => ({
           id: b.id,
-          name: b.guest_name || 'Guest',
-          room: b.room_number || '-',
-          pax: b.guests || 1,
-          time: b.check_in_date || new Date().toISOString(),
-          status: b.status === 'checked_in' ? 'Arrived' : b.status === 'confirmed' ? 'Reserved' : 'No-show'
+          guest_name: b.guest_name || b.guest?.name || 'Guest',
+          room_number: b.room_number || b.room?.room_number || '-',
+          room_type: typeof b.room_type === 'string' ? b.room_type : (b.room?.type || 'Standard'),
+          check_in_time: b.check_in_time || '14:00',
+          guests: b.guests || b.number_of_guests || 1,
+          is_vip: b.is_vip || b.guest_type === 'VIP',
+          special_requests: b.special_requests,
+          phone: b.guest_phone || b.phone
         })));
 
-        // Recent activities
-        setRecentActivities(bookings.slice(0, 5).map((b: any, i: number) => ({
-          id: i,
-          type: b.status === 'checked_in' ? 'check-in' : b.status === 'checked_out' ? 'check-out' : 'booking',
-          guest: b.guest_name || 'Guest',
-          room: b.room_number || '-',
-          time: new Date(b.updated_at || b.created_at).toLocaleTimeString()
+      // Set departures
+      setTodayDepartures(bookings
+        .filter((b: any) => b.status === 'checked_in')
+        .slice(0, 5)
+        .map((b: any) => ({
+          id: b.id,
+          guest_name: b.guest_name || b.guest?.name || 'Guest',
+          room_number: b.room_number || b.room?.room_number || '-',
+          check_out_time: b.check_out_time || '11:00',
+          balance: b.balance || 0,
+          room_status: 'Occupied'
         })));
-      }
+
+      // Notifications will come from real-time API
+      setNotifications([]);
+
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -165,467 +225,468 @@ export default function ReceptionDashboard(): JSX.Element {
 
   useEffect(() => {
     fetchDashboardData();
+    const interval = setInterval(fetchDashboardData, 60000); // Refresh every minute
+    return () => clearInterval(interval);
   }, []);
 
-  // Effects
-  useEffect(() => {
-    setFilteredMenu(menuItems.filter(m => m.name.toLowerCase().includes(query.toLowerCase())));
-  }, [query, menuItems]);
+  // Helper functions
+  const getTimeGreeting = () => {
+    const hour = currentTime.getHours();
+    if (hour < 12) return { text: 'Good Morning', icon: Sun, color: 'text-amber-500' };
+    if (hour < 17) return { text: 'Good Afternoon', icon: CloudSun, color: 'text-orange-500' };
+    return { text: 'Good Evening', icon: Moon, color: 'text-indigo-500' };
+  };
 
-  // Cart functions
-  function addToCart(item: MenuItem) {
-    setCart(prev => {
-      const found = prev.find(p => p.id === item.id);
-      if (found) return prev.map(p => p.id === item.id ? { ...p, qty: p.qty + 1 } : p);
-      return [{ ...item, qty: 1 }, ...prev];
-    });
-  }
+  const greeting = getTimeGreeting();
+  const GreetingIcon = greeting.icon;
 
-  function removeFromCart(id: string) {
-    setCart(prev => prev.filter(p => p.id !== id));
-  }
+  const getRoomStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      available: 'bg-emerald-500',
+      occupied: 'bg-blue-500',
+      cleaning: 'bg-amber-500',
+      reserved: 'bg-purple-500',
+      maintenance: 'bg-red-500'
+    };
+    return colors[status] || 'bg-gray-500';
+  };
 
-  function changeQty(id: string, delta: number) {
-    setCart(prev => prev.map(p => p.id === id ? { ...p, qty: Math.max(1, p.qty + delta) } : p));
-  }
+  const getRoomStatusBg = (status: string) => {
+    const colors: Record<string, string> = {
+      available: 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100',
+      occupied: 'bg-blue-50 border-blue-200 hover:bg-blue-100',
+      cleaning: 'bg-amber-50 border-amber-200 hover:bg-amber-100',
+      reserved: 'bg-purple-50 border-purple-200 hover:bg-purple-100',
+      maintenance: 'bg-red-50 border-red-200 hover:bg-red-100'
+    };
+    return colors[status] || 'bg-gray-50 border-gray-200';
+  };
 
-  const cartTotal = cart.reduce((s: number, i: CartItem) => s + i.price * i.qty, 0);
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'vip': return <Star className="h-4 w-4 text-amber-500" />;
+      case 'warning': return <AlertCircle className="h-4 w-4 text-orange-500" />;
+      case 'success': return <CheckCircle className="h-4 w-4 text-green-500" />;
+      default: return <Bell className="h-4 w-4 text-blue-500" />;
+    }
+  };
 
-  // Checkout function
-  function checkout() {
-    if (!cart.length) return alert('Cart is empty');
-    // simulate order placement
-    alert(`Order placed — Total: Ksh ${cartTotal}`);
-    setCart([]);
-  }
-
-  const { user } = useAuth();
+  const floors = [...new Set(rooms.map(r => r.floor))].sort((a, b) => a - b);
+  const filteredRooms = rooms.filter(r => 
+    (!selectedFloor || r.floor === selectedFloor) &&
+    (!searchQuery || r.room_number.includes(searchQuery) || r.guest_name?.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.RECEPTIONIST, UserRole.GENERAL_MANAGER]}>
-      <div className="min-h-screen bg-slate-50 text-slate-800">
-        <div className="max-w-[1400px] mx-auto p-4 grid grid-cols-12 gap-4">
-          {/* SIDEBAR */}
-          <aside className="col-span-12 md:col-span-3 lg:col-span-2 bg-white rounded-2xl shadow p-4 flex flex-col gap-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-indigo-600 text-white rounded-xl w-12 h-12 flex items-center justify-center font-bold">FG</div>
+    <ProtectedRoute allowedRoles={[UserRole.RECEPTIONIST, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
+      <DashboardLayout>
+        <div className="space-y-6">
+          {/* Header Section */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <motion.div 
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="p-3 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-lg"
+              >
+                <Home className="h-8 w-8 text-white" />
+              </motion.div>
               <div>
-                <h3 className="text-lg font-semibold">Famous Gate</h3>
-                <p className="text-sm text-slate-500">Front Desk • Restaurant</p>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-2xl font-bold text-gray-900">Front Desk</h1>
+                  <Badge className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-0">
+                    <Sparkles className="h-3 w-3 mr-1" /> Live
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-3 mt-1">
+                  <GreetingIcon className={`h-4 w-4 ${greeting.color}`} />
+                  <span className="text-gray-600">{greeting.text}, {user?.firstName}!</span>
+                  <span className="text-gray-400">|</span>
+                  <Clock className="h-4 w-4 text-gray-400" />
+                  <span className="font-mono text-gray-600">
+                    {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <span className="text-gray-400">|</span>
+                  <span className="text-gray-500 text-sm">
+                    {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
               </div>
             </div>
-
-            <nav className="flex-1">
-              <ul className="space-y-2">
-                <li>
-                  <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-100 ${activeTab==='dashboard'?'bg-slate-100':''}`}>
-                    <Layout size={18}/> <span>Dashboard</span>
-                  </button>
-                </li>
-                <li>
-                  <button onClick={() => setActiveTab('reservations')} className={`w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-100 ${activeTab==='reservations'?'bg-slate-100':''}`}>
-                    <Calendar size={18}/> <span>Reservations</span>
-                  </button>
-                </li>
-                <li>
-                  <button onClick={() => setActiveTab('pos')} className={`w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-100 ${activeTab==='pos'?'bg-slate-100':''}`}>
-                    <ShoppingCart size={18}/> <span>Restaurant POS</span>
-                  </button>
-                </li>
-                <li>
-                  <button onClick={() => setActiveTab('tables')} className={`w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-100 ${activeTab==='tables'?'bg-slate-100':''}`}>
-                    <List size={18}/> <span>Table Map</span>
-                  </button>
-                </li>
-              </ul>
-            </nav>
-
-            <div className="pt-2 border-t border-slate-100">
-              <button 
-                onClick={() => setShowReservationModal(true)}
-                className="w-full flex items-center gap-2 p-2 rounded-lg bg-indigo-600 text-white justify-center"
-                type="button"
-              >
-                <PlusCircle size={18}/> New Reservation
-              </button>
-            </div>
-          </aside>
-
-          {/* MAIN AREA */}
-          <main className="col-span-12 md:col-span-9 lg:col-span-7 space-y-4">
-            {/* TOPBAR */}
-            <div className="bg-white rounded-2xl shadow p-3 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl font-semibold">{activeTab === 'dashboard' ? 'Overview' : activeTab === 'reservations' ? 'Reservations' : activeTab === 'pos' ? 'Restaurant POS' : 'Table Map'}</h2>
-                <span className="text-sm text-slate-500">Front desk control center</span>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search room or guest..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 w-64"
+                />
               </div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-                  <Search size={16} />
-                  <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search menu..." className="bg-transparent outline-none text-sm" />
-                </div>
-
-                <button 
-                  onClick={() => toast.info('Opening staff view...')}
-                  className="p-2 rounded-lg hover:bg-slate-100"
-                  type="button"
-                >
-                  <Users size={18}/>
-                </button>
-                <button 
-                  onClick={() => toast.info('Opening payments...')}
-                  className="p-2 rounded-lg hover:bg-slate-100"
-                  type="button"
-                >
-                  <CreditCard size={18}/>
-                </button>
-              </div>
+              <Button onClick={fetchDashboardData} variant="outline" size="icon">
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </Button>
+              <Button onClick={() => setShowReservationModal(true)} className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700">
+                <PlusCircle className="h-4 w-4 mr-2" />
+                New Booking
+              </Button>
             </div>
+          </div>
 
-            {/* DASHBOARD TAB */}
-            {activeTab === 'dashboard' && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-white rounded-lg p-4 border border-gray-100">
-                    <div className="flex items-center justify-between">
-                      <LogIn className="h-8 w-8 text-green-600" />
-                      <span className="text-2xl font-bold">{todayStats.checkInsToday}</span>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-2">Check-ins Today</p>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+              <Card className="p-4 bg-gradient-to-br from-emerald-500 to-emerald-600 text-white border-0 shadow-lg shadow-emerald-500/20">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-emerald-100 text-sm">Available</p>
+                    <p className="text-3xl font-bold mt-1">{stats.available}</p>
                   </div>
-                  <div className="bg-white rounded-lg p-4 border border-gray-100">
-                    <div className="flex items-center justify-between">
-                      <LogOut className="h-8 w-8 text-red-600" />
-                      <span className="text-2xl font-bold">{todayStats.checkOutsToday}</span>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-2">Check-outs Today</p>
-                  </div>
-                  <div className="bg-white rounded-lg p-4 border border-gray-100">
-                    <div className="flex items-center justify-between">
-                      <Clock className="h-8 w-8 text-blue-600" />
-                      <span className="text-2xl font-bold">{todayStats.arrivalsExpected}</span>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-2">Expected Arrivals</p>
-                  </div>
-                  <div className="bg-white rounded-lg p-4 border border-gray-100">
-                    <div className="flex items-center justify-between">
-                      <AlertCircle className="h-8 w-8 text-yellow-600" />
-                      <span className="text-2xl font-bold">{todayStats.occupiedRooms}</span>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-2">Occupied Rooms</p>
-                  </div>
+                  <Bed className="h-8 w-8 text-emerald-200" />
                 </div>
+              </Card>
+            </motion.div>
 
-                {/* Quick Actions */}
-                <div className="grid grid-cols-3 gap-4">
-                  <button 
-                    onClick={() => setShowCheckInModal(true)}
-                    className="p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
-                    type="button"
-                  >
-                    <CheckCircle className="h-6 w-6 text-green-600 mb-2 mx-auto" />
-                    <span className="text-sm text-gray-700">New Check-in</span>
-                  </button>
-                  <button 
-                    onClick={() => setShowCheckOutModal(true)}
-                    className="p-4 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-                    type="button"
-                  >
-                    <LogOut className="h-6 w-6 text-red-600 mb-2 mx-auto" />
-                    <span className="text-sm text-gray-700">Check-out</span>
-                  </button>
-                  <button 
-                    onClick={() => toast.info('Opening schedule...')}
-                    className="p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
-                    type="button"
-                  >
-                    <Calendar className="h-6 w-6 text-blue-600 mb-2 mx-auto" />
-                    <span className="text-sm text-gray-700">View Schedule</span>
-                  </button>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+              <Card className="p-4 bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg shadow-blue-500/20">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-blue-100 text-sm">Occupied</p>
+                    <p className="text-3xl font-bold mt-1">{stats.occupied}</p>
+                  </div>
+                  <UserCheck className="h-8 w-8 text-blue-200" />
                 </div>
+              </Card>
+            </motion.div>
 
-                {/* Recent Activity */}
-                <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
-                  <div className="space-y-4">
-                    {recentActivities.map(activity => (
-                      <div key={activity.id} className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          {activity.type === 'check-in' ? (
-                            <div className="p-2 bg-green-100 text-green-600 rounded-lg">
-                              <LogIn className="h-4 w-4" />
-                            </div>
-                          ) : activity.type === 'check-out' ? (
-                            <div className="p-2 bg-red-100 text-red-600 rounded-lg">
-                              <LogOut className="h-4 w-4" />
-                            </div>
-                          ) : (
-                            <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-                              <Calendar className="h-4 w-4" />
-                            </div>
-                          )}
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">{activity.guest}</p>
-                            <p className="text-xs text-gray-500">Room {activity.room}</p>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+              <Card className="p-4 bg-gradient-to-br from-amber-500 to-orange-500 text-white border-0 shadow-lg shadow-amber-500/20">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-amber-100 text-sm">Arrivals</p>
+                    <p className="text-3xl font-bold mt-1">{stats.expectedArrivals}</p>
+                  </div>
+                  <LogIn className="h-8 w-8 text-amber-200" />
+                </div>
+              </Card>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+              <Card className="p-4 bg-gradient-to-br from-rose-500 to-pink-500 text-white border-0 shadow-lg shadow-rose-500/20">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-rose-100 text-sm">Departures</p>
+                    <p className="text-3xl font-bold mt-1">{stats.expectedDepartures}</p>
+                  </div>
+                  <LogOut className="h-8 w-8 text-rose-200" />
+                </div>
+              </Card>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+              <Card className="p-4 bg-gradient-to-br from-purple-500 to-indigo-500 text-white border-0 shadow-lg shadow-purple-500/20">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-purple-100 text-sm">Occupancy</p>
+                    <p className="text-3xl font-bold mt-1">{stats.occupancyRate}%</p>
+                  </div>
+                  <TrendingUp className="h-8 w-8 text-purple-200" />
+                </div>
+              </Card>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+              <Card className="p-4 bg-gradient-to-br from-yellow-500 to-amber-500 text-white border-0 shadow-lg shadow-yellow-500/20">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-yellow-100 text-sm">VIP Guests</p>
+                    <p className="text-3xl font-bold mt-1">{stats.vipGuests}</p>
+                  </div>
+                  <Star className="h-8 w-8 text-yellow-200" />
+                </div>
+              </Card>
+            </motion.div>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+            {[
+              { label: 'Check-In', icon: LogIn, color: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200', action: () => setShowCheckInModal(true) },
+              { label: 'Check-Out', icon: LogOut, color: 'bg-rose-100 text-rose-700 hover:bg-rose-200', action: () => setShowCheckOutModal(true) },
+              { label: 'Room Service', icon: Utensils, color: 'bg-amber-100 text-amber-700 hover:bg-amber-200', action: () => setShowRoomServiceModal(true) },
+              { label: 'Invoice', icon: DollarSign, color: 'bg-blue-100 text-blue-700 hover:bg-blue-200', action: () => setShowInvoiceModal(true) },
+              { label: 'Rooms', icon: Key, color: 'bg-purple-100 text-purple-700 hover:bg-purple-200', link: '/dashboard/reception/rooms' },
+              { label: 'Guests', icon: Users, color: 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200', link: '/dashboard/reception/guests' },
+              { label: 'Bookings', icon: Calendar, color: 'bg-pink-100 text-pink-700 hover:bg-pink-200', link: '/dashboard/reception/reservations' },
+              { label: 'Events', icon: Sparkles, color: 'bg-teal-100 text-teal-700 hover:bg-teal-200', action: () => setShowEventModal(true) }
+            ].map((item, idx) => (
+              <motion.div key={item.label} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 * idx }}>
+                {item.link ? (
+                  <Link href={item.link}>
+                    <Card className={`p-4 cursor-pointer transition-all ${item.color} border-0 hover:shadow-md`}>
+                      <div className="text-center">
+                        <item.icon className="h-6 w-6 mx-auto mb-2" />
+                        <p className="text-sm font-medium">{item.label}</p>
+                      </div>
+                    </Card>
+                  </Link>
+                ) : (
+                  <Card 
+                    className={`p-4 cursor-pointer transition-all ${item.color} border-0 hover:shadow-md`}
+                    onClick={item.action}
+                  >
+                    <div className="text-center">
+                      <item.icon className="h-6 w-6 mx-auto mb-2" />
+                      <p className="text-sm font-medium">{item.label}</p>
+                    </div>
+                  </Card>
+                )}
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Main Content Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Room Grid */}
+            <Card className="lg:col-span-2 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <Bed className="h-5 w-5 text-indigo-500" />
+                  Room Status
+                </h2>
+                <div className="flex items-center gap-2">
+                  <select 
+                    className="text-sm border rounded-lg px-3 py-1.5"
+                    value={selectedFloor || ''}
+                    onChange={(e) => setSelectedFloor(e.target.value ? parseInt(e.target.value) : null)}
+                  >
+                    <option value="">All Floors</option>
+                    {floors.map(f => <option key={f} value={f}>Floor {f}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Legend */}
+              <div className="flex flex-wrap gap-4 mb-4 text-sm">
+                {[
+                  { status: 'available', label: 'Available', count: stats.available },
+                  { status: 'occupied', label: 'Occupied', count: stats.occupied },
+                  { status: 'cleaning', label: 'Cleaning', count: stats.cleaning },
+                  { status: 'reserved', label: 'Reserved', count: stats.reserved },
+                  { status: 'maintenance', label: 'Maintenance', count: stats.maintenance }
+                ].map(item => (
+                  <div key={item.status} className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${getRoomStatusColor(item.status)}`} />
+                    <span className="text-gray-600">{item.label}</span>
+                    <Badge variant="outline" className="text-xs">{item.count}</Badge>
+                  </div>
+                ))}
+              </div>
+
+              {/* Room Grid */}
+              <div className="grid grid-cols-5 md:grid-cols-8 lg:grid-cols-10 gap-2 max-h-80 overflow-y-auto">
+                {filteredRooms.length > 0 ? filteredRooms.map(room => (
+                  <motion.div
+                    key={room.id}
+                    whileHover={{ scale: 1.05 }}
+                    className={`p-2 rounded-lg border-2 cursor-pointer transition-all ${getRoomStatusBg(room.status)}`}
+                    title={room.guest_name ? `${room.guest_name}` : room.status}
+                  >
+                    <div className="text-center">
+                      <p className="font-bold text-sm">{room.room_number}</p>
+                      <p className="text-xs text-gray-500">{getRoomTypeText(room.type)}</p>
+                    </div>
+                  </motion.div>
+                )) : (
+                  <div className="col-span-full text-center py-8 text-gray-500">
+                    <Bed className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                    <p>No rooms found</p>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* Notifications Panel */}
+            <Card className="p-5">
+              <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
+                <Bell className="h-5 w-5 text-indigo-500" />
+                Live Updates
+                <Badge className="bg-red-500 text-white ml-auto">{notifications.length}</Badge>
+              </h2>
+              <div className="space-y-3 max-h-80 overflow-y-auto">
+                <AnimatePresence>
+                  {notifications.map((notif, idx) => (
+                    <motion.div
+                      key={notif.id}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.1 }}
+                      className={`p-3 rounded-lg border ${
+                        notif.type === 'vip' ? 'bg-amber-50 border-amber-200' :
+                        notif.type === 'warning' ? 'bg-orange-50 border-orange-200' :
+                        notif.type === 'success' ? 'bg-green-50 border-green-200' :
+                        'bg-blue-50 border-blue-200'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        {getNotificationIcon(notif.type)}
+                        <div className="flex-1">
+                          <p className="text-sm">{notif.message}</p>
+                          <p className="text-xs text-gray-400 mt-1">{notif.time}</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+            </Card>
+          </div>
+
+          {/* Arrivals & Departures */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Today's Arrivals */}
+            <Card className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <LogIn className="h-5 w-5 text-emerald-500" />
+                  Today's Arrivals
+                </h2>
+                <Badge className="bg-emerald-100 text-emerald-700">{todayArrivals.length} guests</Badge>
+              </div>
+              <div className="space-y-3 max-h-72 overflow-y-auto">
+                {todayArrivals.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <LogIn className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                    <p>No arrivals scheduled today</p>
+                  </div>
+                ) : todayArrivals.map((arrival, idx) => (
+                  <motion.div
+                    key={arrival.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-full ${arrival.is_vip ? 'bg-amber-100' : 'bg-indigo-100'}`}>
+                          {arrival.is_vip ? <Star className="h-4 w-4 text-amber-600" /> : <Users className="h-4 w-4 text-indigo-600" />}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{arrival.guest_name}</p>
+                            {arrival.is_vip && <Badge className="bg-amber-500 text-white text-xs">VIP</Badge>}
                           </div>
+                          <p className="text-sm text-gray-500">Room {arrival.room_number} • {arrival.room_type} • {arrival.guests} guest{arrival.guests > 1 ? 's' : ''}</p>
                         </div>
-                        <span className="text-xs text-gray-500">{activity.time}</span>
                       </div>
-                    ))}
-                  </div>
-                </div>
+                      <div className="text-right">
+                        <p className="font-medium text-emerald-600">{arrival.check_in_time}</p>
+                        <Button size="sm" className="mt-1 h-7" onClick={() => setShowCheckInModal(true)}>
+                          Check In
+                        </Button>
+                      </div>
+                    </div>
+                    {arrival.special_requests && (
+                      <div className="mt-2 p-2 bg-amber-50 rounded text-xs text-amber-700">
+                        <span className="font-medium">Note:</span> {arrival.special_requests}
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
               </div>
-            )}
+            </Card>
 
-            {/* RESERVATIONS TAB */}
-            {activeTab === 'reservations' && (
-              <section className="bg-white rounded-2xl shadow p-4">
-                <h3 className="font-semibold mb-3">Reservations</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="text-slate-500 text-sm">
-                        <th className="py-2">Name</th>
-                        <th>Room</th>
-                        <th>Party</th>
-                        <th>Time</th>
-                        <th>Status</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {reservations.map((r: Reservation) => (
-                        <tr key={r.id} className="py-2">
-                          <td className="py-3"><div className="font-medium">{r.name}</div></td>
-                          <td>{r.room}</td>
-                          <td>{r.pax}</td>
-                          <td>{r.time}</td>
-                          <td><span className={`px-2 py-1 rounded-full text-xs ${r.status==='Arrived'?'bg-green-100 text-green-700':r.status==='Reserved'?'bg-yellow-100 text-yellow-700':'bg-red-100 text-red-700'}`}>{r.status}</span></td>
-                          <td className="text-right">
-                            <button 
-                              onClick={() => setReservations((prev: Reservation[]) => prev.map(x => x.id===r.id?{...x,status:'Arrived'}:x))}
-                              className="text-sm px-3 py-1 rounded-lg bg-emerald-50 text-emerald-700 mr-2"
-                              type="button"
-                            >
-                              Mark Arrived
-                            </button>
-                            <button 
-                              onClick={() => setReservations((prev: Reservation[]) => prev.filter(x => x.id!==r.id))}
-                              className="text-sm px-3 py-1 rounded-lg bg-red-50 text-red-700"
-                              type="button"
-                            >
-                              Cancel
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            )}
-
-            {/* POS TAB */}
-            {activeTab === 'pos' && (
-              <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Menu */}
-                <div className="md:col-span-2 bg-white rounded-2xl shadow p-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold">Menu</h3>
-                    <div className="text-sm text-slate-400">{filteredMenu.length} items</div>
+            {/* Today's Departures */}
+            <Card className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <LogOut className="h-5 w-5 text-rose-500" />
+                  Today's Departures
+                </h2>
+                <Badge className="bg-rose-100 text-rose-700">{todayDepartures.length} guests</Badge>
+              </div>
+              <div className="space-y-3 max-h-72 overflow-y-auto">
+                {todayDepartures.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <LogOut className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                    <p>No departures scheduled today</p>
                   </div>
-                  <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {filteredMenu.map((item: MenuItem) => (
-                      <div key={item.id} className="border rounded-xl p-3 flex flex-col gap-2">
-                        <div className="flex items-center justify-between">
-                          <div className="font-medium">{item.name}</div>
-                          <div className="text-sm text-slate-500">Ksh {item.price}</div>
+                ) : todayDepartures.map((departure, idx) => (
+                  <motion.div
+                    key={departure.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-full bg-rose-100">
+                          <Key className="h-4 w-4 text-rose-600" />
                         </div>
-                        <div className="text-xs text-slate-400">{item.category}</div>
-                        <div className="mt-2 flex gap-2">
-                          <button 
-                            onClick={() => addToCart(item)} 
-                            className="flex-1 py-2 rounded-lg bg-indigo-600 text-white"
-                            type="button"
-                          >
-                            Add
-                          </button>
-                          <button 
-                            onClick={() => addToCart(item)} 
-                            className="py-2 rounded-lg border px-3"
-                            type="button"
-                          >
-                            Quick
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Cart */}
-                <aside className="bg-white rounded-2xl shadow p-4">
-                  <h3 className="font-semibold">Order Cart</h3>
-                  <div className="mt-3 divide-y">
-                    {cart.length===0 && <div className="text-slate-400 py-6 text-center">No items yet</div>}
-                    {cart.map((item: CartItem) => (
-                      <div key={item.id} className="py-3 flex items-center justify-between gap-3">
                         <div>
-                          <div className="font-medium">{item.name}</div>
-                          <div className="text-sm text-slate-400">Ksh {item.price} • {item.qty}x</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button 
-                            onClick={() => changeQty(item.id, -1)} 
-                            className="px-2 py-1 rounded-md border"
-                            type="button"
-                          >
-                            -
-                          </button>
-                          <div className="w-6 text-center">{item.qty}</div>
-                          <button 
-                            onClick={() => changeQty(item.id, +1)} 
-                            className="px-2 py-1 rounded-md border"
-                            type="button"
-                          >
-                            +
-                          </button>
-                          <button 
-                            onClick={() => removeFromCart(item.id)} 
-                            className="p-2 rounded-md hover:bg-slate-100"
-                            type="button"
-                          >
-                            <Trash2 size={16}/>
-                          </button>
+                          <p className="font-medium">{departure.guest_name}</p>
+                          <p className="text-sm text-gray-500">Room {departure.room_number}</p>
                         </div>
                       </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-4">
-                    <div className="flex items-center justify-between text-slate-600">
-                      <div className="text-sm">Subtotal</div>
-                      <div className="font-semibold">Ksh {cartTotal}</div>
+                      <div className="text-right">
+                        <p className="font-medium text-rose-600">{departure.check_out_time}</p>
+                        {departure.balance > 0 && (
+                          <p className="text-xs text-red-500">Balance: KES {departure.balance.toLocaleString()}</p>
+                        )}
+                        <Button size="sm" variant="outline" className="mt-1 h-7" onClick={() => setShowCheckOutModal(true)}>
+                          Check Out
+                        </Button>
+                      </div>
                     </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <button 
-                        onClick={checkout} 
-                        className="py-2 rounded-lg bg-emerald-600 text-white flex items-center justify-center gap-2"
-                        type="button"
-                      >
-                        <CheckCircle size={16}/> Pay
-                      </button>
-                      <button 
-                        onClick={() => setCart([])} 
-                        className="py-2 rounded-lg border"
-                        type="button"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  </div>
-                </aside>
-              </section>
-            )}
+                  </motion.div>
+                ))}
+              </div>
+            </Card>
+          </div>
 
-            {/* TABLES TAB */}
-            {activeTab === 'tables' && (
-              <section className="bg-white rounded-2xl shadow p-4">
-                <h3 className="font-semibold mb-3">Table Map</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {Array.from({length:8}).map((_, i: number) => {
-                    const t: TableData = { id: i+1, name: `T${i+1}`, status: i%3===0 ? 'occupied' : i%3===1 ? 'reserved' : 'free' }
-                    return (
-                      <div key={t.id} className="p-3 rounded-xl border flex items-center justify-between">
-                        <div>
-                          <div className="font-medium">{t.name}</div>
-                          <div className="text-sm text-slate-400">{t.status}</div>
-                        </div>
-                        <div>
-                          <Circle size={18} className={`${t.status==='free'?'text-green-400':t.status==='reserved'?'text-yellow-400':'text-red-400'}`}/>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </section>
-            )}
-          </main>
-
-          {/* RIGHT SIDEBAR */}
-          <aside className="hidden lg:block col-span-3 bg-white rounded-2xl shadow p-4">
-            <h4 className="font-semibold">Quick Actions</h4>
-            <div className="mt-3 flex flex-col gap-2">
-              <button
-                onClick={() => setShowRoomServiceModal(true)}
-                className="py-2 rounded-lg bg-indigo-50 text-indigo-700 flex items-center gap-2 justify-center"
-                type="button"
-              >
-                <Coffee size={16}/> Room Service
-              </button>
-              <button
-                onClick={() => setShowInvoiceModal(true)}
-                className="py-2 rounded-lg bg-emerald-50 text-emerald-700 flex items-center gap-2 justify-center"
-                type="button"
-              >
-                <DollarSign size={16}/> Generate Invoice
-              </button>
-              <button
-                onClick={() => setShowEventModal(true)}
-                className="py-2 rounded-lg bg-yellow-50 text-yellow-700 flex items-center gap-2 justify-center"
-                type="button"
-              >
-                <Calendar size={16}/> Add Event
-              </button>
+          {/* Footer Quick Links */}
+          <Card className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <Zap className="h-5 w-5 text-indigo-600" />
+                <span className="font-medium text-indigo-900">Quick Links</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link href="/dashboard/reception/rooms">
+                  <Button variant="outline" size="sm" className="border-indigo-200 text-indigo-700 hover:bg-indigo-100">
+                    <Bed className="h-4 w-4 mr-1" /> All Rooms
+                  </Button>
+                </Link>
+                <Link href="/dashboard/reception/guests">
+                  <Button variant="outline" size="sm" className="border-indigo-200 text-indigo-700 hover:bg-indigo-100">
+                    <Users className="h-4 w-4 mr-1" /> Guest List
+                  </Button>
+                </Link>
+                <Link href="/dashboard/reception/reservations">
+                  <Button variant="outline" size="sm" className="border-indigo-200 text-indigo-700 hover:bg-indigo-100">
+                    <Calendar className="h-4 w-4 mr-1" /> Reservations
+                  </Button>
+                </Link>
+                <Link href="/dashboard/housekeeping">
+                  <Button variant="outline" size="sm" className="border-indigo-200 text-indigo-700 hover:bg-indigo-100">
+                    <Home className="h-4 w-4 mr-1" /> Housekeeping
+                  </Button>
+                </Link>
+              </div>
             </div>
-
-            <div className="mt-6">
-              <h4 className="text-sm text-slate-500">Active Staff</h4>
-              <ul className="mt-3 space-y-2">
-                <li className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">Asha (Reception)</div>
-                    <div className="text-xs text-slate-400">Online</div>
-                  </div>
-                  <div className="text-sm text-slate-400">2m</div>
-                </li>
-                <li className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">Ken (Kitchen)</div>
-                    <div className="text-xs text-slate-400">Busy</div>
-                  </div>
-                  <div className="text-sm text-slate-400">5m</div>
-                </li>
-              </ul>
-            </div>
-          </aside>
+          </Card>
         </div>
-      </div>
-      {/* Modals */}
-      <CheckInModal
-        isOpen={showCheckInModal}
-        onClose={() => setShowCheckInModal(false)}
-      />
-      <CheckOutModal
-        isOpen={showCheckOutModal}
-        onClose={() => setShowCheckOutModal(false)}
-      />
-      <RoomServiceModal
-        isOpen={showRoomServiceModal}
-        onClose={() => setShowRoomServiceModal(false)}
-      />
-      <InvoiceModal
-        isOpen={showInvoiceModal}
-        onClose={() => setShowInvoiceModal(false)}
-      />
-      <EventModal
-        isOpen={showEventModal}
-        onClose={() => setShowEventModal(false)}
-      />
-      <ReservationModal
-        isOpen={showReservationModal}
-        onClose={() => setShowReservationModal(false)}
-      />
+
+        {/* Modals */}
+        <CheckInModal isOpen={showCheckInModal} onClose={() => setShowCheckInModal(false)} />
+        <CheckOutModal isOpen={showCheckOutModal} onClose={() => setShowCheckOutModal(false)} />
+        <RoomServiceModal isOpen={showRoomServiceModal} onClose={() => setShowRoomServiceModal(false)} />
+        <InvoiceModal isOpen={showInvoiceModal} onClose={() => setShowInvoiceModal(false)} />
+        <EventModal isOpen={showEventModal} onClose={() => setShowEventModal(false)} />
+        <ReservationModal isOpen={showReservationModal} onClose={() => setShowReservationModal(false)} />
+      </DashboardLayout>
     </ProtectedRoute>
   );
 }

@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { User, Plus, Edit, Trash2, RefreshCw, Save, Phone, CreditCard, Truck, CheckCircle, Clock, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatDate } from '@/lib/date-utils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -203,7 +204,7 @@ export default function DriversPage() {
                               <CreditCard className="h-4 w-4 text-gray-400" />
                               <div>
                                 <p className="text-sm">{d.license_number}</p>
-                                {d.license_expiry && <p className="text-xs text-gray-500">Exp: {new Date(d.license_expiry).toLocaleDateString()}</p>}
+                                {d.license_expiry && <p className="text-xs text-gray-500">Exp: {formatDate(d.license_expiry)}</p>}
                               </div>
                             </div>
                           ) : <span className="text-gray-400">-</span>}

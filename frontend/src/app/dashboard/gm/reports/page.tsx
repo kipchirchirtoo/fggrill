@@ -30,6 +30,7 @@ export default function GMReportsPage() {
     setIsLoading(true);
     try {
       let data;
+
       switch (selectedReport) {
         case 'revenue':
           data = await financeAPI.getDashboard();
@@ -49,6 +50,7 @@ export default function GMReportsPage() {
     } catch (error) {
       console.error('Error generating report:', error);
       toast.error('Failed to generate report');
+      setReportData(null);
     } finally {
       setIsLoading(false);
     }
@@ -78,14 +80,14 @@ export default function GMReportsPage() {
           </div>
         );
       case 'staff':
-        const staffList = reportData.staff || reportData || [];
+        const staffList = Array.isArray(reportData.staff) ? reportData.staff : (Array.isArray(reportData) ? reportData : []);
         return (
           <div className="space-y-2">
             <p className="font-medium">Total Staff: {staffList.length}</p>
             <div className="max-h-64 overflow-y-auto">
               {staffList.slice(0, 10).map((s: any) => (
                 <div key={s.id} className="flex justify-between py-2 border-b">
-                  <span>{s.first_name} {s.last_name}</span>
+                  <span>{s.name || s.first_name + ' ' + s.last_name}</span>
                   <span className="text-gray-500">{s.role}</span>
                 </div>
               ))}
@@ -93,7 +95,7 @@ export default function GMReportsPage() {
           </div>
         );
       case 'inventory':
-        const branches = reportData.branches || reportData || [];
+        const branches = Array.isArray(reportData.branches) ? reportData.branches : (Array.isArray(reportData) ? reportData : []);
         return (
           <div className="space-y-2">
             <p className="font-medium">Stock by Branch</p>

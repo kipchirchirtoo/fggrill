@@ -96,7 +96,7 @@ export default function AdminFinancePage() {
   }, []);
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN]}>
+    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
           <div className="flex items-center justify-between">

@@ -21,7 +21,8 @@ export default function BranchManagerStockPage() {
     setIsLoading(true);
     try {
       const res = await storeAPI.getBranchStock(user?.branch_id);
-      setStock(res.stock || res || []);
+      const stockData = res?.data?.stock || res?.data || res?.stock || (Array.isArray(res) ? res : []);
+      setStock(Array.isArray(stockData) ? stockData : []);
     } catch (error) { console.error('Error:', error); } 
     finally { setIsLoading(false); }
   };
@@ -63,18 +64,30 @@ export default function BranchManagerStockPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {stock.map((s: any) => (
-                    <tr key={s.id || s.sku} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium">{s.item_name || s.name}</td>
-                      <td className="px-4 py-3 text-gray-600">{s.sku || s.item_sku}</td>
-                      <td className="px-4 py-3">{s.quantity}</td>
-                      <td className="px-4 py-3">
-                        <Badge className={s.quantity <= (s.reorder_level || 10) ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}>
-                          {s.quantity <= (s.reorder_level || 10) ? 'Low' : 'OK'}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
+                  {stock.map((s: any) => {
+                    const itemName = s.item_name || s.name || s.item?.name || `Item #${s.item_id || s.id}`;
+                    const itemSku = s.sku || s.item_sku || s.item?.sku || '-';
+                    const qty = s.quantity ?? 0;
+                    const isLow = qty <= (s.reorder_level || s.item?.reorder_level || 10);
+                    
+                    return (
+                      <tr key={s.id || s.item_id || itemSku} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <div>
+                            <p className="font-medium text-gray-900">{itemName}</p>
+                            {s.category && <p className="text-xs text-gray-500">{s.category}</p>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 font-mono text-sm">{itemSku}</td>
+                        <td className="px-4 py-3 font-medium">{qty}</td>
+                        <td className="px-4 py-3">
+                          <Badge className={isLow ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}>
+                            {isLow ? 'Low Stock' : 'In Stock'}
+                          </Badge>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

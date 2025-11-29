@@ -10,6 +10,7 @@ import { Send, Package, RefreshCw, Plus, Clock, CheckCircle, XCircle } from 'luc
 import { Button } from '@/components/ui/button';
 import { storeAPI } from '@/lib/api';
 import { toast } from 'sonner';
+import { formatDate } from '@/lib/date-utils';
 import Link from 'next/link';
 
 export default function BranchManagerRequestsPage() {
@@ -93,7 +94,7 @@ export default function BranchManagerRequestsPage() {
                   {requests.map((r: any) => (
                     <tr key={r.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-medium">{r.request_number || `REQ-${r.id}`}</td>
-                      <td className="px-4 py-3 text-gray-600">{new Date(r.created_at).toLocaleDateString()}</td>
+                      <td className="px-4 py-3 text-gray-600">{formatDate(r.created_at)}</td>
                       <td className="px-4 py-3">{r.items_count || r.items?.length || 0} items</td>
                       <td className="px-4 py-3">
                         <Badge className={getStatusBadge(r.status)}>{r.status}</Badge>

@@ -21,7 +21,8 @@ export default function BranchManagerHousekeepingPage() {
     setIsLoading(true);
     try {
       const res = await housekeepingAPI.getTasks(user?.branch_id);
-      setTasks(res.tasks || res || []);
+      const tasksData = res?.data?.tasks || res?.data || res?.tasks || (Array.isArray(res) ? res : []);
+      setTasks(Array.isArray(tasksData) ? tasksData : []);
     } catch (error) { console.error('Error:', error); } 
     finally { setIsLoading(false); }
   };

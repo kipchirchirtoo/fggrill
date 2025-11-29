@@ -336,21 +336,364 @@ export const bookingsAPI = {
 };
 
 // =====================================================
-// HOUSEKEEPING API
+// HOUSEKEEPING API (Enhanced)
 // =====================================================
 
 export const housekeepingAPI = {
-  getTasks: (branchId?: number) => {
-    const query = branchId ? `?branch_id=${branchId}` : '';
-    return fetchAPI<any>(`/housekeeping/tasks${query}`);
+  // Dashboard
+  getDashboard: (branchId?: string) => {
+    const query = branchId ? `?branchId=${branchId}` : '';
+    return fetchAPI<any>(`/housekeeping/dashboard${query}`);
   },
+  getRoomGrid: (branchId?: string, floor?: number) => {
+    const params = new URLSearchParams();
+    if (branchId) params.append('branchId', branchId);
+    if (floor) params.append('floor', String(floor));
+    return fetchAPI<any>(`/housekeeping/dashboard/room-grid?${params}`);
+  },
+  getStats: (branchId?: string) => {
+    const query = branchId ? `?branchId=${branchId}` : '';
+    return fetchAPI<any>(`/housekeeping/dashboard/stats${query}`);
+  },
+  getWorkloadDistribution: (branchId?: string) => {
+    const query = branchId ? `?branchId=${branchId}` : '';
+    return fetchAPI<any>(`/housekeeping/dashboard/workload${query}`);
+  },
+
+  // Tasks
+  getTasks: (params?: { status?: string; priority?: string; assignedTo?: string; taskType?: string; floor?: number; date?: string; roomNumber?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.priority) query.append('priority', params.priority);
+    if (params?.assignedTo) query.append('assignedTo', params.assignedTo);
+    if (params?.taskType) query.append('taskType', params.taskType);
+    if (params?.floor) query.append('floor', String(params.floor));
+    if (params?.date) query.append('date', params.date);
+    if (params?.roomNumber) query.append('roomNumber', params.roomNumber);
+    return fetchAPI<any>(`/housekeeping/tasks?${query}`);
+  },
+  getMyTasks: () => fetchAPI<any>('/housekeeping/tasks/my-tasks'),
+  getTask: (id: string) => fetchAPI<any>(`/housekeeping/tasks/${id}`),
   createTask: (data: any) => fetchAPI<any>('/housekeeping/tasks', { method: 'POST', body: JSON.stringify(data) }),
-  updateTask: (id: string, data: any) => fetchAPI<any>(`/housekeeping/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  completeTask: (id: string, data?: any) => fetchAPI<any>(`/housekeeping/tasks/${id}/complete`, { method: 'PUT', body: JSON.stringify(data || {}) }),
-  getRoomStatus: (branchId?: number) => {
-    const query = branchId ? `?branch_id=${branchId}` : '';
-    return fetchAPI<any>(`/housekeeping/rooms${query}`);
+  updateTaskStatus: (id: string, data: any) => fetchAPI<any>(`/housekeeping/tasks/${id}/status`, { method: 'PUT', body: JSON.stringify(data) }),
+  assignTask: (id: string, data: any) => fetchAPI<any>(`/housekeeping/tasks/${id}/assign`, { method: 'PUT', body: JSON.stringify(data) }),
+  updateChecklist: (id: string, data: any) => fetchAPI<any>(`/housekeeping/tasks/${id}/checklist`, { method: 'PUT', body: JSON.stringify(data) }),
+  bulkAssignTasks: (data: { taskIds: string[]; assignedTo: string }) => fetchAPI<any>('/housekeeping/tasks/bulk-assign', { method: 'POST', body: JSON.stringify(data) }),
+  autoAssignTasks: (floor?: number) => {
+    const query = floor ? `?floor=${floor}` : '';
+    return fetchAPI<any>(`/housekeeping/tasks/auto-assign${query}`, { method: 'POST' });
   },
+  deleteTask: (id: string) => fetchAPI<any>(`/housekeeping/tasks/${id}`, { method: 'DELETE' }),
+  // Legacy compatibility
+  updateTask: (id: string, data: any) => fetchAPI<any>(`/housekeeping/tasks/${id}/status`, { method: 'PUT', body: JSON.stringify(data) }),
+  completeTask: (id: string, data?: any) => fetchAPI<any>(`/housekeeping/tasks/${id}/status`, { 
+    method: 'PUT', 
+    body: JSON.stringify({ status: 'completed', ...(data || {}) }) 
+  }),
+
+  // Rooms
+  getRooms: (params?: { floor?: number; status?: string; priority?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.floor) query.append('floor', String(params.floor));
+    if (params?.status) query.append('status', params.status);
+    if (params?.priority) query.append('priority', params.priority);
+    return fetchAPI<any>(`/housekeeping/rooms?${query}`);
+  },
+  getRoomsByFloor: (branchId?: string) => {
+    const query = branchId ? `?branchId=${branchId}` : '';
+    return fetchAPI<any>(`/housekeeping/rooms/by-floor${query}`);
+  },
+  getRoomsForInspection: (branchId?: string) => {
+    const query = branchId ? `?branchId=${branchId}` : '';
+    return fetchAPI<any>(`/housekeeping/rooms/for-inspection${query}`);
+  },
+  getRoom: (id: string) => fetchAPI<any>(`/housekeeping/rooms/${id}`),
+  getRoomHistory: (id: string) => fetchAPI<any>(`/housekeeping/rooms/${id}/history`),
+  updateRoomStatus: (id: string, data: any) => fetchAPI<any>(`/housekeeping/rooms/${id}/status`, { method: 'PUT', body: JSON.stringify(data) }),
+  setRoomDND: (id: string, enable: boolean) => fetchAPI<any>(`/housekeeping/rooms/${id}/dnd`, { method: 'PUT', body: JSON.stringify({ enable }) }),
+  assignRoomAttendant: (id: string, attendantId: string) => fetchAPI<any>(`/housekeeping/rooms/${id}/assign`, { method: 'PUT', body: JSON.stringify({ attendantId }) }),
+  bulkUpdateRoomStatus: (data: { roomIds: string[]; status: string; reason?: string }) => fetchAPI<any>('/housekeeping/rooms/bulk-status', { method: 'PUT', body: JSON.stringify(data) }),
+  getRoomStatus: (roomId: string) => fetchAPI<any>(`/housekeeping/rooms/${roomId}`),
+
+  // Inspections
+  getInspections: (params?: { result?: string; inspectedBy?: string; date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.result) query.append('result', params.result);
+    if (params?.inspectedBy) query.append('inspectedBy', params.inspectedBy);
+    if (params?.date) query.append('date', params.date);
+    return fetchAPI<any>(`/housekeeping/inspections?${query}`);
+  },
+  getInspectionQueue: () => fetchAPI<any>('/housekeeping/inspections/queue'),
+  getInspectionStats: (startDate?: string, endDate?: string) => {
+    const query = new URLSearchParams();
+    if (startDate) query.append('startDate', startDate);
+    if (endDate) query.append('endDate', endDate);
+    return fetchAPI<any>(`/housekeeping/inspections/stats?${query}`);
+  },
+  getInspection: (id: string) => fetchAPI<any>(`/housekeeping/inspections/${id}`),
+  submitInspection: (data: any) => fetchAPI<any>('/housekeeping/inspections', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Staff
+  getStaff: (params?: { available?: boolean; designation?: string; floor?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.available !== undefined) query.append('available', String(params.available));
+    if (params?.designation) query.append('designation', params.designation);
+    if (params?.floor) query.append('floor', String(params.floor));
+    return fetchAPI<any>(`/housekeeping/staff?${query}`);
+  },
+  getStaffWorkload: () => fetchAPI<any>('/housekeeping/staff/workload'),
+  getStaffMember: (id: string) => fetchAPI<any>(`/housekeeping/staff/${id}`),
+  getStaffPerformance: (id: string, period?: number) => {
+    const query = period ? `?period=${period}` : '';
+    return fetchAPI<any>(`/housekeeping/staff/${id}/performance${query}`);
+  },
+  createStaffProfile: (data: any) => fetchAPI<any>('/housekeeping/staff', { method: 'POST', body: JSON.stringify(data) }),
+  updateStaffProfile: (id: string, data: any) => fetchAPI<any>(`/housekeeping/staff/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  updateStaffAvailability: (id: string, data: any) => fetchAPI<any>(`/housekeeping/staff/${id}/availability`, { method: 'PUT', body: JSON.stringify(data) }),
+  staffCheckIn: (id: string) => fetchAPI<any>(`/housekeeping/staff/${id}/check-in`, { method: 'POST' }),
+  staffCheckOut: (id: string) => fetchAPI<any>(`/housekeeping/staff/${id}/check-out`, { method: 'POST' }),
+
+  // Linen Management
+  getLinenTypes: (category?: string) => {
+    const query = category ? `?category=${category}` : '';
+    return fetchAPI<any>(`/housekeeping/linen/types${query}`);
+  },
+  getLinenInventory: (params?: { locationType?: string; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.locationType) query.append('locationType', params.locationType);
+    if (params?.status) query.append('status', params.status);
+    return fetchAPI<any>(`/housekeeping/linen/inventory?${query}`);
+  },
+  getLinenTransactions: (params?: { linenTypeId?: string; transactionType?: string; date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.linenTypeId) query.append('linenTypeId', params.linenTypeId);
+    if (params?.transactionType) query.append('transactionType', params.transactionType);
+    if (params?.date) query.append('date', params.date);
+    return fetchAPI<any>(`/housekeeping/linen/transactions?${query}`);
+  },
+  getLinenParLevels: () => fetchAPI<any>('/housekeeping/linen/par-levels'),
+  recordLinenTransaction: (data: any) => fetchAPI<any>('/housekeeping/linen/transactions', { method: 'POST', body: JSON.stringify(data) }),
+  issueLinen: (data: any) => fetchAPI<any>('/housekeeping/linen/issue', { method: 'POST', body: JSON.stringify(data) }),
+  returnLinen: (data: any) => fetchAPI<any>('/housekeeping/linen/return', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Lost & Found
+  getLostFoundItems: (params?: { status?: string; category?: string; valuable?: boolean }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.category) query.append('category', params.category);
+    if (params?.valuable !== undefined) query.append('valuable', String(params.valuable));
+    return fetchAPI<any>(`/housekeeping/lost-found?${query}`);
+  },
+  getExpiringLostFound: (days?: number) => {
+    const query = days ? `?days=${days}` : '';
+    return fetchAPI<any>(`/housekeeping/lost-found/expiring${query}`);
+  },
+  getLostFoundStats: (startDate?: string, endDate?: string) => {
+    const query = new URLSearchParams();
+    if (startDate) query.append('startDate', startDate);
+    if (endDate) query.append('endDate', endDate);
+    return fetchAPI<any>(`/housekeeping/lost-found/stats?${query}`);
+  },
+  getLostFoundItem: (id: string) => fetchAPI<any>(`/housekeeping/lost-found/${id}`),
+  createLostFoundItem: (data: any) => fetchAPI<any>('/housekeeping/lost-found', { method: 'POST', body: JSON.stringify(data) }),
+  updateLostFoundItem: (id: string, data: any) => fetchAPI<any>(`/housekeeping/lost-found/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  updateLostFoundStatus: (id: string, data: any) => fetchAPI<any>(`/housekeeping/lost-found/${id}/status`, { method: 'PUT', body: JSON.stringify(data) }),
+  addContactAttempt: (id: string, data: any) => fetchAPI<any>(`/housekeeping/lost-found/${id}/contact`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Maintenance Requests
+  getMaintenanceRequests: (params?: { status?: string; priority?: string; category?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.priority) query.append('priority', params.priority);
+    if (params?.category) query.append('category', params.category);
+    return fetchAPI<any>(`/housekeeping/maintenance?${query}`);
+  },
+  getMaintenanceStats: () => fetchAPI<any>('/housekeeping/maintenance/stats'),
+  getRoomMaintenance: (roomId: string) => fetchAPI<any>(`/housekeeping/maintenance/room/${roomId}`),
+  getMaintenanceRequest: (id: string) => fetchAPI<any>(`/housekeeping/maintenance/${id}`),
+  createMaintenanceRequest: (data: any) => fetchAPI<any>('/housekeeping/maintenance', { method: 'POST', body: JSON.stringify(data) }),
+  updateMaintenanceStatus: (id: string, data: any) => fetchAPI<any>(`/housekeeping/maintenance/${id}/status`, { method: 'PUT', body: JSON.stringify(data) }),
+  verifyMaintenanceCompletion: (id: string, data: any) => fetchAPI<any>(`/housekeeping/maintenance/${id}/verify`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Guest Requests
+  getGuestRequests: (params?: { status?: string; requestType?: string; vip?: boolean }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.requestType) query.append('requestType', params.requestType);
+    if (params?.vip !== undefined) query.append('vip', String(params.vip));
+    return fetchAPI<any>(`/housekeeping/guest-requests?${query}`);
+  },
+  getRequestTypesSummary: () => fetchAPI<any>('/housekeeping/guest-requests/types-summary'),
+  getRoomGuestRequests: (roomId: string) => fetchAPI<any>(`/housekeeping/guest-requests/room/${roomId}`),
+  getGuestRequest: (id: string) => fetchAPI<any>(`/housekeeping/guest-requests/${id}`),
+  createGuestRequest: (data: any) => fetchAPI<any>('/housekeeping/guest-requests', { method: 'POST', body: JSON.stringify(data) }),
+  assignGuestRequest: (id: string, assignedTo: string) => fetchAPI<any>(`/housekeeping/guest-requests/${id}/assign`, { method: 'PUT', body: JSON.stringify({ assignedTo }) }),
+  completeGuestRequest: (id: string, data?: any) => fetchAPI<any>(`/housekeeping/guest-requests/${id}/complete`, { method: 'PUT', body: JSON.stringify(data || {}) }),
+  recordGuestFeedback: (id: string, data: any) => fetchAPI<any>(`/housekeeping/guest-requests/${id}/feedback`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Scheduling
+  getShiftDefinitions: () => fetchAPI<any>('/housekeeping/scheduling/shifts'),
+  getSchedules: (startDate: string, endDate: string, staffId?: string) => {
+    const query = new URLSearchParams({ startDate, endDate });
+    if (staffId) query.append('staffId', staffId);
+    return fetchAPI<any>(`/housekeeping/scheduling/schedules?${query}`);
+  },
+  getTodayRoster: () => fetchAPI<any>('/housekeeping/scheduling/today-roster'),
+  getLeaveRequests: (params?: { status?: string; staffId?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.staffId) query.append('staffId', params.staffId);
+    return fetchAPI<any>(`/housekeeping/scheduling/leave-requests?${query}`);
+  },
+  getShiftSwaps: (status?: string) => {
+    const query = status ? `?status=${status}` : '';
+    return fetchAPI<any>(`/housekeeping/scheduling/shift-swaps${query}`);
+  },
+  createSchedule: (data: any) => fetchAPI<any>('/housekeeping/scheduling/schedules', { method: 'POST', body: JSON.stringify(data) }),
+  bulkCreateSchedules: (schedules: any[]) => fetchAPI<any>('/housekeeping/scheduling/schedules/bulk', { method: 'POST', body: JSON.stringify({ schedules }) }),
+  updateSchedule: (id: string, data: any) => fetchAPI<any>(`/housekeeping/scheduling/schedules/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteSchedule: (id: string) => fetchAPI<any>(`/housekeeping/scheduling/schedules/${id}`, { method: 'DELETE' }),
+  createLeaveRequest: (data: any) => fetchAPI<any>('/housekeeping/scheduling/leave-requests', { method: 'POST', body: JSON.stringify(data) }),
+  reviewLeaveRequest: (id: string, data: { approved: boolean; reviewNotes?: string }) => fetchAPI<any>(`/housekeeping/scheduling/leave-requests/${id}/review`, { method: 'PUT', body: JSON.stringify(data) }),
+  createShiftSwap: (data: any) => fetchAPI<any>('/housekeeping/scheduling/shift-swaps', { method: 'POST', body: JSON.stringify(data) }),
+  respondToShiftSwap: (id: string, accepted: boolean) => fetchAPI<any>(`/housekeeping/scheduling/shift-swaps/${id}/respond`, { method: 'PUT', body: JSON.stringify({ accepted }) }),
+  approveShiftSwap: (id: string, approved: boolean) => fetchAPI<any>(`/housekeeping/scheduling/shift-swaps/${id}/approve`, { method: 'PUT', body: JSON.stringify({ approved }) }),
+
+  // Reports
+  getDailyReport: (date?: string) => {
+    const query = date ? `?date=${date}` : '';
+    return fetchAPI<any>(`/housekeeping/reports/daily${query}`);
+  },
+  getStaffPerformanceReport: (startDate: string, endDate: string) => {
+    return fetchAPI<any>(`/housekeeping/reports/staff-performance?startDate=${startDate}&endDate=${endDate}`);
+  },
+  getProductivityReport: (startDate: string, endDate: string) => {
+    return fetchAPI<any>(`/housekeeping/reports/productivity?startDate=${startDate}&endDate=${endDate}`);
+  },
+  getTurnaroundReport: (date?: string) => {
+    const query = date ? `?date=${date}` : '';
+    return fetchAPI<any>(`/housekeeping/reports/turnaround${query}`);
+  },
+  getSupplyUsageReport: (startDate: string, endDate: string) => {
+    return fetchAPI<any>(`/housekeeping/reports/supply-usage?startDate=${startDate}&endDate=${endDate}`);
+  },
+  exportReport: (params: { reportType: string; format: string; startDate?: string; endDate?: string }) => {
+    const query = new URLSearchParams(params as any);
+    return fetchAPI<any>(`/housekeeping/reports/export?${query}`);
+  },
+
+  // =====================================================
+  // SMART ASSIGNMENT
+  // =====================================================
+  smartAssignTask: (taskId: string) => fetchAPI<any>(`/housekeeping/smart-assign/task/${taskId}`, { method: 'POST' }),
+  smartAssignBatch: (taskIds: string[]) => fetchAPI<any>('/housekeeping/smart-assign/batch', { method: 'POST', body: JSON.stringify({ taskIds }) }),
+  getAssignmentRecommendations: (taskId: string, limit?: number) => {
+    const query = limit ? `?limit=${limit}` : '';
+    return fetchAPI<any>(`/housekeeping/smart-assign/recommendations/${taskId}${query}`);
+  },
+
+  // =====================================================
+  // GAMIFICATION
+  // =====================================================
+  getLeaderboard: (period?: 'week' | 'month' | 'all', limit?: number) => {
+    const query = new URLSearchParams();
+    if (period) query.append('period', period);
+    if (limit) query.append('limit', String(limit));
+    return fetchAPI<any>(`/housekeeping/gamification/leaderboard?${query}`);
+  },
+  getStaffGamificationStats: (staffId: string) => fetchAPI<any>(`/housekeeping/gamification/staff/${staffId}/stats`),
+  getAllAchievements: () => fetchAPI<any>('/housekeeping/gamification/achievements'),
+  getStaffBadges: (staffId: string) => fetchAPI<any>(`/housekeeping/gamification/staff/${staffId}/achievements`),
+  getTeamChallenges: (activeOnly?: boolean) => {
+    const query = activeOnly !== undefined ? `?active=${activeOnly}` : '';
+    return fetchAPI<any>(`/housekeeping/gamification/challenges${query}`);
+  },
+  awardBonusPoints: (staffId: string, type: string, description?: string) => 
+    fetchAPI<any>('/housekeeping/gamification/award-bonus', { method: 'POST', body: JSON.stringify({ staffId, type, description }) }),
+
+  // =====================================================
+  // GUEST PORTAL
+  // =====================================================
+  submitGuestPortalRequest: (data: any) => fetchAPI<any>('/housekeeping/guest-portal/request', { method: 'POST', body: JSON.stringify(data) }),
+  getGuestPortalRequestStatus: (requestId: string) => fetchAPI<any>(`/housekeeping/guest-portal/request/${requestId}/status`),
+  requestCleanNow: (roomNumber: string, guestName?: string, reason?: string) => 
+    fetchAPI<any>('/housekeeping/guest-portal/clean-now', { method: 'POST', body: JSON.stringify({ roomNumber, guestName, reason }) }),
+  setDndSchedule: (roomNumber: string, startTime: string, endTime: string) => 
+    fetchAPI<any>('/housekeeping/guest-portal/dnd-schedule', { method: 'POST', body: JSON.stringify({ roomNumber, startTime, endTime }) }),
+  saveGuestPortalPreferences: (roomNumber: string, preferences: any) => 
+    fetchAPI<any>('/housekeeping/guest-portal/preferences', { method: 'POST', body: JSON.stringify({ roomNumber, preferences }) }),
+  getGuestPortalPreferences: (roomNumber: string) => fetchAPI<any>(`/housekeeping/guest-portal/preferences/${roomNumber}`),
+  submitGuestPortalFeedback: (requestId: string, rating: number, feedback?: string) => 
+    fetchAPI<any>(`/housekeeping/guest-portal/feedback/${requestId}`, { method: 'POST', body: JSON.stringify({ rating, feedback }) }),
+
+  // =====================================================
+  // SUSTAINABILITY
+  // =====================================================
+  recordSustainabilityMetrics: (taskId: string, metrics: any) => 
+    fetchAPI<any>(`/housekeeping/sustainability/task/${taskId}/metrics`, { method: 'POST', body: JSON.stringify(metrics) }),
+  getSustainabilityDailySummary: (date?: string, branchId?: number) => {
+    const query = new URLSearchParams();
+    if (date) query.append('date', date);
+    if (branchId) query.append('branchId', String(branchId));
+    return fetchAPI<any>(`/housekeeping/sustainability/daily-summary?${query}`);
+  },
+  getSustainabilityTrends: (days?: number, branchId?: number) => {
+    const query = new URLSearchParams();
+    if (days) query.append('days', String(days));
+    if (branchId) query.append('branchId', String(branchId));
+    return fetchAPI<any>(`/housekeeping/sustainability/trends?${query}`);
+  },
+  registerGreenGuest: (bookingId: string, roomNumber: string, options: any) => 
+    fetchAPI<any>('/housekeeping/sustainability/green-guest', { method: 'POST', body: JSON.stringify({ bookingId, roomNumber, options }) }),
+  getGreenGuestStats: (bookingId: string) => fetchAPI<any>(`/housekeeping/sustainability/green-guest/${bookingId}/stats`),
+  generateGreenCertificate: (bookingId: string) => fetchAPI<any>(`/housekeeping/sustainability/green-guest/${bookingId}/certificate`),
+  getStaffSustainabilityRanking: (limit?: number) => {
+    const query = limit ? `?limit=${limit}` : '';
+    return fetchAPI<any>(`/housekeeping/sustainability/staff-ranking${query}`);
+  },
+
+  // =====================================================
+  // PREDICTIVE ANALYTICS
+  // =====================================================
+  getDemandForecast: (date?: string, branchId?: number) => {
+    const query = new URLSearchParams();
+    if (date) query.append('date', date);
+    if (branchId) query.append('branchId', String(branchId));
+    return fetchAPI<any>(`/housekeeping/analytics/demand-forecast?${query}`);
+  },
+  getStaffPrediction: (date?: string, shiftType?: string, branchId?: number) => {
+    const query = new URLSearchParams();
+    if (date) query.append('date', date);
+    if (shiftType) query.append('shiftType', shiftType);
+    if (branchId) query.append('branchId', String(branchId));
+    return fetchAPI<any>(`/housekeeping/analytics/staff-prediction?${query}`);
+  },
+  getQualityAlerts: (branchId?: number) => {
+    const query = branchId ? `?branchId=${branchId}` : '';
+    return fetchAPI<any>(`/housekeeping/analytics/quality-alerts${query}`);
+  },
+  getForecastAccuracy: (days?: number) => {
+    const query = days ? `?days=${days}` : '';
+    return fetchAPI<any>(`/housekeeping/analytics/forecast-accuracy${query}`);
+  },
+  getSupplyPrediction: (supplyId: string, days?: number, branchId?: number) => {
+    const query = new URLSearchParams();
+    if (days) query.append('days', String(days));
+    if (branchId) query.append('branchId', String(branchId));
+    return fetchAPI<any>(`/housekeeping/analytics/supply-prediction/${supplyId}?${query}`);
+  },
+
+  // =====================================================
+  // PMS INTEGRATION
+  // =====================================================
+  processBookingEvent: (event: any) => fetchAPI<any>('/housekeeping/pms/booking-event', { method: 'POST', body: JSON.stringify(event) }),
+  syncPmsGuestPreferences: (bookingId: string, roomNumber: string, preferences: any) => 
+    fetchAPI<any>('/housekeeping/pms/sync-preferences', { method: 'POST', body: JSON.stringify({ bookingId, roomNumber, preferences }) }),
+  getPmsTodayArrivals: () => fetchAPI<any>('/housekeeping/pms/today-arrivals'),
+  getPmsTodayDepartures: () => fetchAPI<any>('/housekeeping/pms/today-departures'),
+  autoGenerateTasksFromBookings: () => fetchAPI<any>('/housekeeping/pms/auto-generate-tasks', { method: 'POST' }),
+  notifyRoomReady: (roomNumber: string, bookingId?: string) => 
+    fetchAPI<any>('/housekeeping/pms/notify-room-ready', { method: 'POST', body: JSON.stringify({ roomNumber, bookingId }) }),
 };
 
 // =====================================================
@@ -374,18 +717,123 @@ export const maintenanceAPI = {
 // =====================================================
 
 export const restaurantAPI = {
+  // Orders
   getOrders: (branchId?: number, status?: string) => {
     const query = new URLSearchParams();
     if (branchId) query.append('branch_id', String(branchId));
     if (status) query.append('status', status);
     return fetchAPI<any>(`/restaurant/orders?${query}`);
   },
+  getOrder: (id: string) => fetchAPI<any>(`/restaurant/orders/${id}`),
   createOrder: (data: any) => fetchAPI<any>('/restaurant/orders', { method: 'POST', body: JSON.stringify(data) }),
   updateOrder: (id: string, data: any) => fetchAPI<any>(`/restaurant/orders/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  getMenuItems: () => fetchAPI<any>('/restaurant/menu'),
+  updateOrderStatus: (id: string, status: string) => fetchAPI<any>(`/restaurant/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+  
+  // Menu Categories
+  getCategories: () => fetchAPI<any>('/restaurant/menu/categories'),
+  createCategory: (data: any) => fetchAPI<any>('/restaurant/menu/categories', { method: 'POST', body: JSON.stringify(data) }),
+  updateCategory: (id: string, data: any) => fetchAPI<any>(`/restaurant/menu/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteCategory: (id: string) => fetchAPI<any>(`/restaurant/menu/categories/${id}`, { method: 'DELETE' }),
+  
+  // Menu Items
+  getMenuItems: (categoryId?: string, branchId?: number) => {
+    const query = new URLSearchParams();
+    if (categoryId) query.append('category_id', categoryId);
+    if (branchId) query.append('branch_id', String(branchId));
+    return fetchAPI<any>(`/restaurant/menu/items?${query}`);
+  },
+  getMenuItem: (id: string) => fetchAPI<any>(`/restaurant/menu/items/${id}`),
+  createMenuItem: (data: any) => fetchAPI<any>('/restaurant/menu/items', { method: 'POST', body: JSON.stringify(data) }),
+  updateMenuItem: (id: string, data: any) => fetchAPI<any>(`/restaurant/menu/items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteMenuItem: (id: string) => fetchAPI<any>(`/restaurant/menu/items/${id}`, { method: 'DELETE' }),
+  toggleItemAvailability: (id: string) => fetchAPI<any>(`/restaurant/menu/items/${id}/toggle`, { method: 'PUT' }),
+  
+  // Tables
   getTables: (branchId?: number) => {
     const query = branchId ? `?branch_id=${branchId}` : '';
     return fetchAPI<any>(`/restaurant/tables${query}`);
+  },
+  updateTableStatus: (id: string, status: string) => fetchAPI<any>(`/restaurant/tables/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+  
+  // Kitchen Display
+  getKitchenOrders: () => fetchAPI<any>('/restaurant/kitchen/orders'),
+  markItemReady: (orderId: string, itemId: string) => fetchAPI<any>(`/restaurant/kitchen/orders/${orderId}/items/${itemId}/ready`, { method: 'PUT' }),
+  
+  // Receipts & Billing
+  generateReceipt: (orderId: string) => fetchAPI<any>(`/restaurant/orders/${orderId}/receipt`),
+  processPayment: (orderId: string, data: any) => fetchAPI<any>(`/restaurant/orders/${orderId}/payment`, { method: 'POST', body: JSON.stringify(data) }),
+  
+  // Reports
+  getDailySales: (date?: string) => {
+    const query = date ? `?date=${date}` : '';
+    return fetchAPI<any>(`/restaurant/reports/daily-sales${query}`);
+  },
+  getPopularItems: (days?: number) => {
+    const query = days ? `?days=${days}` : '';
+    return fetchAPI<any>(`/restaurant/reports/popular-items${query}`);
+  },
+};
+
+// =====================================================
+// BAR API
+// =====================================================
+
+export const barAPI = {
+  // Orders
+  getOrders: (branchId?: number, status?: string) => {
+    const query = new URLSearchParams();
+    if (branchId) query.append('branch_id', String(branchId));
+    if (status) query.append('status', status);
+    return fetchAPI<any>(`/bar/orders?${query}`);
+  },
+  getOrder: (id: string) => fetchAPI<any>(`/bar/orders/${id}`),
+  createOrder: (data: any) => fetchAPI<any>('/bar/orders', { method: 'POST', body: JSON.stringify(data) }),
+  updateOrder: (id: string, data: any) => fetchAPI<any>(`/bar/orders/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  updateOrderStatus: (id: string, status: string) => fetchAPI<any>(`/bar/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+  
+  // Drink Categories
+  getCategories: () => fetchAPI<any>('/bar/categories'),
+  createCategory: (data: any) => fetchAPI<any>('/bar/categories', { method: 'POST', body: JSON.stringify(data) }),
+  updateCategory: (id: string, data: any) => fetchAPI<any>(`/bar/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteCategory: (id: string) => fetchAPI<any>(`/bar/categories/${id}`, { method: 'DELETE' }),
+  
+  // Drinks Menu
+  getDrinks: (categoryId?: string) => {
+    const query = categoryId ? `?category_id=${categoryId}` : '';
+    return fetchAPI<any>(`/bar/drinks${query}`);
+  },
+  getDrink: (id: string) => fetchAPI<any>(`/bar/drinks/${id}`),
+  createDrink: (data: any) => fetchAPI<any>('/bar/drinks', { method: 'POST', body: JSON.stringify(data) }),
+  updateDrink: (id: string, data: any) => fetchAPI<any>(`/bar/drinks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteDrink: (id: string) => fetchAPI<any>(`/bar/drinks/${id}`, { method: 'DELETE' }),
+  toggleDrinkAvailability: (id: string) => fetchAPI<any>(`/bar/drinks/${id}/toggle`, { method: 'PUT' }),
+  
+  // Tabs (for customers running a tab)
+  getTabs: (branchId?: number) => {
+    const query = branchId ? `?branch_id=${branchId}` : '';
+    return fetchAPI<any>(`/bar/tabs${query}`);
+  },
+  createTab: (data: any) => fetchAPI<any>('/bar/tabs', { method: 'POST', body: JSON.stringify(data) }),
+  addToTab: (tabId: string, items: any) => fetchAPI<any>(`/bar/tabs/${tabId}/items`, { method: 'POST', body: JSON.stringify(items) }),
+  closeTab: (tabId: string, paymentMethod: string) => fetchAPI<any>(`/bar/tabs/${tabId}/close`, { method: 'POST', body: JSON.stringify({ payment_method: paymentMethod }) }),
+  
+  // Stock & Inventory
+  getStock: (branchId?: number) => {
+    const query = branchId ? `?branch_id=${branchId}` : '';
+    return fetchAPI<any>(`/bar/stock${query}`);
+  },
+  updateStock: (id: string, quantity: number) => fetchAPI<any>(`/bar/stock/${id}`, { method: 'PUT', body: JSON.stringify({ quantity }) }),
+  
+  // Reports
+  getDailySales: (date?: string, branchId?: number) => {
+    const query = new URLSearchParams();
+    if (date) query.append('date', date);
+    if (branchId) query.append('branch_id', String(branchId));
+    return fetchAPI<any>(`/bar/reports/daily-sales?${query}`);
+  },
+  getPopularDrinks: (days?: number) => {
+    const query = days ? `?days=${days}` : '';
+    return fetchAPI<any>(`/bar/reports/popular-drinks${query}`);
   },
 };
 
@@ -409,6 +857,55 @@ export const financeAPI = {
   createTransaction: (data: any) => fetchAPI<any>('/finance/transactions', { method: 'POST', body: JSON.stringify(data) }),
   getInvoices: () => fetchAPI<any>('/finance/invoices'),
   createInvoice: (data: any) => fetchAPI<any>('/finance/invoices', { method: 'POST', body: JSON.stringify(data) }),
+  
+  // Advanced Financial Tools
+  getCashFlow: (params?: { startDate?: string; endDate?: string; branch_id?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    return fetchAPI<any>(`/finance/cashflow?${query}`);
+  },
+  getProfitLoss: (params?: { startDate?: string; endDate?: string; branch_id?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    return fetchAPI<any>(`/finance/profit-loss?${query}`);
+  },
+  getRevenueByBranch: (params?: { startDate?: string; endDate?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    return fetchAPI<any>(`/finance/revenue-by-branch?${query}`);
+  },
+  getBudgetAnalysis: (params?: { year?: number; month?: number; branch_id?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.year) query.append('year', String(params.year));
+    if (params?.month) query.append('month', String(params.month));
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    return fetchAPI<any>(`/finance/budget-analysis?${query}`);
+  },
+  getTaxSummary: (params?: { startDate?: string; endDate?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    return fetchAPI<any>(`/finance/tax-summary?${query}`);
+  },
+  getForecast: (months?: number) => {
+    const query = months ? `?months=${months}` : '';
+    return fetchAPI<any>(`/finance/forecast${query}`);
+  },
+  getArAp: () => fetchAPI<any>('/finance/ar-ap'),
+  getKPIs: (period?: string) => {
+    const query = period ? `?period=${period}` : '';
+    return fetchAPI<any>(`/finance/kpis${query}`);
+  },
+  getExpenses: () => fetchAPI<any>('/finance/expenses'),
+  createExpense: (data: any) => fetchAPI<any>('/finance/expenses', { method: 'POST', body: JSON.stringify(data) }),
+  approveExpense: (id: string) => fetchAPI<any>(`/finance/expenses/${id}/approve`, { method: 'PUT' }),
+  getBudgets: () => fetchAPI<any>('/finance/budgets'),
+  createBudget: (data: any) => fetchAPI<any>('/finance/budgets', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 // =====================================================

@@ -7,7 +7,7 @@ import { BarChart3 } from 'lucide-react';
 
 export default function ManagerReportsPage() {
   return (
-    <ProtectedRoute allowedRoles={[UserRole.GENERAL_MANAGER]}>
+    <ProtectedRoute allowedRoles={[UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
           <div>

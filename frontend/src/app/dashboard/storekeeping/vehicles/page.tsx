@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Truck, Plus, Edit, Trash2, RefreshCw, Save, Car, Bike, AlertTriangle, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatDate } from '@/lib/date-utils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -200,7 +201,7 @@ export default function VehiclesPage() {
                         <td className="px-4 py-4">{v.capacity_kg ? `${v.capacity_kg} kg` : '-'}</td>
                         <td className="px-4 py-4"><Badge className={getStatusColor(v.status)}>{v.status}</Badge></td>
                         <td className="px-4 py-4 font-medium">{v.total_trips}</td>
-                        <td className="px-4 py-4 text-sm">{v.insurance_expiry ? new Date(v.insurance_expiry).toLocaleDateString() : '-'}</td>
+                        <td className="px-4 py-4 text-sm">{v.insurance_expiry ? formatDate(v.insurance_expiry) : '-'}</td>
                         {canEdit && (
                           <td className="px-4 py-4">
                             <div className="flex gap-2">

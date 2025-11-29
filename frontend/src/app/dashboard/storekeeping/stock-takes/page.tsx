@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ClipboardList, Plus, Eye, RefreshCw, Play, CheckCircle, Clock, XCircle, AlertTriangle, Package, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatDate } from '@/lib/date-utils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -210,7 +211,7 @@ export default function StockTakesPage() {
                             <span className="text-red-600 font-bold flex items-center gap-1"><AlertTriangle className="h-4 w-4" />{take.items_with_variance}</span>
                           ) : <span className="text-green-600">0</span>}
                         </td>
-                        <td className="px-4 py-4 text-sm text-gray-500">{new Date(take.started_at).toLocaleDateString()}</td>
+                        <td className="px-4 py-4 text-sm text-gray-500">{formatDate(take.started_at)}</td>
                         <td className="px-4 py-4">
                           <Button size="sm" variant="outline" onClick={() => handleViewTake(take)}>
                             {take.status === 'IN_PROGRESS' ? <><Play className="h-4 w-4 mr-1" />Continue</> : <><Eye className="h-4 w-4 mr-1" />View</>}

@@ -7,7 +7,7 @@ import { Calendar } from 'lucide-react';
 
 export default function MaintenanceSchedulePage() {
   return (
-    <ProtectedRoute allowedRoles={[UserRole.MAINTENANCE]}>
+    <ProtectedRoute allowedRoles={[UserRole.MAINTENANCE, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
           <div>

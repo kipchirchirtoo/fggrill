@@ -257,8 +257,41 @@ export default function StorekeepingDashboard() {
             </Card>
           </div>
 
+          {/* Procurement & Receiving */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer border-l-4 border-l-emerald-500" onClick={() => router.push('/dashboard/storekeeping/purchase-orders')}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-emerald-100 rounded-xl">
+                    <Package className="h-8 w-8 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">Purchase Orders</h3>
+                    <p className="text-sm text-gray-500">Create & manage stock procurement</p>
+                  </div>
+                </div>
+                <ArrowRight className="h-5 w-5 text-gray-400" />
+              </div>
+            </Card>
+
+            <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer border-l-4 border-l-teal-500" onClick={() => router.push('/dashboard/storekeeping/grn')}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-teal-100 rounded-xl">
+                    <ClipboardList className="h-8 w-8 text-teal-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">Goods Received (GRN)</h3>
+                    <p className="text-sm text-gray-500">Record incoming stock receipts</p>
+                  </div>
+                </div>
+                <ArrowRight className="h-5 w-5 text-gray-400" />
+              </div>
+            </Card>
+          </div>
+
           {/* Additional Resources */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <Card className="p-4 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push('/dashboard/storekeeping/vehicles')}>
               <div className="flex flex-col items-center gap-2 text-center">
                 <div className="p-3 bg-blue-100 rounded-full"><Car className="h-6 w-6 text-blue-600" /></div>
@@ -285,6 +318,13 @@ export default function StorekeepingDashboard() {
                 <div className="p-3 bg-amber-100 rounded-full"><ClipboardList className="h-6 w-6 text-amber-600" /></div>
                 <h4 className="font-medium">Stock Takes</h4>
                 <p className="text-xs text-gray-500">Inventory counts</p>
+              </div>
+            </Card>
+            <Card className="p-4 hover:shadow-lg transition-shadow cursor-pointer border-2 border-red-200" onClick={() => router.push('/dashboard/storekeeping/wastage')}>
+              <div className="flex flex-col items-center gap-2 text-center">
+                <div className="p-3 bg-red-100 rounded-full"><AlertTriangle className="h-6 w-6 text-red-600" /></div>
+                <h4 className="font-medium">Wastage</h4>
+                <p className="text-xs text-gray-500">Track losses</p>
               </div>
             </Card>
           </div>

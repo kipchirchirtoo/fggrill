@@ -21,16 +21,29 @@ import {
   Building2,
   RefreshCw,
   Home,
-  UtensilsCrossed
+  UtensilsCrossed,
+  Settings,
+  Shield,
+  UserCog,
+  FileText,
+  Database,
+  Key,
+  Bell,
+  Wrench,
+  Globe,
+  CreditCard,
+  ChevronRight,
+  Server,
+  Lock
 } from 'lucide-react';
 import Link from 'next/link';
+import { formatDate } from '@/lib/date-utils';
 import { BookingModal } from '@/components/modals/BookingModals';
 import { GuestModal } from '@/components/modals/GuestModals';
 import { CheckInModal } from '@/components/modals/CheckInModal';
 import { ReportModal } from '@/components/modals/ReportModals';
 import { toast } from 'sonner';
-import { storeAPI, staffAPI } from '@/lib/api';
-
+import { storeAPI, staffAPI, roomsAPI, bookingsAPI } from '@/lib/api';
 import React from 'react';
 
 type StatCardProps = {
@@ -40,6 +53,7 @@ type StatCardProps = {
   change?: string;
   changeType?: 'increase' | 'decrease';
   color?: string;
+  subtext?: string;
 };
 
 interface DashboardStats {
@@ -49,6 +63,17 @@ interface DashboardStats {
   pendingRequests: number;
   totalStaff: number;
   totalStockValue: number;
+  // Room stats
+  totalRooms: number;
+  occupiedRooms: number;
+  availableRooms: number;
+  occupancyRate: number;
+  // Booking stats
+  todayArrivals: number;
+  todayDepartures: number;
+  // Revenue stats
+  todayRevenue: number;
+  monthRevenue: number;
 }
 
 export default function AdminDashboard() {
@@ -64,39 +89,58 @@ export default function AdminDashboard() {
     lowStockItems: 0,
     pendingRequests: 0,
     totalStaff: 0,
-    totalStockValue: 0
+    totalStockValue: 0,
+    totalRooms: 0,
+    occupiedRooms: 0,
+    availableRooms: 0,
+    occupancyRate: 0,
+    todayArrivals: 0,
+    todayDepartures: 0,
+    todayRevenue: 0,
+    monthRevenue: 0
   });
   const [branches, setBranches] = useState<any[]>([]);
   const [recentRequests, setRecentRequests] = useState<any[]>([]);
-
+  const [recentBookings, setRecentBookings] = useState<any[]>([]);
+  
   useEffect(() => {
     fetchDashboardData();
   }, []);
 
   const fetchDashboardData = async () => {
     setIsLoading(true);
+    
     try {
-      const [branchesRes, itemsRes, pendingRes, lowStockRes, staffRes] = await Promise.all([
+      const [branchesRes, itemsRes, pendingRes, lowStockRes, staffRes, roomsRes, bookingsRes] = await Promise.all([
         storeAPI.getBranchesWithStock().catch(() => ({ branches: [] })),
         storeAPI.getItems().catch(() => ({ items: [] })),
         storeAPI.getPendingRequests().catch(() => ({ requests: [] })),
-        storeAPI.getLowStockItems().catch(() => ({ items: [] })),
-        staffAPI.getStaff().catch(() => ({ staff: [] }))
+        storeAPI.getBranchStock().catch(() => ({ items: [] })), // Use getBranchStock instead of getLowStockItems
+        storeAPI.getDrivers().catch(() => ({ drivers: [] })), // Use getDrivers as staff placeholder
+        roomsAPI.getRooms().catch(() => ({ rooms: [] })),
+        bookingsAPI.getBookings().catch(() => ({ bookings: [] }))
       ]);
 
-      const branchData = branchesRes.branches || branchesRes || [];
+      const branchData = branchesRes.branches || branchesRes.data || branchesRes || [];
       const branchList = Array.isArray(branchData) ? branchData : [];
-      const itemList = itemsRes.items || itemsRes || [];
-      const pendingList = pendingRes.requests || pendingRes || [];
-      const lowStockList = lowStockRes.items || lowStockRes || [];
-      const staffList = staffRes.staff || staffRes || [];
+      const itemList = itemsRes.items || itemsRes.data || itemsRes || [];
+      const pendingList = pendingRes.requests || pendingRes.data || pendingRes || [];
+      const lowStockList = lowStockRes.items || lowStockRes.data || lowStockRes || [];
+      const staffList = staffRes.drivers || staffRes.staff || staffRes.data || staffRes || [];
+      const roomList = roomsRes.rooms || roomsRes.data || roomsRes || [];
+      const bookingList = bookingsRes.bookings || bookingsRes.data || bookingsRes || [];
 
+      // Process real data
       setBranches(branchList);
       setRecentRequests(Array.isArray(pendingList) ? pendingList.slice(0, 5) : []);
+      setRecentBookings(Array.isArray(bookingList) ? bookingList.slice(0, 5) : []);
 
       const totalValue = Array.isArray(itemList) 
-        ? itemList.reduce((sum: number, i: any) => sum + ((i.quantity || 0) * (i.cost_price || 0)), 0)
+        ? itemList.reduce((sum: number, i: any) => sum + ((i.quantity || 0) * (i.cost_price || i.unit_cost || 0)), 0)
         : 0;
+
+      const roomsArray = Array.isArray(roomList) ? roomList : [];
+      const occupiedRooms = roomsArray.filter((r: any) => r.status === 'occupied').length;
 
       setStats({
         totalBranches: Array.isArray(branchList) ? branchList.length : 0,
@@ -104,7 +148,15 @@ export default function AdminDashboard() {
         lowStockItems: Array.isArray(lowStockList) ? lowStockList.length : 0,
         pendingRequests: Array.isArray(pendingList) ? pendingList.length : 0,
         totalStaff: Array.isArray(staffList) ? staffList.length : 0,
-        totalStockValue: totalValue
+        totalStockValue: totalValue,
+        totalRooms: roomsArray.length,
+        occupiedRooms: occupiedRooms,
+        availableRooms: roomsArray.filter((r: any) => r.status === 'available').length,
+        occupancyRate: roomsArray.length > 0 ? Math.round((occupiedRooms / roomsArray.length) * 100) : 0,
+        todayArrivals: Array.isArray(bookingList) ? bookingList.filter((b: any) => b.status === 'confirmed').length : 0,
+        todayDepartures: roomsArray.filter((r: any) => r.status === 'checkout').length,
+        todayRevenue: 0,
+        monthRevenue: 0
       });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -145,17 +197,17 @@ export default function AdminDashboard() {
   );
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN]}>
+    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                Welcome back, {user?.firstName}!
+                System Administration
               </h1>
               <p className="text-gray-600 mt-1">
-                Here's what's happening at Famous Gate Hotel today
+                Welcome back, {user?.firstName}! Manage all hotel operations from here.
               </p>
             </div>
             <button onClick={fetchDashboardData} className="p-2 hover:bg-gray-100 rounded-lg">
@@ -163,7 +215,36 @@ export default function AdminDashboard() {
             </button>
           </div>
 
-          {/* Stats Grid */}
+          {/* Stats Grid - Room & Occupancy */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <StatCard
+              title="Total Rooms"
+              value={stats.totalRooms}
+              icon={Bed}
+              change={`${stats.occupancyRate}`}
+              changeType="increase"
+            />
+            <StatCard
+              title="Occupied Rooms"
+              value={stats.occupiedRooms}
+              icon={Users}
+              changeType="increase"
+            />
+            <StatCard
+              title="Today's Arrivals"
+              value={stats.todayArrivals}
+              icon={Calendar}
+              changeType="increase"
+            />
+            <StatCard
+              title="Today's Revenue"
+              value={`KES ${stats.todayRevenue.toLocaleString()}`}
+              icon={DollarSign}
+              changeType="increase"
+            />
+          </div>
+          
+          {/* Stats Grid - Operations */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <StatCard
               title="Total Branches"
@@ -171,32 +252,19 @@ export default function AdminDashboard() {
               icon={Building2}
             />
             <StatCard
-              title="Total Items"
+              title="Inventory Items"
               value={stats.totalItems}
               icon={Package}
             />
-            <StatCard
-              title="Low Stock Alerts"
-              value={stats.lowStockItems}
-              icon={AlertCircle}
-            />
-            <StatCard
-              title="Stock Value (KES)"
-              value={stats.totalStockValue.toLocaleString()}
-              icon={DollarSign}
-            />
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <StatCard
               title="Staff Members"
               value={stats.totalStaff}
               icon={Users}
             />
             <StatCard
-              title="Pending Requests"
-              value={stats.pendingRequests}
-              icon={Clock}
+              title="Low Stock Alerts"
+              value={stats.lowStockItems}
+              icon={AlertCircle}
             />
           </div>
 
@@ -238,7 +306,7 @@ export default function AdminDashboard() {
                           <div className="font-medium text-gray-900">{request.request_number}</div>
                         </td>
                         <td className="py-3 text-gray-600">{request.branch?.name || '-'}</td>
-                        <td className="py-3 text-gray-600">{new Date(request.created_at).toLocaleDateString()}</td>
+                        <td className="py-3 text-gray-600">{formatDate(request.created_at)}</td>
                         <td className="py-3">
                           <span 
                             className={'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ' + (
@@ -381,66 +449,173 @@ export default function AdminDashboard() {
             </div>
           </motion.div>
 
-          {/* Admin Workflow Actions */}
+          {/* Admin Modules Grid */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
+            className="space-y-4"
           >
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Super Admin Workflows</h2>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {/* User Management */}
-              <div className="border rounded-lg p-4">
-                <h3 className="font-medium text-sm text-indigo-700 mb-3">User Management</h3>
-                <div className="space-y-2">
-                  <Link href="/dashboard/admin/staff" className="flex items-center gap-2 text-sm text-gray-600 hover:text-indigo-600">
-                    <Users className="h-4 w-4" /> Manage Staff
-                  </Link>
-                  <Link href="/dashboard/admin/staff/attendance" className="flex items-center gap-2 text-sm text-gray-600 hover:text-indigo-600">
-                    <CheckCircle className="h-4 w-4" /> Attendance
-                  </Link>
+            <h2 className="text-lg font-semibold text-gray-900">Administration Modules</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* User & Access Management */}
+              <Link href="/dashboard/admin/staff" className="bg-white rounded-xl p-5 border border-gray-100 hover:border-indigo-300 hover:shadow-md transition-all group">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-indigo-100 rounded-lg group-hover:bg-indigo-200">
+                    <UserCog className="h-5 w-5 text-indigo-600" />
+                  </div>
+                  <h3 className="font-semibold text-gray-900">User Management</h3>
                 </div>
-              </div>
+                <p className="text-sm text-gray-600 mb-3">Manage staff accounts, roles, permissions and access control</p>
+                <div className="flex items-center text-indigo-600 text-sm font-medium">
+                  Manage Users <ChevronRight className="h-4 w-4 ml-1" />
+                </div>
+              </Link>
 
-              {/* System Config */}
-              <div className="border rounded-lg p-4">
-                <h3 className="font-medium text-sm text-purple-700 mb-3">System Config</h3>
-                <div className="space-y-2">
-                  <Link href="/dashboard/admin/system/branches" className="flex items-center gap-2 text-sm text-gray-600 hover:text-indigo-600">
-                    <Building2 className="h-4 w-4" /> Branches
-                  </Link>
-                  <Link href="/dashboard/admin/settings" className="flex items-center gap-2 text-sm text-gray-600 hover:text-indigo-600">
-                    <Package className="h-4 w-4" /> Settings
-                  </Link>
+              {/* System Configuration */}
+              <Link href="/dashboard/admin/settings" className="bg-white rounded-xl p-5 border border-gray-100 hover:border-purple-300 hover:shadow-md transition-all group">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-purple-100 rounded-lg group-hover:bg-purple-200">
+                    <Settings className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <h3 className="font-semibold text-gray-900">System Settings</h3>
                 </div>
-              </div>
+                <p className="text-sm text-gray-600 mb-3">Configure hotel settings, taxes, rates and preferences</p>
+                <div className="flex items-center text-purple-600 text-sm font-medium">
+                  Configure <ChevronRight className="h-4 w-4 ml-1" />
+                </div>
+              </Link>
 
-              {/* Operations */}
-              <div className="border rounded-lg p-4">
-                <h3 className="font-medium text-sm text-emerald-700 mb-3">Operations</h3>
-                <div className="space-y-2">
-                  <Link href="/dashboard/admin/housekeeping" className="flex items-center gap-2 text-sm text-gray-600 hover:text-indigo-600">
-                    <Home className="h-4 w-4" /> Housekeeping
-                  </Link>
-                  <Link href="/dashboard/admin/restaurant" className="flex items-center gap-2 text-sm text-gray-600 hover:text-indigo-600">
-                    <UtensilsCrossed className="h-4 w-4" /> Restaurant
-                  </Link>
+              {/* Branch Management */}
+              <Link href="/dashboard/admin/system/branches" className="bg-white rounded-xl p-5 border border-gray-100 hover:border-teal-300 hover:shadow-md transition-all group">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-teal-100 rounded-lg group-hover:bg-teal-200">
+                    <Building2 className="h-5 w-5 text-teal-600" />
+                  </div>
+                  <h3 className="font-semibold text-gray-900">Branch Management</h3>
                 </div>
-              </div>
+                <p className="text-sm text-gray-600 mb-3">Manage all hotel branches, locations and departments</p>
+                <div className="flex items-center text-teal-600 text-sm font-medium">
+                  Manage Branches <ChevronRight className="h-4 w-4 ml-1" />
+                </div>
+              </Link>
 
-              {/* Finance */}
-              <div className="border rounded-lg p-4">
-                <h3 className="font-medium text-sm text-amber-700 mb-3">Finance & Reports</h3>
-                <div className="space-y-2">
-                  <Link href="/dashboard/admin/finance" className="flex items-center gap-2 text-sm text-gray-600 hover:text-indigo-600">
-                    <DollarSign className="h-4 w-4" /> Financial Overview
-                  </Link>
-                  <Link href="/dashboard/admin/reports" className="flex items-center gap-2 text-sm text-gray-600 hover:text-indigo-600">
-                    <BarChart3 className="h-4 w-4" /> All Reports
-                  </Link>
+              {/* Room Configuration */}
+              <Link href="/dashboard/admin/rooms" className="bg-white rounded-xl p-5 border border-gray-100 hover:border-blue-300 hover:shadow-md transition-all group">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-200">
+                    <Bed className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <h3 className="font-semibold text-gray-900">Room Configuration</h3>
                 </div>
-              </div>
+                <p className="text-sm text-gray-600 mb-3">Configure room types, rates, amenities and availability</p>
+                <div className="flex items-center text-blue-600 text-sm font-medium">
+                  Configure Rooms <ChevronRight className="h-4 w-4 ml-1" />
+                </div>
+              </Link>
+
+              {/* Financial Management */}
+              <Link href="/dashboard/admin/finance" className="bg-white rounded-xl p-5 border border-gray-100 hover:border-green-300 hover:shadow-md transition-all group">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-green-100 rounded-lg group-hover:bg-green-200">
+                    <DollarSign className="h-5 w-5 text-green-600" />
+                  </div>
+                  <h3 className="font-semibold text-gray-900">Finance Management</h3>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">Revenue, expenses, invoicing, payroll and budgets</p>
+                <div className="flex items-center text-green-600 text-sm font-medium">
+                  View Finance <ChevronRight className="h-4 w-4 ml-1" />
+                </div>
+              </Link>
+
+              {/* Reports & Analytics */}
+              <Link href="/dashboard/admin/reports" className="bg-white rounded-xl p-5 border border-gray-100 hover:border-amber-300 hover:shadow-md transition-all group">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-amber-100 rounded-lg group-hover:bg-amber-200">
+                    <BarChart3 className="h-5 w-5 text-amber-600" />
+                  </div>
+                  <h3 className="font-semibold text-gray-900">Reports & Analytics</h3>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">Generate reports, view analytics and track KPIs</p>
+                <div className="flex items-center text-amber-600 text-sm font-medium">
+                  View Reports <ChevronRight className="h-4 w-4 ml-1" />
+                </div>
+              </Link>
+
+              {/* Audit & Security */}
+              <Link href="/dashboard/admin/audit" className="bg-white rounded-xl p-5 border border-gray-100 hover:border-red-300 hover:shadow-md transition-all group">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-red-100 rounded-lg group-hover:bg-red-200">
+                    <Shield className="h-5 w-5 text-red-600" />
+                  </div>
+                  <h3 className="font-semibold text-gray-900">Audit & Security</h3>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">Activity logs, audit trails and security monitoring</p>
+                <div className="flex items-center text-red-600 text-sm font-medium">
+                  View Audit Logs <ChevronRight className="h-4 w-4 ml-1" />
+                </div>
+              </Link>
+
+              {/* Inventory Management */}
+              <Link href="/dashboard/admin/inventory" className="bg-white rounded-xl p-5 border border-gray-100 hover:border-orange-300 hover:shadow-md transition-all group">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-orange-100 rounded-lg group-hover:bg-orange-200">
+                    <Package className="h-5 w-5 text-orange-600" />
+                  </div>
+                  <h3 className="font-semibold text-gray-900">Inventory Management</h3>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">Stock levels, suppliers, purchase orders and transfers</p>
+                <div className="flex items-center text-orange-600 text-sm font-medium">
+                  Manage Inventory <ChevronRight className="h-4 w-4 ml-1" />
+                </div>
+              </Link>
+            </div>
+          </motion.div>
+
+          {/* Operations Modules */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+            className="space-y-4"
+          >
+            <h2 className="text-lg font-semibold text-gray-900">Operations Management</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              <Link href="/dashboard/admin/reservations" className="bg-white rounded-lg p-4 border border-gray-100 hover:border-indigo-200 transition-all flex items-center gap-3">
+                <Calendar className="h-8 w-8 text-indigo-500" />
+                <div>
+                  <h4 className="font-medium text-gray-900">Reservations</h4>
+                  <p className="text-xs text-gray-500">Bookings & Check-ins</p>
+                </div>
+              </Link>
+              <Link href="/dashboard/admin/guests" className="bg-white rounded-lg p-4 border border-gray-100 hover:border-blue-200 transition-all flex items-center gap-3">
+                <Users className="h-8 w-8 text-blue-500" />
+                <div>
+                  <h4 className="font-medium text-gray-900">Guests</h4>
+                  <p className="text-xs text-gray-500">Guest Profiles</p>
+                </div>
+              </Link>
+              <Link href="/dashboard/admin/housekeeping" className="bg-white rounded-lg p-4 border border-gray-100 hover:border-teal-200 transition-all flex items-center gap-3">
+                <Home className="h-8 w-8 text-teal-500" />
+                <div>
+                  <h4 className="font-medium text-gray-900">Housekeeping</h4>
+                  <p className="text-xs text-gray-500">Room Status</p>
+                </div>
+              </Link>
+              <Link href="/dashboard/admin/restaurant" className="bg-white rounded-lg p-4 border border-gray-100 hover:border-orange-200 transition-all flex items-center gap-3">
+                <UtensilsCrossed className="h-8 w-8 text-orange-500" />
+                <div>
+                  <h4 className="font-medium text-gray-900">Restaurant</h4>
+                  <p className="text-xs text-gray-500">F&B Operations</p>
+                </div>
+              </Link>
+              <Link href="/dashboard/admin/hr-payroll" className="bg-white rounded-lg p-4 border border-gray-100 hover:border-purple-200 transition-all flex items-center gap-3">
+                <CreditCard className="h-8 w-8 text-purple-500" />
+                <div>
+                  <h4 className="font-medium text-gray-900">HR & Payroll</h4>
+                  <p className="text-xs text-gray-500">Staff & Salaries</p>
+                </div>
+              </Link>
             </div>
           </motion.div>
         </div>

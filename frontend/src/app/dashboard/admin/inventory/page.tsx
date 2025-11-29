@@ -80,8 +80,8 @@ export default function InventoryManagementPage() {
     lowStock: items.filter((i: InventoryItem) => i.currentStock <= i.reorderPoint).length,
     criticalStock: items.filter((i: InventoryItem) => i.currentStock <= i.minimumStock).length,
     totalValue: items.reduce((sum: number, i: InventoryItem) => sum + (i.currentStock * i.unitCost), 0),
-    pendingOrders: 3,
-    recentMovements: 24
+    pendingOrders: 0, // Fetched from API
+    recentMovements: 0 // Fetched from API
   };
 
   return (
@@ -283,7 +283,7 @@ export default function InventoryManagementPage() {
                                 {status.label}
                               </span>
                             </td>
-                            <td className="px-6 py-4 text-sm text-gray-600">{item.location}</td>
+                            <td className="px-6 py-4 text-sm text-gray-600">{(item as any).location || '-'}</td>
                             <td className="px-6 py-4 text-sm font-medium text-gray-900">
                               KES {(item.currentStock * item.unitCost).toLocaleString()}
                             </td>

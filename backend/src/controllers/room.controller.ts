@@ -11,12 +11,18 @@ export const getRooms = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { data: rooms, error } = await supabase
+    let query = supabase
       .from('rooms')
       .select(`
         *,
         type:room_types(*)
       `);
+
+    if (req.query.branch_id) {
+      query = query.eq('branch_id', req.query.branch_id);
+    }
+
+    const { data: rooms, error } = await query;
 
     if (error) {
       throw error;

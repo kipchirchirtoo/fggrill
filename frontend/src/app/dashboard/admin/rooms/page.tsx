@@ -23,7 +23,13 @@ import {
   Bath,
   Users,
   DollarSign,
-  MapPin
+  MapPin,
+  Settings,
+  Tag,
+  Building2,
+  RefreshCw,
+  Star,
+  Percent
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { RoomModal, RoomDetailsModal } from '@/components/modals/RoomModals';
@@ -103,6 +109,32 @@ export default function RoomsManagement() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [activeTab, setActiveTab] = useState<'rooms' | 'types' | 'rates' | 'amenities'>('rooms');
+
+  // Room Types Configuration
+  const roomTypes = [
+    { id: 1, name: 'Standard', basePrice: 3500, maxOccupancy: 2, description: 'Comfortable room with basic amenities', count: rooms.filter(r => r.type === RoomType.STANDARD).length },
+    { id: 2, name: 'Deluxe', basePrice: 5500, maxOccupancy: 3, description: 'Spacious room with premium amenities', count: rooms.filter(r => r.type === RoomType.DELUXE).length },
+    { id: 3, name: 'Suite', basePrice: 8500, maxOccupancy: 4, description: 'Luxury suite with separate living area', count: rooms.filter(r => r.type === RoomType.SUITE).length },
+  ];
+
+  // Rate Seasons
+  const rateSeasons = [
+    { id: 1, name: 'Low Season', multiplier: 0.85, startDate: 'Jan 15', endDate: 'Mar 31' },
+    { id: 2, name: 'Regular Season', multiplier: 1.0, startDate: 'Apr 1', endDate: 'Nov 30' },
+    { id: 3, name: 'High Season', multiplier: 1.25, startDate: 'Dec 1', endDate: 'Jan 14' },
+    { id: 4, name: 'Peak Season', multiplier: 1.5, startDate: 'Dec 20', endDate: 'Jan 5' },
+  ];
+
+  // Available Amenities
+  const availableAmenities = [
+    { id: 'wifi', name: 'Free WiFi', icon: Wifi, enabled: true },
+    { id: 'tv', name: 'Smart TV', icon: Tv, enabled: true },
+    { id: 'ac', name: 'Air Conditioning', icon: Wind, enabled: true },
+    { id: 'minibar', name: 'Mini Bar', icon: Coffee, enabled: true },
+    { id: 'jacuzzi', name: 'Jacuzzi', icon: Bath, enabled: false },
+    { id: 'balcony', name: 'Balcony', icon: MapPin, enabled: true },
+  ];
 
   // Filter rooms based on search and filters
   const filteredRooms = rooms.filter(room => {
@@ -283,37 +315,74 @@ export default function RoomsManagement() {
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Room Management</h1>
-              <p className="text-gray-600 mt-1">Manage hotel rooms and availability</p>
+              <h1 className="text-3xl font-bold text-gray-900">Room Configuration</h1>
+              <p className="text-gray-600 mt-1">Manage rooms, types, rates and amenities</p>
             </div>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-            >
-              <Plus className="h-5 w-5" />
-              Add Room
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => window.location.reload()}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Refresh
+              </button>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                <Plus className="h-5 w-5" />
+                Add Room
+              </button>
+            </div>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            {Object.values(RoomStatus).map(status => {
-              const count = rooms.filter(r => r.status === status).length;
-              return (
-                <div key={status} className="bg-white rounded-lg p-4 border border-gray-100">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600 capitalize">{status.replace('_', ' ')}</p>
-                      <p className="text-2xl font-bold text-gray-900">{count}</p>
-                    </div>
-                    <div className={`p-2 rounded-lg ${getStatusColor(status).split(' ')[0]}`}>
-                      {getStatusIcon(status)}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          {/* Tabs */}
+          <div className="border-b border-gray-200">
+            <nav className="flex gap-8">
+              {[
+                { id: 'rooms', label: 'All Rooms', icon: Bed },
+                { id: 'types', label: 'Room Types', icon: Tag },
+                { id: 'rates', label: 'Rate Management', icon: Percent },
+                { id: 'amenities', label: 'Amenities', icon: Star }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`flex items-center gap-2 py-4 border-b-2 font-medium text-sm transition-colors ${
+                    activeTab === tab.id
+                      ? 'border-indigo-600 text-indigo-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <tab.icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
           </div>
+
+          {/* Rooms Tab */}
+          {activeTab === 'rooms' && (
+            <>
+              {/* Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                {Object.values(RoomStatus).map(status => {
+                  const count = rooms.filter(r => r.status === status).length;
+                  return (
+                    <div key={status} className="bg-white rounded-lg p-4 border border-gray-100">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-gray-600 capitalize">{status.replace('_', ' ')}</p>
+                          <p className="text-2xl font-bold text-gray-900">{count}</p>
+                        </div>
+                        <div className={`p-2 rounded-lg ${getStatusColor(status).split(' ')[0]}`}>
+                          {getStatusIcon(status)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
 
           {/* Filters and Search */}
           <div className="bg-white rounded-lg p-4 border border-gray-100">
@@ -462,11 +531,182 @@ export default function RoomsManagement() {
           )}
 
           {/* Empty State */}
-          {filteredRooms.length === 0 && (
-            <div className="bg-white rounded-lg p-12 text-center">
-              <Bed className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No rooms found</h3>
-              <p className="text-gray-600">Try adjusting your search or filters</p>
+              {filteredRooms.length === 0 && (
+                <div className="bg-white rounded-lg p-12 text-center">
+                  <Bed className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No rooms found</h3>
+                  <p className="text-gray-600">Try adjusting your search or filters</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Room Types Tab */}
+          {activeTab === 'types' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Room Types Configuration</h2>
+                <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                  <Plus className="h-4 w-4" />
+                  Add Room Type
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {roomTypes.map(type => (
+                  <div key={type.id} className="bg-white rounded-xl p-6 border border-gray-100 hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-xl font-bold text-gray-900">{type.name}</h3>
+                      <span className="text-sm bg-indigo-100 text-indigo-700 px-2 py-1 rounded">{type.count} rooms</span>
+                    </div>
+                    <p className="text-gray-600 text-sm mb-4">{type.description}</p>
+                    <div className="space-y-2 mb-4">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Base Price:</span>
+                        <span className="font-medium">KES {type.basePrice.toLocaleString()}/night</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Max Occupancy:</span>
+                        <span className="font-medium">{type.maxOccupancy} guests</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button className="flex-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm">
+                        <Edit className="h-4 w-4 inline mr-1" />
+                        Edit
+                      </button>
+                      <button className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Rate Management Tab */}
+          {activeTab === 'rates' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Rate Management</h2>
+                <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                  <Plus className="h-4 w-4" />
+                  Add Season
+                </button>
+              </div>
+
+              {/* Current Rates */}
+              <div className="bg-white rounded-xl p-6 border border-gray-100">
+                <h3 className="font-semibold mb-4">Current Rate Card</h3>
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Room Type</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Base Rate</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Low Season</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">High Season</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Peak Season</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {roomTypes.map(type => (
+                      <tr key={type.id}>
+                        <td className="px-4 py-3 font-medium">{type.name}</td>
+                        <td className="px-4 py-3">KES {type.basePrice.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-green-600">KES {Math.round(type.basePrice * 0.85).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-amber-600">KES {Math.round(type.basePrice * 1.25).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-red-600">KES {Math.round(type.basePrice * 1.5).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Seasons */}
+              <div className="bg-white rounded-xl p-6 border border-gray-100">
+                <h3 className="font-semibold mb-4">Seasonal Rates</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {rateSeasons.map(season => (
+                    <div key={season.id} className="p-4 border rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium">{season.name}</span>
+                        <span className={`text-sm font-bold ${season.multiplier > 1 ? 'text-red-600' : season.multiplier < 1 ? 'text-green-600' : 'text-gray-600'}`}>
+                          {season.multiplier > 1 ? '+' : ''}{Math.round((season.multiplier - 1) * 100)}%
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500">{season.startDate} - {season.endDate}</p>
+                      <button className="mt-2 text-sm text-indigo-600 hover:underline">Edit dates</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Amenities Tab */}
+          {activeTab === 'amenities' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Amenities Configuration</h2>
+                <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                  <Plus className="h-4 w-4" />
+                  Add Amenity
+                </button>
+              </div>
+
+              <div className="bg-white rounded-xl p-6 border border-gray-100">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {availableAmenities.map(amenity => (
+                    <div key={amenity.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${amenity.enabled ? 'bg-indigo-100' : 'bg-gray-100'}`}>
+                          <amenity.icon className={`h-5 w-5 ${amenity.enabled ? 'text-indigo-600' : 'text-gray-400'}`} />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{amenity.name}</p>
+                          <p className="text-xs text-gray-500">{amenity.enabled ? 'Enabled' : 'Disabled'}</p>
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" defaultChecked={amenity.enabled} className="sr-only peer" />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Amenity by Room Type */}
+              <div className="bg-white rounded-xl p-6 border border-gray-100">
+                <h3 className="font-semibold mb-4">Amenities by Room Type</h3>
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amenity</th>
+                      {roomTypes.map(type => (
+                        <th key={type.id} className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">{type.name}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {availableAmenities.map(amenity => (
+                      <tr key={amenity.id}>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <amenity.icon className="h-4 w-4 text-gray-400" />
+                            {amenity.name}
+                          </div>
+                        </td>
+                        {roomTypes.map(type => (
+                          <td key={type.id} className="px-4 py-3 text-center">
+                            <input type="checkbox" defaultChecked={type.id > 1 || amenity.id !== 'jacuzzi'} className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

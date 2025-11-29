@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/lib/auth-context';
+import Image from 'next/image';
 import { 
   Hotel, 
   Mail, 
@@ -11,7 +12,10 @@ import {
   EyeOff,
   Loader2,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Coffee,
+  Leaf,
+  Star
 } from 'lucide-react';
 
 export default function LoginPage() {
@@ -47,97 +51,132 @@ export default function LoginPage() {
   // Quick login buttons for demo - organized by category
   const demoAccounts = {
     management: [
-      { email: 'admin@famousgate.com', password: 'admin123', role: 'Super Admin', color: 'bg-red-100 text-red-700 border-red-200' },
-      { email: 'gm@famousgate.com', password: 'gm123', role: 'General Manager', color: 'bg-purple-100 text-purple-700 border-purple-200' },
+      { email: 'admin@famousgate.com', password: 'admin123', role: 'Super Admin', color: 'bg-amber-900/20 text-amber-900 border-amber-300 hover:bg-amber-900/30' },
+      { email: 'gm@famousgate.com', password: 'gm123', role: 'General Manager', color: 'bg-green-800/20 text-green-900 border-green-300 hover:bg-green-800/30' },
     ],
     branchManagers: [
-      { email: 'manager.bomet@famousgate.com', password: 'bomet123', role: 'Manager (Bomet HQ)', color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
-      { email: 'manager.kericho@famousgate.com', password: 'kericho123', role: 'Manager (Kericho)', color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
-      { email: 'manager.litein@famousgate.com', password: 'litein123', role: 'Manager (Litein)', color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
+      { email: 'manager.bomet@famousgate.com', password: 'bomet123', role: 'Manager (Bomet HQ)', color: 'bg-amber-800/20 text-amber-800 border-amber-200 hover:bg-amber-800/30' },
+      { email: 'manager.kericho@famousgate.com', password: 'kericho123', role: 'Manager (Kericho)', color: 'bg-amber-800/20 text-amber-800 border-amber-200 hover:bg-amber-800/30' },
+      { email: 'manager.litein@famousgate.com', password: 'litein123', role: 'Manager (Litein)', color: 'bg-amber-800/20 text-amber-800 border-amber-200 hover:bg-amber-800/30' },
     ],
     storekeeping: [
-      { email: 'central@famousgate.com', password: 'central123', role: 'Central Storekeeper', color: 'bg-blue-100 text-blue-700 border-blue-200' },
-      { email: 'store.bomet@famousgate.com', password: 'store123', role: 'Store (Bomet)', color: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
-      { email: 'store.kericho@famousgate.com', password: 'store123', role: 'Store (Kericho)', color: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
+      { email: 'central@famousgate.com', password: 'central123', role: 'Central Storekeeper', color: 'bg-green-700/20 text-green-800 border-green-200 hover:bg-green-700/30' },
+      { email: 'store.bomet@famousgate.com', password: 'store123', role: 'Store (Bomet)', color: 'bg-green-600/20 text-green-700 border-green-200 hover:bg-green-600/30' },
+      { email: 'store.kericho@famousgate.com', password: 'store123', role: 'Store (Kericho)', color: 'bg-green-600/20 text-green-700 border-green-200 hover:bg-green-600/30' },
     ],
     operations: [
-      { email: 'reception@famousgate.com', password: 'reception123', role: 'Receptionist', color: 'bg-green-100 text-green-700 border-green-200' },
-      { email: 'housekeeping@famousgate.com', password: 'house123', role: 'Housekeeping', color: 'bg-teal-100 text-teal-700 border-teal-200' },
-      { email: 'restaurant@famousgate.com', password: 'rest123', role: 'Restaurant', color: 'bg-orange-100 text-orange-700 border-orange-200' },
-      { email: 'maintenance@famousgate.com', password: 'maint123', role: 'Maintenance', color: 'bg-amber-100 text-amber-700 border-amber-200' },
+      { email: 'reception@famousgate.com', password: 'reception123', role: 'Receptionist', color: 'bg-stone-200 text-stone-700 border-stone-300 hover:bg-stone-300' },
+      { email: 'housekeeping@famousgate.com', password: 'house123', role: 'Housekeeping', color: 'bg-stone-200 text-stone-700 border-stone-300 hover:bg-stone-300' },
+      { email: 'restaurant@famousgate.com', password: 'rest123', role: 'Restaurant', color: 'bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-200' },
+      { email: 'maintenance@famousgate.com', password: 'maint123', role: 'Maintenance', color: 'bg-stone-200 text-stone-700 border-stone-300 hover:bg-stone-300' },
     ],
     finance: [
-      { email: 'accountant@famousgate.com', password: 'account123', role: 'Accountant', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-      { email: 'auditor@famousgate.com', password: 'audit123', role: 'Auditor', color: 'bg-lime-100 text-lime-700 border-lime-200' },
+      { email: 'accountant@famousgate.com', password: 'account123', role: 'Accountant', color: 'bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-200' },
+      { email: 'auditor@famousgate.com', password: 'audit123', role: 'Auditor', color: 'bg-lime-100 text-lime-800 border-lime-200 hover:bg-lime-200' },
+    ],
+    bar: [
+      { email: 'bar.bomet@famousgate.com', password: 'bar123', role: 'Bartender (Bomet)', color: 'bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200' },
+      { email: 'bar.kericho@famousgate.com', password: 'bar123', role: 'Bartender (Kericho)', color: 'bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200' },
+      { email: 'bar.litein@famousgate.com', password: 'bar123', role: 'Bartender (Litein)', color: 'bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200' },
     ]
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
-      {/* Background Pattern */}
-      <div className="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] -z-10" />
+    <div className="min-h-screen relative overflow-hidden">
+      {/* Background Image with Overlay */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: `linear-gradient(135deg, rgba(62, 39, 22, 0.92) 0%, rgba(34, 54, 34, 0.88) 50%, rgba(62, 39, 22, 0.92) 100%), 
+                           url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
+        }}
+      />
       
-      <div className="flex min-h-screen">
-        {/* Left Side - Branding */}
+      {/* Decorative Elements */}
+      <div className="absolute top-10 left-10 w-72 h-72 bg-green-500/10 rounded-full blur-3xl" />
+      <div className="absolute bottom-10 right-10 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl" />
+      <div className="absolute top-1/2 left-1/4 w-48 h-48 bg-green-400/5 rounded-full blur-2xl" />
+      
+      <div className="relative z-10 flex min-h-screen">
+        {/* Left Side - Hero Branding */}
         <motion.div 
           initial={{ opacity: 0, x: -50 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5 }}
-          className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-600 to-purple-700 p-12 text-white relative overflow-hidden"
+          transition={{ duration: 0.6 }}
+          className="hidden lg:flex lg:w-1/2 p-12 text-white relative"
         >
-          {/* Decorative circles */}
-          <div className="absolute top-20 right-20 w-64 h-64 bg-white/10 rounded-full blur-3xl" />
-          <div className="absolute bottom-20 left-20 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl" />
-          
-          <div className="relative z-10 flex flex-col justify-between w-full">
-            <div>
-              <div className="flex items-center space-x-3 mb-12">
-                <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
-                  <Hotel className="h-8 w-8" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold">Famous Gate Hotel</h1>
-                  <p className="text-indigo-200">Kericho, Kenya</p>
-                </div>
+          <div className="flex flex-col justify-center items-center w-full">
+            {/* Large Centered Logo */}
+            <motion.div 
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.8, delay: 0.3 }}
+              className="relative mb-8"
+            >
+              <div className="absolute inset-0 bg-white/20 rounded-full blur-3xl scale-150" />
+              <div className="relative h-48 w-48 bg-white rounded-full overflow-hidden shadow-2xl border-4 border-white/30 p-4">
+                <Image
+                  src="/fglogo.png"
+                  alt="Famous Gate"
+                  fill
+                  className="object-contain p-2"
+                  priority
+                />
+              </div>
+            </motion.div>
+            
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.5 }}
+              className="text-center"
+            >
+              <h1 className="text-5xl font-bold mb-2 text-white drop-shadow-lg">
+                Famous Gate
+              </h1>
+              <p className="text-2xl text-amber-200 font-light mb-6">Hotel & Lounge</p>
+              <div className="flex items-center justify-center gap-2 text-green-200 mb-8">
+                <Leaf className="h-5 w-5" />
+                <span className="text-lg">Bomet, Kenya</span>
+                <Leaf className="h-5 w-5" />
               </div>
               
-              <div className="space-y-8">
-                <div>
-                  <h2 className="text-4xl font-bold mb-4">
-                    Welcome to Your Hotel Management Portal
-                  </h2>
-                  <p className="text-xl text-indigo-100">
-                    Streamline operations, enhance guest experiences, and boost revenue with our comprehensive management system.
-                  </p>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                    <Sparkles className="h-6 w-6 mb-2" />
-                    <h3 className="font-semibold mb-1">Smart Booking</h3>
-                    <p className="text-sm text-indigo-100">Real-time room availability and instant confirmations</p>
-                  </div>
-                  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                    <Sparkles className="h-6 w-6 mb-2" />
-                    <h3 className="font-semibold mb-1">Guest Management</h3>
-                    <p className="text-sm text-indigo-100">Complete CRM with loyalty programs</p>
-                  </div>
-                  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                    <Sparkles className="h-6 w-6 mb-2" />
-                    <h3 className="font-semibold mb-1">Staff Coordination</h3>
-                    <p className="text-sm text-indigo-100">Efficient task management and scheduling</p>
-                  </div>
-                  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                    <Sparkles className="h-6 w-6 mb-2" />
-                    <h3 className="font-semibold mb-1">Financial Insights</h3>
-                    <p className="text-sm text-indigo-100">Real-time revenue tracking and reports</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+              <p className="text-xl text-white/80 max-w-md mx-auto leading-relaxed">
+                Experience warmth, comfort, and exceptional hospitality in the heart of the Rift Valley
+              </p>
+            </motion.div>
             
-            <div className="text-sm text-indigo-200">
-              © 2024 Famous Gate Hotel. All rights reserved.
+            {/* Feature Cards */}
+            <motion.div 
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.7 }}
+              className="grid grid-cols-2 gap-4 mt-12 max-w-lg"
+            >
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                <Coffee className="h-6 w-6 mb-2 text-amber-300" />
+                <h3 className="font-semibold text-white mb-1">Premium Lounge</h3>
+                <p className="text-sm text-white/70">Finest coffee & cuisine</p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                <Star className="h-6 w-6 mb-2 text-amber-300" />
+                <h3 className="font-semibold text-white mb-1">Luxury Rooms</h3>
+                <p className="text-sm text-white/70">Comfort redefined</p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                <Sparkles className="h-6 w-6 mb-2 text-green-300" />
+                <h3 className="font-semibold text-white mb-1">Events & Meetings</h3>
+                <p className="text-sm text-white/70">Perfect venue</p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                <Hotel className="h-6 w-6 mb-2 text-green-300" />
+                <h3 className="font-semibold text-white mb-1">6 Branches</h3>
+                <p className="text-sm text-white/70">Across the region</p>
+              </div>
+            </motion.div>
+            
+            <div className="absolute bottom-8 text-sm text-white/50">
+              © 2024 Famous Gate Hotel & Lounge. All rights reserved.
             </div>
           </div>
         </motion.div>
@@ -152,18 +191,25 @@ export default function LoginPage() {
           >
             {/* Mobile Logo */}
             <div className="lg:hidden mb-8 text-center">
-              <div className="inline-flex items-center space-x-3 mb-4">
-                <div className="p-3 bg-indigo-100 rounded-xl">
-                  <Hotel className="h-8 w-8 text-indigo-600" />
+              <motion.div 
+                initial={{ scale: 0.8 }}
+                animate={{ scale: 1 }}
+                className="inline-block mb-4"
+              >
+                <div className="relative h-24 w-24 bg-white rounded-full overflow-hidden shadow-xl border-4 border-white/50 mx-auto p-2">
+                  <Image
+                    src="/fglogo.png"
+                    alt="Famous Gate"
+                    fill
+                    className="object-contain"
+                  />
                 </div>
-                <div className="text-left">
-                  <h1 className="text-xl font-bold text-gray-900">Famous Gate Hotel</h1>
-                  <p className="text-sm text-gray-600">Management System</p>
-                </div>
-              </div>
+              </motion.div>
+              <h1 className="text-2xl font-bold text-white">Famous Gate</h1>
+              <p className="text-amber-200">Hotel & Lounge</p>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-xl p-8">
+            <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl p-8 border border-white/20">
               <div className="mb-8">
                 <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h2>
                 <p className="text-gray-600">Sign in to access your dashboard</p>
@@ -186,7 +232,7 @@ export default function LoginPage() {
                       type="email"
                       value={formData.email}
                       onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                      className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors ${
+                      className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-colors ${
                         errors.email ? 'border-red-500' : 'border-gray-300'
                       }`}
                       placeholder="Enter your email"
@@ -207,7 +253,7 @@ export default function LoginPage() {
                       type={showPassword ? 'text' : 'password'}
                       value={formData.password}
                       onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                      className={`w-full pl-10 pr-12 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors ${
+                      className={`w-full pl-10 pr-12 py-3 border rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-colors ${
                         errors.password ? 'border-red-500' : 'border-gray-300'
                       }`}
                       placeholder="Enter your password"
@@ -227,10 +273,10 @@ export default function LoginPage() {
 
                 <div className="flex items-center justify-between">
                   <label className="flex items-center">
-                    <input type="checkbox" className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                    <input type="checkbox" className="rounded border-gray-300 text-amber-800 focus:ring-amber-500" />
                     <span className="ml-2 text-sm text-gray-600">Remember me</span>
                   </label>
-                  <a href="#" className="text-sm text-indigo-600 hover:text-indigo-500">
+                  <a href="#" className="text-sm text-amber-800 hover:text-amber-600">
                     Forgot password?
                   </a>
                 </div>
@@ -238,7 +284,7 @@ export default function LoginPage() {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all duration-200 flex items-center justify-center space-x-2"
+                  className="w-full bg-gradient-to-r from-amber-800 to-green-800 text-white py-3 rounded-lg font-semibold hover:from-amber-900 hover:to-green-900 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 transition-all duration-200 flex items-center justify-center space-x-2 shadow-lg"
                 >
                   {isLoading ? (
                     <>
@@ -323,7 +369,7 @@ export default function LoginPage() {
                 </div>
 
                 {/* Finance */}
-                <div>
+                <div className="mb-3">
                   <p className="text-xs text-gray-400 mb-1.5 font-semibold uppercase tracking-wide">Finance</p>
                   <div className="grid grid-cols-2 gap-1.5">
                     {demoAccounts.finance.map((acc) => (
@@ -337,12 +383,28 @@ export default function LoginPage() {
                     ))}
                   </div>
                 </div>
+
+                {/* Bar */}
+                <div>
+                  <p className="text-xs text-gray-400 mb-1.5 font-semibold uppercase tracking-wide">🍸 Bar & Lounge</p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {demoAccounts.bar.map((acc) => (
+                      <button
+                        key={acc.role}
+                        onClick={() => login(acc.email, acc.password)}
+                        className={`text-xs px-2 py-1.5 rounded border transition-all hover:scale-105 font-medium ${acc.color}`}
+                      >
+                        {acc.role}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
 
-            <p className="mt-8 text-center text-sm text-gray-600">
+            <p className="mt-8 text-center text-sm text-white/80">
               Need help? Contact{' '}
-              <a href="tel:0790900777" className="text-indigo-600 hover:text-indigo-500">
+              <a href="tel:0790900777" className="text-amber-300 hover:text-amber-200 font-medium">
                 0790900777
               </a>
             </p>

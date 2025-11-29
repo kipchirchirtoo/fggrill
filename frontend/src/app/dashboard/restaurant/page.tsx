@@ -71,7 +71,7 @@ export default function RestaurantDashboard() {
   }, []);
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.RESTAURANT]}>
+    <ProtectedRoute allowedRoles={[UserRole.RESTAURANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
           <div>
@@ -164,22 +164,22 @@ export default function RestaurantDashboard() {
             <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
               <div className="grid grid-cols-2 gap-4">
-                <button className="p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
+                <a href="/dashboard/restaurant/pos" className="p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors block text-center">
                   <ShoppingCart className="h-6 w-6 text-green-600 mb-2 mx-auto" />
-                  <span className="text-sm text-gray-700">New Order</span>
-                </button>
-                <button className="p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
-                  <UtensilsCrossed className="h-6 w-6 text-blue-600 mb-2 mx-auto" />
+                  <span className="text-sm text-gray-700">Open POS</span>
+                </a>
+                <a href="/dashboard/restaurant/orders" className="p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors block text-center">
+                  <Clock className="h-6 w-6 text-blue-600 mb-2 mx-auto" />
+                  <span className="text-sm text-gray-700">View Orders</span>
+                </a>
+                <a href="/dashboard/restaurant/menu" className="p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors block text-center">
+                  <UtensilsCrossed className="h-6 w-6 text-purple-600 mb-2 mx-auto" />
                   <span className="text-sm text-gray-700">Menu Items</span>
-                </button>
-                <button className="p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
-                  <Package className="h-6 w-6 text-purple-600 mb-2 mx-auto" />
-                  <span className="text-sm text-gray-700">Inventory</span>
-                </button>
-                <button className="p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors">
+                </a>
+                <a href="/dashboard/restaurant/kitchen" className="p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors block text-center">
                   <DollarSign className="h-6 w-6 text-yellow-600 mb-2 mx-auto" />
-                  <span className="text-sm text-gray-700">Daily Report</span>
-                </button>
+                  <span className="text-sm text-gray-700">Kitchen Display</span>
+                </a>
               </div>
 
               <div className="mt-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">

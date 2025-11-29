@@ -24,7 +24,9 @@ export default function BranchStoreStockOutPage() {
     setIsLoading(true);
     try {
       const res = await storeAPI.getBranchStock(user?.branch_id);
-      setStock(res.stock || res || []);
+      // Handle various API response formats
+      const stockData = res?.data?.stock || res?.data || res?.stock || (Array.isArray(res) ? res : []);
+      setStock(Array.isArray(stockData) ? stockData : []);
     } catch (error) { console.error('Error:', error); } 
     finally { setIsLoading(false); }
   };

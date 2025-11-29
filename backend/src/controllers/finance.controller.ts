@@ -621,3 +621,652 @@ export const approveExpense = async (
     next(error);
   }
 };
+
+// ============== ADVANCED FINANCIAL TOOLS ==============
+
+// @desc    Get Cash Flow Report
+// @route   GET /api/finance/cashflow
+// @access  Private (Finance Staff)
+export const getCashFlowReport = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { startDate, endDate, branch_id } = req.query;
+    const start = startDate as string || new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString();
+    const end = endDate as string || new Date().toISOString();
+
+    // Get income transactions
+    let incomeQuery = supabase
+      .from('finance_transactions')
+      .select('amount, category, created_at, payment_method')
+      .eq('transaction_type', 'INCOME')
+      .gte('created_at', start)
+      .lte('created_at', end);
+
+    // Get expense transactions
+    let expenseQuery = supabase
+      .from('finance_transactions')
+      .select('amount, category, created_at, payment_method')
+      .eq('transaction_type', 'EXPENSE')
+      .gte('created_at', start)
+      .lte('created_at', end);
+
+    if (branch_id) {
+      incomeQuery = incomeQuery.eq('branch_id', branch_id);
+      expenseQuery = expenseQuery.eq('branch_id', branch_id);
+    }
+
+    const [incomeRes, expenseRes] = await Promise.all([incomeQuery, expenseQuery]);
+
+    const income = incomeRes.data || [];
+    const expenses = expenseRes.data || [];
+
+    const totalIncome = income.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const totalExpenses = expenses.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const netCashFlow = totalIncome - totalExpenses;
+
+    // Group by category
+    const incomeByCategory: Record<string, number> = {};
+    const expensesByCategory: Record<string, number> = {};
+
+    income.forEach(t => {
+      incomeByCategory[t.category || 'Other'] = (incomeByCategory[t.category || 'Other'] || 0) + t.amount;
+    });
+
+    expenses.forEach(t => {
+      expensesByCategory[t.category || 'Other'] = (expensesByCategory[t.category || 'Other'] || 0) + t.amount;
+    });
+
+    // Daily cash flow
+    const dailyCashFlow: Record<string, { income: number; expenses: number; net: number }> = {};
+    
+    income.forEach(t => {
+      const date = t.created_at.split('T')[0];
+      if (!dailyCashFlow[date]) dailyCashFlow[date] = { income: 0, expenses: 0, net: 0 };
+      dailyCashFlow[date].income += t.amount;
+      dailyCashFlow[date].net += t.amount;
+    });
+
+    expenses.forEach(t => {
+      const date = t.created_at.split('T')[0];
+      if (!dailyCashFlow[date]) dailyCashFlow[date] = { income: 0, expenses: 0, net: 0 };
+      dailyCashFlow[date].expenses += t.amount;
+      dailyCashFlow[date].net -= t.amount;
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        summary: {
+          totalIncome,
+          totalExpenses,
+          netCashFlow,
+          profitMargin: totalIncome > 0 ? ((netCashFlow / totalIncome) * 100).toFixed(2) : 0
+        },
+        incomeByCategory,
+        expensesByCategory,
+        dailyCashFlow: Object.entries(dailyCashFlow).map(([date, data]) => ({ date, ...data })).sort((a, b) => a.date.localeCompare(b.date)),
+        period: { start, end }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Profit & Loss Statement
+// @route   GET /api/finance/profit-loss
+// @access  Private (Finance Staff)
+export const getProfitLossStatement = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { startDate, endDate, branch_id } = req.query;
+    const start = startDate as string || new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString();
+    const end = endDate as string || new Date().toISOString();
+
+    // Revenue categories
+    const revenueCategories = ['ROOM_REVENUE', 'FOOD_BEVERAGE', 'SERVICES', 'OTHER_INCOME'];
+    const expenseCategories = ['SALARIES', 'UTILITIES', 'SUPPLIES', 'MAINTENANCE', 'MARKETING', 'ADMIN', 'OTHER_EXPENSE'];
+
+    let revenueQuery = supabase
+      .from('finance_transactions')
+      .select('amount, category')
+      .eq('transaction_type', 'INCOME')
+      .gte('created_at', start)
+      .lte('created_at', end);
+
+    let expenseQuery = supabase
+      .from('finance_transactions')
+      .select('amount, category')
+      .eq('transaction_type', 'EXPENSE')
+      .gte('created_at', start)
+      .lte('created_at', end);
+
+    if (branch_id) {
+      revenueQuery = revenueQuery.eq('branch_id', branch_id);
+      expenseQuery = expenseQuery.eq('branch_id', branch_id);
+    }
+
+    const [revenueRes, expenseRes] = await Promise.all([revenueQuery, expenseQuery]);
+
+    const revenues = revenueRes.data || [];
+    const expenses = expenseRes.data || [];
+
+    // Calculate revenue breakdown
+    const revenueBreakdown: Record<string, number> = {};
+    let totalRevenue = 0;
+    revenues.forEach(t => {
+      const cat = t.category || 'OTHER_INCOME';
+      revenueBreakdown[cat] = (revenueBreakdown[cat] || 0) + t.amount;
+      totalRevenue += t.amount;
+    });
+
+    // Calculate expense breakdown
+    const expenseBreakdown: Record<string, number> = {};
+    let totalExpenses = 0;
+    expenses.forEach(t => {
+      const cat = t.category || 'OTHER_EXPENSE';
+      expenseBreakdown[cat] = (expenseBreakdown[cat] || 0) + t.amount;
+      totalExpenses += t.amount;
+    });
+
+    const grossProfit = totalRevenue;
+    const operatingExpenses = totalExpenses;
+    const netProfit = grossProfit - operatingExpenses;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        revenue: {
+          breakdown: revenueBreakdown,
+          total: totalRevenue
+        },
+        expenses: {
+          breakdown: expenseBreakdown,
+          total: totalExpenses
+        },
+        grossProfit,
+        operatingExpenses,
+        netProfit,
+        profitMargin: totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(2) : 0,
+        period: { start, end }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Revenue by Branch
+// @route   GET /api/finance/revenue-by-branch
+// @access  Private (Finance Staff)
+export const getRevenueByBranch = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { startDate, endDate } = req.query;
+    const start = startDate as string || new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString();
+    const end = endDate as string || new Date().toISOString();
+
+    // Get all branches
+    const { data: branches } = await supabase.from('branches').select('id, name, code');
+
+    // Get transactions grouped by branch
+    const { data: transactions } = await supabase
+      .from('finance_transactions')
+      .select('amount, transaction_type, branch_id')
+      .gte('created_at', start)
+      .lte('created_at', end);
+
+    const branchData: Record<string, { income: number; expenses: number; net: number; name: string; code: string }> = {};
+
+    branches?.forEach(b => {
+      branchData[b.id] = { income: 0, expenses: 0, net: 0, name: b.name, code: b.code };
+    });
+
+    transactions?.forEach(t => {
+      if (t.branch_id && branchData[t.branch_id]) {
+        if (t.transaction_type === 'INCOME') {
+          branchData[t.branch_id].income += t.amount;
+          branchData[t.branch_id].net += t.amount;
+        } else {
+          branchData[t.branch_id].expenses += t.amount;
+          branchData[t.branch_id].net -= t.amount;
+        }
+      }
+    });
+
+    const branchRevenue = Object.entries(branchData).map(([id, data]) => ({
+      branch_id: id,
+      ...data
+    })).sort((a, b) => b.income - a.income);
+
+    const totals = branchRevenue.reduce((acc, b) => ({
+      income: acc.income + b.income,
+      expenses: acc.expenses + b.expenses,
+      net: acc.net + b.net
+    }), { income: 0, expenses: 0, net: 0 });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        branches: branchRevenue,
+        totals,
+        period: { start, end }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Budget vs Actual Report
+// @route   GET /api/finance/budget-analysis
+// @access  Private (Finance Staff)
+export const getBudgetAnalysis = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { year, month, branch_id } = req.query;
+    const currentYear = year || new Date().getFullYear();
+    const currentMonth = month || new Date().getMonth() + 1;
+
+    // Get budgets
+    let budgetQuery = supabase
+      .from('budgets')
+      .select('*')
+      .eq('year', currentYear)
+      .eq('month', currentMonth);
+
+    if (branch_id) {
+      budgetQuery = budgetQuery.eq('branch_id', branch_id);
+    }
+
+    const { data: budgets } = await budgetQuery;
+
+    // Get actual expenses for the period
+    const startDate = new Date(Number(currentYear), Number(currentMonth) - 1, 1).toISOString();
+    const endDate = new Date(Number(currentYear), Number(currentMonth), 0).toISOString();
+
+    let expenseQuery = supabase
+      .from('finance_transactions')
+      .select('amount, category')
+      .eq('transaction_type', 'EXPENSE')
+      .gte('created_at', startDate)
+      .lte('created_at', endDate);
+
+    if (branch_id) {
+      expenseQuery = expenseQuery.eq('branch_id', branch_id);
+    }
+
+    const { data: expenses } = await expenseQuery;
+
+    // Calculate actuals by category
+    const actualsByCategory: Record<string, number> = {};
+    expenses?.forEach(e => {
+      actualsByCategory[e.category || 'Other'] = (actualsByCategory[e.category || 'Other'] || 0) + e.amount;
+    });
+
+    // Compare budget vs actual
+    const analysis = budgets?.map(b => {
+      const actual = actualsByCategory[b.category] || 0;
+      const variance = b.amount - actual;
+      const variancePercent = b.amount > 0 ? ((variance / b.amount) * 100).toFixed(2) : 0;
+      return {
+        category: b.category,
+        budgeted: b.amount,
+        actual,
+        variance,
+        variancePercent,
+        status: variance >= 0 ? 'UNDER_BUDGET' : 'OVER_BUDGET'
+      };
+    }) || [];
+
+    const totals = analysis.reduce((acc, a) => ({
+      budgeted: acc.budgeted + a.budgeted,
+      actual: acc.actual + a.actual,
+      variance: acc.variance + a.variance
+    }), { budgeted: 0, actual: 0, variance: 0 });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        analysis,
+        totals: {
+          ...totals,
+          variancePercent: totals.budgeted > 0 ? ((totals.variance / totals.budgeted) * 100).toFixed(2) : 0,
+          status: totals.variance >= 0 ? 'UNDER_BUDGET' : 'OVER_BUDGET'
+        },
+        period: { year: currentYear, month: currentMonth }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Tax Summary
+// @route   GET /api/finance/tax-summary
+// @access  Private (Finance Staff)
+export const getTaxSummary = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { startDate, endDate } = req.query;
+    const start = startDate as string || new Date(new Date().getFullYear(), 0, 1).toISOString();
+    const end = endDate as string || new Date().toISOString();
+
+    // Get all income
+    const { data: income } = await supabase
+      .from('finance_transactions')
+      .select('amount, category')
+      .eq('transaction_type', 'INCOME')
+      .gte('created_at', start)
+      .lte('created_at', end);
+
+    // Get all expenses
+    const { data: expenses } = await supabase
+      .from('finance_transactions')
+      .select('amount, category')
+      .eq('transaction_type', 'EXPENSE')
+      .gte('created_at', start)
+      .lte('created_at', end);
+
+    const totalIncome = income?.reduce((sum, t) => sum + t.amount, 0) || 0;
+    const totalExpenses = expenses?.reduce((sum, t) => sum + t.amount, 0) || 0;
+    const taxableIncome = totalIncome - totalExpenses;
+
+    // Kenya tax rates (simplified)
+    const vatRate = 0.16; // 16% VAT
+    const corporateTaxRate = 0.30; // 30% corporate tax
+
+    const estimatedVAT = totalIncome * vatRate;
+    const estimatedCorporateTax = taxableIncome > 0 ? taxableIncome * corporateTaxRate : 0;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        grossIncome: totalIncome,
+        deductibleExpenses: totalExpenses,
+        taxableIncome,
+        taxes: {
+          vat: {
+            rate: vatRate * 100,
+            estimated: estimatedVAT.toFixed(2)
+          },
+          corporateTax: {
+            rate: corporateTaxRate * 100,
+            estimated: estimatedCorporateTax.toFixed(2)
+          },
+          totalEstimated: (estimatedVAT + estimatedCorporateTax).toFixed(2)
+        },
+        period: { start, end }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Financial Forecast
+// @route   GET /api/finance/forecast
+// @access  Private (Finance Staff)
+export const getFinancialForecast = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { months = 3 } = req.query;
+    const forecastMonths = Number(months);
+
+    // Get last 6 months of data for trend analysis
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    const { data: historicalData } = await supabase
+      .from('finance_transactions')
+      .select('amount, transaction_type, created_at')
+      .gte('created_at', sixMonthsAgo.toISOString());
+
+    // Group by month
+    const monthlyData: Record<string, { income: number; expenses: number }> = {};
+    
+    historicalData?.forEach(t => {
+      const month = t.created_at.substring(0, 7); // YYYY-MM
+      if (!monthlyData[month]) monthlyData[month] = { income: 0, expenses: 0 };
+      if (t.transaction_type === 'INCOME') {
+        monthlyData[month].income += t.amount;
+      } else {
+        monthlyData[month].expenses += t.amount;
+      }
+    });
+
+    const months_data = Object.entries(monthlyData).sort((a, b) => a[0].localeCompare(b[0]));
+    
+    // Calculate averages for forecasting
+    const avgIncome = months_data.reduce((sum, [_, d]) => sum + d.income, 0) / Math.max(months_data.length, 1);
+    const avgExpenses = months_data.reduce((sum, [_, d]) => sum + d.expenses, 0) / Math.max(months_data.length, 1);
+
+    // Simple growth rate calculation
+    let incomeGrowth = 0;
+    let expenseGrowth = 0;
+    if (months_data.length >= 2) {
+      const first = months_data[0][1];
+      const last = months_data[months_data.length - 1][1];
+      incomeGrowth = first.income > 0 ? (last.income - first.income) / first.income / months_data.length : 0;
+      expenseGrowth = first.expenses > 0 ? (last.expenses - first.expenses) / first.expenses / months_data.length : 0;
+    }
+
+    // Generate forecast
+    const forecast = [];
+    let currentIncome = avgIncome;
+    let currentExpenses = avgExpenses;
+    const today = new Date();
+
+    for (let i = 1; i <= forecastMonths; i++) {
+      const forecastDate = new Date(today);
+      forecastDate.setMonth(forecastDate.getMonth() + i);
+      const monthStr = forecastDate.toISOString().substring(0, 7);
+
+      currentIncome = currentIncome * (1 + incomeGrowth);
+      currentExpenses = currentExpenses * (1 + expenseGrowth);
+
+      forecast.push({
+        month: monthStr,
+        projectedIncome: Math.round(currentIncome),
+        projectedExpenses: Math.round(currentExpenses),
+        projectedNet: Math.round(currentIncome - currentExpenses)
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        historical: months_data.map(([month, data]) => ({
+          month,
+          income: data.income,
+          expenses: data.expenses,
+          net: data.income - data.expenses
+        })),
+        forecast,
+        trends: {
+          avgMonthlyIncome: Math.round(avgIncome),
+          avgMonthlyExpenses: Math.round(avgExpenses),
+          incomeGrowthRate: (incomeGrowth * 100).toFixed(2),
+          expenseGrowthRate: (expenseGrowth * 100).toFixed(2)
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Accounts Receivable/Payable Summary
+// @route   GET /api/finance/ar-ap
+// @access  Private (Finance Staff)
+export const getAccountsReceivablePayable = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    // Get unpaid invoices (Accounts Receivable)
+    const { data: unpaidInvoices } = await supabase
+      .from('finance_invoices')
+      .select('id, invoice_number, guest_id, total_amount, amount_paid, due_date, status')
+      .in('status', ['PENDING', 'PARTIAL', 'OVERDUE']);
+
+    // Get pending supplier payments (Accounts Payable)
+    const { data: pendingPayments } = await supabase
+      .from('expenses')
+      .select('id, description, amount, expense_date, status')
+      .eq('status', 'approved');
+
+    const totalReceivable = unpaidInvoices?.reduce((sum, inv) => sum + (inv.total_amount - (inv.amount_paid || 0)), 0) || 0;
+    const totalPayable = pendingPayments?.reduce((sum, p) => sum + p.amount, 0) || 0;
+
+    // Aging analysis for receivables
+    const today = new Date();
+    const aging = {
+      current: 0,
+      days30: 0,
+      days60: 0,
+      days90: 0,
+      over90: 0
+    };
+
+    unpaidInvoices?.forEach(inv => {
+      const dueDate = new Date(inv.due_date);
+      const daysPastDue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+      const amount = inv.total_amount - (inv.amount_paid || 0);
+
+      if (daysPastDue <= 0) aging.current += amount;
+      else if (daysPastDue <= 30) aging.days30 += amount;
+      else if (daysPastDue <= 60) aging.days60 += amount;
+      else if (daysPastDue <= 90) aging.days90 += amount;
+      else aging.over90 += amount;
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        accountsReceivable: {
+          total: totalReceivable,
+          count: unpaidInvoices?.length || 0,
+          aging
+        },
+        accountsPayable: {
+          total: totalPayable,
+          count: pendingPayments?.length || 0
+        },
+        netPosition: totalReceivable - totalPayable
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Financial KPIs
+// @route   GET /api/finance/kpis
+// @access  Private (Finance Staff)
+export const getFinancialKPIs = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { period = 'month' } = req.query;
+    
+    let startDate: Date;
+    const endDate = new Date();
+    
+    switch (period) {
+      case 'week':
+        startDate = new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case 'quarter':
+        startDate = new Date(endDate);
+        startDate.setMonth(startDate.getMonth() - 3);
+        break;
+      case 'year':
+        startDate = new Date(endDate);
+        startDate.setFullYear(startDate.getFullYear() - 1);
+        break;
+      default: // month
+        startDate = new Date(endDate);
+        startDate.setMonth(startDate.getMonth() - 1);
+    }
+
+    // Get transactions
+    const { data: transactions } = await supabase
+      .from('finance_transactions')
+      .select('amount, transaction_type, category')
+      .gte('created_at', startDate.toISOString())
+      .lte('created_at', endDate.toISOString());
+
+    const income = transactions?.filter(t => t.transaction_type === 'INCOME') || [];
+    const expenses = transactions?.filter(t => t.transaction_type === 'EXPENSE') || [];
+
+    const totalRevenue = income.reduce((sum, t) => sum + t.amount, 0);
+    const totalExpenses = expenses.reduce((sum, t) => sum + t.amount, 0);
+    const netIncome = totalRevenue - totalExpenses;
+
+    // Calculate previous period for comparison
+    const prevStartDate = new Date(startDate.getTime() - (endDate.getTime() - startDate.getTime()));
+    
+    const { data: prevTransactions } = await supabase
+      .from('finance_transactions')
+      .select('amount, transaction_type')
+      .gte('created_at', prevStartDate.toISOString())
+      .lt('created_at', startDate.toISOString());
+
+    const prevIncome = prevTransactions?.filter(t => t.transaction_type === 'INCOME') || [];
+    const prevExpenses = prevTransactions?.filter(t => t.transaction_type === 'EXPENSE') || [];
+    const prevRevenue = prevIncome.reduce((sum, t) => sum + t.amount, 0);
+    const prevTotalExpenses = prevExpenses.reduce((sum, t) => sum + t.amount, 0);
+
+    const revenueGrowth = prevRevenue > 0 ? ((totalRevenue - prevRevenue) / prevRevenue * 100) : 0;
+    const expenseGrowth = prevTotalExpenses > 0 ? ((totalExpenses - prevTotalExpenses) / prevTotalExpenses * 100) : 0;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        kpis: {
+          totalRevenue,
+          totalExpenses,
+          netIncome,
+          profitMargin: totalRevenue > 0 ? ((netIncome / totalRevenue) * 100).toFixed(2) : 0,
+          expenseRatio: totalRevenue > 0 ? ((totalExpenses / totalRevenue) * 100).toFixed(2) : 0,
+          revenueGrowth: revenueGrowth.toFixed(2),
+          expenseGrowth: expenseGrowth.toFixed(2)
+        },
+        period: {
+          start: startDate.toISOString(),
+          end: endDate.toISOString(),
+          type: period
+        },
+        comparison: {
+          prevRevenue,
+          prevExpenses: prevTotalExpenses,
+          prevNetIncome: prevRevenue - prevTotalExpenses
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};

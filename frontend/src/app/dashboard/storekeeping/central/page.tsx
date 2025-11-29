@@ -23,6 +23,7 @@ import {
   Camera, Scan, Keyboard
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatDate } from '@/lib/date-utils';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
@@ -1028,7 +1029,7 @@ export default function CentralWarehousePage() {
                           </td>
                           <td className="px-4 py-4">{request.items.length} items</td>
                           <td className="px-4 py-4 text-sm text-gray-500">
-                            {new Date(request.created_at).toLocaleDateString()}
+                            {formatDate(request.created_at)}
                           </td>
                           <td className="px-4 py-4">
                             <div className="flex gap-2">
@@ -1099,7 +1100,7 @@ export default function CentralWarehousePage() {
                             </div>
                           </td>
                           <td className="px-4 py-4 text-sm text-gray-500">
-                            {new Date(dispatch.created_at).toLocaleDateString()}
+                            {formatDate(dispatch.created_at)}
                           </td>
                           <td className="px-4 py-4 text-sm text-gray-500">
                             {dispatch.vehicle_number || '-'}
@@ -1182,7 +1183,7 @@ export default function CentralWarehousePage() {
                             </div>
                           </td>
                           <td className="px-4 py-4 text-sm text-gray-500">
-                            {new Date(transfer.created_at).toLocaleDateString()}
+                            {formatDate(transfer.created_at)}
                           </td>
                         </tr>
                       ))}

@@ -47,6 +47,9 @@ export const getMenuItems = async (
     if (req.query.category) {
       query = query.eq('category_id', req.query.category);
     }
+    if (req.query.branch_id) {
+      query = query.or(`branch_id.eq.${req.query.branch_id},branch_id.is.null`);
+    }
     if (req.query.available === 'true') {
       query = query.eq('is_available', true);
     }
@@ -195,8 +198,12 @@ export const createOrder = async (
       tableNumber,
       roomNumber,
       guestId,
+      guestName,
       specialInstructions,
-      items
+      items,
+      paymentMethod,
+      status,
+      branchId
     } = req.body;
 
     // Generate order number
@@ -212,9 +219,16 @@ export const createOrder = async (
         table_number: tableNumber,
         room_number: roomNumber,
         guest_id: guestId,
+        guest_name: guestName,
         special_instructions: specialInstructions,
         total_amount: 0, // Will be calculated by trigger
-        created_by: req.user?.id
+        payment_method: paymentMethod,
+        payment_status: status === 'confirmed' ? 'paid' : 'pending',
+        status: status || 'pending',
+        confirmed_at: status === 'confirmed' ? new Date().toISOString() : null,
+        confirmed_by: status === 'confirmed' ? req.user?.id : null,
+        created_by: req.user?.id,
+        branch_id: branchId
       }])
       .select()
       .single();
@@ -413,6 +427,9 @@ export const getOrders = async (
     }
     if (req.query.guest) {
       query = query.eq('guest_id', req.query.guest);
+    }
+    if (req.query.branch_id) {
+      query = query.eq('branch_id', req.query.branch_id);
     }
 
     const { data: orders, error, count } = await query;

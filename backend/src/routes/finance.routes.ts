@@ -10,7 +10,15 @@ import {
   createBudget,
   getExpenses,
   createExpense,
-  approveExpense
+  approveExpense,
+  getCashFlowReport,
+  getProfitLossStatement,
+  getRevenueByBranch,
+  getBudgetAnalysis,
+  getTaxSummary,
+  getFinancialForecast,
+  getAccountsReceivablePayable,
+  getFinancialKPIs
 } from '../controllers/finance.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -69,6 +77,56 @@ router.route('/expenses')
 router.put('/expenses/:id/approve',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
   approveExpense
+);
+
+// ============== ADVANCED FINANCIAL TOOLS ==============
+
+// Cash Flow Report
+router.get('/cashflow',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  getCashFlowReport
+);
+
+// Profit & Loss Statement
+router.get('/profit-loss',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  getProfitLossStatement
+);
+
+// Revenue by Branch
+router.get('/revenue-by-branch',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  getRevenueByBranch
+);
+
+// Budget vs Actual Analysis
+router.get('/budget-analysis',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  getBudgetAnalysis
+);
+
+// Tax Summary
+router.get('/tax-summary',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  getTaxSummary
+);
+
+// Financial Forecast
+router.get('/forecast',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  getFinancialForecast
+);
+
+// Accounts Receivable/Payable
+router.get('/ar-ap',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  getAccountsReceivablePayable
+);
+
+// Financial KPIs
+router.get('/kpis',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  getFinancialKPIs
 );
 
 export default router;

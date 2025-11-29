@@ -7,7 +7,7 @@ import { Package } from 'lucide-react';
 
 export default function RestaurantInventoryPage() {
   return (
-    <ProtectedRoute allowedRoles={[UserRole.RESTAURANT]}>
+    <ProtectedRoute allowedRoles={[UserRole.RESTAURANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
           <div>

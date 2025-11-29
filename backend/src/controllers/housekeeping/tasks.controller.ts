@@ -1,0 +1,639 @@
+// =====================================================
+// HOUSEKEEPING TASKS CONTROLLER
+// =====================================================
+
+import { Request, Response, NextFunction } from 'express';
+import { supabase } from '../../config/supabase';
+import { logger } from '../../utils/logger';
+import {
+  ICreateTaskRequest,
+  IUpdateTaskStatusRequest,
+  IAssignTaskRequest,
+  IBulkAssignRequest,
+  HKTaskStatus,
+  HKTaskType,
+  HKPriority
+} from '../../types/housekeeping.types';
+
+// Helper function to get staff profile ID from user ID
+async function getStaffProfileId(userId: string | undefined): Promise<string | null> {
+  if (!userId) return null;
+  const { data } = await supabase
+    .from('hk_staff_profiles')
+    .select('id')
+    .eq('user_id', userId)
+    .single();
+  return data?.id || null;
+}
+
+/**
+ * @desc    Get all housekeeping tasks with filters
+ * @route   GET /api/housekeeping/tasks
+ * @access  Private
+ */
+export const getTasks = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const startIndex = (page - 1) * limit;
+
+    const { status, priority, taskType, assignedTo, floor, date, roomNumber } = req.query;
+
+    let query = supabase
+      .from('hk_tasks')
+      .select(`
+        *,
+        room:rooms(id, room_number, floor, room_type, hk_status),
+        assignee:hk_staff_profiles!assigned_to(
+          id, staff_code,
+          user:users(first_name, last_name)
+        ),
+        completed_by_staff:hk_staff_profiles!completed_by(
+          id, staff_code,
+          user:users(first_name, last_name)
+        )
+      `, { count: 'exact' })
+      .order('priority', { ascending: true })
+      .order('due_by', { ascending: true })
+      .order('created_at', { ascending: false })
+      .range(startIndex, startIndex + limit - 1);
+
+    if (status) query = query.eq('status', status);
+    if (priority) query = query.eq('priority', priority);
+    if (taskType) query = query.eq('task_type', taskType);
+    if (assignedTo) query = query.eq('assigned_to', assignedTo);
+    if (floor) query = query.eq('floor_number', parseInt(floor as string));
+    if (roomNumber) query = query.ilike('room_number', `%${roomNumber}%`);
+    if (date) {
+      query = query.gte('created_at', `${date}T00:00:00`).lte('created_at', `${date}T23:59:59`);
+    }
+
+    const { data: tasks, error, count } = await query;
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      count: tasks?.length || 0,
+      total: count || 0,
+      page,
+      pages: Math.ceil((count || 0) / limit),
+      data: tasks
+    });
+  } catch (error) {
+    logger.error('Error fetching tasks:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get single task by ID
+ * @route   GET /api/housekeeping/tasks/:id
+ * @access  Private
+ */
+export const getTask = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const { data: task, error } = await supabase
+      .from('hk_tasks')
+      .select(`
+        *,
+        room:rooms(*),
+        assignee:hk_staff_profiles!assigned_to(
+          id, staff_code, designation,
+          user:users(first_name, last_name, email, phone)
+        ),
+        completed_by_staff:hk_staff_profiles!completed_by(
+          id, staff_code,
+          user:users(first_name, last_name)
+        ),
+        checklist:hk_task_checklists(*),
+        inspection:hk_inspections(*)
+      `)
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      res.status(404).json({ success: false, message: 'Task not found' });
+      return;
+    }
+
+    res.status(200).json({ success: true, data: task });
+  } catch (error) {
+    logger.error('Error fetching task:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get tasks assigned to current user
+ * @route   GET /api/housekeeping/tasks/my-tasks
+ * @access  Private
+ */
+export const getMyTasks = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const staffId = await getStaffProfileId(req.user?.id);
+    if (!staffId) {
+      res.status(404).json({ success: false, message: 'Staff profile not found' });
+      return;
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const { data: tasks, error } = await supabase
+      .from('hk_tasks')
+      .select(`
+        *,
+        room:rooms(id, room_number, floor, room_type, hk_status, is_vip),
+        checklist:hk_task_checklists(*)
+      `)
+      .eq('assigned_to', staffId)
+      .gte('created_at', `${today}T00:00:00`)
+      .not('status', 'in', '("cancelled","inspection_passed")')
+      .order('priority', { ascending: true })
+      .order('due_by', { ascending: true });
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      count: tasks?.length || 0,
+      data: tasks
+    });
+  } catch (error) {
+    logger.error('Error fetching my tasks:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Create new housekeeping task
+ * @route   POST /api/housekeeping/tasks
+ * @access  Private (Supervisors, Managers)
+ */
+export const createTask = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const {
+      roomId,
+      taskType,
+      priority = 'normal',
+      assignedTo,
+      scheduledStart,
+      dueBy,
+      specialInstructions,
+      isVip,
+      guestPreferences
+    } = req.body as ICreateTaskRequest;
+
+    // Get room details
+    const { data: room, error: roomError } = await supabase
+      .from('rooms')
+      .select('id, room_number, floor, room_type, is_vip')
+      .eq('id', roomId)
+      .single();
+
+    if (roomError || !room) {
+      res.status(404).json({ success: false, message: 'Room not found' });
+      return;
+    }
+
+    // Calculate credit value based on task type
+    let creditValue = 1.0;
+    if (taskType === HKTaskType.CHECKOUT_FULL_CLEAN) creditValue = 1.5;
+    if (taskType === HKTaskType.STAY_OVER_SERVICE) creditValue = 0.5;
+    if (taskType === HKTaskType.DEEP_CLEAN) creditValue = 2.0;
+    if (taskType === HKTaskType.CHECKOUT_VIP_CLEAN) creditValue = 2.0;
+    if (room.room_type?.toLowerCase().includes('suite')) creditValue += 0.5;
+
+    // Estimate duration
+    let estimatedDuration = 30;
+    if (taskType === HKTaskType.CHECKOUT_FULL_CLEAN) estimatedDuration = 45;
+    if (taskType === HKTaskType.STAY_OVER_SERVICE) estimatedDuration = 20;
+    if (taskType === HKTaskType.DEEP_CLEAN) estimatedDuration = 90;
+    if (taskType === HKTaskType.TURNDOWN_SERVICE) estimatedDuration = 10;
+
+    const { data: task, error: taskError } = await supabase
+      .from('hk_tasks')
+      .insert([{
+        room_id: roomId,
+        room_number: room.room_number,
+        floor_number: room.floor,
+        task_type: taskType,
+        priority,
+        status: assignedTo ? 'assigned' : 'pending',
+        assigned_to: assignedTo || null,
+        assigned_at: assignedTo ? new Date().toISOString() : null,
+        assigned_by: assignedTo ? req.user?.id : null,
+        estimated_duration_minutes: estimatedDuration,
+        scheduled_start: scheduledStart || null,
+        due_by: dueBy || null,
+        credit_value: creditValue,
+        is_vip: isVip || room.is_vip,
+        guest_preferences: guestPreferences || {},
+        special_instructions: specialInstructions || null,
+        requires_inspection: true,
+        created_by: req.user?.id
+      }])
+      .select()
+      .single();
+
+    if (taskError) throw taskError;
+
+    // Update room status
+    await supabase
+      .from('rooms')
+      .update({ hk_status: 'vacant_dirty', assigned_attendant_id: assignedTo || null })
+      .eq('id', roomId);
+
+    // Create checklist from template
+    const { data: template } = await supabase
+      .from('hk_checklist_templates')
+      .select('*')
+      .eq('task_type', taskType)
+      .eq('is_active', true)
+      .single();
+
+    if (template) {
+      await supabase
+        .from('hk_task_checklists')
+        .insert([{ task_id: task.id, template_id: template.id, completed_items: [], completion_percentage: 0 }]);
+    }
+
+    res.status(201).json({ success: true, data: task });
+    logger.info(`Task created: ${task.task_number} for room ${room.room_number}`);
+  } catch (error) {
+    logger.error('Error creating task:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Update task status
+ * @route   PUT /api/housekeeping/tasks/:id/status
+ * @access  Private
+ */
+export const updateTaskStatus = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { status, notes, suppliesUsed, photos } = req.body as IUpdateTaskStatusRequest;
+
+    const { data: task, error: taskError } = await supabase
+      .from('hk_tasks')
+      .select('*, room:rooms(*)')
+      .eq('id', id)
+      .single();
+
+    if (taskError || !task) {
+      res.status(404).json({ success: false, message: 'Task not found' });
+      return;
+    }
+
+    const updateData: Record<string, any> = { status, updated_at: new Date().toISOString() };
+
+    // Handle status transitions
+    if (status === HKTaskStatus.IN_PROGRESS) {
+      updateData.started_at = task.started_at || new Date().toISOString();
+      await supabase.from('rooms').update({ hk_status: 'cleaning_in_progress' }).eq('id', task.room_id);
+    }
+
+    if (status === HKTaskStatus.PAUSED) {
+      updateData.paused_at = new Date().toISOString();
+    }
+
+    if (status === HKTaskStatus.COMPLETED || status === HKTaskStatus.PENDING_INSPECTION) {
+      updateData.completed_at = new Date().toISOString();
+      updateData.completed_by = await getStaffProfileId(req.user?.id);
+      updateData.completion_notes = notes;
+      updateData.completion_photos = photos || [];
+      if (suppliesUsed) updateData.supplies_used = suppliesUsed;
+      if (task.started_at) {
+        updateData.actual_duration_minutes = Math.round((Date.now() - new Date(task.started_at).getTime()) / 60000);
+      }
+      const roomStatus = task.requires_inspection ? 'inspected' : 'vacant_clean';
+      await supabase.from('rooms').update({ hk_status: roomStatus, last_cleaned_at: new Date().toISOString() }).eq('id', task.room_id);
+    }
+
+    if (status === HKTaskStatus.INSPECTION_PASSED) {
+      await supabase.from('rooms').update({ hk_status: 'vacant_clean', last_inspected_at: new Date().toISOString() }).eq('id', task.room_id);
+    }
+
+    if (status === HKTaskStatus.INSPECTION_FAILED || status === HKTaskStatus.REWORK_REQUIRED) {
+      await supabase.from('rooms').update({ hk_status: 'vacant_dirty' }).eq('id', task.room_id);
+    }
+
+    const { data: updatedTask, error: updateError } = await supabase
+      .from('hk_tasks')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    // Update staff availability
+    if (['completed', 'pending_inspection', 'inspection_passed', 'cancelled', 'skipped'].includes(status) && task.assigned_to) {
+      await supabase.from('hk_staff_profiles').update({
+        current_task_id: null,
+        current_room_number: null,
+        is_available: true
+      }).eq('id', task.assigned_to);
+    }
+
+    res.status(200).json({ success: true, data: updatedTask });
+    logger.info(`Task ${task.task_number} status updated to ${status}`);
+  } catch (error) {
+    logger.error('Error updating task status:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Assign task to staff member
+ * @route   PUT /api/housekeeping/tasks/:id/assign
+ * @access  Private (Supervisors, Managers)
+ */
+export const assignTask = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { assignedTo, priority, notes } = req.body;
+
+    const { data: staff } = await supabase
+      .from('hk_staff_profiles')
+      .select('id, staff_code')
+      .eq('id', assignedTo)
+      .single();
+
+    if (!staff) {
+      res.status(404).json({ success: false, message: 'Staff member not found' });
+      return;
+    }
+
+    const updateData: Record<string, any> = {
+      assigned_to: assignedTo,
+      assigned_at: new Date().toISOString(),
+      assigned_by: req.user?.id,
+      status: 'assigned',
+      updated_at: new Date().toISOString()
+    };
+
+    if (priority) updateData.priority = priority;
+    if (notes) updateData.special_instructions = notes;
+
+    const { data: task, error } = await supabase
+      .from('hk_tasks')
+      .update(updateData)
+      .eq('id', id)
+      .select(`*, assignee:hk_staff_profiles!assigned_to(id, staff_code, user:users(first_name, last_name))`)
+      .single();
+
+    if (error) throw error;
+
+    await supabase.from('rooms').update({ assigned_attendant_id: assignedTo }).eq('id', task.room_id);
+
+    res.status(200).json({ success: true, data: task });
+    logger.info(`Task ${task.task_number} assigned to ${staff.staff_code}`);
+  } catch (error) {
+    logger.error('Error assigning task:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Bulk assign tasks
+ * @route   POST /api/housekeeping/tasks/bulk-assign
+ * @access  Private (Supervisors, Managers)
+ */
+export const bulkAssignTasks = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { taskIds, assignedTo } = req.body as IBulkAssignRequest;
+
+    const { data: tasks, error } = await supabase
+      .from('hk_tasks')
+      .update({
+        assigned_to: assignedTo,
+        assigned_at: new Date().toISOString(),
+        assigned_by: req.user?.id,
+        status: 'assigned'
+      })
+      .in('id', taskIds)
+      .select();
+
+    if (error) throw error;
+
+    res.status(200).json({ success: true, count: tasks?.length || 0, data: tasks });
+  } catch (error) {
+    logger.error('Error bulk assigning tasks:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Auto-assign pending tasks based on workload balancing
+ * @route   POST /api/housekeeping/tasks/auto-assign
+ * @access  Private (Supervisors, Managers)
+ */
+export const autoAssignTasks = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const floor = req.query.floor ? parseInt(req.query.floor as string) : undefined;
+
+    // Get pending unassigned tasks
+    let tasksQuery = supabase
+      .from('hk_tasks')
+      .select('id, room_number, floor_number, priority, credit_value')
+      .eq('status', 'pending')
+      .is('assigned_to', null)
+      .order('priority', { ascending: true });
+
+    if (floor) tasksQuery = tasksQuery.eq('floor_number', floor);
+
+    const { data: tasks } = await tasksQuery;
+
+    if (!tasks || tasks.length === 0) {
+      res.status(200).json({ success: true, message: 'No pending tasks to assign', assigned: 0 });
+      return;
+    }
+
+    // Get available staff with capacity
+    const { data: staff } = await supabase
+      .from('vw_hk_staff_workload')
+      .select('*')
+      .eq('is_available', true);
+
+    if (!staff || staff.length === 0) {
+      res.status(200).json({ success: true, message: 'No available staff', assigned: 0 });
+      return;
+    }
+
+    // Sort staff by remaining capacity
+    const staffWithCapacity = staff.map(s => ({
+      ...s,
+      remainingCapacity: parseFloat(s.max_credits_per_shift || 14) - parseFloat(s.current_credits || 0)
+    })).filter(s => s.remainingCapacity > 0).sort((a, b) => b.remainingCapacity - a.remainingCapacity);
+
+    // Assign tasks using round-robin with capacity check
+    const assignments: { taskId: string; staffId: string }[] = [];
+    let staffIndex = 0;
+
+    for (const task of tasks) {
+      if (staffWithCapacity.length === 0) break;
+
+      const assignee = staffWithCapacity[staffIndex % staffWithCapacity.length];
+      if (assignee.remainingCapacity >= parseFloat(task.credit_value || 1)) {
+        assignments.push({ taskId: task.id, staffId: assignee.id });
+        assignee.remainingCapacity -= parseFloat(task.credit_value || 1);
+        
+        if (assignee.remainingCapacity <= 0) {
+          staffWithCapacity.splice(staffIndex % staffWithCapacity.length, 1);
+        }
+      }
+      staffIndex++;
+    }
+
+    // Execute assignments
+    for (const { taskId, staffId } of assignments) {
+      await supabase.from('hk_tasks').update({
+        assigned_to: staffId,
+        assigned_at: new Date().toISOString(),
+        assigned_by: req.user?.id,
+        status: 'assigned'
+      }).eq('id', taskId);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Auto-assigned ${assignments.length} tasks`,
+      assigned: assignments.length,
+      assignments
+    });
+  } catch (error) {
+    logger.error('Error auto-assigning tasks:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Update task checklist
+ * @route   PUT /api/housekeeping/tasks/:id/checklist
+ * @access  Private
+ */
+export const updateChecklist = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { completedItems } = req.body;
+
+    const { data: checklist, error: fetchError } = await supabase
+      .from('hk_task_checklists')
+      .select('*')
+      .eq('task_id', id)
+      .single();
+
+    if (fetchError) {
+      // Create new checklist if doesn't exist
+      const { data: newChecklist, error: createError } = await supabase
+        .from('hk_task_checklists')
+        .insert([{ task_id: id, completed_items: completedItems, completion_percentage: 0 }])
+        .select()
+        .single();
+
+      if (createError) throw createError;
+      res.status(200).json({ success: true, data: newChecklist });
+      return;
+    }
+
+    // Calculate completion percentage
+    const totalItems = completedItems.length;
+    const completedCount = completedItems.filter((item: any) => item.completed).length;
+    const completionPercentage = totalItems > 0 ? Math.round((completedCount / totalItems) * 100) : 0;
+
+    const { data: updated, error } = await supabase
+      .from('hk_task_checklists')
+      .update({ completed_items: completedItems, completion_percentage: completionPercentage })
+      .eq('id', checklist.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(200).json({ success: true, data: updated });
+  } catch (error) {
+    logger.error('Error updating checklist:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Delete task
+ * @route   DELETE /api/housekeeping/tasks/:id
+ * @access  Private (Managers only)
+ */
+export const deleteTask = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const { data: task, error: fetchError } = await supabase
+      .from('hk_tasks')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !task) {
+      res.status(404).json({ success: false, message: 'Task not found' });
+      return;
+    }
+
+    // Only allow deletion of pending/cancelled tasks
+    if (!['pending', 'cancelled'].includes(task.status)) {
+      res.status(400).json({ success: false, message: 'Can only delete pending or cancelled tasks' });
+      return;
+    }
+
+    const { error } = await supabase.from('hk_tasks').delete().eq('id', id);
+    if (error) throw error;
+
+    res.status(200).json({ success: true, message: 'Task deleted' });
+    logger.info(`Task ${task.task_number} deleted`);
+  } catch (error) {
+    logger.error('Error deleting task:', error);
+    next(error);
+  }
+};

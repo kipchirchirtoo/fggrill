@@ -69,24 +69,63 @@ export const createUser = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const user = {
-      ...req.body,
-      created_by_id: req.user.id,
-      created_at: new Date().toISOString()
+    const { email, password, firstName, lastName, role, branchId, phoneNumber } = req.body;
+
+    if (!email || !password || !firstName || !lastName || !role) {
+      res.status(400).json({
+        success: false,
+        message: 'Please provide all required fields'
+      });
+      return;
+    }
+
+    // 1. Create user in Supabase Auth
+    const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        first_name: firstName,
+        last_name: lastName,
+        role
+      }
+    });
+
+    if (authError) throw authError;
+    if (!authUser.user) throw new Error('Failed to create auth user');
+
+    // 2. Create user profile in public users table
+    const userProfile = {
+      id: authUser.user.id,
+      email,
+      first_name: firstName,
+      last_name: lastName,
+      role,
+      branch_id: branchId || null,
+      phone_number: phoneNumber,
+      created_by_id: req.user?.id,
+      created_at: new Date().toISOString(),
+      status: 'active'
     };
 
-    const { data, error } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('users')
-      .insert([user])
+      .insert([userProfile])
       .select()
       .single();
 
-    if (error) throw error;
+    if (profileError) {
+      // Rollback auth user if profile creation fails
+      await supabase.auth.admin.deleteUser(authUser.user.id);
+      throw profileError;
+    }
 
     res.status(201).json({
       success: true,
-      data
+      data: profile
     });
+    
+    logger.info(`User created by admin: ${email} (${role})`);
   } catch (error) {
     next(error);
   }

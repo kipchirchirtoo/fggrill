@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -19,7 +19,8 @@ import {
   Mail,
   Phone,
   Edit,
-  Trash2
+  Trash2,
+  RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -28,9 +29,35 @@ import {
   PayrollModal,
   PerformanceModal
 } from '@/components/modals/StaffModals';
+import { staffAPI, storeAPI } from '@/lib/api';
+
+interface StaffMember {
+  id: string | number;
+  name: string;
+  full_name?: string;
+  role: string;
+  department: string;
+  department_name?: string;
+  status: string;
+  shift?: string;
+  performance?: number;
+  phone?: string;
+  email?: string;
+  joinDate?: string;
+  created_at?: string;
+  branch_id?: number;
+  branch_name?: string;
+}
+
+interface Department {
+  name: string;
+  staff: number;
+  color: string;
+}
 
 export default function AdminStaffPage() {
   const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
   const [showEditStaffModal, setShowEditStaffModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -40,92 +67,96 @@ export default function AdminStaffPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('all');
 
-  const staffStats = {
-    totalStaff: 24,
-    onDuty: 18,
-    onLeave: 3,
-    newHires: 2,
-    departments: 6,
-    averagePerformance: 87
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  
+  const [staffStats, setStaffStats] = useState({
+    totalStaff: 0,
+    onDuty: 0,
+    onLeave: 0,
+    newHires: 0,
+    departments: 0,
+    averagePerformance: 0
+  });
+
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      const staffRes = await staffAPI.getStaff().catch((err) => { 
+        console.error('Staff API error:', err); 
+        return { staff: [] }; 
+      });
+      
+      const staff = staffRes.staff || staffRes.data || staffRes || [];
+      const staffArray = Array.isArray(staff) ? staff : [];
+      
+      // Process staff members
+      const processedStaff = staffArray.map((s: any) => ({
+        id: s.id,
+        name: s.full_name || s.name || `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+        role: s.role || s.position || '-',
+        department: s.department_name || s.department || '-',
+        status: s.status || 'active',
+        shift: s.shift || 'Morning',
+        performance: s.performance || 0,
+        phone: s.phone || s.phone_number || '-',
+        email: s.email || '-',
+        joinDate: s.created_at || s.join_date || '-',
+        branch_name: s.branch_name || '-'
+      }));
+      
+      setStaffMembers(processedStaff);
+      
+      // Calculate department distribution
+      const deptCounts: { [key: string]: number } = {};
+      const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-red-500', 'bg-indigo-500', 'bg-teal-500', 'bg-pink-500'];
+      
+      processedStaff.forEach((s: any) => {
+        const dept = s.department || 'Other';
+        deptCounts[dept] = (deptCounts[dept] || 0) + 1;
+      });
+      
+      const deptArray = Object.entries(deptCounts).map(([name, count], index) => ({
+        name,
+        staff: count,
+        color: colors[index % colors.length]
+      }));
+      
+      setDepartments(deptArray);
+      
+      // Calculate stats
+      const activeStaff = processedStaff.filter((s: any) => s.status === 'active').length;
+      const onLeaveStaff = processedStaff.filter((s: any) => s.status === 'on-leave' || s.status === 'on_leave').length;
+      const avgPerformance = processedStaff.length > 0 
+        ? Math.round(processedStaff.reduce((sum: number, s: any) => sum + (s.performance || 0), 0) / processedStaff.length)
+        : 0;
+      
+      setStaffStats({
+        totalStaff: processedStaff.length,
+        onDuty: activeStaff,
+        onLeave: onLeaveStaff,
+        newHires: processedStaff.filter((s: any) => {
+          if (!s.joinDate || s.joinDate === '-') return false;
+          const joinDate = new Date(s.joinDate);
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          return joinDate >= thirtyDaysAgo;
+        }).length,
+        departments: deptArray.length,
+        averagePerformance: avgPerformance
+      });
+      
+    } catch (error) {
+      console.error('Error fetching staff data:', error);
+      toast.error('Failed to load staff data');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const staffMembers = [
-    {
-      id: 1,
-      name: 'Mary Kamau',
-      role: 'Housekeeping Supervisor',
-      department: 'Housekeeping',
-      status: 'active',
-      shift: 'Morning',
-      performance: 92,
-      phone: '+254 712 345 678',
-      email: 'mary.k@famousgate.com',
-      joinDate: '2022-03-15'
-    },
-    {
-      id: 2,
-      name: 'John Mwangi',
-      role: 'Head Chef',
-      department: 'Restaurant',
-      status: 'active',
-      shift: 'Morning',
-      performance: 88,
-      phone: '+254 723 456 789',
-      email: 'john.m@famousgate.com',
-      joinDate: '2021-06-20'
-    },
-    {
-      id: 3,
-      name: 'Sarah Wanjiru',
-      role: 'Front Desk Manager',
-      department: 'Reception',
-      status: 'active',
-      shift: 'Morning',
-      performance: 95,
-      phone: '+254 734 567 890',
-      email: 'sarah.w@famousgate.com',
-      joinDate: '2020-01-10'
-    },
-    {
-      id: 4,
-      name: 'Peter Njoroge',
-      role: 'Maintenance Technician',
-      department: 'Maintenance',
-      status: 'on-leave',
-      shift: 'Evening',
-      performance: 85,
-      phone: '+254 745 678 901',
-      email: 'peter.n@famousgate.com',
-      joinDate: '2023-02-28'
-    },
-    {
-      id: 5,
-      name: 'Grace Ochieng',
-      role: 'Accountant',
-      department: 'Finance',
-      status: 'active',
-      shift: 'Morning',
-      performance: 90,
-      phone: '+254 756 789 012',
-      email: 'grace.o@famousgate.com',
-      joinDate: '2022-08-15'
-    }
-  ];
-
-  const departments = [
-    { name: 'Housekeeping', staff: 6, color: 'bg-blue-500' },
-    { name: 'Restaurant', staff: 8, color: 'bg-green-500' },
-    { name: 'Reception', staff: 4, color: 'bg-purple-500' },
-    { name: 'Maintenance', staff: 3, color: 'bg-orange-500' },
-    { name: 'Finance', staff: 2, color: 'bg-red-500' },
-    { name: 'Management', staff: 1, color: 'bg-indigo-500' }
-  ];
-
-  const upcomingShifts = [
-    { time: '06:00 - 14:00', type: 'Morning', staff: 8 },
-    { time: '14:00 - 22:00', type: 'Evening', staff: 7 },
-    { time: '22:00 - 06:00', type: 'Night', staff: 3 }
-  ];
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
@@ -136,13 +167,23 @@ export default function AdminStaffPage() {
               <h1 className="text-3xl font-bold text-gray-900">Staff Management</h1>
               <p className="text-gray-600 mt-1">Manage employees and work schedules</p>
             </div>
-            <button
-              onClick={() => setShowAddStaffModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-            >
-              <UserPlus className="h-5 w-5" />
-              Add Staff Member
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={fetchData}
+                disabled={isLoading}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+              <button
+                onClick={() => setShowAddStaffModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              >
+                <UserPlus className="h-5 w-5" />
+                Add Staff Member
+              </button>
+            </div>
           </div>
 
           {/* Stats Grid */}
@@ -258,14 +299,14 @@ export default function AdminStaffPage() {
                             <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
                               <div
                                 className={`h-2 rounded-full ${
-                                  member.performance >= 90 ? 'bg-green-500' :
-                                  member.performance >= 70 ? 'bg-yellow-500' :
+                                  (member.performance || 0) >= 90 ? 'bg-green-500' :
+                                  (member.performance || 0) >= 70 ? 'bg-yellow-500' :
                                   'bg-red-500'
                                 }`}
-                                style={{ width: `${member.performance}%` }}
+                                style={{ width: `${member.performance || 0}%` }}
                               />
                             </div>
-                            <span className="text-sm text-gray-600">{member.performance}%</span>
+                            <span className="text-sm text-gray-600">{member.performance || 0}%</span>
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -318,11 +359,15 @@ export default function AdminStaffPage() {
                 </div>
               </div>
 
-              {/* Today's Shifts */}
+              {/* Shift Overview */}
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Today's Shifts</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Shift Overview</h3>
                 <div className="space-y-3">
-                  {upcomingShifts.map(shift => (
+                  {[
+                    { type: 'Morning', time: '06:00 - 14:00', staff: staffMembers.filter(s => s.shift === 'Morning').length },
+                    { type: 'Evening', time: '14:00 - 22:00', staff: staffMembers.filter(s => s.shift === 'Evening').length },
+                    { type: 'Night', time: '22:00 - 06:00', staff: staffMembers.filter(s => s.shift === 'Night').length }
+                  ].map(shift => (
                     <div key={shift.type} className="p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-medium text-gray-900">{shift.type} Shift</span>

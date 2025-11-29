@@ -1,8 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { X, Bell, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { X, Bell, Clock, CheckCircle, AlertCircle, Shield } from 'lucide-react';
+import { useAuth } from '@/lib/auth-context';
+import { 
+  Notification as NotificationType, 
+  filterNotificationsForUser,
+  ROLE_HIERARCHY,
+  NotificationLevel
+} from '@/lib/notifications';
 
 interface Notification {
   id: string;
@@ -11,6 +18,9 @@ interface Notification {
   type: 'info' | 'success' | 'warning' | 'error';
   timestamp: Date;
   read: boolean;
+  visibility?: NotificationLevel;
+  targetRoles?: string[];
+  department?: string;
 }
 
 interface NotificationModalProps {
@@ -19,46 +29,58 @@ interface NotificationModalProps {
 }
 
 export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: '1',
-      title: 'New Booking',
-      message: 'Room 201 has been booked for tomorrow',
-      type: 'info',
-      timestamp: new Date(),
-      read: false
-    },
-    {
-      id: '2',
-      title: 'Payment Received',
-      message: 'Payment of KES 15,000 received for booking #1234',
-      type: 'success',
-      timestamp: new Date(Date.now() - 3600000),
-      read: false
-    },
-    {
-      id: '3',
-      title: 'Low Inventory Alert',
-      message: 'Towels stock is running low',
-      type: 'warning',
-      timestamp: new Date(Date.now() - 7200000),
-      read: false
-    }
-  ]);
+  const { user } = useAuth();
+  const [allNotifications, setAllNotifications] = useState<Notification[]>([]);
+  
+  // Filter notifications based on user role
+  const notifications = useMemo(() => {
+    if (!user) return [];
+    
+    return allNotifications.filter(n => {
+      const userLevel = ROLE_HIERARCHY[user.role] || 0;
+      
+      // Check visibility level
+      if (n.visibility) {
+        const levelMin: Record<NotificationLevel, number> = {
+          all: 0,
+          staff: 20,
+          supervisors: 50,
+          managers: 70,
+          admin: 90,
+        };
+        if (userLevel < levelMin[n.visibility]) return false;
+      }
+      
+      // Check specific target roles
+      if (n.targetRoles && n.targetRoles.length > 0) {
+        if (!n.targetRoles.includes(user.role)) return false;
+      }
+      
+      // Check department match (optional)
+      if (n.department && user.department && n.department !== user.department) {
+        // Only filter by department for non-manager roles
+        if (userLevel < 70) return false;
+      }
+      
+      return true;
+    });
+  }, [allNotifications, user]);
+
+  useEffect(() => {
+    // Load notifications - in production this would come from API
+    // For now, notifications start empty (no mock data)
+    setAllNotifications([]);
+  }, []);
 
   const markAsRead = (id: string) => {
-    setNotifications(prev =>
-      prev.map(notification =>
-        notification.id === id
-          ? { ...notification, read: true }
-          : notification
-      )
+    setAllNotifications(prev =>
+      prev.map(n => n.id === id ? { ...n, read: true } : n)
     );
   };
 
   const markAllAsRead = () => {
-    setNotifications(prev =>
-      prev.map(notification => ({ ...notification, read: true }))
+    setAllNotifications(prev =>
+      prev.map(n => ({ ...n, read: true }))
     );
   };
 

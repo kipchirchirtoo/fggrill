@@ -14,7 +14,7 @@ export function StorekeepingLayout({ children }: StorekeepingLayoutProps) {
 
   useEffect(() => {
     // Only start monitoring if the user has appropriate role
-    if (user && [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.STOREKEEPER].includes(user.role)) {
+    if (user && [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER].includes(user.role)) {
       stockMonitor.start();
     }
 
@@ -24,7 +24,16 @@ export function StorekeepingLayout({ children }: StorekeepingLayoutProps) {
   }, [user]);
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.STOREKEEPER]}>
+    <ProtectedRoute allowedRoles={[
+      UserRole.SUPER_ADMIN, 
+      UserRole.GENERAL_MANAGER, 
+      UserRole.BRANCH_MANAGER,
+      UserRole.CENTRAL_STOREKEEPER, 
+      UserRole.BRANCH_STOREKEEPER,
+      UserRole.HOUSEKEEPING,
+      UserRole.HOUSEKEEPING_SUPERVISOR,
+      UserRole.RESTAURANT
+    ]}>
       {children}
     </ProtectedRoute>
   );

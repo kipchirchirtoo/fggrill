@@ -7,7 +7,7 @@ import { Users } from 'lucide-react';
 
 export default function ReceptionGuestsPage() {
   return (
-    <ProtectedRoute allowedRoles={[UserRole.RECEPTIONIST]}>
+    <ProtectedRoute allowedRoles={[UserRole.RECEPTIONIST, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
           <div>

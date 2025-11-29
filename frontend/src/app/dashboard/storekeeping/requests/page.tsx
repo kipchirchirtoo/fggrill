@@ -12,6 +12,7 @@ import {
   Building2, Package, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatDate } from '@/lib/date-utils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -96,7 +97,7 @@ export default function StockRequestsPage() {
   const pendingCount = requests.filter(r => ['PENDING', 'UNDER_REVIEW'].includes(r.status)).length;
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER]}>
+    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.HOUSEKEEPING, UserRole.HOUSEKEEPING_SUPERVISOR]}>
       <DashboardLayout>
         <div className="space-y-6">
           {/* Header */}
@@ -227,7 +228,7 @@ export default function StockRequestsPage() {
                           </div>
                         </td>
                         <td className="px-4 py-4 text-sm text-gray-500">
-                          {new Date(request.created_at).toLocaleDateString()}
+                          {formatDate(request.created_at)}
                         </td>
                         <td className="px-4 py-4">
                           <Button size="sm" variant="outline">

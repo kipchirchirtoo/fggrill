@@ -73,7 +73,8 @@ export default function BranchManagerReportsPage() {
           </div>
         );
       case 'staff':
-        const staffList = reportData.staff || reportData || [];
+        const staffData = reportData?.data?.staff || reportData?.staff || (Array.isArray(reportData) ? reportData : []);
+        const staffList = Array.isArray(staffData) ? staffData : [];
         return (
           <div>
             <p className="font-medium mb-2">Staff Count: {staffList.length}</p>
@@ -86,21 +87,23 @@ export default function BranchManagerReportsPage() {
           </div>
         );
       case 'inventory':
-        const stockList = reportData.stock || reportData || [];
+        const stockData = reportData?.data?.stock || reportData?.stock || (Array.isArray(reportData) ? reportData : []);
+        const stockList = Array.isArray(stockData) ? stockData : [];
         const totalValue = stockList.reduce((sum: number, s: any) => sum + ((s.quantity || 0) * (s.cost_price || 0)), 0);
         return (
           <div>
             <p className="font-medium mb-2">Items: {stockList.length} | Value: KES {totalValue.toLocaleString()}</p>
             {stockList.slice(0, 5).map((s: any) => (
               <div key={s.id || s.sku} className="flex justify-between py-2 border-b">
-                <span>{s.item_name || s.name}</span>
+                <span>{s.item_name || s.name || s.item?.name || 'Unknown Item'}</span>
                 <span>{s.quantity} units</span>
               </div>
             ))}
           </div>
         );
       case 'occupancy':
-        const bookings = reportData.bookings || reportData || [];
+        const bookingsData = reportData?.data?.bookings || reportData?.bookings || (Array.isArray(reportData) ? reportData : []);
+        const bookings = Array.isArray(bookingsData) ? bookingsData : [];
         return (
           <div>
             <p className="font-medium mb-2">Bookings in period: {bookings.length}</p>

@@ -25,6 +25,7 @@ export default function GMBranchesPage() {
       setBranches(res.branches || res || []);
     } catch (error) {
       console.error('Error fetching branches:', error);
+      setBranches([]);
     } finally {
       setIsLoading(false);
     }

@@ -1,0 +1,60 @@
+import express from 'express';
+import { protect, authorize } from '../middleware/auth';
+import { UserRole } from '../models/User';
+import * as orderController from '../controllers/bar/orders.controller';
+import * as menuController from '../controllers/bar/menu.controller';
+import * as tabController from '../controllers/bar/tabs.controller';
+import * as inventoryController from '../controllers/bar/inventory.controller';
+import * as reportController from '../controllers/bar/reports.controller';
+
+const router = express.Router();
+
+// Middleware for all bar routes
+router.use(protect);
+// Allow Bartender, Admin, Manager, Branch Manager
+// router.use(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RESTAURANT])); // "Bartender" -> Restaurant?
+
+// ====================
+// ORDERS
+// ====================
+router.get('/orders', orderController.getOrders);
+router.get('/orders/:id', orderController.getOrder);
+router.post('/orders', orderController.createOrder);
+router.put('/orders/:id', orderController.updateOrder);
+router.put('/orders/:id/status', orderController.updateOrderStatus);
+
+// ====================
+// MENU (Categories & Drinks)
+// ====================
+router.get('/categories', menuController.getCategories);
+router.post('/categories', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), menuController.createCategory); // Only admins create cats
+
+router.get('/drinks', menuController.getDrinks);
+router.get('/drinks/:id', menuController.getDrink);
+router.post('/drinks', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), menuController.createDrink);
+router.put('/drinks/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), menuController.updateDrink);
+router.delete('/drinks/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), menuController.deleteDrink);
+router.put('/drinks/:id/toggle', menuController.toggleDrinkAvailability);
+
+// ====================
+// TABS
+// ====================
+router.get('/tabs', tabController.getTabs);
+router.post('/tabs', tabController.createTab);
+router.post('/tabs/:id/items', tabController.addToTab);
+router.post('/tabs/:id/close', tabController.closeTab);
+
+// ====================
+// INVENTORY / STOCK
+// ====================
+router.get('/stock', inventoryController.getStock);
+router.get('/stock/logs', inventoryController.getStockLogs);
+router.put('/stock/:id', inventoryController.updateStock);
+
+// ====================
+// REPORTS
+// ====================
+router.get('/reports/daily-sales', reportController.getDailySales);
+router.get('/reports/popular-drinks', reportController.getPopularDrinks);
+
+export default router;

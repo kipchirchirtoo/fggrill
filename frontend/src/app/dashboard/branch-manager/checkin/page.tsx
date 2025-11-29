@@ -22,9 +22,13 @@ export default function BranchManagerCheckinPage() {
   const fetchBookings = async () => {
     setIsLoading(true);
     try {
-      const res = await bookingsAPI.getBookings({ branch_id: user?.branch_id });
-      setBookings(res.bookings || res || []);
-    } catch (error) { console.error('Error:', error); } 
+      const res = await bookingsAPI.getBookings({ branch_id: user?.branch_id || undefined }).catch(() => ({ bookings: [] }));
+      const list = res?.bookings || res?.data || [];
+      setBookings(Array.isArray(list) ? list : []);
+    } catch (error) { 
+      console.error('Error:', error);
+      setBookings([]);
+    } 
     finally { setIsLoading(false); }
   };
 

@@ -40,7 +40,8 @@ import {
   ShoppingCart,
   Send,
   Clock,
-  CheckCircle
+  CheckCircle,
+  ChefHat
 } from 'lucide-react';
 
 interface DashboardLayoutProps {
@@ -102,22 +103,22 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           name: 'Storekeeping', 
           icon: Warehouse,
           submenu: [
-            { name: 'Overview', href: '/dashboard/storekeeping', icon: LayoutDashboard },
-            { name: 'Central Warehouse', href: '/dashboard/storekeeping/central', icon: Warehouse },
-            { name: 'Branch Stock', href: '/dashboard/storekeeping/branch', icon: Package },
-            { name: 'Inventory', href: '/dashboard/storekeeping/inventory', icon: ClipboardList },
-            { name: 'Transfers', href: '/dashboard/storekeeping/transfers', icon: Truck },
-            { name: 'Requests', href: '/dashboard/storekeeping/requests', icon: Send },
-            { name: 'Stock Takes', href: '/dashboard/storekeeping/stock-takes', icon: ClipboardCheck }
+            { name: 'Overview', href: '/dashboard/admin/storekeeping', icon: LayoutDashboard },
+            { name: 'Central Warehouse', href: '/dashboard/admin/storekeeping/central', icon: Warehouse },
+            { name: 'Branch Stock', href: '/dashboard/admin/storekeeping/branch', icon: Package },
+            { name: 'Inventory', href: '/dashboard/admin/inventory', icon: ClipboardList },
+            { name: 'Transfers', href: '/dashboard/admin/storekeeping/transfers', icon: Truck },
+            { name: 'Requests', href: '/dashboard/admin/storekeeping/requests', icon: Send },
+            { name: 'Stock Takes', href: '/dashboard/admin/storekeeping/stock-takes', icon: ClipboardCheck }
           ]
         },
         { 
           name: 'Logistics', 
           icon: Truck,
           submenu: [
-            { name: 'Vehicles', href: '/dashboard/storekeeping/vehicles', icon: Car },
-            { name: 'Drivers', href: '/dashboard/storekeeping/drivers', icon: User },
-            { name: 'Suppliers', href: '/dashboard/storekeeping/suppliers', icon: Building2 }
+            { name: 'Vehicles', href: '/dashboard/admin/vehicles', icon: Car },
+            { name: 'Drivers', href: '/dashboard/admin/drivers', icon: User },
+            { name: 'Suppliers', href: '/dashboard/admin/suppliers', icon: Building2 }
           ]
         },
         { name: 'Finance', href: '/dashboard/admin/finance', icon: DollarSign },
@@ -130,47 +131,47 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           name: 'Front Desk', 
           icon: Calendar,
           submenu: [
-            { name: 'Reservations', href: '/dashboard/gm/reservations', icon: Calendar },
-            { name: 'Check In/Out', href: '/dashboard/gm/checkin', icon: ClipboardList },
-            { name: 'Rooms', href: '/dashboard/gm/rooms', icon: Bed },
-            { name: 'Guests', href: '/dashboard/gm/guests', icon: Users }
+            { name: 'Reservations', href: '/dashboard/admin/reservations', icon: Calendar },
+            { name: 'Check In/Out', href: '/dashboard/admin/checkin', icon: ClipboardList },
+            { name: 'Rooms', href: '/dashboard/admin/rooms', icon: Bed },
+            { name: 'Guests', href: '/dashboard/admin/guests', icon: Users }
           ]
         },
         { 
           name: 'Operations', 
           icon: Home,
           submenu: [
-            { name: 'Housekeeping', href: '/dashboard/gm/housekeeping', icon: Home },
-            { name: 'Restaurant', href: '/dashboard/gm/restaurant', icon: UtensilsCrossed },
-            { name: 'Maintenance', href: '/dashboard/gm/maintenance', icon: Wrench }
+            { name: 'Housekeeping', href: '/dashboard/admin/housekeeping', icon: Home },
+            { name: 'Restaurant', href: '/dashboard/admin/restaurant', icon: UtensilsCrossed },
+            { name: 'Maintenance', href: '/dashboard/admin/maintenance', icon: Wrench }
           ]
         },
         { 
           name: 'Storekeeping', 
           icon: Warehouse,
           submenu: [
-            { name: 'Overview', href: '/dashboard/storekeeping', icon: LayoutDashboard },
-            { name: 'Central Warehouse', href: '/dashboard/storekeeping/central', icon: Warehouse },
-            { name: 'Branch Stock', href: '/dashboard/storekeeping/branch', icon: Package },
-            { name: 'Inventory', href: '/dashboard/storekeeping/inventory', icon: ClipboardList },
-            { name: 'Transfers', href: '/dashboard/storekeeping/transfers', icon: Truck },
-            { name: 'Requests', href: '/dashboard/storekeeping/requests', icon: Send },
-            { name: 'Stock Takes', href: '/dashboard/storekeeping/stock-takes', icon: ClipboardCheck }
+            { name: 'Overview', href: '/dashboard/admin/storekeeping', icon: LayoutDashboard },
+            { name: 'Central Warehouse', href: '/dashboard/admin/storekeeping/central', icon: Warehouse },
+            { name: 'Branch Stock', href: '/dashboard/admin/storekeeping/branch', icon: Package },
+            { name: 'Inventory', href: '/dashboard/admin/inventory', icon: ClipboardList },
+            { name: 'Transfers', href: '/dashboard/admin/storekeeping/transfers', icon: Truck },
+            { name: 'Requests', href: '/dashboard/admin/storekeeping/requests', icon: Send },
+            { name: 'Stock Takes', href: '/dashboard/admin/storekeeping/stock-takes', icon: ClipboardCheck }
           ]
         },
         { 
           name: 'Logistics', 
           icon: Truck,
           submenu: [
-            { name: 'Vehicles', href: '/dashboard/storekeeping/vehicles', icon: Car },
-            { name: 'Drivers', href: '/dashboard/storekeeping/drivers', icon: User },
-            { name: 'Suppliers', href: '/dashboard/storekeeping/suppliers', icon: Building2 }
+            { name: 'Vehicles', href: '/dashboard/admin/vehicles', icon: Car },
+            { name: 'Drivers', href: '/dashboard/admin/drivers', icon: User },
+            { name: 'Suppliers', href: '/dashboard/admin/suppliers', icon: Building2 }
           ]
         },
-        { name: 'Finance', href: '/dashboard/gm/finance', icon: DollarSign },
-        { name: 'Reports', href: '/dashboard/gm/reports', icon: BarChart3 },
-        { name: 'Branches', href: '/dashboard/gm/branches', icon: Building2 },
-        { name: 'Staff', href: '/dashboard/gm/staff', icon: Users }
+        { name: 'Finance', href: '/dashboard/admin/finance', icon: DollarSign },
+        { name: 'Reports', href: '/dashboard/admin/reports', icon: BarChart3 },
+        { name: 'Branches', href: '/dashboard/admin/system/branches', icon: Building2 },
+        { name: 'Staff', href: '/dashboard/admin/staff', icon: Users }
       ],
       [UserRole.BRANCH_MANAGER]: [
         { 
@@ -217,9 +218,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         { name: 'Inventory', href: '/dashboard/housekeeping/inventory', icon: Package }
       ],
       [UserRole.RESTAURANT]: [
+        { name: 'POS', href: '/dashboard/restaurant/pos', icon: DollarSign },
         { name: 'Orders', href: '/dashboard/restaurant/orders', icon: ClipboardList },
+        { name: 'Kitchen', href: '/dashboard/restaurant/kitchen', icon: ChefHat },
         { name: 'Menu', href: '/dashboard/restaurant/menu', icon: UtensilsCrossed },
         { name: 'Inventory', href: '/dashboard/restaurant/inventory', icon: Package }
+      ],
+      [UserRole.BARTENDER]: [
+        { name: 'Bar POS', href: '/dashboard/bar/pos', icon: DollarSign },
+        { name: 'Orders', href: '/dashboard/bar/orders', icon: ClipboardList },
+        { name: 'Tabs', href: '/dashboard/bar/tabs', icon: Users },
+        { name: 'Drinks Menu', href: '/dashboard/bar/menu', icon: UtensilsCrossed },
+        { name: 'Inventory', href: '/dashboard/bar/inventory', icon: Package }
       ],
       [UserRole.ACCOUNTANT]: [
         { name: 'Invoices', href: '/dashboard/finance/invoices', icon: DollarSign },
@@ -314,7 +324,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       [UserRole.BRANCH_MANAGER]: 'branch-manager',
       [UserRole.RECEPTIONIST]: 'reception',
       [UserRole.HOUSEKEEPING]: 'housekeeping',
+      [UserRole.HOUSEKEEPING_SUPERVISOR]: 'housekeeping',
       [UserRole.RESTAURANT]: 'restaurant',
+      [UserRole.BARTENDER]: 'bar',
       [UserRole.ACCOUNTANT]: 'finance',
       [UserRole.MAINTENANCE]: 'maintenance',
       [UserRole.CENTRAL_STOREKEEPER]: 'central-store',

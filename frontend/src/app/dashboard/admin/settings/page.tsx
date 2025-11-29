@@ -38,7 +38,7 @@ export default function AdminSettingsPage() {
   ];
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN]}>
+    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
           <div>

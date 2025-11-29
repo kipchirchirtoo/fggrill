@@ -11,7 +11,9 @@ export enum UserRole {
   BRANCH_MANAGER = 'branch_manager',
   RECEPTIONIST = 'receptionist',
   HOUSEKEEPING = 'housekeeping',
+  HOUSEKEEPING_SUPERVISOR = 'housekeeping_supervisor',
   RESTAURANT = 'restaurant',
+  BARTENDER = 'bartender',
   MAINTENANCE = 'maintenance',
   ACCOUNTANT = 'accountant',
   AUDITOR = 'auditor',
@@ -213,6 +215,40 @@ const DEMO_USERS = [
     branch_id: 1,
     branch_name: 'Famous Gate Bomet (HQ)'
   },
+  // === BARTENDERS ===
+  {
+    id: 'bartender-1',
+    email: 'bar.bomet@famousgate.com',
+    password: 'bar123',
+    firstName: 'Kevin',
+    lastName: 'Omondi',
+    role: UserRole.BARTENDER,
+    department: 'Bar & Lounge',
+    branch_id: 1,
+    branch_name: 'Famous Gate Bomet (HQ)'
+  },
+  {
+    id: 'bartender-2',
+    email: 'bar.kericho@famousgate.com',
+    password: 'bar123',
+    firstName: 'Brian',
+    lastName: 'Kiprop',
+    role: UserRole.BARTENDER,
+    department: 'Bar & Lounge',
+    branch_id: 3,
+    branch_name: 'Famous Gate Kericho'
+  },
+  {
+    id: 'bartender-3',
+    email: 'bar.litein@famousgate.com',
+    password: 'bar123',
+    firstName: 'Joyce',
+    lastName: 'Cherop',
+    role: UserRole.BARTENDER,
+    department: 'Bar & Lounge',
+    branch_id: 6,
+    branch_name: 'Famous Gate Litein'
+  },
   {
     id: 'maintenance-1',
     email: 'maintenance@famousgate.com',
@@ -315,7 +351,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       [UserRole.BRANCH_MANAGER]: '/dashboard/branch-manager',
       [UserRole.RECEPTIONIST]: '/dashboard/reception',
       [UserRole.HOUSEKEEPING]: '/dashboard/housekeeping',
+      [UserRole.HOUSEKEEPING_SUPERVISOR]: '/dashboard/housekeeping',
       [UserRole.RESTAURANT]: '/dashboard/restaurant',
+      [UserRole.BARTENDER]: '/dashboard/bar',
       [UserRole.MAINTENANCE]: '/dashboard/maintenance',
       [UserRole.ACCOUNTANT]: '/dashboard/finance',
       [UserRole.AUDITOR]: '/dashboard/audit',

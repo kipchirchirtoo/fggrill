@@ -69,22 +69,24 @@ export default function GeneralManagerDashboard() {
         staffAPI.getStaff().catch(() => ({ staff: [] }))
       ]);
 
-      const branchList = branchesRes.branches || branchesRes || [];
-      const pendingRequests = pendingRes.requests || pendingRes || [];
-      const lowStockItems = lowStockRes.items || lowStockRes || [];
-      const staffList = staffRes.staff || staffRes || [];
+      // Handle various API response formats
+      const branchList = branchesRes?.data?.branches || branchesRes?.data || branchesRes?.branches || (Array.isArray(branchesRes) ? branchesRes : []);
+      const pendingRequests = pendingRes?.data?.requests || pendingRes?.data || pendingRes?.requests || (Array.isArray(pendingRes) ? pendingRes : []);
+      const lowStockItems = lowStockRes?.data?.items || lowStockRes?.data || lowStockRes?.items || (Array.isArray(lowStockRes) ? lowStockRes : []);
+      const staffList = staffRes?.data?.staff || staffRes?.data || staffRes?.staff || (Array.isArray(staffRes) ? staffRes : []);
 
-      setBranches(branchList);
+      setBranches(Array.isArray(branchList) ? branchList : []);
 
       // Calculate total stock value across all branches
-      const totalStockValue = branchList.reduce((sum: number, b: any) => sum + (b.stock_value || 0), 0);
+      const safeBranchList = Array.isArray(branchList) ? branchList : [];
+      const totalStockValue = safeBranchList.reduce((sum: number, b: any) => sum + (b.stock_value || 0), 0);
 
       setStats({
         totalRevenue: totalStockValue, // Using stock value as proxy for now
         totalOccupancy: 0, // Would come from bookings API
         totalRooms: 0, // Would come from rooms API
         totalStaff: Array.isArray(staffList) ? staffList.length : 0,
-        totalBranches: branchList.length,
+        totalBranches: safeBranchList.length,
         lowStockAlerts: Array.isArray(lowStockItems) ? lowStockItems.length : 0,
         pendingRequests: Array.isArray(pendingRequests) ? pendingRequests.length : 0,
         activeGuests: 0 // Would come from bookings API

@@ -23,15 +23,20 @@ export default function Home() {
   const getRolePath = (role: string) => {
     const paths: Record<string, string> = {
       'super_admin': 'admin',
+      'general_manager': 'gm',
+      'branch_manager': 'manager',
       'manager': 'manager',
       'receptionist': 'reception',
       'housekeeping': 'housekeeping',
       'restaurant': 'restaurant',
       'accountant': 'finance',
       'maintenance': 'maintenance',
+      'central_storekeeper': 'central-store',
+      'branch_storekeeper': 'branch-store',
+      'auditor': 'audit',
       'guest': 'guest'
     };
-    return paths[role] || 'guest';
+    return paths[role] || 'admin';
   };
 
   // Show loading state while checking auth

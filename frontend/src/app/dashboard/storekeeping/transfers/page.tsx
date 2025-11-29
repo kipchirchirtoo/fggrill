@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Truck, RefreshCw, ArrowRight, Package, Building2, Clock, Check, AlertTriangle, Plus, X, Send, Eye, ShoppingCart, User, Search } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatDate } from '@/lib/date-utils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -186,7 +187,7 @@ export default function TransfersPage() {
                   <td className="px-4 py-4"><span>{d.from_branch?.name || 'Central'}</span> <ArrowRight className="h-4 w-4 inline text-gray-400" /> <span>{d.to_branch?.name || 'Branch'}</span></td>
                   <td className="px-4 py-4"><Badge className={getStatusColor(d.status)}>{d.status}</Badge></td>
                   <td className="px-4 py-4">{d.items_count || 0}</td>
-                  <td className="px-4 py-4 text-sm text-gray-500">{new Date(d.created_at).toLocaleDateString()}</td>
+                  <td className="px-4 py-4 text-sm text-gray-500">{formatDate(d.created_at)}</td>
                 </tr>)}
               </tbody></table></div>}
             </Card>

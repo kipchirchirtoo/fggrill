@@ -28,10 +28,16 @@ export default function GMStaffPage() {
         staffAPI.getStaff(),
         systemAPI.getBranches()
       ]);
-      setStaff(staffRes.staff || staffRes || []);
-      setBranches(branchRes.branches || branchRes || []);
+
+      const staffData = staffRes?.staff || staffRes?.data || staffRes || [];
+      const branchData = branchRes?.branches || branchRes?.data || branchRes || [];
+
+      setStaff(Array.isArray(staffData) ? staffData : []);
+      setBranches(Array.isArray(branchData) ? branchData : []);
     } catch (error) {
       console.error('Error fetching data:', error);
+      setStaff([]);
+      setBranches([]);
     } finally {
       setIsLoading(false);
     }

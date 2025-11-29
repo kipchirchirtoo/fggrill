@@ -1,4 +1,35 @@
 import { toast } from 'sonner';
+import { UserRole } from './auth-context';
+
+// Role hierarchy - higher number = higher access level
+export const ROLE_HIERARCHY: Record<string, number> = {
+  [UserRole.SUPER_ADMIN]: 100,
+  [UserRole.GENERAL_MANAGER]: 90,
+  [UserRole.BRANCH_MANAGER]: 80,
+  [UserRole.AUDITOR]: 70,
+  [UserRole.ACCOUNTANT]: 60,
+  [UserRole.CENTRAL_STOREKEEPER]: 55,
+  [UserRole.BRANCH_STOREKEEPER]: 50,
+  [UserRole.HOUSEKEEPING_SUPERVISOR]: 45,
+  [UserRole.RECEPTIONIST]: 40,
+  [UserRole.HOUSEKEEPING]: 30,
+  [UserRole.RESTAURANT]: 30,
+  [UserRole.BARTENDER]: 30,
+  [UserRole.MAINTENANCE]: 20,
+  [UserRole.EMPLOYEE]: 10,
+  [UserRole.GUEST]: 0,
+};
+
+// Notification visibility levels
+export type NotificationLevel = 'all' | 'staff' | 'supervisors' | 'managers' | 'admin';
+
+export const LEVEL_MIN_ROLE: Record<NotificationLevel, number> = {
+  all: 0,           // Everyone can see
+  staff: 20,        // All staff
+  supervisors: 50,  // Storekeeper and above
+  managers: 70,     // Manager and above
+  admin: 90,        // Admin and Super Admin only
+};
 
 export interface Notification {
   id: string;
@@ -10,6 +41,11 @@ export interface Notification {
   actionUrl?: string;
   department?: string;
   priority?: 'low' | 'medium' | 'high';
+  visibility?: NotificationLevel;       // Who can see this notification
+  targetRoles?: string[];               // Specific roles that can see this
+  targetDepartments?: string[];         // Specific departments
+  targetBranchId?: string;              // Specific branch only
+  createdByRole?: string;               // Role of creator
 }
 
 export interface NotificationSubscriber {
@@ -59,6 +95,76 @@ export async function getNotifications(userId: string) {
     console.error('Error fetching notifications:', error);
     throw error;
   }
+}
+
+// Check if a user can view a notification based on role hierarchy
+export function canViewNotification(
+  notification: Notification,
+  userRole: string,
+  userDepartment?: string,
+  userBranchId?: string
+): boolean {
+  const userLevel = ROLE_HIERARCHY[userRole] || 0;
+  
+  // Check visibility level
+  if (notification.visibility) {
+    const requiredLevel = LEVEL_MIN_ROLE[notification.visibility];
+    if (userLevel < requiredLevel) return false;
+  }
+  
+  // Check specific target roles
+  if (notification.targetRoles && notification.targetRoles.length > 0) {
+    if (!notification.targetRoles.includes(userRole)) return false;
+  }
+  
+  // Check specific departments
+  if (notification.targetDepartments && notification.targetDepartments.length > 0) {
+    if (!userDepartment || !notification.targetDepartments.includes(userDepartment)) return false;
+  }
+  
+  // Check branch restriction
+  if (notification.targetBranchId) {
+    if (userBranchId !== notification.targetBranchId) {
+      // Super admin and general manager can see all branches
+      if (userLevel < ROLE_HIERARCHY[UserRole.GENERAL_MANAGER]) return false;
+    }
+  }
+  
+  return true;
+}
+
+// Filter notifications for a specific user
+export function filterNotificationsForUser(
+  notifications: Notification[],
+  userRole: string,
+  userDepartment?: string,
+  userBranchId?: string
+): Notification[] {
+  return notifications.filter(n => 
+    canViewNotification(n, userRole, userDepartment, userBranchId)
+  );
+}
+
+// Get role display name
+export function getRoleDisplayName(role: string): string {
+  const names: Record<string, string> = {
+    [UserRole.SUPER_ADMIN]: 'Super Admin',
+    [UserRole.GENERAL_MANAGER]: 'General Manager',
+    [UserRole.BRANCH_MANAGER]: 'Branch Manager',
+    [UserRole.AUDITOR]: 'Auditor',
+    [UserRole.ACCOUNTANT]: 'Accountant',
+    [UserRole.CENTRAL_STOREKEEPER]: 'Central Storekeeper',
+    [UserRole.BRANCH_STOREKEEPER]: 'Branch Storekeeper',
+    [UserRole.HOUSEKEEPING_SUPERVISOR]: 'Housekeeping Supervisor',
+    [UserRole.RECEPTIONIST]: 'Receptionist',
+    [UserRole.HOUSEKEEPING]: 'Housekeeping',
+    [UserRole.RESTAURANT]: 'Restaurant Staff',
+    [UserRole.BARTENDER]: 'Bartender',
+    [UserRole.MAINTENANCE]: 'Maintenance',
+    [UserRole.EMPLOYEE]: 'Employee',
+    [UserRole.GUEST]: 'Guest',
+  };
+  return names[role] || role;
 }
 
 export async function markNotificationAsRead(notificationId: string) {
