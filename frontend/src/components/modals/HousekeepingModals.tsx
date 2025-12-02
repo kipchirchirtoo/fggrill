@@ -2,9 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import type { RoomStatus } from '@/types/system.types';
-
-// API base URL
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 import { motion } from 'framer-motion';
 import {
   X, Camera, MessageSquare, AlertTriangle, Clock, CheckCircle,
@@ -13,6 +10,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { housekeepingAPI } from '@/lib/api';
 
 // ============= REPORT ISSUE MODAL =============
 export function ReportIssueModal({ isOpen, onClose, roomNumber = '' }: any) {
@@ -48,7 +46,7 @@ export function ReportIssueModal({ isOpen, onClose, roomNumber = '' }: any) {
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900">Report Issue</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -61,7 +59,7 @@ export function ReportIssueModal({ isOpen, onClose, roomNumber = '' }: any) {
               required
               value={issueData.roomNumber}
               onChange={(e) => setIssueData({ ...issueData, roomNumber: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500"
               placeholder="e.g., 301"
             />
           </div>
@@ -71,7 +69,7 @@ export function ReportIssueModal({ isOpen, onClose, roomNumber = '' }: any) {
             <select
               value={issueData.category}
               onChange={(e) => setIssueData({ ...issueData, category: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500"
             >
               <option value="maintenance">Maintenance</option>
               <option value="electrical">Electrical</option>
@@ -88,7 +86,7 @@ export function ReportIssueModal({ isOpen, onClose, roomNumber = '' }: any) {
             <select
               value={issueData.priority}
               onChange={(e) => setIssueData({ ...issueData, priority: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500"
             >
               <option value="low">Low</option>
               <option value="normal">Normal</option>
@@ -104,7 +102,7 @@ export function ReportIssueModal({ isOpen, onClose, roomNumber = '' }: any) {
               required
               value={issueData.description}
               onChange={(e) => setIssueData({ ...issueData, description: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500"
               rows={4}
               placeholder="Describe the issue in detail..."
             />
@@ -112,7 +110,7 @@ export function ReportIssueModal({ isOpen, onClose, roomNumber = '' }: any) {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Attach Photos</label>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+            <div className="border-2 border-dashed border-gray-300 rounded-ios-lg p-4 text-center">
               <Camera className="h-8 w-8 text-gray-400 mx-auto mb-2" />
               <p className="text-sm text-gray-600">Click to upload photos</p>
               <input type="file" multiple accept="image/*" className="hidden" />
@@ -129,7 +127,7 @@ export function ReportIssueModal({ isOpen, onClose, roomNumber = '' }: any) {
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
+              className="px-6 py-2 bg-red-600 text-white rounded-ios-lg hover:bg-red-700 flex items-center gap-2"
             >
               <AlertTriangle className="h-4 w-4" />
               Report Issue
@@ -172,7 +170,7 @@ export function UpdateRoomStatusModal({ isOpen, onClose, room }: any) {
             <h2 className="text-xl font-bold text-gray-900">Update Room Status</h2>
             <p className="text-sm text-gray-500">Room {room?.roomNumber}</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -186,7 +184,7 @@ export function UpdateRoomStatusModal({ isOpen, onClose, room }: any) {
                   key={statusOption}
                   type="button"
                   onClick={() => setStatus(statusOption)}
-                  className={'p-3 rounded-lg border-2 capitalize transition-colors ' + (status === statusOption ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 hover:border-gray-300')}
+                  className={'p-3 rounded-ios-lg border-2 capitalize transition-colors ' + (status === statusOption ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 hover:border-gray-300')}
                 >
                   {statusOption.replace('-', ' ')}
                 </button>
@@ -199,7 +197,7 @@ export function UpdateRoomStatusModal({ isOpen, onClose, room }: any) {
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500"
               rows={3}
               placeholder="Any additional notes..."
             />
@@ -215,7 +213,7 @@ export function UpdateRoomStatusModal({ isOpen, onClose, room }: any) {
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+              className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700 flex items-center gap-2"
             >
               <CheckCircle className="h-4 w-4" />
               Update Status
@@ -247,19 +245,8 @@ export function InspectionModeModal({ isOpen, onClose }: any) {
   useEffect(() => {
     const fetchRooms = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/api/housekeeping/rooms/for-inspection`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch rooms for inspection');
-        }
-
-        const data = await response.json();
-        setRoomsForInspection(data.data);
+        const data = await housekeepingAPI.getRoomsForInspection();
+        setRoomsForInspection(data.data || data || []);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred');
         toast.error('Failed to load rooms for inspection');
@@ -295,19 +282,19 @@ export function InspectionModeModal({ isOpen, onClose }: any) {
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900">Inspection Mode</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {!selectedRoom ? (
           <div>
-            <h3 className="font-semibold text-gray-900 mb-4">Select Room for Inspection</h3>
+            <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-4">Select Room for Inspection</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {roomsForInspection.map((room: RoomStatus) => (
                 <div
                   key={room.roomId}
-                  className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer"
+                  className="border rounded-ios-lg p-4 hover:bg-gray-50 cursor-pointer"
                   onClick={() => setSelectedRoom(room)}
                 >
                   <div className="flex items-center justify-between">
@@ -325,7 +312,7 @@ export function InspectionModeModal({ isOpen, onClose }: any) {
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="bg-gray-50 rounded-lg p-4">
+            <div className="bg-gray-50 rounded-ios-lg p-4">
               <p className="font-medium text-gray-900">Inspecting Room {selectedRoom.roomNumber}</p>
               <p className="text-sm text-gray-500">Please rate each category</p>
             </div>
@@ -342,7 +329,7 @@ export function InspectionModeModal({ isOpen, onClose }: any) {
                         ...inspectionData,
                         [category.toLowerCase()]: rating
                       })}
-                      className={'px-4 py-2 rounded-lg border-2 ' + (inspectionData[category.toLowerCase() as keyof typeof inspectionData] === rating ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 hover:border-gray-300')}
+                      className={'px-4 py-2 rounded-ios-lg border-2 ' + (inspectionData[category.toLowerCase() as keyof typeof inspectionData] === rating ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 hover:border-gray-300')}
                     >
                       {rating}
                     </button>
@@ -356,7 +343,7 @@ export function InspectionModeModal({ isOpen, onClose }: any) {
               <textarea
                 value={inspectionData.notes}
                 onChange={(e) => setInspectionData({ ...inspectionData, notes: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500"
                 rows={4}
                 placeholder="Any observations or issues..."
               />
@@ -375,13 +362,13 @@ export function InspectionModeModal({ isOpen, onClose }: any) {
                     toast.error('Room failed inspection');
                     setSelectedRoom(null);
                   }}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                  className="px-4 py-2 bg-red-600 text-white rounded-ios-lg hover:bg-red-700"
                 >
                   Fail Inspection
                 </button>
                 <button
                   onClick={handleInspectionSubmit}
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+                  className="px-6 py-2 bg-green-600 text-white rounded-ios-lg hover:bg-green-700 flex items-center gap-2"
                 >
                   <CheckCircle className="h-4 w-4" />
                   Pass Inspection
@@ -417,7 +404,7 @@ export function TaskDetailsModal({ isOpen, onClose, task }: any) {
             <h2 className="text-xl font-bold text-gray-900">Task Details</h2>
             <p className="text-sm text-gray-500">Room {task.roomNumber}</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -443,7 +430,7 @@ export function TaskDetailsModal({ isOpen, onClose, task }: any) {
           </div>
 
           <div>
-            <h3 className="font-semibold text-gray-900 mb-3">Checklist</h3>
+            <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-3">Checklist</h3>
             <div className="space-y-2">
               {task.checklist?.map((item: any, index: number) => (
                 <label key={index} className="flex items-center gap-3">
@@ -463,16 +450,16 @@ export function TaskDetailsModal({ isOpen, onClose, task }: any) {
 
           {task.notes && (
             <div>
-              <h3 className="font-semibold text-gray-900 mb-2">Notes</h3>
-              <p className="text-gray-700 bg-yellow-50 rounded-lg p-3">{task.notes}</p>
+              <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-2">Notes</h3>
+              <p className="text-gray-700 bg-yellow-50 rounded-ios-lg p-3">{task.notes}</p>
             </div>
           )}
 
           <div className="flex justify-end gap-3 pt-4 border-t">
-            <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg">
+            <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-ios-lg">
               Close
             </button>
-            <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg">
+            <button className="px-4 py-2 bg-indigo-600 text-white rounded-ios-lg">
               Edit Task
             </button>
           </div>

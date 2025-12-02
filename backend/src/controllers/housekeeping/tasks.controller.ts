@@ -109,7 +109,7 @@ export const getTask = async (
         room:rooms(*),
         assignee:hk_staff_profiles!assigned_to(
           id, staff_code, designation,
-          user:users(first_name, last_name, email, phone)
+          user:users(first_name, last_name, email, phone_number)
         ),
         completed_by_staff:hk_staff_profiles!completed_by(
           id, staff_code,

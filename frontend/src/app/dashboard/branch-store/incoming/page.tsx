@@ -1,79 +1,81 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Truck, RefreshCw, CheckCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
+import { IOSBadge } from '@/components/ui/ios-badge';
 import { storeAPI } from '@/lib/api';
+import { Truck, RefreshCw, CheckCircle, Package, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
-export default function BranchStoreIncomingPage() {
-  const [dispatches, setDispatches] = useState<any[]>([]);
+interface IncomingDispatch { id: string; dispatch_number: string; from_branch: string; items_count: number; status: string; dispatched_at: string; }
+
+export default function BranchIncomingPage() {
+  const { user } = useAuth();
+  const [dispatches, setDispatches] = useState<IncomingDispatch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => { fetchDispatches(); }, []);
-
-  const fetchDispatches = async () => {
+  const fetchDispatches = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await storeAPI.getIncomingDispatches();
-      setDispatches(res.dispatches || res || []);
-    } catch (error) { console.error('Error:', error); } 
+      const response = await storeAPI.getIncomingDispatches();
+      if (response.success) setDispatches(response.data || []);
+    } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  };
+  }, []);
 
-  const handleConfirm = async (id: string) => {
+  useEffect(() => { fetchDispatches(); }, [fetchDispatches]);
+
+  const handleConfirmDelivery = async (id: string) => {
     try {
-      await storeAPI.confirmDelivery(id, {});
+      await storeAPI.confirmDelivery(id, { received_items: [], delivery_notes: 'Received in full' });
       toast.success('Delivery confirmed');
       fetchDispatches();
-    } catch (error) {
-      toast.error('Failed to confirm');
-    }
+    } catch (error: any) { toast.error(error.message || 'Failed'); }
   };
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.BRANCH_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
+    <ProtectedRoute allowedRoles={[UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_MANAGER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">Incoming Deliveries</h1>
-              <p className="text-gray-600">Confirm stock deliveries</p>
-            </div>
-            <Button onClick={fetchDispatches} variant="outline">
-              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
-            </Button>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900">Incoming Stock</h1><p className="text-gray-500">Receive dispatches from central</p></div>
+            <IOSButton variant="secondary" onClick={fetchDispatches}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
           </div>
 
-          <div className="grid gap-4">
-            {dispatches.map((d: any) => (
-              <Card key={d.id} className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <Truck className="h-8 w-8 text-blue-600" />
-                    <div>
-                      <p className="font-medium">{d.dispatch_number || `DN-${d.id}`}</p>
-                      <p className="text-sm text-gray-500">{d.items_count || 0} items</p>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
+          ) : dispatches.length === 0 ? (
+            <IOSCard className="p-12 text-center"><Truck className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No incoming dispatches</p></IOSCard>
+          ) : (
+            <div className="space-y-3">
+              {dispatches.map((dispatch) => (
+                <IOSCard key={dispatch.id} className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-ios-lg bg-green-100 flex items-center justify-center"><Truck className="h-6 w-6 text-[#34C759]" /></div>
+                      <div>
+                        <p className="font-bold">#{dispatch.dispatch_number}</p>
+                        <p className="text-sm text-gray-500">From: {dispatch.from_branch} • {dispatch.items_count} items</p>
+                        <p className="text-xs text-gray-400 flex items-center gap-1"><Calendar className="h-3 w-3" /> {new Date(dispatch.dispatched_at).toLocaleString()}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <IOSBadge variant={dispatch.status === 'delivered' ? 'success' : 'info'}>{dispatch.status}</IOSBadge>
+                      {dispatch.status === 'in_transit' && (
+                        <IOSButton size="sm" onClick={() => handleConfirmDelivery(dispatch.id)}><CheckCircle className="h-4 w-4 mr-1" /> Receive</IOSButton>
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Badge className={d.status === 'delivered' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}>{d.status}</Badge>
-                    {d.status === 'in_transit' && (
-                      <Button size="sm" onClick={() => handleConfirm(d.id)}>
-                        <CheckCircle className="h-4 w-4 mr-1" /> Confirm
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            ))}
-            {dispatches.length === 0 && <Card className="p-8 text-center text-gray-500">{isLoading ? 'Loading...' : 'No incoming deliveries'}</Card>}
-          </div>
+                </IOSCard>
+              ))}
+            </div>
+          )}
         </div>
       </DashboardLayout>
     </ProtectedRoute>

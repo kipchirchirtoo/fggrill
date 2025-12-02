@@ -1,0 +1,189 @@
+/* iOS Theme CSS Variables - Minimal Edition */
+
+:root {
+  /* Fonts */
+  --font-sf-pro: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-sf-pro-display: 'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-sf-mono: 'SF Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  
+  /* Minimal Color Palette - Light Theme */
+  /* Only essential colors with consistent naming */
+  --ios-primary: #007AFF; /* Blue as primary */
+  --ios-destructive: #FF3B30; /* Red for destructive actions */
+  --ios-success: #34C759; /* Green for success */
+  --ios-warning: #FF9500; /* Orange for warnings */
+  --ios-gray: #8E8E93; /* Primary gray for text */
+  
+  /* Gray scale - minimal and consistent */
+  --ios-gray-100: #8E8E93; /* Text gray */
+  --ios-gray-200: #AEAEB2; /* Secondary text */
+  --ios-gray-300: #C7C7CC; /* Disabled text */
+  --ios-gray-400: #D1D1D6; /* Borders */
+  --ios-gray-500: #E5E5EA; /* Light borders */
+  --ios-gray-600: #F2F2F7; /* Backgrounds */
+  
+  /* Light Theme UI Elements */
+  --ios-background: #FFFFFF;
+  --ios-secondary-background: #F2F2F7;
+  --ios-tertiary-background: #FFFFFF;
+  --ios-grouped-background: #F2F2F7;
+  --ios-separator: rgba(60, 60, 67, 0.29);
+  
+  /* General variables for components */
+  --ios-card-bg: #FFFFFF;
+  --ios-text: #000000;
+  --ios-text-secondary: #8E8E93;
+  --ios-border: rgba(60, 60, 67, 0.29);
+  --ios-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --ios-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --ios-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  
+  /* Border radius */
+  --ios-radius-sm: 6px;
+  --ios-radius-md: 10px;
+  --ios-radius-lg: 14px;
+  --ios-radius-xl: 20px;
+  --ios-radius-2xl: 24px;
+  
+  /* Animation */
+  --ios-transition-fast: 0.15s;
+  --ios-transition-default: 0.3s;
+  --ios-transition-slow: 0.5s;
+}
+
+/* Dark Theme - Minimal Edition */
+.dark {
+  /* Minimal Color Palette - Dark Theme */
+  /* Only essential colors with consistent naming */
+  --ios-primary: #0A84FF; /* Blue as primary */
+  --ios-destructive: #FF453A; /* Red for destructive actions */
+  --ios-success: #30D158; /* Green for success */
+  --ios-warning: #FF9F0A; /* Orange for warnings */
+  --ios-gray: #98989D; /* Primary gray for text */
+  
+  /* Gray scale - minimal and consistent */
+  --ios-gray-100: #98989D; /* Text gray */
+  --ios-gray-200: #8E8E93; /* Secondary text */
+  --ios-gray-300: #636366; /* Disabled text */
+  --ios-gray-400: #48484A; /* Borders */
+  --ios-gray-500: #38383A; /* Light borders */
+  --ios-gray-600: #2C2C2E; /* Backgrounds */
+  
+  /* Dark Theme UI Elements */
+  --ios-background: #000000;
+  --ios-secondary-background: #1C1C1E;
+  --ios-tertiary-background: #2C2C2E;
+  --ios-grouped-background: #1C1C1E;
+  --ios-separator: rgba(84, 84, 88, 0.6);
+  
+  /* General variables for components */
+  --ios-card-bg: #1C1C1E;
+  --ios-text: #FFFFFF;
+  --ios-text-secondary: #98989D;
+  --ios-border: rgba(84, 84, 88, 0.6);
+}
+
+/* Typography */
+.ios-headline {
+  font-family: var(--font-sf-pro-display);
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.ios-title-1 {
+  font-family: var(--font-sf-pro-display);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.ios-title-2 {
+  font-family: var(--font-sf-pro-display);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.ios-title-3 {
+  font-family: var(--font-sf-pro);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.ios-body {
+  font-family: var(--font-sf-pro);
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.ios-body-emphasized {
+  font-family: var(--font-sf-pro);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.ios-caption-1 {
+  font-family: var(--font-sf-pro);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.ios-caption-2 {
+  font-family: var(--font-sf-pro);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Animation Classes */
+.ios-fade-in {
+  animation: iosFadeIn var(--ios-transition-default) ease-out;
+}
+
+.ios-slide-up {
+  animation: iosSlideUp var(--ios-transition-default) ease-out;
+}
+
+.ios-scale {
+  animation: iosScale var(--ios-transition-default) ease-out;
+}
+
+@keyframes iosFadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes iosSlideUp {
+  0% { transform: translateY(10px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes iosScale {
+  0% { transform: scale(0.95); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* iOS Glassmorphism */
+.ios-glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.dark .ios-glass {
+  background: rgba(28, 28, 30, 0.8);
+}
+
+/* Apply SF Pro font family to the whole app */
+body {
+  font-family: var(--font-sf-pro);
+  background-color: var(--ios-background);
+  color: var(--ios-text);
+}
+
+/* Fix for hydration issues */
+html[suppressHydrationWarning] * {
+  transition-property: none !important;
+}

@@ -1,149 +1,116 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { 
-  TrendingUp, TrendingDown, ArrowLeft, RefreshCw, Calendar, DollarSign, Percent
-} from 'lucide-react';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
 import { financeAPI } from '@/lib/api';
-import { toast } from 'sonner';
-import Link from 'next/link';
+import { BarChart3, RefreshCw, TrendingUp, TrendingDown, DollarSign, Download } from 'lucide-react';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
+
+interface PLData { revenue: number; costOfGoods: number; grossProfit: number; operatingExpenses: number; operatingIncome: number; otherIncome: number; otherExpenses: number; netProfit: number; margin: number; }
 
 export default function ProfitLossPage() {
+  const { user } = useAuth();
+  const [data, setData] = useState<PLData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [plData, setPlData] = useState<any>(null);
-  const [dateRange, setDateRange] = useState({
-    startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0]
-  });
+  const [period, setPeriod] = useState<'month' | 'quarter' | 'year'>('month');
 
-  useEffect(() => { fetchProfitLoss(); }, [dateRange]);
-
-  const fetchProfitLoss = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await financeAPI.getProfitLoss({
-        startDate: dateRange.startDate,
-        endDate: dateRange.endDate
-      });
-      setPlData(res.data);
-    } catch (error) {
-      console.error('Error:', error);
-      toast.error('Failed to load P&L data');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      const response = await financeAPI.getProfitLoss();
+      if (response.success && response.data) {
+        setData({
+          revenue: response.data.revenue || 0,
+          costOfGoods: response.data.costOfGoods || 0,
+          grossProfit: response.data.grossProfit || 0,
+          operatingExpenses: response.data.operatingExpenses || 0,
+          operatingIncome: response.data.operatingIncome || 0,
+          otherIncome: response.data.otherIncome || 0,
+          otherExpenses: response.data.otherExpenses || 0,
+          netProfit: response.data.netProfit || 0,
+          margin: response.data.margin || 0,
+        });
+      }
+    } catch (error) { console.error('Error:', error); }
+    finally { setIsLoading(false); }
+  }, []);
 
-  const formatCurrency = (amount: number) => `KES ${(amount || 0).toLocaleString()}`;
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const LineItem = ({ label, amount, indent = false, bold = false, highlight = false }: { label: string; amount: number; indent?: boolean; bold?: boolean; highlight?: boolean }) => (
+    <div className={`flex justify-between py-2 ${indent ? 'pl-4' : ''} ${bold ? 'font-bold' : ''} ${highlight ? 'bg-gray-50 -mx-4 px-4' : ''}`}>
+      <span>{label}</span>
+      <span className={amount < 0 ? 'text-[#FF3B30]' : ''}>{amount < 0 ? '(' : ''}KES {Math.abs(amount).toLocaleString()}{amount < 0 ? ')' : ''}</span>
+    </div>
+  );
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]}>
+    <ProtectedRoute allowedRoles={[UserRole.ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link href="/dashboard/finance">
-                <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" /> Back</Button>
-              </Link>
-              <div>
-                <h1 className="text-2xl font-bold flex items-center gap-2">
-                  <TrendingUp className="h-6 w-6 text-green-600" />
-                  Profit & Loss Statement
-                </h1>
-                <p className="text-gray-600">Income statement for the selected period</p>
-              </div>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900">Profit & Loss Statement</h1><p className="text-gray-500">Income statement overview</p></div>
+            <div className="flex gap-2">
+              {(['month', 'quarter', 'year'] as const).map((p) => (
+                <IOSButton key={p} variant={period === p ? 'primary' : 'secondary'} size="sm" onClick={() => setPeriod(p)}>
+                  {p.charAt(0).toUpperCase() + p.slice(1)}
+                </IOSButton>
+              ))}
+              <IOSButton variant="secondary"><Download className="h-4 w-4 mr-2" /> Export</IOSButton>
             </div>
-            <Button onClick={fetchProfitLoss} variant="outline" disabled={isLoading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
-            </Button>
           </div>
 
-          <Card className="p-4">
-            <div className="flex items-center gap-4 flex-wrap">
-              <Calendar className="h-5 w-5 text-gray-400" />
-              <span className="text-sm font-medium">Period:</span>
-              <input type="date" value={dateRange.startDate}
-                onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-                className="border rounded-lg px-3 py-2 text-sm" />
-              <span>to</span>
-              <input type="date" value={dateRange.endDate}
-                onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-                className="border rounded-lg px-3 py-2 text-sm" />
-            </div>
-          </Card>
-
           {isLoading ? (
-            <div className="text-center py-12 text-gray-500">Loading P&L data...</div>
-          ) : plData ? (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="p-4 bg-green-50 border-green-200">
-                  <p className="text-sm text-green-700">Total Revenue</p>
-                  <p className="text-2xl font-bold text-green-800">{formatCurrency(plData.revenue?.total)}</p>
-                </Card>
-                <Card className="p-4 bg-red-50 border-red-200">
-                  <p className="text-sm text-red-700">Operating Expenses</p>
-                  <p className="text-2xl font-bold text-red-800">{formatCurrency(plData.operatingExpenses)}</p>
-                </Card>
-                <Card className={`p-4 ${plData.netProfit >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-red-50 border-red-200'}`}>
-                  <p className="text-sm text-gray-700">Net Profit</p>
-                  <p className={`text-2xl font-bold ${plData.netProfit >= 0 ? 'text-blue-800' : 'text-red-800'}`}>
-                    {formatCurrency(plData.netProfit)}
-                  </p>
-                  <p className="text-sm mt-1">Margin: {plData.profitMargin}%</p>
-                </Card>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="p-6">
-                  <h3 className="font-semibold mb-4 text-green-700 border-b pb-2">REVENUE</h3>
-                  <div className="space-y-2">
-                    {Object.entries(plData.revenue?.breakdown || {}).map(([cat, amt]) => (
-                      <div key={cat} className="flex justify-between py-2 border-b border-dashed">
-                        <span className="text-sm">{cat.replace(/_/g, ' ')}</span>
-                        <span className="font-medium">{formatCurrency(amt as number)}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between py-2 font-bold text-green-700">
-                      <span>Total Revenue</span>
-                      <span>{formatCurrency(plData.revenue?.total)}</span>
-                    </div>
-                  </div>
-                </Card>
-
-                <Card className="p-6">
-                  <h3 className="font-semibold mb-4 text-red-700 border-b pb-2">EXPENSES</h3>
-                  <div className="space-y-2">
-                    {Object.entries(plData.expenses?.breakdown || {}).map(([cat, amt]) => (
-                      <div key={cat} className="flex justify-between py-2 border-b border-dashed">
-                        <span className="text-sm">{cat.replace(/_/g, ' ')}</span>
-                        <span className="font-medium">{formatCurrency(amt as number)}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between py-2 font-bold text-red-700">
-                      <span>Total Expenses</span>
-                      <span>{formatCurrency(plData.expenses?.total)}</span>
-                    </div>
-                  </div>
-                </Card>
-              </div>
-
-              <Card className="p-6 bg-gray-50">
-                <div className="flex justify-between items-center text-xl">
-                  <span className="font-bold">NET PROFIT / (LOSS)</span>
-                  <span className={`font-bold ${plData.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatCurrency(plData.netProfit)}
-                  </span>
-                </div>
-              </Card>
-            </>
+            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
+          ) : !data ? (
+            <IOSCard className="p-12 text-center"><BarChart3 className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No data available</p></IOSCard>
           ) : (
-            <div className="text-center py-12 text-gray-500">No P&L data available</div>
+            <>
+              <div className="grid grid-cols-3 gap-4">
+                <IOSCard className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-100 rounded-ios-lg"><DollarSign className="h-5 w-5 text-[#34C759]" /></div>
+                    <div><p className="text-sm text-gray-500">Revenue</p><p className="text-xl font-bold">KES {data.revenue.toLocaleString()}</p></div>
+                  </div>
+                </IOSCard>
+                <IOSCard className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-ios-lg ${data.netProfit >= 0 ? 'bg-blue-100' : 'bg-red-100'}`}>
+                      {data.netProfit >= 0 ? <TrendingUp className="h-5 w-5 text-[#007AFF]" /> : <TrendingDown className="h-5 w-5 text-[#FF3B30]" />}
+                    </div>
+                    <div><p className="text-sm text-gray-500">Net Profit</p><p className={`text-xl font-bold ${data.netProfit >= 0 ? 'text-[#34C759]' : 'text-[#FF3B30]'}`}>KES {data.netProfit.toLocaleString()}</p></div>
+                  </div>
+                </IOSCard>
+                <IOSCard className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-100 rounded-ios-lg"><BarChart3 className="h-5 w-5 text-purple-600" /></div>
+                    <div><p className="text-sm text-gray-500">Profit Margin</p><p className="text-xl font-bold">{data.margin.toFixed(1)}%</p></div>
+                  </div>
+                </IOSCard>
+              </div>
+
+              <IOSCard className="p-6">
+                <h2 className="text-lg font-semibold font-sf-pro-display mb-4">Statement Details</h2>
+                <div className="divide-y">
+                  <LineItem label="Revenue" amount={data.revenue} bold />
+                  <LineItem label="Cost of Goods Sold" amount={-data.costOfGoods} indent />
+                  <LineItem label="Gross Profit" amount={data.grossProfit} bold highlight />
+                  <LineItem label="Operating Expenses" amount={-data.operatingExpenses} indent />
+                  <LineItem label="Operating Income" amount={data.operatingIncome} bold highlight />
+                  <LineItem label="Other Income" amount={data.otherIncome} indent />
+                  <LineItem label="Other Expenses" amount={-data.otherExpenses} indent />
+                  <div className={`flex justify-between py-3 font-bold text-lg ${data.netProfit >= 0 ? 'text-[#34C759]' : 'text-[#FF3B30]'} bg-gray-100 -mx-6 px-6 mt-2`}>
+                    <span>Net Profit</span>
+                    <span>KES {data.netProfit.toLocaleString()}</span>
+                  </div>
+                </div>
+              </IOSCard>
+            </>
           )}
         </div>
       </DashboardLayout>

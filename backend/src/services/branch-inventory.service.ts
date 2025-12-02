@@ -273,7 +273,7 @@ export async function getBranchRequests(branchId: number, status?: string) {
   if (reviewerIds.length > 0) {
     const { data: r } = await supabase
       .from('users')
-      .select('id, full_name')
+      .select('id, first_name, last_name')
       .in('id', reviewerIds);
     reviewers = r || [];
   }

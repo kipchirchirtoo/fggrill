@@ -91,7 +91,8 @@ export const createMenuItem = async (
       isVegetarian,
       isSpicy,
       allergens,
-      ingredients
+      ingredients,
+      branchId
     } = req.body;
 
     const { data: item, error } = await supabase
@@ -106,7 +107,8 @@ export const createMenuItem = async (
         is_vegetarian: isVegetarian,
         is_spicy: isSpicy,
         allergens,
-        ingredients
+        ingredients,
+        branch_id: branchId || null
       }])
       .select()
       .single();
@@ -137,34 +139,48 @@ export const updateMenuItem = async (
   try {
     const {
       categoryId,
+      category_id,
       name,
       description,
       price,
       imageUrl,
+      image_url,
       preparationTime,
+      preparation_time,
       isVegetarian,
+      is_vegetarian,
       isSpicy,
+      is_spicy,
       allergens,
       ingredients,
-      isAvailable
+      isAvailable,
+      is_available,
+      branchId,
+      branch_id
     } = req.body;
+
+    // Build update object with only provided fields
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+
+    // Handle both camelCase and snake_case field names
+    if (categoryId !== undefined || category_id !== undefined) updateData.category_id = categoryId || category_id;
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (price !== undefined) updateData.price = price;
+    if (imageUrl !== undefined || image_url !== undefined) updateData.image_url = imageUrl || image_url;
+    if (preparationTime !== undefined || preparation_time !== undefined) updateData.preparation_time = preparationTime || preparation_time;
+    if (isVegetarian !== undefined || is_vegetarian !== undefined) updateData.is_vegetarian = isVegetarian ?? is_vegetarian;
+    if (isSpicy !== undefined || is_spicy !== undefined) updateData.is_spicy = isSpicy ?? is_spicy;
+    if (allergens !== undefined) updateData.allergens = allergens;
+    if (ingredients !== undefined) updateData.ingredients = ingredients;
+    if (isAvailable !== undefined || is_available !== undefined) updateData.is_available = isAvailable ?? is_available;
+    if (branchId !== undefined || branch_id !== undefined) updateData.branch_id = branchId || branch_id || null;
 
     const { data: item, error } = await supabase
       .from('restaurant_menu_items')
-      .update({
-        category_id: categoryId,
-        name,
-        description,
-        price,
-        image_url: imageUrl,
-        preparation_time: preparationTime,
-        is_vegetarian: isVegetarian,
-        is_spicy: isSpicy,
-        allergens,
-        ingredients,
-        is_available: isAvailable,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', req.params.id)
       .select()
       .single();
@@ -178,7 +194,82 @@ export const updateMenuItem = async (
       data: item
     });
 
-    logger.info(`Menu item updated: ${name}`);
+    logger.info(`Menu item updated: ${name || 'item'}`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Delete menu item
+// @route   DELETE /api/restaurant/menu/items/:id
+// @access  Private (Restaurant Staff)
+export const deleteMenuItem = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const { error } = await supabase
+      .from('restaurant_menu_items')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      throw error;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Menu item deleted successfully'
+    });
+
+    logger.info(`Menu item deleted: ${id}`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Toggle menu item availability
+// @route   PUT /api/restaurant/menu/items/:id/toggle
+// @access  Private (Restaurant Staff)
+export const toggleItemAvailability = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    // Get current availability
+    const { data: item, error: fetchError } = await supabase
+      .from('restaurant_menu_items')
+      .select('is_available')
+      .eq('id', id)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    // Toggle it
+    const { data: updatedItem, error: updateError } = await supabase
+      .from('restaurant_menu_items')
+      .update({ 
+        is_available: !item.is_available,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    res.status(200).json({
+      success: true,
+      data: updatedItem
+    });
+
+    logger.info(`Menu item ${id} availability toggled to ${!item.is_available}`);
   } catch (error) {
     next(error);
   }
@@ -526,6 +617,320 @@ export const updateInventoryStock = async (
     });
 
     logger.info(`Inventory stock updated for item ${item.name}`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// =====================================================
+// ROOM SERVICE ENDPOINTS
+// =====================================================
+
+// @desc    Create room service order
+// @route   POST /api/restaurant/room-service
+// @access  Private (Receptionist, Restaurant Staff)
+export const createRoomServiceOrder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { room_number, items, special_instructions, guest_name } = req.body;
+
+    if (!room_number || !items || items.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: 'Room number and at least one item are required'
+      });
+      return;
+    }
+
+    // Get room details to find guest
+    const { data: room, error: roomError } = await supabase
+      .from('rooms')
+      .select('id, room_number, branch_id')
+      .eq('room_number', room_number)
+      .single();
+
+    if (roomError && roomError.code !== 'PGRST116') {
+      logger.warn(`Room ${room_number} not found, proceeding anyway`);
+    }
+
+    // Calculate total from menu items
+    let totalAmount = 0;
+    const orderItems = [];
+
+    for (const item of items) {
+      const { data: menuItem, error: menuError } = await supabase
+        .from('restaurant_menu_items')
+        .select('id, name, price')
+        .eq('id', item.menu_item_id)
+        .single();
+
+      if (menuError) {
+        logger.warn(`Menu item ${item.menu_item_id} not found`);
+        continue;
+      }
+
+      const itemTotal = menuItem.price * item.quantity;
+      totalAmount += itemTotal;
+
+      orderItems.push({
+        menu_item_id: menuItem.id,
+        name: menuItem.name,
+        quantity: item.quantity,
+        unit_price: menuItem.price,
+        total_price: itemTotal,
+        notes: item.notes || null
+      });
+    }
+
+    // Create the room service order
+    const { data: order, error: orderError } = await supabase
+      .from('restaurant_orders')
+      .insert([{
+        order_type: 'room_service',
+        room_number: room_number,
+        room_id: room?.id || null,
+        branch_id: room?.branch_id || null,
+        guest_name: guest_name || null,
+        status: 'pending',
+        total_amount: totalAmount,
+        special_instructions: special_instructions || null,
+        created_by: req.user?.id
+      }])
+      .select()
+      .single();
+
+    if (orderError) {
+      throw orderError;
+    }
+
+    // Insert order items
+    const orderItemsWithOrderId = orderItems.map(item => ({
+      ...item,
+      order_id: order.id
+    }));
+
+    const { error: itemsError } = await supabase
+      .from('restaurant_order_items')
+      .insert(orderItemsWithOrderId);
+
+    if (itemsError) {
+      logger.error('Error inserting order items:', itemsError);
+    }
+
+    res.status(201).json({
+      success: true,
+      data: {
+        ...order,
+        items: orderItems
+      },
+      message: 'Room service order created successfully'
+    });
+
+    logger.info(`Room service order created for room ${room_number}, total: ${totalAmount}`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get room service orders
+// @route   GET /api/restaurant/room-service
+// @access  Private (Receptionist, Restaurant Staff)
+export const getRoomServiceOrders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    let query = supabase
+      .from('restaurant_orders')
+      .select('*, items:restaurant_order_items(*)')
+      .eq('order_type', 'room_service')
+      .order('created_at', { ascending: false });
+
+    if (req.query.status) {
+      query = query.eq('status', req.query.status);
+    }
+
+    if (req.query.room_number) {
+      query = query.eq('room_number', req.query.room_number);
+    }
+
+    if (req.query.branch_id) {
+      query = query.eq('branch_id', req.query.branch_id);
+    }
+
+    const { data: orders, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: orders
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update room service order status
+// @route   PUT /api/restaurant/room-service/:id/status
+// @access  Private (Restaurant Staff)
+export const updateRoomServiceOrderStatus = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { status } = req.body;
+    const validStatuses = ['pending', 'preparing', 'ready', 'delivering', 'delivered', 'cancelled'];
+
+    if (!validStatuses.includes(status)) {
+      res.status(400).json({
+        success: false,
+        message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
+      });
+      return;
+    }
+
+    const updateData: any = { status };
+    if (status === 'delivered') {
+      updateData.delivered_at = new Date().toISOString();
+    }
+
+    const { data: order, error } = await supabase
+      .from('restaurant_orders')
+      .update(updateData)
+      .eq('id', req.params.id)
+      .eq('order_type', 'room_service')
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: order,
+      message: `Order status updated to ${status}`
+    });
+
+    logger.info(`Room service order ${req.params.id} status updated to ${status}`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Upload menu item image
+// @route   POST /api/restaurant/menu/items/:id/image
+// @access  Private (Restaurant Staff)
+export const uploadMenuItemImage = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { imageBase64, fileName, contentType } = req.body;
+
+    if (!imageBase64) {
+      res.status(400).json({ success: false, message: 'No image provided' });
+      return;
+    }
+
+    // Decode base64
+    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    // Generate unique filename
+    const ext = contentType?.split('/')[1] || 'jpg';
+    const uniqueFileName = `menu-items/${id}/${Date.now()}.${ext}`;
+
+    // Upload to Supabase storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('menu-images')
+      .upload(uniqueFileName, buffer, {
+        contentType: contentType || 'image/jpeg',
+        upsert: true
+      });
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('menu-images')
+      .getPublicUrl(uniqueFileName);
+
+    const imageUrl = urlData.publicUrl;
+
+    // Update menu item with image URL
+    const { data: item, error: updateError } = await supabase
+      .from('restaurant_menu_items')
+      .update({ image_url: imageUrl, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: { image_url: imageUrl, item }
+    });
+
+    logger.info(`Menu item ${id} image uploaded`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Delete menu item image
+// @route   DELETE /api/restaurant/menu/items/:id/image
+// @access  Private (Restaurant Staff)
+export const deleteMenuItemImage = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    // Get current item to find image path
+    const { data: item, error: fetchError } = await supabase
+      .from('restaurant_menu_items')
+      .select('image_url')
+      .eq('id', id)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    if (item?.image_url) {
+      // Extract path from URL
+      const urlParts = item.image_url.split('/menu-images/');
+      if (urlParts.length > 1) {
+        const filePath = urlParts[1];
+        await supabase.storage.from('menu-images').remove([filePath]);
+      }
+    }
+
+    // Clear image URL in database
+    const { error: updateError } = await supabase
+      .from('restaurant_menu_items')
+      .update({ image_url: null, updated_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (updateError) throw updateError;
+
+    res.status(200).json({ success: true, message: 'Image deleted' });
   } catch (error) {
     next(error);
   }

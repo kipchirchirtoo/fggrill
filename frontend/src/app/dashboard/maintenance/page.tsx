@@ -1,189 +1,121 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { motion } from 'framer-motion';
-import {
-  Wrench,
-  AlertCircle,
-  CheckCircle,
-  Clock,
-  Package,
-  Calendar,
-  TrendingUp,
-  Settings,
-  RefreshCw
-} from 'lucide-react';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
+import { IOSBadge } from '@/components/ui/ios-badge';
 import { maintenanceAPI } from '@/lib/api';
+import { Wrench, RefreshCw, Plus, Clock, CheckCircle, AlertTriangle, Calendar, ClipboardList, Settings } from 'lucide-react';
 import { toast } from 'sonner';
+import Link from 'next/link';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
+
+interface WorkOrder { id: string; title: string; location: string; priority: string; status: string; created_at: string; }
 
 export default function MaintenanceDashboard() {
   const { user } = useAuth();
+  const [orders, setOrders] = useState<WorkOrder[]>([]);
+  const [stats, setStats] = useState({ pending: 0, inProgress: 0, completed: 0, urgent: 0 });
   const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState({
-    openTickets: 0,
-    inProgress: 0,
-    completed: 0,
-    urgent: 0,
-    scheduledToday: 0,
-    equipmentStatus: 0
-  });
-  const [workOrders, setWorkOrders] = useState<any[]>([]);
 
-  const fetchDashboardData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const requestsRes = await maintenanceAPI.getRequests().catch(() => ({ requests: [] }));
-      const requests = requestsRes.requests || requestsRes || [];
-
-      if (Array.isArray(requests)) {
-        const openTickets = requests.filter((r: any) => r.status !== 'completed').length;
-        const inProgress = requests.filter((r: any) => r.status === 'in_progress').length;
-        const completed = requests.filter((r: any) => r.status === 'completed').length;
-        const urgent = requests.filter((r: any) => r.priority === 'urgent').length;
-
+      const response = await maintenanceAPI.getRequests();
+      if (response.success) {
+        const data = response.data || [];
+        setOrders(data.slice(0, 10));
         setStats({
-          openTickets,
-          inProgress,
-          completed,
-          urgent,
-          scheduledToday: requests.filter((r: any) => r.scheduled_date === new Date().toISOString().split('T')[0]).length,
-          equipmentStatus: 100 - (urgent * 5)
+          pending: data.filter((o: WorkOrder) => o.status === 'pending').length,
+          inProgress: data.filter((o: WorkOrder) => o.status === 'in_progress').length,
+          completed: data.filter((o: WorkOrder) => o.status === 'completed').length,
+          urgent: data.filter((o: WorkOrder) => o.priority === 'urgent').length,
         });
-
-        setWorkOrders(requests.slice(0, 10).map((r: any) => ({
-          id: r.id || r.ticket_number || '-',
-          location: r.location || r.room || '-',
-          issue: r.description || r.issue || '-',
-          priority: r.priority || 'normal',
-          status: r.status || 'pending'
-        })));
       }
-    } catch (error) {
-      console.error('Error fetching maintenance data:', error);
-    } finally {
-      setIsLoading(false);
-    }
+    } catch (error) { console.error('Error:', error); }
+    finally { setIsLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleUpdateStatus = async (id: string, status: string) => {
+    try {
+      await maintenanceAPI.updateRequest(id, { status });
+      toast.success('Status updated');
+      fetchData();
+    } catch (error: any) { toast.error(error.message || 'Failed'); }
   };
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
+  const priorityColors: Record<string, string> = { urgent: 'bg-[#FF3B30]', high: 'bg-orange-500', normal: 'bg-[#007AFF]', low: 'bg-[#8E8E93]' };
+  const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
+    pending: { label: 'Pending', color: 'text-yellow-700', bg: 'bg-yellow-100' },
+    in_progress: { label: 'In Progress', color: 'text-blue-700', bg: 'bg-blue-100' },
+    completed: { label: 'Completed', color: 'text-green-700', bg: 'bg-green-100' },
+  };
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.MAINTENANCE, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              Maintenance Dashboard
-            </h1>
-            <p className="text-gray-600 mt-1">
-              Welcome, {user?.firstName}! Manage work orders and equipment maintenance.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <AlertCircle className="h-8 w-8 text-red-600 mb-2" />
-              <p className="text-2xl font-bold text-red-900">{stats.urgent}</p>
-              <p className="text-sm text-red-700">Urgent</p>
-            </div>
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <Clock className="h-8 w-8 text-yellow-600 mb-2" />
-              <p className="text-2xl font-bold text-yellow-900">{stats.openTickets}</p>
-              <p className="text-sm text-yellow-700">Open Tickets</p>
-            </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <Wrench className="h-8 w-8 text-blue-600 mb-2" />
-              <p className="text-2xl font-bold text-blue-900">{stats.inProgress}</p>
-              <p className="text-sm text-blue-700">In Progress</p>
-            </div>
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <CheckCircle className="h-8 w-8 text-green-600 mb-2" />
-              <p className="text-2xl font-bold text-green-900">{stats.completed}</p>
-              <p className="text-sm text-green-700">Completed</p>
-            </div>
-            <div className="bg-white rounded-lg p-4 border border-gray-100">
-              <Calendar className="h-8 w-8 text-purple-600 mb-2" />
-              <p className="text-2xl font-bold">{stats.scheduledToday}</p>
-              <p className="text-sm text-gray-600">Scheduled Today</p>
-            </div>
-            <div className="bg-white rounded-lg p-4 border border-gray-100">
-              <TrendingUp className="h-8 w-8 text-indigo-600 mb-2" />
-              <p className="text-2xl font-bold">{stats.equipmentStatus}%</p>
-              <p className="text-sm text-gray-600">Equipment Health</p>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Wrench className="h-7 w-7" /> Maintenance</h1><p className="text-gray-500">Manage work orders and assets</p></div>
+            <div className="flex gap-2">
+              <IOSButton variant="secondary" onClick={fetchData}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+              <Link href="/dashboard/maintenance/orders"><IOSButton><Plus className="h-4 w-4 mr-2" /> New Order</IOSButton></Link>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Active Work Orders</h2>
-              <div className="space-y-3">
-                {workOrders.map(order => (
-                  <div key={order.id} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <span className="font-medium text-gray-900">{order.id}</span>
-                        <span className="ml-2 text-sm text-gray-600">{order.location}</span>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <IOSCard className="p-4"><Clock className="h-8 w-8 text-yellow-600 mb-2" /><p className="text-sm text-gray-500">Pending</p><p className="text-2xl font-bold text-yellow-600">{stats.pending}</p></IOSCard>
+            <IOSCard className="p-4"><Wrench className="h-8 w-8 text-[#007AFF] mb-2" /><p className="text-sm text-gray-500">In Progress</p><p className="text-2xl font-bold text-[#007AFF]">{stats.inProgress}</p></IOSCard>
+            <IOSCard className="p-4"><CheckCircle className="h-8 w-8 text-[#34C759] mb-2" /><p className="text-sm text-gray-500">Completed</p><p className="text-2xl font-bold text-[#34C759]">{stats.completed}</p></IOSCard>
+            <IOSCard className="p-4"><AlertTriangle className="h-8 w-8 text-[#FF3B30] mb-2" /><p className="text-sm text-gray-500">Urgent</p><p className="text-2xl font-bold text-[#FF3B30]">{stats.urgent}</p></IOSCard>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-6">
+            <IOSCard className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold font-sf-pro-display">Recent Work Orders</h2>
+                <Link href="/dashboard/maintenance/orders"><IOSButton variant="ghost" size="sm">View All</IOSButton></Link>
+              </div>
+              {isLoading ? (
+                <div className="flex justify-center py-8"><RefreshCw className="h-6 w-6 animate-spin text-gray-400" /></div>
+              ) : orders.length === 0 ? (
+                <div className="text-center py-8 text-gray-500"><Wrench className="h-12 w-12 mx-auto mb-2 text-gray-300" /><p>No work orders</p></div>
+              ) : (
+                <div className="space-y-3 max-h-72 overflow-y-auto">
+                  {orders.map((order) => {
+                    const status = statusConfig[order.status] || statusConfig.pending;
+                    return (
+                      <div key={order.id} className="p-3 border rounded-ios-lg flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-2 h-2 rounded-full ${priorityColors[order.priority] || priorityColors.normal}`} />
+                          <div><p className="font-medium">{order.title}</p><p className="text-sm text-gray-500">{order.location}</p></div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <IOSBadge className={`${status.bg} ${status.color}`}>{status.label}</IOSBadge>
+                          {order.status === 'pending' && <IOSButton size="sm" onClick={() => handleUpdateStatus(order.id, 'in_progress')}>Start</IOSButton>}
+                          {order.status === 'in_progress' && <IOSButton size="sm" onClick={() => handleUpdateStatus(order.id, 'completed')}>Done</IOSButton>}
+                        </div>
                       </div>
-                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                        order.priority === 'urgent' ? 'bg-red-100 text-red-800' :
-                        order.priority === 'high' ? 'bg-orange-100 text-orange-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {order.priority}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-700 mb-2">{order.issue}</p>
-                    <div className="flex items-center justify-between">
-                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                        order.status === 'in-progress' ? 'bg-blue-100 text-blue-800' :
-                        order.status === 'scheduled' ? 'bg-purple-100 text-purple-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {order.status}
-                      </span>
-                      <button className="text-sm text-indigo-600 hover:text-indigo-700">
-                        View Details →
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <button className="p-4 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">
-                  <AlertCircle className="h-6 w-6 text-red-600 mb-2 mx-auto" />
-                  <span className="text-sm text-gray-700">Report Issue</span>
-                </button>
-                <button className="p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
-                  <Wrench className="h-6 w-6 text-blue-600 mb-2 mx-auto" />
-                  <span className="text-sm text-gray-700">New Work Order</span>
-                </button>
-                <button className="p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
-                  <CheckCircle className="h-6 w-6 text-green-600 mb-2 mx-auto" />
-                  <span className="text-sm text-gray-700">Complete Task</span>
-                </button>
-                <button className="p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
-                  <Package className="h-6 w-6 text-purple-600 mb-2 mx-auto" />
-                  <span className="text-sm text-gray-700">Parts Inventory</span>
-                </button>
-              </div>
-
-              <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="flex items-center">
-                  <AlertCircle className="h-5 w-5 text-yellow-600 mr-2" />
-                  <span className="text-sm font-medium text-yellow-800">Scheduled Maintenance</span>
+                    );
+                  })}
                 </div>
-                <p className="text-sm text-yellow-700 mt-1">Generator inspection due tomorrow</p>
+              )}
+            </IOSCard>
+
+            <IOSCard className="p-6">
+              <h2 className="text-lg font-semibold font-sf-pro-display mb-4">Quick Actions</h2>
+              <div className="grid grid-cols-2 gap-3">
+                <Link href="/dashboard/maintenance/orders"><IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-blue-50"><ClipboardList className="h-8 w-8 text-[#007AFF] mb-2" /><p className="font-medium">Work Orders</p></IOSCard></Link>
+                <Link href="/dashboard/maintenance/assets"><IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-green-50"><Settings className="h-8 w-8 text-[#34C759] mb-2" /><p className="font-medium">Assets</p></IOSCard></Link>
+                <Link href="/dashboard/maintenance/schedule"><IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-purple-50"><Calendar className="h-8 w-8 text-purple-600 mb-2" /><p className="font-medium">Schedule</p></IOSCard></Link>
               </div>
-            </div>
+            </IOSCard>
           </div>
         </div>
       </DashboardLayout>

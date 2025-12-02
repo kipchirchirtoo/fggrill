@@ -1,206 +1,119 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Package, Search, AlertTriangle, Wine, Beer, Plus, Minus, RefreshCw } from 'lucide-react';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
+import { IOSBadge } from '@/components/ui/ios-badge';
+import { Input } from '@/components/ui/input';
+import { storeAPI } from '@/lib/api';
+import { Wine, RefreshCw, Search, AlertTriangle, TrendingDown, CheckCircle, ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
-import { barAPI } from '@/lib/api';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
-const defaultStock = [
-  // Beers
-  { id: '1', name: 'Tusker Lager', category: 'beers', quantity: 48, unit: 'bottles', min_stock: 24, price: 300 },
-  { id: '2', name: 'Tusker Malt', category: 'beers', quantity: 24, unit: 'bottles', min_stock: 12, price: 350 },
-  { id: '3', name: 'White Cap', category: 'beers', quantity: 36, unit: 'bottles', min_stock: 24, price: 300 },
-  { id: '4', name: 'Guinness', category: 'beers', quantity: 18, unit: 'bottles', min_stock: 12, price: 400 },
-  { id: '5', name: 'Heineken', category: 'beers', quantity: 12, unit: 'bottles', min_stock: 12, price: 450 },
-  { id: '6', name: 'Corona', category: 'beers', quantity: 6, unit: 'bottles', min_stock: 12, price: 500 },
-  // Spirits
-  { id: '7', name: 'Jameson Whiskey', category: 'whisky', quantity: 5, unit: '750ml', min_stock: 3, price: 3500 },
-  { id: '8', name: 'Jack Daniels', category: 'whisky', quantity: 4, unit: '750ml', min_stock: 2, price: 4000 },
-  { id: '9', name: 'Johnnie Walker Red', category: 'whisky', quantity: 6, unit: '750ml', min_stock: 3, price: 2500 },
-  { id: '10', name: 'Johnnie Walker Black', category: 'whisky', quantity: 3, unit: '750ml', min_stock: 2, price: 4500 },
-  { id: '11', name: 'Smirnoff Vodka', category: 'vodka', quantity: 8, unit: '750ml', min_stock: 4, price: 2000 },
-  { id: '12', name: 'Absolut Vodka', category: 'vodka', quantity: 4, unit: '750ml', min_stock: 2, price: 3000 },
-  { id: '13', name: 'Gordons Gin', category: 'gin', quantity: 5, unit: '750ml', min_stock: 3, price: 2200 },
-  { id: '14', name: 'Tanqueray Gin', category: 'gin', quantity: 3, unit: '750ml', min_stock: 2, price: 3500 },
-  { id: '15', name: 'Captain Morgan', category: 'rum', quantity: 4, unit: '750ml', min_stock: 2, price: 2500 },
-  { id: '16', name: 'Bacardi White', category: 'rum', quantity: 3, unit: '750ml', min_stock: 2, price: 2200 },
-  // Wines
-  { id: '17', name: 'House Red Wine', category: 'wines', quantity: 8, unit: '750ml', min_stock: 4, price: 1500 },
-  { id: '18', name: 'House White Wine', category: 'wines', quantity: 6, unit: '750ml', min_stock: 4, price: 1500 },
-  { id: '19', name: 'Sparkling Wine', category: 'wines', quantity: 4, unit: '750ml', min_stock: 2, price: 2500 },
-  // Mixers
-  { id: '20', name: 'Coca Cola', category: 'mixers', quantity: 48, unit: '300ml', min_stock: 24, price: 100 },
-  { id: '21', name: 'Tonic Water', category: 'mixers', quantity: 24, unit: '300ml', min_stock: 12, price: 150 },
-  { id: '22', name: 'Red Bull', category: 'mixers', quantity: 12, unit: 'cans', min_stock: 12, price: 350 },
-  { id: '23', name: 'Fresh Limes', category: 'garnish', quantity: 20, unit: 'pieces', min_stock: 10, price: 20 },
-  { id: '24', name: 'Fresh Mint', category: 'garnish', quantity: 5, unit: 'bunches', min_stock: 3, price: 50 },
-];
+interface InventoryItem { id: string; sku: string; name: string; category: string; quantity: number; min_quantity: number; unit: string; }
 
 export default function BarInventoryPage() {
   const { user } = useAuth();
-  const [stock, setStock] = useState(defaultStock);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [showLowOnly, setShowLowOnly] = useState(false);
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    barAPI.getStock().then(res => {
-      const items = res.stock || res.data || [];
-      if (items.length > 0) setStock(items);
-    }).catch(() => {});
+  const fetchItems = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const response = await storeAPI.getBranchStock();
+      if (response.success) {
+        const barItems = (response.data || []).filter((item: any) =>
+          item.category?.toLowerCase().includes('beverage') ||
+          item.category?.toLowerCase().includes('alcohol') ||
+          item.category?.toLowerCase().includes('drink') ||
+          item.category?.toLowerCase().includes('bar')
+        );
+        setItems(barItems);
+      }
+    } catch (error) { console.error('Error:', error); }
+    finally { setIsLoading(false); }
   }, []);
 
-  const categories = ['all', ...new Set(defaultStock.map(s => s.category))];
-  
-  const filteredStock = stock.filter(item => {
-    const matchesCat = selectedCategory === 'all' || item.category === selectedCategory;
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesLow = !showLowOnly || item.quantity <= item.min_stock;
-    return matchesCat && matchesSearch && matchesLow;
-  });
+  useEffect(() => { fetchItems(); }, [fetchItems]);
 
-  const lowStockItems = stock.filter(s => s.quantity <= s.min_stock);
-  const totalValue = stock.reduce((sum, s) => sum + (s.quantity * s.price), 0);
+  const filteredItems = items.filter((item) => item.name?.toLowerCase().includes(searchQuery.toLowerCase()));
+  const lowStockItems = items.filter(i => i.quantity <= i.min_quantity);
 
-  const adjustStock = (id: string, delta: number) => {
-    setStock(prev => prev.map(s => s.id === id ? { ...s, quantity: Math.max(0, s.quantity + delta) } : s));
-    toast.success('Stock updated');
+  const handleRequestStock = async (item: InventoryItem) => {
+    try {
+      await storeAPI.createStockRequest({
+        items: [{ item_sku: item.sku, requested_quantity: item.min_quantity * 2, current_branch_stock: item.quantity }],
+        request_type: 'bar', priority: item.quantity === 0 ? 'urgent' : 'normal', reason: 'Bar stock replenishment',
+      });
+      toast.success('Request submitted');
+    } catch (error: any) { toast.error(error.message || 'Failed'); }
   };
 
-  const getStockStatus = (item: typeof stock[0]) => {
-    if (item.quantity === 0) return { label: 'Out of Stock', color: 'bg-red-100 text-red-800' };
-    if (item.quantity <= item.min_stock) return { label: 'Low Stock', color: 'bg-yellow-100 text-yellow-800' };
-    return { label: 'In Stock', color: 'bg-green-100 text-green-800' };
-  };
+  const stats = { total: items.length, lowStock: lowStockItems.length, outOfStock: items.filter(i => i.quantity === 0).length, adequate: items.filter(i => i.quantity > i.min_quantity).length };
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.BARTENDER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                <Package className="h-8 w-8 text-purple-600" />
-                Bar Inventory
-              </h1>
-              <p className="text-gray-600 mt-1">{user?.branch_name || 'Famous Gate Hotel'} - Stock Management</p>
-            </div>
-            <button onClick={() => window.location.reload()} className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50">
-              <RefreshCw className="h-4 w-4" /> Refresh
-            </button>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900">Bar Inventory</h1><p className="text-gray-500">Track drinks and supplies</p></div>
+            <IOSButton variant="secondary" onClick={fetchItems}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl border p-4">
-              <div className="flex items-center justify-between">
-                <div className="p-2 bg-purple-100 rounded-lg"><Package className="h-6 w-6 text-purple-600" /></div>
-                <span className="text-3xl font-bold text-purple-600">{stock.length}</span>
-              </div>
-              <div className="text-sm text-gray-500 mt-2">Total Items</div>
-            </div>
-            <div className="bg-white rounded-xl border p-4">
-              <div className="flex items-center justify-between">
-                <div className="p-2 bg-yellow-100 rounded-lg"><AlertTriangle className="h-6 w-6 text-yellow-600" /></div>
-                <span className="text-3xl font-bold text-yellow-600">{lowStockItems.length}</span>
-              </div>
-              <div className="text-sm text-gray-500 mt-2">Low Stock Items</div>
-            </div>
-            <div className="bg-white rounded-xl border p-4">
-              <div className="flex items-center justify-between">
-                <div className="p-2 bg-red-100 rounded-lg"><Package className="h-6 w-6 text-red-600" /></div>
-                <span className="text-3xl font-bold text-red-600">{stock.filter(s => s.quantity === 0).length}</span>
-              </div>
-              <div className="text-sm text-gray-500 mt-2">Out of Stock</div>
-            </div>
-            <div className="bg-white rounded-xl border p-4">
-              <div className="flex items-center justify-between">
-                <div className="p-2 bg-green-100 rounded-lg"><Wine className="h-6 w-6 text-green-600" /></div>
-                <span className="text-2xl font-bold text-green-600">KES {totalValue.toLocaleString()}</span>
-              </div>
-              <div className="text-sm text-gray-500 mt-2">Stock Value</div>
-            </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <IOSCard className="p-4"><Wine className="h-8 w-8 text-[#007AFF] mb-2" /><p className="text-sm text-gray-500">Total</p><p className="text-xl font-bold">{stats.total}</p></IOSCard>
+            <IOSCard className="p-4 border-l-4 border-yellow-500"><TrendingDown className="h-8 w-8 text-yellow-600 mb-2" /><p className="text-sm text-gray-500">Low Stock</p><p className="text-xl font-bold text-yellow-600">{stats.lowStock}</p></IOSCard>
+            <IOSCard className="p-4 border-l-4 border-red-500"><AlertTriangle className="h-8 w-8 text-[#FF3B30] mb-2" /><p className="text-sm text-gray-500">Out of Stock</p><p className="text-xl font-bold text-[#FF3B30]">{stats.outOfStock}</p></IOSCard>
+            <IOSCard className="p-4 border-l-4 border-green-500"><CheckCircle className="h-8 w-8 text-[#34C759] mb-2" /><p className="text-sm text-gray-500">Adequate</p><p className="text-xl font-bold text-[#34C759]">{stats.adequate}</p></IOSCard>
           </div>
 
-          {/* Low Stock Alert */}
           {lowStockItems.length > 0 && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle className="h-5 w-5 text-yellow-600" />
-                <span className="font-medium text-yellow-800">Low Stock Alert</span>
-              </div>
+            <IOSCard className="p-4 bg-yellow-50 border-yellow-200">
+              <div className="flex items-center gap-2 mb-3"><AlertTriangle className="h-5 w-5 text-yellow-600" /><p className="font-medium text-yellow-800">Low Stock ({lowStockItems.length})</p></div>
               <div className="flex flex-wrap gap-2">
-                {lowStockItems.map(item => (
-                  <span key={item.id} className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-sm">
-                    {item.name} ({item.quantity} {item.unit})
-                  </span>
+                {lowStockItems.slice(0, 5).map((item) => (
+                  <IOSButton key={item.id} size="sm" variant="secondary" onClick={() => handleRequestStock(item)}>{item.name} ({item.quantity})</IOSButton>
                 ))}
               </div>
-            </div>
+            </IOSCard>
           )}
 
-          {/* Search & Filter */}
-          <div className="flex gap-4 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input type="text" placeholder="Search inventory..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg" />
+          <IOSCard className="p-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
             </div>
-            <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="px-4 py-2 border rounded-lg">
-              {categories.map(cat => <option key={cat} value={cat} className="capitalize">{cat}</option>)}
-            </select>
-            <button onClick={() => setShowLowOnly(!showLowOnly)} className={`px-4 py-2 rounded-lg ${showLowOnly ? 'bg-yellow-500 text-white' : 'bg-gray-100'}`}>
-              <AlertTriangle className="h-4 w-4 inline mr-1" /> Low Stock Only
-            </button>
-          </div>
+          </IOSCard>
 
-          {/* Inventory Table */}
-          <div className="bg-white rounded-xl border overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Min Stock</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Adjust</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {filteredStock.map(item => {
-                  const status = getStockStatus(item);
-                  return (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          {item.category === 'beers' ? <Beer className="h-5 w-5 text-amber-500" /> : <Wine className="h-5 w-5 text-purple-500" />}
-                          <span className="font-medium">{item.name}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4"><span className="px-2 py-1 bg-gray-100 rounded text-sm capitalize">{item.category}</span></td>
-                      <td className="px-6 py-4 font-bold">{item.quantity} <span className="text-gray-400 font-normal">{item.unit}</span></td>
-                      <td className="px-6 py-4 text-gray-500">{item.min_stock}</td>
-                      <td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs font-medium ${status.color}`}>{status.label}</span></td>
-                      <td className="px-6 py-4 text-purple-600 font-medium">KES {(item.quantity * item.price).toLocaleString()}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => adjustStock(item.id, -1)} className="p-1 rounded bg-gray-100 hover:bg-gray-200"><Minus className="h-4 w-4" /></button>
-                          <button onClick={() => adjustStock(item.id, 1)} className="p-1 rounded bg-gray-100 hover:bg-gray-200"><Plus className="h-4 w-4" /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {filteredStock.length === 0 && (
-              <div className="text-center py-12 text-gray-500"><Package className="h-12 w-12 mx-auto mb-3 text-gray-300" /><p>No items found</p></div>
-            )}
-          </div>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
+          ) : filteredItems.length === 0 ? (
+            <IOSCard className="p-12 text-center"><Wine className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No items found</p></IOSCard>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filteredItems.map((item) => {
+                const isLow = item.quantity <= item.min_quantity;
+                const isOut = item.quantity === 0;
+                return (
+                  <IOSCard key={item.id} className={`p-4 ${isOut ? 'border-red-200 bg-red-50' : isLow ? 'border-yellow-200 bg-yellow-50' : ''}`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <div><p className="font-bold">{item.name}</p><p className="text-sm text-gray-500">{item.category}</p></div>
+                      {isOut ? <IOSBadge variant="error">Out</IOSBadge> : isLow ? <IOSBadge variant="warning">Low</IOSBadge> : null}
+                    </div>
+                    <div className="flex items-end justify-between mt-4">
+                      <div><p className="text-2xl font-bold">{item.quantity}</p><p className="text-xs text-gray-500">Min: {item.min_quantity} {item.unit}</p></div>
+                      {(isLow || isOut) && <IOSButton size="sm" onClick={() => handleRequestStock(item)}><ShoppingCart className="h-3 w-3 mr-1" /> Request</IOSButton>}
+                    </div>
+                  </IOSCard>
+                );
+              })}
+            </div>
+          )}
         </div>
       </DashboardLayout>
     </ProtectedRoute>

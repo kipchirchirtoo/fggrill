@@ -45,7 +45,7 @@ export function ConsumptionTracking({ branch, records }: ConsumptionTrackingProp
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Consumption Tracking - {branch}</h2>
+        <h2 className="text-xl font-semibold font-sf-pro-display">Consumption Tracking - {branch}</h2>
         <div className="flex items-center gap-4">
           <Select value={timeframe} onValueChange={setTimeframe}>
             <SelectTrigger className="w-32">

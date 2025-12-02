@@ -33,7 +33,7 @@ export function QuickActionsModal({ isOpen, onClose, onAddItem, onCreateRequisit
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle className="text-xl font-semibold text-gray-900">Quick Actions</DialogTitle>
+          <DialogTitle className="text-xl font-semibold font-sf-pro-display text-gray-900">Quick Actions</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 mt-4">
           <Button onClick={() => { onClose(); onAddItem(); }}>Add New Item</Button>
@@ -51,7 +51,7 @@ export function AddNewItemModal({ isOpen, onClose }: ModalProps) {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle className="text-xl font-semibold text-gray-900">Add New Item</DialogTitle>
+          <DialogTitle className="text-xl font-semibold font-sf-pro-display text-gray-900">Add New Item</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 mt-4">
           <div>
@@ -87,7 +87,7 @@ export function CreateRequisitionModal({ isOpen, onClose }: ModalProps) {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle className="text-xl font-semibold text-gray-900">Create Requisition</DialogTitle>
+          <DialogTitle className="text-xl font-semibold font-sf-pro-display text-gray-900">Create Requisition</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 mt-4">
           <div>
@@ -131,7 +131,7 @@ export function CreatePOModal({ isOpen, onClose }: ModalProps) {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle className="text-xl font-semibold text-gray-900">Create Purchase Order</DialogTitle>
+          <DialogTitle className="text-xl font-semibold font-sf-pro-display text-gray-900">Create Purchase Order</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 mt-4">
           <div>
@@ -174,7 +174,7 @@ export function AddSupplierModal({ isOpen, onClose }: ModalProps) {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle className="text-xl font-semibold text-gray-900">Add Supplier</DialogTitle>
+          <DialogTitle className="text-xl font-semibold font-sf-pro-display text-gray-900">Add Supplier</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 mt-4">
           <div>

@@ -94,12 +94,12 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                 handleSearch(e.target.value);
               }}
               placeholder="Search for anything..."
-              className={'flex items-center gap-2 p-3 rounded-lg border ' + (searchTerm === '' ? 'border-gray-200 hover:border-gray-300' : 'border-indigo-600 bg-indigo-50 text-indigo-600')}
+              className={'flex items-center gap-2 p-3 rounded-ios-lg border ' + (searchTerm === '' ? 'border-gray-200 hover:border-gray-300' : 'border-indigo-600 bg-indigo-50 text-indigo-600')}
               autoFocus
             />
             <button
               onClick={onClose}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-lg"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-ios-lg"
             >
               <X className="h-5 w-5 text-gray-500" />
             </button>
@@ -111,7 +111,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
               <button
                 key={category.id}
                 onClick={() => setSelectedCategory(category.id === 'all' ? null : category.id)}
-                className={'flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm ' + (((category.id === 'all' && !selectedCategory) || category.id === selectedCategory) ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100')}
+                className={'flex items-center gap-1 px-3 py-1.5 rounded-ios-lg text-sm ' + (((category.id === 'all' && !selectedCategory) || category.id === selectedCategory) ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100')}
               >
                 <category.icon className="h-4 w-4" />
                 {category.name}
@@ -141,7 +141,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                       window.location.href = result.link;
                     }}
                   >
-                    <div className="p-2 bg-gray-100 rounded-lg">
+                    <div className="p-2 bg-gray-100 rounded-ios-lg">
                       <result.icon className="h-5 w-5 text-gray-600" />
                     </div>
                     <div className="flex-1 min-w-0">

@@ -68,7 +68,7 @@ export const getRoom = async (
         *,
         attendant:hk_staff_profiles!assigned_attendant_id(
           id, staff_code, designation,
-          user:users(first_name, last_name, phone)
+          user:users(first_name, last_name, phone_number)
         ),
         status_history:hk_room_status_history(
           id, previous_status, new_status, reason, created_at,

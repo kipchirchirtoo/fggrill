@@ -84,7 +84,7 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
           
           <form onSubmit={handleSubmit} className="p-4 space-y-4">
             <div className="space-y-2">
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 transition-colors">
+                <div className="border-2 border-dashed border-gray-300 rounded-ios-lg p-6 text-center hover:bg-gray-50 transition-colors">
                     <input 
                         type="file" 
                         id="file-upload" 

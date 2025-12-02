@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { SearchModal } from '@/components/modals/SearchModal';
 import { NotificationModal } from '@/components/modals/NotificationModal';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter, usePathname } from 'next/navigation';
+import { notificationsAPI } from '@/lib/api';
 import {
   Hotel,
   LayoutDashboard,
@@ -41,7 +43,8 @@ import {
   Send,
   Clock,
   CheckCircle,
-  ChefHat
+  ChefHat,
+  AlertTriangle
 } from 'lucide-react';
 
 interface DashboardLayoutProps {
@@ -55,10 +58,43 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  // Dark mode removed - light theme only
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [notificationModalOpen, setNotificationModalOpen] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['Storekeeping']);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Fetch unread notification count
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const response = await notificationsAPI.getUnreadCount();
+        if (response.success && response.data) {
+          setUnreadCount(response.data.count);
+        }
+      } catch (error) {
+        console.error('Error fetching unread count:', error);
+      }
+    };
+
+    if (user) {
+      fetchUnreadCount();
+      // Poll for updates every 30 seconds
+      const interval = setInterval(fetchUnreadCount, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+
+  // Update unread count when notification modal closes
+  const handleNotificationModalClose = () => {
+    setNotificationModalOpen(false);
+    // Refresh unread count
+    notificationsAPI.getUnreadCount().then(response => {
+      if (response.success && response.data) {
+        setUnreadCount(response.data.count);
+      }
+    }).catch(console.error);
+  };
 
   const toggleMenu = (menuName: string) => {
     setExpandedMenus(prev => 
@@ -103,26 +139,30 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           name: 'Storekeeping', 
           icon: Warehouse,
           submenu: [
-            { name: 'Overview', href: '/dashboard/admin/storekeeping', icon: LayoutDashboard },
-            { name: 'Central Warehouse', href: '/dashboard/admin/storekeeping/central', icon: Warehouse },
-            { name: 'Branch Stock', href: '/dashboard/admin/storekeeping/branch', icon: Package },
-            { name: 'Inventory', href: '/dashboard/admin/inventory', icon: ClipboardList },
-            { name: 'Transfers', href: '/dashboard/admin/storekeeping/transfers', icon: Truck },
-            { name: 'Requests', href: '/dashboard/admin/storekeeping/requests', icon: Send },
-            { name: 'Stock Takes', href: '/dashboard/admin/storekeeping/stock-takes', icon: ClipboardCheck }
+            { name: 'Overview', href: '/dashboard/storekeeping', icon: LayoutDashboard },
+            { name: 'Central Warehouse', href: '/dashboard/storekeeping/central', icon: Warehouse },
+            { name: 'Branch Stock', href: '/dashboard/storekeeping/branch', icon: Package },
+            { name: 'Inventory', href: '/dashboard/storekeeping/inventory', icon: ClipboardList },
+            { name: 'Transfers', href: '/dashboard/storekeeping/transfers', icon: Truck },
+            { name: 'Requests', href: '/dashboard/storekeeping/requests', icon: Send },
+            { name: 'Stock Takes', href: '/dashboard/storekeeping/stock-takes', icon: ClipboardCheck },
+            { name: 'Purchase Orders', href: '/dashboard/storekeeping/purchase-orders', icon: ShoppingCart },
+            { name: 'GRN', href: '/dashboard/storekeeping/grn', icon: ClipboardCheck },
+            { name: 'Wastage', href: '/dashboard/storekeeping/wastage', icon: AlertTriangle }
           ]
         },
         { 
           name: 'Logistics', 
           icon: Truck,
           submenu: [
-            { name: 'Vehicles', href: '/dashboard/admin/vehicles', icon: Car },
-            { name: 'Drivers', href: '/dashboard/admin/drivers', icon: User },
-            { name: 'Suppliers', href: '/dashboard/admin/suppliers', icon: Building2 }
+            { name: 'Vehicles', href: '/dashboard/storekeeping/vehicles', icon: Car },
+            { name: 'Drivers', href: '/dashboard/storekeeping/drivers', icon: User },
+            { name: 'Suppliers', href: '/dashboard/storekeeping/suppliers', icon: Building2 }
           ]
         },
-        { name: 'Finance', href: '/dashboard/admin/finance', icon: DollarSign },
+        { name: 'Finance', href: '/dashboard/finance', icon: DollarSign },
         { name: 'Reports', href: '/dashboard/admin/reports', icon: BarChart3 },
+        { name: 'Users', href: '/dashboard/admin/users', icon: User },
         { name: 'Staff', href: '/dashboard/admin/staff', icon: Users },
         { name: 'Settings', href: '/dashboard/admin/settings', icon: Settings }
       ],
@@ -150,27 +190,31 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           name: 'Storekeeping', 
           icon: Warehouse,
           submenu: [
-            { name: 'Overview', href: '/dashboard/admin/storekeeping', icon: LayoutDashboard },
-            { name: 'Central Warehouse', href: '/dashboard/admin/storekeeping/central', icon: Warehouse },
-            { name: 'Branch Stock', href: '/dashboard/admin/storekeeping/branch', icon: Package },
-            { name: 'Inventory', href: '/dashboard/admin/inventory', icon: ClipboardList },
-            { name: 'Transfers', href: '/dashboard/admin/storekeeping/transfers', icon: Truck },
-            { name: 'Requests', href: '/dashboard/admin/storekeeping/requests', icon: Send },
-            { name: 'Stock Takes', href: '/dashboard/admin/storekeeping/stock-takes', icon: ClipboardCheck }
+            { name: 'Overview', href: '/dashboard/storekeeping', icon: LayoutDashboard },
+            { name: 'Central Warehouse', href: '/dashboard/storekeeping/central', icon: Warehouse },
+            { name: 'Branch Stock', href: '/dashboard/storekeeping/branch', icon: Package },
+            { name: 'Inventory', href: '/dashboard/storekeeping/inventory', icon: ClipboardList },
+            { name: 'Transfers', href: '/dashboard/storekeeping/transfers', icon: Truck },
+            { name: 'Requests', href: '/dashboard/storekeeping/requests', icon: Send },
+            { name: 'Stock Takes', href: '/dashboard/storekeeping/stock-takes', icon: ClipboardCheck },
+            { name: 'Purchase Orders', href: '/dashboard/storekeeping/purchase-orders', icon: ShoppingCart },
+            { name: 'GRN', href: '/dashboard/storekeeping/grn', icon: ClipboardCheck },
+            { name: 'Wastage', href: '/dashboard/storekeeping/wastage', icon: AlertTriangle }
           ]
         },
         { 
           name: 'Logistics', 
           icon: Truck,
           submenu: [
-            { name: 'Vehicles', href: '/dashboard/admin/vehicles', icon: Car },
-            { name: 'Drivers', href: '/dashboard/admin/drivers', icon: User },
-            { name: 'Suppliers', href: '/dashboard/admin/suppliers', icon: Building2 }
+            { name: 'Vehicles', href: '/dashboard/storekeeping/vehicles', icon: Car },
+            { name: 'Drivers', href: '/dashboard/storekeeping/drivers', icon: User },
+            { name: 'Suppliers', href: '/dashboard/storekeeping/suppliers', icon: Building2 }
           ]
         },
-        { name: 'Finance', href: '/dashboard/admin/finance', icon: DollarSign },
+        { name: 'Finance', href: '/dashboard/finance', icon: DollarSign },
         { name: 'Reports', href: '/dashboard/admin/reports', icon: BarChart3 },
         { name: 'Branches', href: '/dashboard/admin/system/branches', icon: Building2 },
+        { name: 'Users', href: '/dashboard/admin/users', icon: User },
         { name: 'Staff', href: '/dashboard/admin/staff', icon: Users }
       ],
       [UserRole.BRANCH_MANAGER]: [
@@ -341,8 +385,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const navigationItems = getNavigationItems();
 
   return (
-    <div className={`min-h-screen ${darkMode ? 'dark' : ''}`}>
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
+      <div className="flex h-screen bg-[#F2F2F7]">
         {/* Sidebar - Desktop */}
         <AnimatePresence>
           {sidebarOpen && (
@@ -354,17 +398,24 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               className="hidden lg:flex lg:flex-shrink-0"
             >
               <div className="flex w-64 flex-col">
-                <div className="flex min-h-0 flex-1 flex-col bg-indigo-700 dark:bg-gray-800">
+                <div className="flex min-h-0 flex-1 flex-col bg-white border-r border-[rgba(60,60,67,0.12)]">
                   <div className="flex flex-1 flex-col overflow-y-auto pt-5 pb-4">
                     {/* Logo */}
                     <div className="flex items-center flex-shrink-0 px-4">
                       <div className="flex items-center space-x-3">
-                        <div className="p-2 bg-white/20 rounded-lg">
-                          <Hotel className="h-8 w-8 text-white" />
+                        <div className="w-10 h-10 rounded-xl bg-[#3C3C43] flex items-center justify-center overflow-hidden">
+                          <Image
+                            src="/fglogo.png"
+                            alt="Famous Gate"
+                            width={32}
+                            height={32}
+                            className="object-cover scale-150"
+                            style={{ objectPosition: 'center 30%', width: 'auto', height: 'auto' }}
+                          />
                         </div>
                         <div>
-                          <h1 className="text-lg font-bold text-white">Famous Gate</h1>
-                          <p className="text-xs text-indigo-200">Hotel Management</p>
+                          <h1 className="text-base font-bold text-[#000000]">Famous Gate</h1>
+                          <p className="text-xs text-[#8E8E93]">Management</p>
                         </div>
                       </div>
                     </div>
@@ -380,10 +431,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                             <div key={item.name}>
                               <button
                                 onClick={() => toggleMenu(item.name)}
-                                className={`w-full group flex items-center justify-between px-2 py-2 text-sm font-medium rounded-md transition-colors ${
+                                className={`w-full group flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
                                   isSubmenuActive
-                                    ? 'bg-indigo-800 text-white'
-                                    : 'text-indigo-100 hover:bg-indigo-600 hover:text-white'
+                                    ? 'bg-[#F2F2F7] text-[#000000]'
+                                    : 'text-[#3C3C43] hover:bg-[#F2F2F7]'
                                 }`}
                               >
                                 <span className="flex items-center">
@@ -393,17 +444,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                                 {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                               </button>
                               {isExpanded && (
-                                <div className="mt-1 ml-4 space-y-1 border-l border-indigo-500 pl-2">
+                                <div className="mt-1 ml-4 space-y-1 border-l border-[rgba(60,60,67,0.12)] pl-2">
                                   {item.submenu.map((sub: any) => {
                                     const isSubActive = pathname === sub.href || pathname?.startsWith(sub.href + '/');
                                     return (
                                       <a
                                         key={sub.name}
                                         href={sub.href}
-                                        className={`group flex items-center px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                        className={`group flex items-center px-3 py-2 text-xs font-medium rounded-ios-lg transition-colors ${
                                           isSubActive
-                                            ? 'bg-indigo-600 text-white'
-                                            : 'text-indigo-200 hover:bg-indigo-600 hover:text-white'
+                                            ? 'bg-[#3C3C43] text-white'
+                                            : 'text-[#8E8E93] hover:bg-[#F2F2F7] hover:text-[#000000]'
                                         }`}
                                       >
                                         <sub.icon className="mr-2 h-4 w-4 flex-shrink-0" />
@@ -423,10 +474,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                           <a
                             key={item.name}
                             href={item.href}
-                            className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors ${
+                            className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
                               isActive
-                                ? 'bg-indigo-800 text-white'
-                                : 'text-indigo-100 hover:bg-indigo-600 hover:text-white'
+                                ? 'bg-[#3C3C43] text-white'
+                                : 'text-[#3C3C43] hover:bg-[#F2F2F7]'
                             }`}
                           >
                             <item.icon className="mr-3 h-5 w-5 flex-shrink-0" />
@@ -438,24 +489,24 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   </div>
 
                   {/* User section */}
-                  <div className="flex flex-shrink-0 border-t border-indigo-800 p-4">
+                  <div className="flex flex-shrink-0 border-t border-[rgba(60,60,67,0.12)] p-4">
                     <div className="flex items-center w-full">
                       <div className="flex-shrink-0">
-                        <div className="h-10 w-10 rounded-full bg-indigo-500 flex items-center justify-center">
-                          <User className="h-6 w-6 text-white" />
+                        <div className="h-10 w-10 rounded-full bg-[#F2F2F7] flex items-center justify-center">
+                          <User className="h-6 w-6 text-[#3C3C43]" />
                         </div>
                       </div>
                       <div className="ml-3 flex-1">
-                        <p className="text-sm font-medium text-white">
+                        <p className="text-sm font-medium text-[#000000]">
                           {user?.firstName} {user?.lastName}
                         </p>
-                        <p className="text-xs text-indigo-200">
+                        <p className="text-xs text-[#8E8E93]">
                           {user?.role.replace('_', ' ')}
                         </p>
                       </div>
                       <button
                         onClick={logout}
-                        className="ml-auto text-indigo-200 hover:text-white"
+                        className="ml-auto text-[#8E8E93] hover:text-[#3C3C43]"
                       >
                         <LogOut className="h-5 w-5" />
                       </button>
@@ -482,18 +533,27 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 initial={{ x: -280 }}
                 animate={{ x: 0 }}
                 exit={{ x: -280 }}
-                className="fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-indigo-700 lg:hidden"
+                className="fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-white border-r border-[rgba(60,60,67,0.12)] lg:hidden"
               >
                 {/* Mobile menu content - same as desktop */}
                 <div className="flex min-h-0 flex-1 flex-col">
-                  <div className="flex items-center justify-between p-4">
+                  <div className="flex items-center justify-between p-4 border-b border-[rgba(60,60,67,0.12)]">
                     <div className="flex items-center space-x-3">
-                      <Hotel className="h-8 w-8 text-white" />
-                      <h1 className="text-lg font-bold text-white">Famous Gate</h1>
+                      <div className="w-8 h-8 rounded-ios-lg bg-[#3C3C43] flex items-center justify-center overflow-hidden">
+                        <Image
+                          src="/fglogo.png"
+                          alt="Famous Gate"
+                          width={24}
+                          height={24}
+                          className="object-cover scale-150"
+                          style={{ objectPosition: 'center 30%', width: 'auto', height: 'auto' }}
+                        />
+                      </div>
+                      <h1 className="text-base font-bold text-[#000000]">Famous Gate</h1>
                     </div>
                     <button
                       onClick={() => setMobileMenuOpen(false)}
-                      className="text-white"
+                      className="text-[#3C3C43]"
                     >
                       <X className="h-6 w-6" />
                     </button>
@@ -509,10 +569,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                           <div key={item.name}>
                             <button
                               onClick={() => toggleMenu(item.name)}
-                              className={`w-full group flex items-center justify-between px-2 py-2 text-sm font-medium rounded-md transition-colors ${
+                              className={`w-full group flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
                                 isSubmenuActive
-                                  ? 'bg-indigo-800 text-white'
-                                  : 'text-indigo-100 hover:bg-indigo-600 hover:text-white'
+                                  ? 'bg-[#F2F2F7] text-[#000000]'
+                                  : 'text-[#3C3C43] hover:bg-[#F2F2F7]'
                               }`}
                             >
                               <span className="flex items-center">
@@ -522,7 +582,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                               {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                             </button>
                             {isExpanded && (
-                              <div className="mt-1 ml-4 space-y-1 border-l border-indigo-500 pl-2">
+                              <div className="mt-1 ml-4 space-y-1 border-l border-[rgba(60,60,67,0.12)] pl-2">
                                 {item.submenu.map((sub: any) => {
                                   const isSubActive = pathname === sub.href || pathname?.startsWith(sub.href + '/');
                                   return (
@@ -530,10 +590,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                                       key={sub.name}
                                       href={sub.href}
                                       onClick={() => setMobileMenuOpen(false)}
-                                      className={`group flex items-center px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                      className={`group flex items-center px-3 py-2 text-xs font-medium rounded-ios-lg transition-colors ${
                                         isSubActive
-                                          ? 'bg-indigo-600 text-white'
-                                          : 'text-indigo-200 hover:bg-indigo-600 hover:text-white'
+                                          ? 'bg-[#3C3C43] text-white'
+                                          : 'text-[#8E8E93] hover:bg-[#F2F2F7] hover:text-[#000000]'
                                       }`}
                                     >
                                       <sub.icon className="mr-2 h-4 w-4 flex-shrink-0" />
@@ -553,10 +613,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                           key={item.name}
                           href={item.href}
                           onClick={() => setMobileMenuOpen(false)}
-                          className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                          className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
                             isActive
-                              ? 'bg-indigo-800 text-white'
-                              : 'text-indigo-100 hover:bg-indigo-600'
+                              ? 'bg-[#3C3C43] text-white'
+                              : 'text-[#3C3C43] hover:bg-[#F2F2F7]'
                           }`}
                         >
                           <item.icon className="mr-3 h-5 w-5" />
@@ -574,18 +634,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* Main content */}
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Top bar */}
-          <header className="bg-white dark:bg-gray-800 shadow-sm">
+          <header className="bg-white border-b border-[rgba(60,60,67,0.12)]">
             <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
               <div className="flex items-center">
                 <button
                   onClick={() => setSidebarOpen(!sidebarOpen)}
-                  className="hidden lg:block text-gray-500 hover:text-gray-700"
+                  className="hidden lg:block text-[#3C3C43] hover:text-[#000000]"
                 >
                   <Menu className="h-6 w-6" />
                 </button>
                 <button
                   onClick={() => setMobileMenuOpen(true)}
-                  className="lg:hidden text-gray-500 hover:text-gray-700"
+                  className="lg:hidden text-[#3C3C43] hover:text-[#000000]"
                 >
                   <Menu className="h-6 w-6" />
                 </button>
@@ -593,10 +653,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 {/* Search */}
                 <div className="ml-4 flex-1 max-w-md">
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-[#8E8E93]" />
                     <button
                       onClick={() => setSearchModalOpen(true)}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-left text-gray-500"
+                      className="w-full pl-10 pr-4 py-2 bg-[#F2F2F7] border border-[rgba(60,60,67,0.12)] rounded-xl text-left text-[#8E8E93] hover:bg-white"
                     >
                       Search...
                     </button>
@@ -605,31 +665,27 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               </div>
 
               <div className="flex items-center space-x-4">
-                {/* Dark mode toggle */}
-                <button
-                  onClick={() => setDarkMode(!darkMode)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-                </button>
-
                 {/* Notifications */}
                 <button
                   onClick={() => setNotificationModalOpen(true)}
-                  className="relative text-gray-500 hover:text-gray-700"
+                  className="relative text-[#3C3C43] hover:text-[#000000]"
                 >
                   <Bell className="h-6 w-6" />
-                  <span className="absolute top-0 right-0 h-2 w-2 bg-red-500 rounded-full" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 h-5 w-5 bg-[#3C3C43] text-white text-xs rounded-full flex items-center justify-center font-semibold font-sf-pro-display">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
                 </button>
 
                 {/* User menu */}
                 <div className="relative">
                   <button
                     onClick={() => setUserMenuOpen(!userMenuOpen)}
-                    className="flex items-center space-x-2 text-gray-700 hover:text-gray-900"
+                    className="flex items-center space-x-2 text-[#3C3C43] hover:text-[#000000]"
                   >
-                    <div className="h-8 w-8 rounded-full bg-indigo-500 flex items-center justify-center">
-                      <User className="h-5 w-5 text-white" />
+                    <div className="h-8 w-8 rounded-full bg-[#F2F2F7] flex items-center justify-center">
+                      <User className="h-5 w-5 text-[#3C3C43]" />
                     </div>
                     <ChevronDown className="h-4 w-4" />
                   </button>
@@ -640,24 +696,24 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         initial={{ opacity: 0, y: -10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
-                        className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1 z-50"
+                        className="absolute right-0 mt-2 w-48 bg-white rounded-xl border border-[rgba(60,60,67,0.12)] shadow-lg py-1 z-50"
                       >
                         <a
                           href="/dashboard/profile"
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          className="block px-4 py-2 text-sm text-[#000000] hover:bg-[#F2F2F7]"
                         >
                           Profile
                         </a>
                         <a
                           href="/dashboard/settings"
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          className="block px-4 py-2 text-sm text-[#000000] hover:bg-[#F2F2F7]"
                         >
                           Settings
                         </a>
-                        <hr className="my-1" />
+                        <hr className="my-1 border-[rgba(60,60,67,0.12)]" />
                         <button
                           onClick={logout}
-                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          className="block w-full text-left px-4 py-2 text-sm text-[#FF3B30] hover:bg-[#F2F2F7]"
                         >
                           Sign out
                         </button>
@@ -670,7 +726,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </header>
 
           {/* Main content area */}
-          <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">
+          <main className="flex-1 overflow-y-auto bg-[#F2F2F7]">
             <div className="p-6">
               {children}
             </div>
@@ -685,7 +741,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       />
       <NotificationModal
         isOpen={notificationModalOpen}
-        onClose={() => setNotificationModalOpen(false)}
+        onClose={handleNotificationModalClose}
       />
     </div>
   );

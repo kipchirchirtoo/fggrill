@@ -10,7 +10,8 @@ import {
   getUserProfile,
   updateUserProfile,
   updateUserPassword,
-  uploadProfilePhoto
+  uploadProfilePhoto,
+  testCreateUser
 } from '../controllers/user.controller';
 import { uploadService } from '../services/upload.service';
 
@@ -35,6 +36,9 @@ router.use(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]));
 router.route('/')
   .get(getUsers)
   .post(createUser);
+
+// Test route for debugging user creation
+router.post('/test', testCreateUser);
 
 router.route('/:id')
   .get(getUser)

@@ -72,7 +72,8 @@ export const createTransaction = async (
       referenceId,
       paymentMethod,
       paymentReference,
-      notes
+      notes,
+      branchId
     } = req.body;
 
     // Generate transaction number
@@ -93,6 +94,7 @@ export const createTransaction = async (
         payment_method: paymentMethod,
         payment_reference: paymentReference,
         notes,
+        branch_id: branchId,
         created_by: req.user?.id,
         payment_date: new Date().toISOString()
       }])
@@ -509,8 +511,8 @@ export const getExpenses = async (
         *,
         branch:branches(id, name),
         department:departments(id, name),
-        created_by:users!created_by(id, full_name),
-        approved_by:users!approved_by(id, full_name)
+        created_by:users!created_by(id, first_name, last_name),
+        approved_by:users!approved_by(id, first_name, last_name)
       `)
       .order('created_at', { ascending: false });
 

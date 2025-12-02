@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/minimal/button";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
+import { IOSBadge } from '@/components/ui/ios-badge';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Dialog,
@@ -24,6 +24,8 @@ import {
   ArrowUpRight, ArrowDownLeft, TrendingUp, TrendingDown
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -290,13 +292,13 @@ export default function BranchStorekeeperPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'PENDING': return 'bg-yellow-500';
-      case 'APPROVED': return 'bg-green-500';
-      case 'REJECTED': return 'bg-red-500';
-      case 'DISPATCHED': return 'bg-blue-500';
-      case 'IN_TRANSIT': return 'bg-purple-500';
-      case 'DELIVERED': return 'bg-green-600';
-      default: return 'bg-gray-500';
+      case 'PENDING': return 'bg-[#F2F2F7]';
+      case 'APPROVED': return 'bg-[#F2F2F7]0';
+      case 'REJECTED': return 'bg-[#F2F2F7]0';
+      case 'DISPATCHED': return 'bg-[#F2F2F7]0';
+      case 'IN_TRANSIT': return 'bg-[#F2F2F7]';
+      case 'DELIVERED': return 'bg-[#3C3C43]';
+      default: return 'bg-[#8E8E93]';
     }
   };
 
@@ -312,7 +314,7 @@ export default function BranchStorekeeperPage() {
         <DashboardLayout>
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[rgba(60,60,67,0.12)] mx-auto"></div>
               <p className="mt-4 text-gray-600">Loading branch inventory...</p>
             </div>
           </div>
@@ -329,7 +331,7 @@ export default function BranchStorekeeperPage() {
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-3">
-                <Store className="h-8 w-8 text-green-600" />
+                <Store className="h-8 w-8 text-[#3C3C43]" />
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900">Branch Inventory</h1>
                   <p className="text-gray-600">Manage your branch stock and request from central</p>
@@ -337,70 +339,70 @@ export default function BranchStorekeeperPage() {
               </div>
             </div>
             <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setIsStockOutModalOpen(true)}>
+              <IOSButton variant="outline" onClick={() => setIsStockOutModalOpen(true)}>
                 <Minus className="h-4 w-4 mr-2" />
                 Stock Out
-              </Button>
-              <Button className="bg-green-600 hover:bg-green-700" onClick={() => setIsRequestModalOpen(true)}>
+              </IOSButton>
+              <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={() => setIsRequestModalOpen(true)}>
                 <Send className="h-4 w-4 mr-2" />
                 Request Stock
-              </Button>
+              </IOSButton>
             </div>
           </div>
 
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <Card className="p-6 bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+            <IOSCard className="p-6 bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]">
               <div className="flex items-center gap-4">
-                <div className="p-3 bg-blue-500 rounded-xl">
+                <div className="p-3 bg-[#F2F2F7]0 rounded-xl">
                   <Package className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-blue-700">Total Items</p>
-                  <p className="text-3xl font-bold text-blue-900">{stats.totalItems}</p>
+                  <p className="text-sm font-medium text-[#000000]">Total Items</p>
+                  <p className="text-3xl font-bold text-[#000000]">{stats.totalItems}</p>
                 </div>
               </div>
-            </Card>
+            </IOSCard>
 
-            <Card className="p-6 bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200">
+            <IOSCard className="p-6 bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]">
               <div className="flex items-center gap-4">
-                <div className="p-3 bg-amber-500 rounded-xl">
+                <div className="p-3 bg-[#F2F2F7] rounded-xl">
                   <AlertTriangle className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-amber-700">Low Stock</p>
-                  <p className="text-3xl font-bold text-amber-900">{stats.lowStock}</p>
+                  <p className="text-sm font-medium text-[#3C3C43]">Low Stock</p>
+                  <p className="text-3xl font-bold text-[#3C3C43]">{stats.lowStock}</p>
                 </div>
               </div>
-            </Card>
+            </IOSCard>
 
-            <Card className="p-6 bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+            <IOSCard className="p-6 bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]">
               <div className="flex items-center gap-4">
-                <div className="p-3 bg-purple-500 rounded-xl">
+                <div className="p-3 bg-[#F2F2F7] rounded-xl">
                   <ClipboardList className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-purple-700">Pending Requests</p>
-                  <p className="text-3xl font-bold text-purple-900">{stats.pendingRequests}</p>
+                  <p className="text-sm font-medium text-[#3C3C43]">Pending Requests</p>
+                  <p className="text-3xl font-bold text-[#3C3C43]">{stats.pendingRequests}</p>
                 </div>
               </div>
-            </Card>
+            </IOSCard>
 
-            <Card className="p-6 bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+            <IOSCard className="p-6 bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]">
               <div className="flex items-center gap-4">
-                <div className="p-3 bg-green-500 rounded-xl">
+                <div className="p-3 bg-[#F2F2F7]0 rounded-xl">
                   <Truck className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-green-700">Incoming</p>
-                  <p className="text-3xl font-bold text-green-900">{stats.incomingDispatches}</p>
+                  <p className="text-sm font-medium text-[#000000]">Incoming</p>
+                  <p className="text-3xl font-bold text-[#000000]">{stats.incomingDispatches}</p>
                 </div>
               </div>
-            </Card>
+            </IOSCard>
           </div>
 
           {/* Tabs */}
-          <div className="border-b border-gray-200">
+          <div className="border-b border-[#E5E5EA]">
             <nav className="-mb-px flex gap-6">
               {[
                 { id: 'stock', label: 'Current Stock', icon: Box },
@@ -413,7 +415,7 @@ export default function BranchStorekeeperPage() {
                   onClick={() => setActiveTab(tab.id as any)}
                   className={`pb-4 px-1 flex items-center gap-2 ${
                     activeTab === tab.id
-                      ? 'border-b-2 border-green-600 text-green-600'
+                      ? 'border-b-2 border-[rgba(60,60,67,0.12)] text-[#3C3C43]'
                       : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
@@ -425,7 +427,7 @@ export default function BranchStorekeeperPage() {
           </div>
 
           {/* Tab Content */}
-          <div className="bg-white rounded-xl shadow-sm border">
+          <div className="bg-[#FFFFFF] rounded-xl shadow-none 0_1px_3px_rgba(0,0,0,0.04)] border">
             
             {/* Current Stock Tab */}
             {activeTab === 'stock' && (
@@ -458,21 +460,21 @@ export default function BranchStorekeeperPage() {
                       {filteredStock.map((stock) => {
                         const isLow = stock.quantity <= stock.reorder_level;
                         return (
-                          <tr key={stock.id} className={`hover:bg-gray-50 ${isLow ? 'bg-amber-50' : ''}`}>
+                          <tr key={stock.id} className={`hover:bg-gray-50 ${isLow ? 'bg-[#F2F2F7]' : ''}`}>
                             <td className="px-4 py-4 font-mono text-sm">{stock.item_sku}</td>
                             <td className="px-4 py-4 font-medium">{stock.item?.item_name || '-'}</td>
                             <td className="px-4 py-4 text-sm text-gray-500">{stock.item?.category || '-'}</td>
                             <td className="px-4 py-4">
-                              <span className={`text-lg font-bold ${isLow ? 'text-red-600' : 'text-gray-900'}`}>
+                              <span className={`text-lg font-bold ${isLow ? 'text-[#3C3C43]' : 'text-gray-900'}`}>
                                 {stock.quantity}
                               </span>
                             </td>
                             <td className="px-4 py-4 text-sm text-gray-500">{stock.reorder_level}</td>
                             <td className="px-4 py-4">
                               {isLow ? (
-                                <Badge className="bg-amber-500">Low Stock</Badge>
+                                <IOSBadge className="bg-[#F2F2F7]">Low Stock</IOSBadge>
                               ) : (
-                                <Badge className="bg-green-500">OK</Badge>
+                                <IOSBadge className="bg-[#F2F2F7]0">OK</IOSBadge>
                               )}
                             </td>
                           </tr>
@@ -511,15 +513,15 @@ export default function BranchStorekeeperPage() {
                           <td className="px-4 py-4 font-mono text-sm">{request.request_number}</td>
                           <td className="px-4 py-4">{request.request_type}</td>
                           <td className="px-4 py-4">
-                            <Badge className={
-                              request.priority === 'URGENT' ? 'bg-red-500' :
-                              request.priority === 'HIGH' ? 'bg-orange-500' :
-                              'bg-blue-500'
-                            }>{request.priority}</Badge>
+                            <IOSBadge className={
+                              request.priority === 'URGENT' ? 'bg-[#F2F2F7]0' :
+                              request.priority === 'HIGH' ? 'bg-[#F2F2F7]' :
+                              'bg-[#F2F2F7]0'
+                            }>{request.priority}</IOSBadge>
                           </td>
                           <td className="px-4 py-4">{request.items?.length || 0} items</td>
                           <td className="px-4 py-4">
-                            <Badge className={getStatusColor(request.status)}>{request.status}</Badge>
+                            <IOSBadge className={getStatusColor(request.status)}>{request.status}</IOSBadge>
                           </td>
                           <td className="px-4 py-4 text-sm text-gray-500">
                             {new Date(request.created_at).toLocaleDateString()}
@@ -543,7 +545,7 @@ export default function BranchStorekeeperPage() {
               <div className="p-6">
                 <div className="space-y-4">
                   {incomingDispatches.map((dispatch) => (
-                    <Card key={dispatch.id} className="p-4">
+                    <IOSCard key={dispatch.id} className="p-4">
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-mono font-medium">{dispatch.dispatch_number}</p>
@@ -551,10 +553,10 @@ export default function BranchStorekeeperPage() {
                           <p className="text-sm text-gray-500">{dispatch.items?.length || 0} items</p>
                         </div>
                         <div className="text-right">
-                          <Badge className={getStatusColor(dispatch.status)}>{dispatch.status}</Badge>
+                          <IOSBadge className={getStatusColor(dispatch.status)}>{dispatch.status}</IOSBadge>
                           {dispatch.status === 'IN_TRANSIT' && (
-                            <Button 
-                              className="mt-2 bg-green-600 hover:bg-green-700" 
+                            <IOSButton 
+                              className="mt-2 bg-[#3C3C43] hover:bg-[#3C3C43]" 
                               size="sm"
                               onClick={() => {
                                 setSelectedDispatch(dispatch);
@@ -562,11 +564,11 @@ export default function BranchStorekeeperPage() {
                               }}
                             >
                               <Check className="h-4 w-4 mr-1" /> Receive
-                            </Button>
+                            </IOSButton>
                           )}
                         </div>
                       </div>
-                    </Card>
+                    </IOSCard>
                   ))}
                   {incomingDispatches.length === 0 && (
                     <div className="text-center py-12 text-gray-500">
@@ -582,7 +584,7 @@ export default function BranchStorekeeperPage() {
             {activeTab === 'movements' && (
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900">Stock Movement History</h3>
+                  <h3 className="font-semibold font-sf-pro-display text-gray-900">Stock Movement History</h3>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -608,17 +610,17 @@ export default function BranchStorekeeperPage() {
                           <td className="px-4 py-4">
                             <div className="flex items-center gap-2">
                               {movement.movement_type === 'IN' || movement.movement_type === 'RECEIVED' ? (
-                                <ArrowDownLeft className="h-4 w-4 text-green-500" />
+                                <ArrowDownLeft className="h-4 w-4 text-[#8E8E93]0" />
                               ) : (
-                                <ArrowUpRight className="h-4 w-4 text-red-500" />
+                                <ArrowUpRight className="h-4 w-4 text-[#8E8E93]0" />
                               )}
-                              <span className={movement.movement_type === 'IN' || movement.movement_type === 'RECEIVED' ? 'text-green-600' : 'text-red-600'}>
+                              <span className={movement.movement_type === 'IN' || movement.movement_type === 'RECEIVED' ? 'text-[#3C3C43]' : 'text-[#3C3C43]'}>
                                 {movement.movement_type}
                               </span>
                             </div>
                           </td>
                           <td className="px-4 py-4">
-                            <span className={`font-bold ${movement.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            <span className={`font-bold ${movement.quantity > 0 ? 'text-[#3C3C43]' : 'text-[#3C3C43]'}`}>
                               {movement.quantity > 0 ? '+' : ''}{movement.quantity}
                             </span>
                           </td>
@@ -692,7 +694,7 @@ export default function BranchStorekeeperPage() {
               {/* Add Items */}
               <div>
                 <Label className="mb-2 block">Add Items from Catalog</Label>
-                <div className="border rounded-lg max-h-48 overflow-y-auto">
+                <div className="border rounded-ios-lg max-h-48 overflow-y-auto">
                   {masterCatalog.slice(0, 20).map((item) => (
                     <div 
                       key={item.sku} 
@@ -703,7 +705,7 @@ export default function BranchStorekeeperPage() {
                         <p className="font-medium">{item.item_name || item.description}</p>
                         <p className="text-xs text-gray-500 font-mono">{item.sku}</p>
                       </div>
-                      <Plus className="h-4 w-4 text-green-600" />
+                      <Plus className="h-4 w-4 text-[#3C3C43]" />
                     </div>
                   ))}
                 </div>
@@ -717,7 +719,7 @@ export default function BranchStorekeeperPage() {
                     {requestItems.map((item, idx) => {
                       const catalogItem = masterCatalog.find(c => c.sku === item.item_sku);
                       return (
-                        <div key={idx} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                        <div key={idx} className="flex items-center justify-between p-3 bg-[#F2F2F7] rounded-ios-lg">
                           <div>
                             <p className="font-medium">{catalogItem?.item_name || item.item_sku}</p>
                           </div>
@@ -733,13 +735,13 @@ export default function BranchStorekeeperPage() {
                               }}
                               className="w-20"
                             />
-                            <Button 
+                            <IOSButton 
                               variant="ghost" 
                               size="sm"
                               onClick={() => setRequestItems(requestItems.filter((_, i) => i !== idx))}
                             >
-                              <X className="h-4 w-4 text-red-500" />
-                            </Button>
+                              <X className="h-4 w-4 text-[#8E8E93]0" />
+                            </IOSButton>
                           </div>
                         </div>
                       );
@@ -750,17 +752,17 @@ export default function BranchStorekeeperPage() {
 
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button variant="outline" onClick={() => setIsRequestModalOpen(false)}>
+                <IOSButton variant="outline" onClick={() => setIsRequestModalOpen(false)}>
                   Cancel
-                </Button>
-                <Button 
-                  className="bg-green-600 hover:bg-green-700" 
+                </IOSButton>
+                <IOSButton 
+                  className="bg-[#3C3C43] hover:bg-[#3C3C43]" 
                   onClick={handleCreateRequest}
                   disabled={requestItems.length === 0}
                 >
                   <Send className="h-4 w-4 mr-2" />
                   Submit Request
-                </Button>
+                </IOSButton>
               </div>
             </div>
           </DialogContent>
@@ -826,13 +828,13 @@ export default function BranchStorekeeperPage() {
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button variant="outline" onClick={() => setIsStockOutModalOpen(false)}>
+                <IOSButton variant="outline" onClick={() => setIsStockOutModalOpen(false)}>
                   Cancel
-                </Button>
-                <Button className="bg-red-600 hover:bg-red-700" onClick={handleStockOut}>
+                </IOSButton>
+                <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleStockOut}>
                   <Minus className="h-4 w-4 mr-2" />
                   Record Stock Out
-                </Button>
+                </IOSButton>
               </div>
             </div>
           </DialogContent>
@@ -850,14 +852,14 @@ export default function BranchStorekeeperPage() {
 
             {selectedDispatch && (
               <div className="space-y-4">
-                <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="bg-gray-50 p-4 rounded-ios-lg">
                   <p className="font-mono font-medium">{selectedDispatch.dispatch_number}</p>
                   <p className="text-sm text-gray-500">{selectedDispatch.items?.length || 0} items</p>
                 </div>
 
                 <div className="space-y-2">
                   {selectedDispatch.items?.map((item: any) => (
-                    <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div key={item.id} className="flex items-center justify-between p-3 border rounded-ios-lg">
                       <div>
                         <p className="font-medium">{item.item?.item_name || item.item_sku}</p>
                         <p className="text-xs text-gray-500 font-mono">{item.item_sku}</p>
@@ -868,13 +870,13 @@ export default function BranchStorekeeperPage() {
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t">
-                  <Button variant="outline" onClick={() => setIsReceiveModalOpen(false)}>
+                  <IOSButton variant="outline" onClick={() => setIsReceiveModalOpen(false)}>
                     Cancel
-                  </Button>
-                  <Button className="bg-green-600 hover:bg-green-700" onClick={handleConfirmDelivery}>
+                  </IOSButton>
+                  <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleConfirmDelivery}>
                     <Check className="h-4 w-4 mr-2" />
                     Confirm All Received
-                  </Button>
+                  </IOSButton>
                 </div>
               </div>
             )}

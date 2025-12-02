@@ -196,7 +196,7 @@ export const getBranchRequests = async (
           *,
           item:simple_items(sku, item_name, description, category, unit_of_measure)
         ),
-        reviewer:users!stock_requests_reviewed_by_fkey(id, full_name)
+        reviewer:users!stock_requests_reviewed_by_fkey(id, first_name, last_name)
       `)
       .eq('requesting_branch_id', branchId)
       .order('created_at', { ascending: false });

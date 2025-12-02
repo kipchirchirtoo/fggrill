@@ -5,16 +5,17 @@ import { useRouter } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
+import { Button } from "@/components/ui/minimal/button";
+import { IOSBadge } from '@/components/ui/ios-badge';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Truck, RefreshCw, ArrowRight, Package, Building2, Clock, Check, AlertTriangle, Plus, X, Send, Eye, ShoppingCart, User, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/date-utils';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+import { storeAPI } from '@/lib/api';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
 interface Dispatch {
   id: string;
@@ -61,74 +62,100 @@ export default function TransfersPage() {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [transferQty, setTransferQty] = useState(1);
   
-  const isManager = user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER || user?.role === UserRole.STOREKEEPER;
+  const isManager =
+    user?.role === UserRole.SUPER_ADMIN ||
+    user?.role === UserRole.GENERAL_MANAGER ||
+    user?.role === UserRole.CENTRAL_STOREKEEPER ||
+    user?.role === UserRole.BRANCH_STOREKEEPER;
 
   useEffect(() => { fetchAllData(); }, []);
 
   const fetchAllData = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const headers = { 'Authorization': `Bearer ${token}` };
       const [dispatchRes, transferRes, itemsRes] = await Promise.all([
-        fetch(`${API_URL}/api/store/dispatch-notes`, { headers }).catch(() => ({ ok: false })),
-        fetch(`${API_URL}/api/store/transfer_items`, { headers }).catch(() => ({ ok: false })),
-        fetch(`${API_URL}/api/store/items`, { headers }).catch(() => ({ ok: false }))
+        storeAPI.getDispatchHistory().catch((err) => {
+          console.error('Dispatches error:', err);
+          return { data: [] as any[] } as any;
+        }),
+        storeAPI.getTransferItems().catch((err) => {
+          console.error('Transfer items error:', err);
+          return { data: [] as any[] } as any;
+        }),
+        storeAPI.getItems().catch((err) => {
+          console.error('Items error:', err);
+          return { data: [] as any[] } as any;
+        }),
       ]);
-      if (dispatchRes.ok) { const data = await (dispatchRes as Response).json(); setDispatches(data.data || []); }
-      if (transferRes.ok) { 
-        const data = await (transferRes as Response).json(); 
-        const all = data.data || [];
-        setTransferItems(all.filter((t: TransferItem) => t.ordered));
-        setMyCart(all.filter((t: TransferItem) => !t.ordered));
+
+      const dispatchList = (dispatchRes as any).data || (dispatchRes as any).dispatches || dispatchRes || [];
+      const transferList = (transferRes as any).data || (transferRes as any).items || transferRes || [];
+      const itemsList = (itemsRes as any).data || (itemsRes as any).items || itemsRes || [];
+
+      setDispatches(Array.isArray(dispatchList) ? dispatchList : []);
+
+      if (Array.isArray(transferList)) {
+        setTransferItems(transferList.filter((t: TransferItem) => t.ordered));
+        setMyCart(transferList.filter((t: TransferItem) => !t.ordered));
+      } else {
+        setTransferItems([]);
+        setMyCart([]);
       }
-      if (itemsRes.ok) { const data = await (itemsRes as Response).json(); setItems(data.data || []); }
-    } catch (error) { console.error('Error:', error); }
-    finally { setIsLoading(false); }
+
+      setItems(Array.isArray(itemsList) ? itemsList : []);
+    } catch (error) {
+      console.error('Error loading transfers data:', error);
+      toast.error('Failed to load transfers data');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleAddToCart = async () => {
     if (!selectedItem || transferQty <= 0) return;
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/api/store/transfer`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sku: selectedItem.sku, transfer_quantity: transferQty })
+      await storeAPI.transferItem({
+        sku: selectedItem.sku,
+        transfer_quantity: transferQty,
       });
-      if (res.ok) { toast.success('Added to cart'); setIsAddToCartOpen(false); setSelectedItem(null); setTransferQty(1); fetchAllData(); }
-      else { const err = await res.json(); toast.error(err.detail || 'Failed'); }
-    } catch { toast.error('Failed to add'); }
+      toast.success('Added to cart');
+      setIsAddToCartOpen(false);
+      setSelectedItem(null);
+      setTransferQty(1);
+      fetchAllData();
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to add');
+    }
   };
 
   const handleSubmitRequest = async () => {
     if (myCart.length === 0) { toast.error('Cart empty'); return; }
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/api/store/submit-transfer-request`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-      });
-      if (res.ok) { toast.success('Request submitted'); fetchAllData(); }
-      else { const err = await res.json(); toast.error(err.detail || 'Failed'); }
-    } catch { toast.error('Failed'); }
+      await storeAPI.submitTransferRequest();
+      toast.success('Request submitted');
+      fetchAllData();
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed');
+    }
   };
 
   const handleCompleteTransfer = async (item: TransferItem, cancel = false) => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/api/store/complete-transfer`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sku: item.item_sku, quantity: item.quantity, shop_user_id: item.shop_user?.id, cancel: cancel ? 'true' : 'false' })
+      await storeAPI.completeTransfer({
+        sku: item.item_sku,
+        quantity: item.quantity,
+        shop_user_id: item.shop_user?.id || '',
+        cancel,
       });
-      if (res.ok) { toast.success(cancel ? 'Cancelled' : 'Completed'); fetchAllData(); }
-      else { const err = await res.json(); toast.error(err.detail || 'Failed'); }
-    } catch { toast.error('Failed'); }
+      toast.success(cancel ? 'Cancelled' : 'Completed');
+      fetchAllData();
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed');
+    }
   };
 
   const filteredItems = items.filter(i => !searchTerm || i.item_name?.toLowerCase().includes(searchTerm.toLowerCase()) || i.sku?.toLowerCase().includes(searchTerm.toLowerCase()));
-  const getStatusColor = (s: string) => ({ DRAFT: 'bg-gray-100 text-gray-800', PENDING: 'bg-yellow-100 text-yellow-800', IN_TRANSIT: 'bg-blue-100 text-blue-800', DELIVERED: 'bg-green-100 text-green-800', CONFIRMED: 'bg-green-200 text-green-900', DISPUTED: 'bg-red-100 text-red-800' }[s] || 'bg-gray-100 text-gray-800');
+  const getStatusColor = (s: string) => ({ DRAFT: 'bg-gray-100 text-gray-800', PENDING: 'bg-[#F2F2F7] text-[#3C3C43]', IN_TRANSIT: 'bg-[#F2F2F7] text-[#000000]', DELIVERED: 'bg-[#F2F2F7] text-[#000000]', CONFIRMED: 'bg-[#E5E5EA] text-[#000000]', DISPUTED: 'bg-[#F2F2F7] text-[#000000]' }[s] || 'bg-gray-100 text-gray-800');
   const inTransitCount = dispatches.filter(d => d.status === 'IN_TRANSIT').length;
   const deliveredCount = dispatches.filter(d => ['DELIVERED', 'CONFIRMED'].includes(d.status)).length;
 
@@ -142,38 +169,38 @@ export default function TransfersPage() {
               <p className="text-gray-600">Manage stock transfers and dispatch requests</p>
             </div>
             <div className="flex gap-3">
-              <Button variant="outline" onClick={fetchAllData}><RefreshCw className="h-4 w-4 mr-2" />Refresh</Button>
-              <Button onClick={() => setIsAddToCartOpen(true)}><Plus className="h-4 w-4 mr-2" />Request Transfer</Button>
+              <IOSButton variant="outline" onClick={fetchAllData}><RefreshCw className="h-4 w-4 mr-2" />Refresh</IOSButton>
+              <IOSButton onClick={() => setIsAddToCartOpen(true)}><Plus className="h-4 w-4 mr-2" />Request Transfer</IOSButton>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <Card className="p-4 cursor-pointer hover:bg-blue-50" onClick={() => setActiveTab('dispatches')}>
-              <div className="flex items-center gap-3"><Truck className="h-8 w-8 text-blue-500" /><div><p className="text-sm text-gray-500">Dispatches</p><p className="text-2xl font-bold">{dispatches.length}</p></div></div>
-            </Card>
-            <Card className="p-4 cursor-pointer hover:bg-yellow-50" onClick={() => setActiveTab('transfers')}>
-              <div className="flex items-center gap-3"><Clock className="h-8 w-8 text-yellow-500" /><div><p className="text-sm text-gray-500">Pending</p><p className="text-2xl font-bold text-yellow-600">{transferItems.length}</p></div></div>
-            </Card>
-            <Card className="p-4 cursor-pointer hover:bg-indigo-50" onClick={() => setActiveTab('my-cart')}>
-              <div className="flex items-center gap-3"><ShoppingCart className="h-8 w-8 text-indigo-500" /><div><p className="text-sm text-gray-500">My Cart</p><p className="text-2xl font-bold text-indigo-600">{myCart.length}</p></div></div>
-            </Card>
-            <Card className="p-4"><div className="flex items-center gap-3"><Check className="h-8 w-8 text-green-500" /><div><p className="text-sm text-gray-500">Delivered</p><p className="text-2xl font-bold text-green-600">{deliveredCount}</p></div></div></Card>
-            <Card className="p-4"><div className="flex items-center gap-3"><AlertTriangle className="h-8 w-8 text-amber-500" /><div><p className="text-sm text-gray-500">In Transit</p><p className="text-2xl font-bold text-amber-600">{inTransitCount}</p></div></div></Card>
+            <IOSCard className="p-4 cursor-pointer hover:bg-[#F2F2F7]" onClick={() => setActiveTab('dispatches')}>
+              <div className="flex items-center gap-3"><Truck className="h-8 w-8 text-[#8E8E93]0" /><div><p className="text-sm text-gray-500">Dispatches</p><p className="text-2xl font-bold">{dispatches.length}</p></div></div>
+            </IOSCard>
+            <IOSCard className="p-4 cursor-pointer hover:bg-[#F2F2F7]" onClick={() => setActiveTab('transfers')}>
+              <div className="flex items-center gap-3"><Clock className="h-8 w-8 text-[#3C3C43]" /><div><p className="text-sm text-gray-500">Pending</p><p className="text-2xl font-bold text-[#3C3C43]">{transferItems.length}</p></div></div>
+            </IOSCard>
+            <IOSCard className="p-4 cursor-pointer hover:bg-[#F2F2F7]" onClick={() => setActiveTab('my-cart')}>
+              <div className="flex items-center gap-3"><ShoppingCart className="h-8 w-8 text-[#3C3C43]" /><div><p className="text-sm text-gray-500">My Cart</p><p className="text-2xl font-bold text-[#3C3C43]">{myCart.length}</p></div></div>
+            </IOSCard>
+            <IOSCard className="p-4"><div className="flex items-center gap-3"><Check className="h-8 w-8 text-[#8E8E93]0" /><div><p className="text-sm text-gray-500">Delivered</p><p className="text-2xl font-bold text-[#3C3C43]">{deliveredCount}</p></div></div></IOSCard>
+            <IOSCard className="p-4"><div className="flex items-center gap-3"><AlertTriangle className="h-8 w-8 text-[#3C3C43]" /><div><p className="text-sm text-gray-500">In Transit</p><p className="text-2xl font-bold text-[#3C3C43]">{inTransitCount}</p></div></div></IOSCard>
           </div>
 
           <div className="flex gap-2 border-b">
             {(['dispatches', 'transfers', 'my-cart'] as const).map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2 font-medium border-b-2 ${activeTab === tab ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500'}`}>
+              <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2 font-medium border-b-2 ${activeTab === tab ? 'border-[rgba(60,60,67,0.12)] text-[#3C3C43]' : 'border-transparent text-gray-500'}`}>
                 {tab === 'dispatches' && <><Truck className="h-4 w-4 inline mr-2" />Dispatches</>}
-                {tab === 'transfers' && <><Clock className="h-4 w-4 inline mr-2" />Pending {transferItems.length > 0 && <Badge className="ml-1">{transferItems.length}</Badge>}</>}
-                {tab === 'my-cart' && <><ShoppingCart className="h-4 w-4 inline mr-2" />Cart {myCart.length > 0 && <Badge className="ml-1 bg-indigo-600">{myCart.length}</Badge>}</>}
+                {tab === 'transfers' && <><Clock className="h-4 w-4 inline mr-2" />Pending {transferItems.length > 0 && <IOSBadge className="ml-1">{transferItems.length}</IOSBadge>}</>}
+                {tab === 'my-cart' && <><ShoppingCart className="h-4 w-4 inline mr-2" />Cart {myCart.length > 0 && <IOSBadge className="ml-1 bg-[#3C3C43]">{myCart.length}</IOSBadge>}</>}
               </button>
             ))}
           </div>
 
           {activeTab === 'dispatches' && (
-            <Card>
-              {isLoading ? <div className="p-12 text-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div></div>
+            <IOSCard>
+              {isLoading ? <div className="p-12 text-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[rgba(60,60,67,0.12)] mx-auto"></div></div>
               : dispatches.length === 0 ? <div className="p-12 text-center text-gray-500"><Truck className="h-12 w-12 mx-auto mb-3 opacity-30" /><p>No dispatches</p></div>
               : <div className="overflow-x-auto"><table className="w-full"><thead className="bg-gray-50"><tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dispatch #</th>
@@ -185,17 +212,17 @@ export default function TransfersPage() {
                 {dispatches.map(d => <tr key={d.id} className="hover:bg-gray-50">
                   <td className="px-4 py-4 font-mono text-sm">{d.dispatch_number}</td>
                   <td className="px-4 py-4"><span>{d.from_branch?.name || 'Central'}</span> <ArrowRight className="h-4 w-4 inline text-gray-400" /> <span>{d.to_branch?.name || 'Branch'}</span></td>
-                  <td className="px-4 py-4"><Badge className={getStatusColor(d.status)}>{d.status}</Badge></td>
+                  <td className="px-4 py-4"><IOSBadge className={getStatusColor(d.status)}>{d.status}</IOSBadge></td>
                   <td className="px-4 py-4">{d.items_count || 0}</td>
                   <td className="px-4 py-4 text-sm text-gray-500">{formatDate(d.created_at)}</td>
                 </tr>)}
               </tbody></table></div>}
-            </Card>
+            </IOSCard>
           )}
 
           {activeTab === 'transfers' && (
-            <Card>
-              <div className="p-4 border-b bg-yellow-50"><h3 className="font-semibold flex items-center gap-2"><Clock className="h-5 w-5 text-yellow-600" />Pending Requests</h3></div>
+            <IOSCard>
+              <div className="p-4 border-b bg-[#F2F2F7]"><h3 className="font-semibold font-sf-pro-display flex items-center gap-2"><Clock className="h-5 w-5 text-[#3C3C43]" />Pending Requests</h3></div>
               {transferItems.length === 0 ? <div className="p-12 text-center text-gray-500"><Clock className="h-12 w-12 mx-auto mb-3 opacity-30" /><p>No pending</p></div>
               : <div className="overflow-x-auto"><table className="w-full"><thead className="bg-gray-50"><tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
@@ -208,21 +235,21 @@ export default function TransfersPage() {
                   <td className="px-4 py-4"><User className="h-4 w-4 inline text-gray-400 mr-1" />{i.shop_user?.first_name} {i.shop_user?.last_name}</td>
                   <td className="px-4 py-4 font-bold">{i.quantity}</td>
                   {isManager && <td className="px-4 py-4"><div className="flex gap-2">
-                    <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleCompleteTransfer(i)}><Check className="h-4 w-4 mr-1" />Approve</Button>
-                    <Button size="sm" variant="outline" className="text-red-600" onClick={() => handleCompleteTransfer(i, true)}><X className="h-4 w-4 mr-1" />Reject</Button>
+                    <IOSButton size="sm" className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={() => handleCompleteTransfer(i)}><Check className="h-4 w-4 mr-1" />Approve</IOSButton>
+                    <IOSButton size="sm" variant="outline" className="text-[#3C3C43]" onClick={() => handleCompleteTransfer(i, true)}><X className="h-4 w-4 mr-1" />Reject</IOSButton>
                   </div></td>}
                 </tr>)}
               </tbody></table></div>}
-            </Card>
+            </IOSCard>
           )}
 
           {activeTab === 'my-cart' && (
-            <Card>
-              <div className="p-4 border-b bg-indigo-50 flex items-center justify-between">
-                <h3 className="font-semibold flex items-center gap-2"><ShoppingCart className="h-5 w-5 text-indigo-600" />My Cart</h3>
-                {myCart.length > 0 && <Button onClick={handleSubmitRequest} className="bg-indigo-600 hover:bg-indigo-700"><Send className="h-4 w-4 mr-2" />Submit ({myCart.length})</Button>}
+            <IOSCard>
+              <div className="p-4 border-b bg-[#F2F2F7] flex items-center justify-between">
+                <h3 className="font-semibold font-sf-pro-display flex items-center gap-2"><ShoppingCart className="h-5 w-5 text-[#3C3C43]" />My Cart</h3>
+                {myCart.length > 0 && <IOSButton onClick={handleSubmitRequest} className="bg-[#3C3C43] hover:bg-[#3C3C43]"><Send className="h-4 w-4 mr-2" />Submit ({myCart.length})</IOSButton>}
               </div>
-              {myCart.length === 0 ? <div className="p-12 text-center text-gray-500"><ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-30" /><p>Empty</p><Button className="mt-4" onClick={() => setIsAddToCartOpen(true)}><Plus className="h-4 w-4 mr-2" />Add</Button></div>
+              {myCart.length === 0 ? <div className="p-12 text-center text-gray-500"><ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-30" /><p>Empty</p><IOSButton className="mt-4" onClick={() => setIsAddToCartOpen(true)}><Plus className="h-4 w-4 mr-2" />Add</IOSButton></div>
               : <div className="overflow-x-auto"><table className="w-full"><thead className="bg-gray-50"><tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
@@ -231,29 +258,29 @@ export default function TransfersPage() {
               </tr></thead><tbody className="divide-y">
                 {myCart.map(i => <tr key={i.id} className="hover:bg-gray-50">
                   <td className="px-4 py-4"><p className="font-medium">{i.item?.item_name || i.item?.description}</p><p className="text-xs text-gray-500 font-mono">{i.item_sku}</p></td>
-                  <td className="px-4 py-4 font-bold text-indigo-600">{i.quantity}</td>
+                  <td className="px-4 py-4 font-bold text-[#3C3C43]">{i.quantity}</td>
                   <td className="px-4 py-4">KES {(i.item?.retail_price || 0).toLocaleString()}</td>
-                  <td className="px-4 py-4"><Button size="sm" variant="outline" className="text-red-600" onClick={() => handleCompleteTransfer(i, true)}><X className="h-4 w-4" /></Button></td>
+                  <td className="px-4 py-4"><IOSButton size="sm" variant="outline" className="text-[#3C3C43]" onClick={() => handleCompleteTransfer(i, true)}><X className="h-4 w-4" /></IOSButton></td>
                 </tr>)}
               </tbody></table></div>}
-            </Card>
+            </IOSCard>
           )}
         </div>
 
         <Dialog open={isAddToCartOpen} onOpenChange={setIsAddToCartOpen}>
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader><DialogTitle className="flex items-center gap-2"><ShoppingCart className="h-5 w-5 text-indigo-600" />Request Transfer</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle className="flex items-center gap-2"><ShoppingCart className="h-5 w-5 text-[#3C3C43]" />Request Transfer</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <div className="relative"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" /><Input placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10" /></div>
-              <div className="max-h-64 overflow-y-auto border rounded-lg">
+              <div className="max-h-64 overflow-y-auto border rounded-ios-lg">
                 {filteredItems.slice(0, 20).map(i => (
-                  <div key={i.sku} onClick={() => setSelectedItem(i)} className={`p-3 border-b cursor-pointer hover:bg-gray-50 ${selectedItem?.sku === i.sku ? 'bg-indigo-50' : ''}`}>
+                  <div key={i.sku} onClick={() => setSelectedItem(i)} className={`p-3 border-b cursor-pointer hover:bg-gray-50 ${selectedItem?.sku === i.sku ? 'bg-[#F2F2F7]' : ''}`}>
                     <div className="flex justify-between"><div><p className="font-medium">{i.item_name}</p><p className="text-xs text-gray-500 font-mono">{i.sku}</p></div><div className="text-right"><p className="font-bold">{i.quantity} stock</p><p className="text-xs text-gray-500">KES {(i.retail_price || 0).toLocaleString()}</p></div></div>
                   </div>
                 ))}
               </div>
-              {selectedItem && <div className="bg-indigo-50 p-4 rounded-lg"><p className="font-medium mb-2">Selected: {selectedItem.item_name}</p><div className="flex items-center gap-4"><label>Qty:</label><Input type="number" min="1" max={selectedItem.quantity} value={transferQty} onChange={e => setTransferQty(parseInt(e.target.value) || 1)} className="w-24" /><span className="text-sm text-gray-500">Max: {selectedItem.quantity}</span></div></div>}
-              <div className="flex justify-end gap-3 pt-4 border-t"><Button variant="outline" onClick={() => setIsAddToCartOpen(false)}>Cancel</Button><Button onClick={handleAddToCart} disabled={!selectedItem || transferQty <= 0}><Plus className="h-4 w-4 mr-2" />Add</Button></div>
+              {selectedItem && <div className="bg-[#F2F2F7] p-4 rounded-ios-lg"><p className="font-medium mb-2">Selected: {selectedItem.item_name}</p><div className="flex items-center gap-4"><label>Qty:</label><Input type="number" min="1" max={selectedItem.quantity} value={transferQty} onChange={e => setTransferQty(parseInt(e.target.value) || 1)} className="w-24" /><span className="text-sm text-gray-500">Max: {selectedItem.quantity}</span></div></div>}
+              <div className="flex justify-end gap-3 pt-4 border-t"><IOSButton variant="outline" onClick={() => setIsAddToCartOpen(false)}>Cancel</IOSButton><IOSButton onClick={handleAddToCart} disabled={!selectedItem || transferQty <= 0}><Plus className="h-4 w-4 mr-2" />Add</IOSButton></div>
             </div>
           </DialogContent>
         </Dialog>

@@ -172,7 +172,7 @@ export function NewRequisitionModal({ isOpen, onClose, onSubmit, items }: NewReq
 
               <div className="space-y-3">
                 {formData.items.map((item, index) => (
-                  <div key={index} className="flex items-start gap-4 p-3 border rounded-lg">
+                  <div key={index} className="flex items-start gap-4 p-3 border rounded-ios-lg">
                     <div className="flex-1 grid grid-cols-3 gap-3">
                       <div className="space-y-2">
                         <Label htmlFor={`item-${index}`}>Item</Label>
@@ -243,7 +243,7 @@ export function NewRequisitionModal({ isOpen, onClose, onSubmit, items }: NewReq
               <textarea
                 id="notes"
                 rows={3}
-                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                className="w-full px-3 py-2 border rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600"
                 value={formData.notes}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, notes: e.target.value })}
                 placeholder="Any additional information..."

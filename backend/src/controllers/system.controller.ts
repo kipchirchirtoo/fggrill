@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { supabase } from '../config/database';
+import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 
 // =====================================================
@@ -103,7 +103,7 @@ export const getDepartments = async (
       .select(`
         *,
         branch:branches(id, name),
-        supervisor:users(id, full_name)
+        supervisor:users(id, first_name, last_name)
       `)
       .order('name', { ascending: true });
 

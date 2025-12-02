@@ -562,7 +562,7 @@ export const getTodayRoster = async (
         *,
         staff:hk_staff_profiles(
           id, staff_code, designation, is_available, current_room_number,
-          user:users(first_name, last_name, phone)
+          user:users(first_name, last_name, phone_number)
         ),
         shift:hk_shift_definitions(name, shift_type, start_time, end_time)
       `)

@@ -1,16 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   X, Search, Coffee, User, Bed, Clock,
-  DollarSign, FileText, Utensils, Send
+  DollarSign, FileText, Utensils, Send, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { restaurantAPI } from '@/lib/api';
 
 interface RoomServiceModalProps {
   isOpen: boolean;
   onClose: () => void;
+  prefilledRoom?: string;
+  guestName?: string;
 }
 
 interface MenuItem {
@@ -26,16 +29,47 @@ interface OrderItem extends MenuItem {
   notes: string;
 }
 
-export function RoomServiceModal({ isOpen, onClose }: RoomServiceModalProps): JSX.Element | null {
+export function RoomServiceModal({ isOpen, onClose, prefilledRoom, guestName }: RoomServiceModalProps): JSX.Element | null {
   const [searchTerm, setSearchTerm] = useState('');
-  const [roomNumber, setRoomNumber] = useState('');
+  const [roomNumber, setRoomNumber] = useState(prefilledRoom || '');
   const [selectedItems, setSelectedItems] = useState<OrderItem[]>([]);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([
-    { id: '1', name: 'Club Sandwich', price: 850, category: 'Mains', description: 'Classic triple-decker with chicken, bacon, lettuce, and tomato' },
-    { id: '2', name: 'Caesar Salad', price: 650, category: 'Salads', description: 'Crisp romaine, parmesan, croutons with Caesar dressing' },
-    { id: '3', name: 'Cappuccino', price: 350, category: 'Drinks', description: 'Espresso topped with foamy milk' },
-    { id: '4', name: 'Fresh Fruit Platter', price: 450, category: 'Desserts', description: 'Seasonal fresh fruits' },
-  ]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Fetch menu items on mount
+  useEffect(() => {
+    if (isOpen) {
+      fetchMenuItems();
+      if (prefilledRoom) setRoomNumber(prefilledRoom);
+    }
+  }, [isOpen, prefilledRoom]);
+
+  const fetchMenuItems = async () => {
+    setIsLoading(true);
+    try {
+      const response = await restaurantAPI.getMenuItems(undefined, undefined, true);
+      const items = response.data || response.items || response || [];
+      setMenuItems(items.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        price: item.price || 0,
+        category: item.category?.name || item.category || 'General',
+        description: item.description || ''
+      })));
+    } catch (error) {
+      console.error('Error fetching menu:', error);
+      // Fallback to default items if API fails
+      setMenuItems([
+        { id: '1', name: 'Club Sandwich', price: 850, category: 'Mains', description: 'Classic triple-decker with chicken, bacon, lettuce, and tomato' },
+        { id: '2', name: 'Caesar Salad', price: 650, category: 'Salads', description: 'Crisp romaine, parmesan, croutons with Caesar dressing' },
+        { id: '3', name: 'Cappuccino', price: 350, category: 'Drinks', description: 'Espresso topped with foamy milk' },
+        { id: '4', name: 'Fresh Fruit Platter', price: 450, category: 'Desserts', description: 'Seasonal fresh fruits' },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleAddItem = (item: MenuItem) => {
     setSelectedItems(prev => {
@@ -80,24 +114,28 @@ export function RoomServiceModal({ isOpen, onClose }: RoomServiceModalProps): JS
       return;
     }
 
+    setIsSubmitting(true);
     try {
-      // TODO: Implement API call
-      const response = await fetch('/api/room-service/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roomNumber,
-          items: selectedItems,
-          totalAmount
-        })
+      await restaurantAPI.createRoomServiceOrder({
+        room_number: roomNumber,
+        items: selectedItems.map(item => ({
+          menu_item_id: item.id,
+          quantity: item.quantity,
+          notes: item.notes || undefined
+        })),
+        guest_name: guestName,
+        special_instructions: selectedItems.filter(i => i.notes).map(i => `${i.name}: ${i.notes}`).join('; ')
       });
-
-      if (!response.ok) throw new Error('Failed to place order');
       
       toast.success('Room service order placed successfully!');
+      setSelectedItems([]);
+      setRoomNumber('');
       onClose();
-    } catch (error) {
-      toast.error('Failed to place order');
+    } catch (error: any) {
+      console.error('Room service order error:', error);
+      toast.error(error.message || 'Failed to place order. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -125,7 +163,7 @@ export function RoomServiceModal({ isOpen, onClose }: RoomServiceModalProps): JS
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900">Room Service Order</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -141,14 +179,14 @@ export function RoomServiceModal({ isOpen, onClose }: RoomServiceModalProps): JS
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Search menu items..."
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-ios-lg"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-3 max-h-[500px] overflow-y-auto pr-2">
               {filteredItems.map(item => (
-                <div key={item.id} className="border rounded-lg p-3 hover:border-indigo-500 transition-colors">
+                <div key={item.id} className="border rounded-ios-lg p-3 hover:border-indigo-500 transition-colors">
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <h3 className="font-medium text-gray-900">{item.name}</h3>
@@ -160,7 +198,7 @@ export function RoomServiceModal({ isOpen, onClose }: RoomServiceModalProps): JS
                     <span className="text-sm text-gray-500">{item.category}</span>
                     <button
                       onClick={() => handleAddItem(item)}
-                      className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100"
+                      className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-ios-lg hover:bg-indigo-100"
                     >
                       Add to Order
                     </button>
@@ -181,11 +219,11 @@ export function RoomServiceModal({ isOpen, onClose }: RoomServiceModalProps): JS
                 value={roomNumber}
                 onChange={(e) => setRoomNumber(e.target.value)}
                 placeholder="Enter room number"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
             </div>
 
-            <div className="border rounded-lg divide-y">
+            <div className="border rounded-ios-lg divide-y">
               {selectedItems.length === 0 ? (
                 <div className="p-4 text-center text-gray-500">
                   <Utensils className="h-8 w-8 mx-auto mb-2 text-gray-400" />
@@ -242,7 +280,7 @@ export function RoomServiceModal({ isOpen, onClose }: RoomServiceModalProps): JS
 
                 <button
                   onClick={handleSubmitOrder}
-                  className="w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+                  className="w-full py-2 bg-green-600 text-white rounded-ios-lg hover:bg-green-700 flex items-center justify-center gap-2"
                 >
                   <Send className="h-4 w-4" />
                   Place Order

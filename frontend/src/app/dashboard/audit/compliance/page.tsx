@@ -4,109 +4,87 @@ import { useState } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { ClipboardCheck, ArrowLeft, CheckCircle, XCircle, Clock, Shield } from 'lucide-react';
-import Link from 'next/link';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
+import { IOSBadge } from '@/components/ui/ios-badge';
+import { Shield, CheckCircle, AlertTriangle, XCircle, RefreshCw } from 'lucide-react';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
+
+interface ComplianceItem { id: string; category: string; requirement: string; status: 'compliant' | 'partial' | 'non_compliant'; lastChecked: string; notes?: string; }
+
+const statusConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
+  compliant: { label: 'Compliant', color: 'text-green-700', bg: 'bg-green-100', icon: CheckCircle },
+  partial: { label: 'Partial', color: 'text-yellow-700', bg: 'bg-yellow-100', icon: AlertTriangle },
+  non_compliant: { label: 'Non-Compliant', color: 'text-red-700', bg: 'bg-red-100', icon: XCircle },
+};
 
 export default function CompliancePage() {
-  const complianceChecks = [
-    { name: 'Inventory Records', status: 'pass', lastCheck: '2024-01-15' },
-    { name: 'Financial Reconciliation', status: 'pass', lastCheck: '2024-01-14' },
-    { name: 'User Access Review', status: 'pending', lastCheck: '2024-01-10' },
-    { name: 'Data Backup Verification', status: 'pass', lastCheck: '2024-01-15' },
-    { name: 'Transaction Limits', status: 'pass', lastCheck: '2024-01-15' },
-  ];
+  const { user } = useAuth();
+  const [items] = useState<ComplianceItem[]>([
+    { id: '1', category: 'Health & Safety', requirement: 'Fire safety equipment inspection', status: 'compliant', lastChecked: '2024-11-15' },
+    { id: '2', category: 'Health & Safety', requirement: 'Food handling certification', status: 'compliant', lastChecked: '2024-10-01' },
+    { id: '3', category: 'Financial', requirement: 'Tax compliance documentation', status: 'partial', lastChecked: '2024-11-20', notes: 'Missing Q3 receipts' },
+    { id: '4', category: 'HR', requirement: 'Employee contracts updated', status: 'compliant', lastChecked: '2024-11-01' },
+    { id: '5', category: 'Data Protection', requirement: 'Guest data privacy policy', status: 'non_compliant', lastChecked: '2024-10-15', notes: 'Policy needs update' },
+  ]);
+
+  const stats = {
+    compliant: items.filter(i => i.status === 'compliant').length,
+    partial: items.filter(i => i.status === 'partial').length,
+    nonCompliant: items.filter(i => i.status === 'non_compliant').length,
+    score: Math.round((items.filter(i => i.status === 'compliant').length / items.length) * 100),
+  };
+
+  const categories = [...new Set(items.map(i => i.category))];
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]}>
+    <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard/audit">
-              <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" /> Back</Button>
-            </Link>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <ClipboardCheck className="h-6 w-6 text-amber-600" />
-              Compliance Checks
-            </h1>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900">Compliance Status</h1><p className="text-gray-500">Regulatory and policy compliance</p></div>
+            <IOSButton variant="secondary"><RefreshCw className="h-4 w-4 mr-2" /> Run Check</IOSButton>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="p-4 bg-green-50">
-              <div className="flex items-center gap-3">
-                <CheckCircle className="h-8 w-8 text-green-600" />
-                <div>
-                  <p className="text-sm text-green-700">Passed</p>
-                  <p className="text-2xl font-bold text-green-800">
-                    {complianceChecks.filter(c => c.status === 'pass').length}
-                  </p>
-                </div>
-              </div>
-            </Card>
-            <Card className="p-4 bg-yellow-50">
-              <div className="flex items-center gap-3">
-                <Clock className="h-8 w-8 text-yellow-600" />
-                <div>
-                  <p className="text-sm text-yellow-700">Pending</p>
-                  <p className="text-2xl font-bold text-yellow-800">
-                    {complianceChecks.filter(c => c.status === 'pending').length}
-                  </p>
-                </div>
-              </div>
-            </Card>
-            <Card className="p-4 bg-red-50">
-              <div className="flex items-center gap-3">
-                <XCircle className="h-8 w-8 text-red-600" />
-                <div>
-                  <p className="text-sm text-red-700">Failed</p>
-                  <p className="text-2xl font-bold text-red-800">
-                    {complianceChecks.filter(c => c.status === 'fail').length}
-                  </p>
-                </div>
-              </div>
-            </Card>
+          <IOSCard className="p-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
+            <p className="text-blue-100">Overall Compliance Score</p>
+            <p className="text-4xl font-bold mt-2">{stats.score}%</p>
+            <div className="mt-4 h-2 bg-blue-400 rounded-full overflow-hidden">
+              <div className="h-full bg-[#FFFFFF]" style={{ width: `${stats.score}%` }} />
+            </div>
+          </IOSCard>
+
+          <div className="grid grid-cols-3 gap-4">
+            <IOSCard className="p-4 border-l-4 border-green-500"><CheckCircle className="h-6 w-6 text-[#34C759] mb-2" /><p className="text-sm text-gray-500">Compliant</p><p className="text-xl font-bold text-[#34C759]">{stats.compliant}</p></IOSCard>
+            <IOSCard className="p-4 border-l-4 border-yellow-500"><AlertTriangle className="h-6 w-6 text-yellow-600 mb-2" /><p className="text-sm text-gray-500">Partial</p><p className="text-xl font-bold text-yellow-600">{stats.partial}</p></IOSCard>
+            <IOSCard className="p-4 border-l-4 border-red-500"><XCircle className="h-6 w-6 text-[#FF3B30] mb-2" /><p className="text-sm text-gray-500">Non-Compliant</p><p className="text-xl font-bold text-[#FF3B30]">{stats.nonCompliant}</p></IOSCard>
           </div>
 
-          <Card className="p-6">
-            <h3 className="font-semibold mb-4">Compliance Checklist</h3>
-            <div className="space-y-3">
-              {complianceChecks.map((check, idx) => (
-                <div key={idx} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
-                  <div className="flex items-center gap-3">
-                    {check.status === 'pass' ? (
-                      <CheckCircle className="h-5 w-5 text-green-600" />
-                    ) : check.status === 'pending' ? (
-                      <Clock className="h-5 w-5 text-yellow-600" />
-                    ) : (
-                      <XCircle className="h-5 w-5 text-red-600" />
-                    )}
-                    <span className="font-medium">{check.name}</span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-500">Last: {check.lastCheck}</span>
-                    <span className={`px-2 py-1 text-xs rounded ${
-                      check.status === 'pass' ? 'bg-green-100 text-green-700' :
-                      check.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
-                      {check.status.toUpperCase()}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card className="p-4 bg-indigo-50 border-indigo-200">
-            <div className="flex items-start gap-3">
-              <Shield className="h-5 w-5 text-indigo-600 mt-0.5" />
-              <div>
-                <p className="font-medium text-indigo-800">Compliance Status: Good</p>
-                <p className="text-sm text-indigo-600">All critical checks passed. Next scheduled audit: End of month.</p>
+          {categories.map((category) => (
+            <IOSCard key={category} className="p-6">
+              <h2 className="text-lg font-semibold font-sf-pro-display mb-4">{category}</h2>
+              <div className="space-y-3">
+                {items.filter(i => i.category === category).map((item) => {
+                  const status = statusConfig[item.status];
+                  const StatusIcon = status.icon;
+                  return (
+                    <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-ios-lg">
+                      <div className="flex items-center gap-3">
+                        <StatusIcon className={`h-5 w-5 ${status.color}`} />
+                        <div>
+                          <p className="font-medium">{item.requirement}</p>
+                          {item.notes && <p className="text-sm text-gray-500">{item.notes}</p>}
+                          <p className="text-xs text-gray-400">Last checked: {new Date(item.lastChecked).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      <IOSBadge className={`${status.bg} ${status.color}`}>{status.label}</IOSBadge>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
-          </Card>
+            </IOSCard>
+          ))}
         </div>
       </DashboardLayout>
     </ProtectedRoute>

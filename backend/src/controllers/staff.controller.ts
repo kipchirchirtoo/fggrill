@@ -1,6 +1,63 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+
+// Password generation utility
+const generateStrongPassword = (): string => {
+  const length = 12;
+  const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+  let password = '';
+  
+  // Ensure at least one character from each category
+  password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)]; // Uppercase
+  password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)]; // Lowercase
+  password += '0123456789'[Math.floor(Math.random() * 10)]; // Number
+  password += '!@#$%^&*'[Math.floor(Math.random() * 8)]; // Special char
+  
+  // Fill remaining length
+  for (let i = 4; i < length; i++) {
+    password += charset[Math.floor(Math.random() * charset.length)];
+  }
+  
+  // Shuffle the password
+  return password.split('').sort(() => Math.random() - 0.5).join('');
+};
+
+// @desc    Get all available user roles
+// @route   GET /api/staff/roles
+// @access  Private (Admin, Manager)
+export const getRoles = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    // Get roles from UserRole enum
+    const roles = [
+      { value: 'super_admin', label: 'Super Admin', description: 'Full system access' },
+      { value: 'general_manager', label: 'General Manager', description: 'Multi-branch management' },
+      { value: 'branch_manager', label: 'Branch Manager', description: 'Single branch management' },
+      { value: 'receptionist', label: 'Receptionist', description: 'Front desk operations' },
+      { value: 'housekeeping', label: 'Housekeeping', description: 'Room cleaning and maintenance' },
+      { value: 'restaurant', label: 'Restaurant Staff', description: 'Food & beverage service' },
+      { value: 'maintenance', label: 'Maintenance', description: 'Facility maintenance' },
+      { value: 'accountant', label: 'Accountant', description: 'Financial management' },
+      { value: 'auditor', label: 'Auditor', description: 'Financial auditing' },
+      { value: 'central_storekeeper', label: 'Central Storekeeper', description: 'Central inventory management' },
+      { value: 'branch_storekeeper', label: 'Branch Storekeeper', description: 'Branch inventory management' },
+      { value: 'employee', label: 'Employee', description: 'General employee access' }
+    ];
+
+    res.status(200).json({
+      success: true,
+      data: roles
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 // @desc    Get all staff members
 // @route   GET /api/staff
@@ -102,6 +159,136 @@ export const getStaffMember = async (
       success: true,
       data: staff
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Create new staff member
+// @route   POST /api/staff
+// @access  Private (Admin, Manager)
+export const createStaffMember = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const {
+      firstName,
+      lastName,
+      email,
+      phone,
+      role,
+      department,
+      shift,
+      salary,
+      startDate,
+      idNumber,
+      emergencyContact,
+      address,
+      branchId
+    } = req.body;
+
+    // Validate required fields
+    if (!firstName || !lastName || !email || !role || !department) {
+      res.status(400).json({
+        success: false,
+        message: 'Please provide all required fields: firstName, lastName, email, role, department'
+      });
+      return;
+    }
+
+    // Generate strong password
+    const generatedPassword = generateStrongPassword();
+    
+    // Create user in Supabase Auth
+    const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
+      email,
+      password: generatedPassword,
+      email_confirm: true,
+      user_metadata: {
+        first_name: firstName,
+        last_name: lastName,
+        role: role
+      }
+    });
+
+    if (authError) {
+      throw authError;
+    }
+
+    if (!authUser.user) {
+      throw new Error('Failed to create user account');
+    }
+
+    // Create user profile in users table
+    const { data: userProfile, error: userError } = await supabase
+      .from('users')
+      .insert([{
+        id: authUser.user.id,
+        email,
+        first_name: firstName,
+        last_name: lastName,
+        phone_number: phone,
+        role: role,
+        created_at: new Date().toISOString()
+      }])
+      .select()
+      .single();
+
+    if (userError) {
+      // If user profile creation fails, delete the auth user
+      await supabase.auth.admin.deleteUser(authUser.user.id);
+      throw userError;
+    }
+
+    // Create staff profile
+    const { data: staffProfile, error: staffError } = await supabase
+      .from('staff_profiles')
+      .insert([{
+        user_id: authUser.user.id,
+        role,
+        department,
+        shift: shift || 'morning',
+        salary: salary ? parseFloat(salary) : null,
+        start_date: startDate || new Date().toISOString().split('T')[0],
+        id_number: idNumber,
+        emergency_contact: emergencyContact,
+        address,
+        branch_id: branchId ? parseInt(branchId) : null,
+        status: 'active',
+        created_at: new Date().toISOString()
+      }])
+      .select(`
+        *,
+        user:users!user_id(
+          id,
+          email,
+          first_name,
+          last_name,
+          phone_number,
+          role
+        )
+      `)
+      .single();
+
+    if (staffError) {
+      // If staff profile creation fails, clean up
+      await supabase.auth.admin.deleteUser(authUser.user.id);
+      await supabase.from('users').delete().eq('id', authUser.user.id);
+      throw staffError;
+    }
+
+    res.status(201).json({
+      success: true,
+      data: {
+        staff: staffProfile,
+        generatedPassword: generatedPassword // Return password for admin to share with user
+      },
+      message: 'Staff member created successfully'
+    });
+
+    logger.info(`Staff member created: ${email} with role ${role}`);
   } catch (error) {
     next(error);
   }
@@ -377,7 +564,7 @@ export const getAttendance = async (
         *,
         staff:staff_profiles(
           id,
-          user:users!user_id(id, full_name, email)
+          user:users!user_id(id, first_name, last_name, email)
         )
       `)
       .order('attendance_date', { ascending: false });
@@ -496,6 +683,184 @@ export const getAttendanceSummary = async (
     res.status(200).json({
       success: true,
       data: summary
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// =====================================================
+// LEAVE MANAGEMENT
+// =====================================================
+
+// @desc    Get leave requests
+// @route   GET /api/staff/leave
+// @access  Private (Admin, Manager)
+export const getLeaveRequests = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { staff_id, status, branch_id } = req.query;
+
+    let query = supabase
+      .from('staff_leave')
+      .select(`
+        *,
+        staff:staff_profiles(
+          id, department, status,
+          user:users(id, first_name, last_name, email)
+        ),
+        approver:users!approved_by(first_name, last_name)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (staff_id) query = query.eq('staff_id', staff_id);
+    if (status) query = query.eq('status', status);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      count: data?.length || 0,
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Create leave request
+// @route   POST /api/staff/leave
+// @access  Private
+export const createLeaveRequest = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { staff_id, leave_type, start_date, end_date, reason } = req.body;
+
+    const { data, error } = await supabase
+      .from('staff_leave')
+      .insert([{
+        staff_id,
+        leave_type,
+        start_date,
+        end_date,
+        reason,
+        status: 'pending'
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update leave request status
+// @route   PUT /api/staff/leave/:id
+// @access  Private (Admin, Manager)
+export const updateLeaveRequest = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { status, notes } = req.body;
+    const userId = (req as any).user?.id;
+
+    const updateData: any = { status };
+    if (notes) updateData.notes = notes;
+    if (status === 'approved' || status === 'rejected') {
+      updateData.approved_by = userId;
+    }
+
+    const { data, error } = await supabase
+      .from('staff_leave')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Approve leave request
+// @route   PUT /api/staff/leave/:id/approve
+// @access  Private (Admin, Manager)
+export const approveLeaveRequest = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const userId = (req as any).user?.id;
+
+    const { data, error } = await supabase
+      .from('staff_leave')
+      .update({ status: 'approved', approved_by: userId })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      message: 'Leave request approved',
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Reject leave request
+// @route   PUT /api/staff/leave/:id/reject
+// @access  Private (Admin, Manager)
+export const rejectLeaveRequest = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const userId = (req as any).user?.id;
+
+    const { data, error } = await supabase
+      .from('staff_leave')
+      .update({ status: 'rejected', approved_by: userId, notes: reason })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      message: 'Leave request rejected',
+      data
     });
   } catch (error) {
     next(error);

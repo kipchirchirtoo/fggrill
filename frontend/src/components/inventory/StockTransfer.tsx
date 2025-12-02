@@ -116,7 +116,7 @@ export function StockTransfer({ isOpen, onClose, fromBranch, items }: StockTrans
                 if (!item) return null;
 
                 return (
-                  <div key={item.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                  <div key={item.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-ios-lg">
                     <div className="flex-1">
                       <p className="font-medium">{item.name}</p>
                       <p className="text-sm text-gray-500">Available: {item.currentStock}</p>

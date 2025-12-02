@@ -4,10 +4,10 @@ import { useState, useEffect } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/minimal/button";
 import { Input } from '@/components/ui/input';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { 
   Trash2, Plus, RefreshCw, Search, Package, AlertTriangle,
@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/date-utils';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -221,12 +223,12 @@ export default function WastagePage() {
 
   const getReasonColor = (reason: string) => {
     const colors: Record<string, string> = {
-      'EXPIRED': 'bg-red-100 text-red-700',
-      'DAMAGED': 'bg-orange-100 text-orange-700',
-      'SPOILED': 'bg-yellow-100 text-yellow-700',
-      'THEFT': 'bg-purple-100 text-purple-700',
-      'BREAKAGE': 'bg-blue-100 text-blue-700',
-      'QUALITY_ISSUE': 'bg-pink-100 text-pink-700',
+      'EXPIRED': 'bg-[#F2F2F7] text-[#000000]',
+      'DAMAGED': 'bg-[#F2F2F7] text-[#3C3C43]',
+      'SPOILED': 'bg-[#F2F2F7] text-[#3C3C43]',
+      'THEFT': 'bg-[#F2F2F7] text-[#3C3C43]',
+      'BREAKAGE': 'bg-[#F2F2F7] text-[#000000]',
+      'QUALITY_ISSUE': 'bg-[#F2F2F7] text-[#3C3C43]',
       'OTHER': 'bg-gray-100 text-gray-700'
     };
     return colors[reason] || 'bg-gray-100';
@@ -234,9 +236,9 @@ export default function WastagePage() {
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      'PENDING': 'bg-yellow-100 text-yellow-700',
-      'APPROVED': 'bg-green-100 text-green-700',
-      'REJECTED': 'bg-red-100 text-red-700'
+      'PENDING': 'bg-[#F2F2F7] text-[#3C3C43]',
+      'APPROVED': 'bg-[#F2F2F7] text-[#000000]',
+      'REJECTED': 'bg-[#F2F2F7] text-[#000000]'
     };
     return colors[status] || 'bg-gray-100';
   };
@@ -348,95 +350,95 @@ export default function WastagePage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold flex items-center gap-2">
-                <Trash2 className="h-6 w-6 text-red-600" />
+                <Trash2 className="h-6 w-6 text-[#3C3C43]" />
                 Wastage Tracking
               </h1>
               <p className="text-gray-600">Record and monitor stock wastage, spoilage, and losses</p>
             </div>
             <div className="flex gap-3">
-              <Button variant="outline" onClick={fetchData} disabled={isLoading}>
+              <IOSButton variant="outline" onClick={fetchData} disabled={isLoading}>
                 <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh
-              </Button>
+              </IOSButton>
               {canManage && (
-                <Button onClick={() => setIsCreateModalOpen(true)} className="bg-red-600 hover:bg-red-700">
+                <IOSButton onClick={() => setIsCreateModalOpen(true)} className="bg-[#3C3C43] hover:bg-[#3C3C43]">
                   <Plus className="h-4 w-4 mr-2" />
                   Record Wastage
-                </Button>
+                </IOSButton>
               )}
             </div>
           </div>
 
           {/* Enhanced Stats */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="p-5 bg-gradient-to-br from-red-50 to-red-100 border-red-200">
+            <IOSCard className="p-5 bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-red-600">Total Loss Value</p>
-                  <p className="text-2xl font-bold text-red-700 mt-1">KES {stats.totalLoss.toLocaleString()}</p>
-                  <p className="text-xs text-red-500 mt-1">{stats.totalWastage} records total</p>
+                  <p className="text-sm font-medium text-[#3C3C43]">Total Loss Value</p>
+                  <p className="text-2xl font-bold text-[#000000] mt-1">KES {stats.totalLoss.toLocaleString()}</p>
+                  <p className="text-xs text-[#8E8E93]0 mt-1">{stats.totalWastage} records total</p>
                 </div>
-                <div className="p-3 bg-red-200 rounded-full">
-                  <DollarSign className="h-6 w-6 text-red-700" />
+                <div className="p-3 bg-[#E5E5EA] rounded-full">
+                  <DollarSign className="h-6 w-6 text-[#000000]" />
                 </div>
               </div>
-            </Card>
+            </IOSCard>
             
-            <Card className="p-5 bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
+            <IOSCard className="p-5 bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-orange-600">This Month</p>
-                  <p className="text-2xl font-bold text-orange-700 mt-1">KES {stats.thisMonthLoss.toLocaleString()}</p>
+                  <p className="text-sm font-medium text-[#3C3C43]">This Month</p>
+                  <p className="text-2xl font-bold text-[#3C3C43] mt-1">KES {stats.thisMonthLoss.toLocaleString()}</p>
                   <div className="flex items-center gap-1 mt-1">
                     {monthChange.type === 'increase' ? (
-                      <ArrowUpRight className="h-3 w-3 text-red-500" />
+                      <ArrowUpRight className="h-3 w-3 text-[#8E8E93]0" />
                     ) : monthChange.type === 'decrease' ? (
-                      <ArrowDownRight className="h-3 w-3 text-green-500" />
+                      <ArrowDownRight className="h-3 w-3 text-[#8E8E93]0" />
                     ) : null}
-                    <p className={`text-xs ${monthChange.type === 'increase' ? 'text-red-500' : monthChange.type === 'decrease' ? 'text-green-500' : 'text-gray-500'}`}>
+                    <p className={`text-xs ${monthChange.type === 'increase' ? 'text-[#8E8E93]0' : monthChange.type === 'decrease' ? 'text-[#8E8E93]0' : 'text-gray-500'}`}>
                       {monthChange.percent}% vs last month
                     </p>
                   </div>
                 </div>
-                <div className="p-3 bg-orange-200 rounded-full">
-                  <Calendar className="h-6 w-6 text-orange-700" />
+                <div className="p-3 bg-[#F2F2F7] rounded-full">
+                  <Calendar className="h-6 w-6 text-[#3C3C43]" />
                 </div>
               </div>
-            </Card>
+            </IOSCard>
             
-            <Card className="p-5 bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-200">
+            <IOSCard className="p-5 bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-yellow-600">Pending Approval</p>
-                  <p className="text-2xl font-bold text-yellow-700 mt-1">{stats.pendingApproval}</p>
-                  <p className="text-xs text-yellow-500 mt-1">Awaiting review</p>
+                  <p className="text-sm font-medium text-[#3C3C43]">Pending Approval</p>
+                  <p className="text-2xl font-bold text-[#3C3C43] mt-1">{stats.pendingApproval}</p>
+                  <p className="text-xs text-[#3C3C43] mt-1">Awaiting review</p>
                 </div>
-                <div className="p-3 bg-yellow-200 rounded-full">
-                  <Clock className="h-6 w-6 text-yellow-700" />
+                <div className="p-3 bg-[#F2F2F7] rounded-full">
+                  <Clock className="h-6 w-6 text-[#3C3C43]" />
                 </div>
               </div>
-            </Card>
+            </IOSCard>
             
-            <Card className="p-5 bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+            <IOSCard className="p-5 bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-purple-600">Avg. Loss/Record</p>
-                  <p className="text-2xl font-bold text-purple-700 mt-1">KES {stats.avgLossPerRecord.toLocaleString()}</p>
-                  <p className="text-xs text-purple-500 mt-1">Top: {stats.topReason}</p>
+                  <p className="text-sm font-medium text-[#3C3C43]">Avg. Loss/Record</p>
+                  <p className="text-2xl font-bold text-[#3C3C43] mt-1">KES {stats.avgLossPerRecord.toLocaleString()}</p>
+                  <p className="text-xs text-[#3C3C43] mt-1">Top: {stats.topReason}</p>
                 </div>
-                <div className="p-3 bg-purple-200 rounded-full">
-                  <BarChart3 className="h-6 w-6 text-purple-700" />
+                <div className="p-3 bg-[#F2F2F7] rounded-full">
+                  <BarChart3 className="h-6 w-6 text-[#3C3C43]" />
                 </div>
               </div>
-            </Card>
+            </IOSCard>
           </div>
 
           {/* Analytics Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Loss by Reason */}
-            <Card className="p-5">
-              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <PieChart className="h-5 w-5 text-red-500" />
+            <IOSCard className="p-5">
+              <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-4 flex items-center gap-2">
+                <PieChart className="h-5 w-5 text-[#8E8E93]0" />
                 Loss by Reason
               </h3>
               <div className="space-y-3">
@@ -450,16 +452,16 @@ export default function WastagePage() {
                       <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                         <div 
                           className={`h-full rounded-full ${
-                            idx === 0 ? 'bg-red-500' : 
-                            idx === 1 ? 'bg-orange-500' : 
-                            idx === 2 ? 'bg-yellow-500' : 
-                            idx === 3 ? 'bg-blue-500' : 'bg-gray-400'
+                            idx === 0 ? 'bg-[#F2F2F7]0' : 
+                            idx === 1 ? 'bg-[#F2F2F7]' : 
+                            idx === 2 ? 'bg-[#F2F2F7]' : 
+                            idx === 3 ? 'bg-[#F2F2F7]0' : 'bg-gray-400'
                           }`}
                           style={{ width: `${stats.totalLoss > 0 ? (item.loss / stats.totalLoss) * 100 : 0}%` }}
                         />
                       </div>
                     </div>
-                    <span className="text-sm font-bold text-red-600 w-28 text-right">
+                    <span className="text-sm font-bold text-[#3C3C43] w-28 text-right">
                       KES {item.loss.toLocaleString()}
                     </span>
                   </div>
@@ -468,12 +470,12 @@ export default function WastagePage() {
                   <p className="text-gray-500 text-center py-4">No data available</p>
                 )}
               </div>
-            </Card>
+            </IOSCard>
 
             {/* Loss by Branch */}
-            <Card className="p-5">
-              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <Building2 className="h-5 w-5 text-blue-500" />
+            <IOSCard className="p-5">
+              <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-4 flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-[#8E8E93]0" />
                 Loss by Branch
               </h3>
               <div className="space-y-3">
@@ -487,16 +489,16 @@ export default function WastagePage() {
                       <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                         <div 
                           className={`h-full rounded-full ${
-                            idx === 0 ? 'bg-blue-500' : 
-                            idx === 1 ? 'bg-indigo-500' : 
-                            idx === 2 ? 'bg-purple-500' : 
-                            idx === 3 ? 'bg-pink-500' : 'bg-gray-400'
+                            idx === 0 ? 'bg-[#F2F2F7]0' : 
+                            idx === 1 ? 'bg-[#F2F2F7]0' : 
+                            idx === 2 ? 'bg-[#F2F2F7]' : 
+                            idx === 3 ? 'bg-[#F2F2F7]' : 'bg-gray-400'
                           }`}
                           style={{ width: `${stats.totalLoss > 0 ? (item.loss / stats.totalLoss) * 100 : 0}%` }}
                         />
                       </div>
                     </div>
-                    <span className="text-sm font-bold text-red-600 w-28 text-right">
+                    <span className="text-sm font-bold text-[#3C3C43] w-28 text-right">
                       KES {item.loss.toLocaleString()}
                     </span>
                   </div>
@@ -505,11 +507,11 @@ export default function WastagePage() {
                   <p className="text-gray-500 text-center py-4">No data available</p>
                 )}
               </div>
-            </Card>
+            </IOSCard>
           </div>
 
           {/* Filters */}
-          <Card className="p-4">
+          <IOSCard className="p-4">
             <div className="flex flex-wrap items-center gap-4">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -523,7 +525,7 @@ export default function WastagePage() {
               <select
                 value={reasonFilter}
                 onChange={(e) => setReasonFilter(e.target.value)}
-                className="border rounded-lg px-3 py-2 text-sm"
+                className="border rounded-ios-lg px-3 py-2 text-sm"
               >
                 <option value="">All Reasons</option>
                 {reasons.map(r => (
@@ -533,7 +535,7 @@ export default function WastagePage() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="border rounded-lg px-3 py-2 text-sm"
+                className="border rounded-ios-lg px-3 py-2 text-sm"
               >
                 <option value="">All Status</option>
                 <option value="PENDING">Pending</option>
@@ -555,15 +557,15 @@ export default function WastagePage() {
                   className="w-36 text-sm"
                 />
               </div>
-              <Button variant="outline" onClick={exportToCSV} className="ml-auto">
+              <IOSButton variant="outline" onClick={exportToCSV} className="ml-auto">
                 <Download className="h-4 w-4 mr-2" />
                 Export CSV
-              </Button>
+              </IOSButton>
             </div>
-          </Card>
+          </IOSCard>
 
           {/* Wastage Table */}
-          <Card>
+          <IOSCard>
             {isLoading ? (
               <div className="p-12 text-center text-gray-500">Loading records...</div>
             ) : filteredRecords.length === 0 ? (
@@ -591,46 +593,46 @@ export default function WastagePage() {
                   <tbody className="divide-y">
                     {filteredRecords.map((record) => (
                       <tr key={record.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-4 font-mono text-sm text-blue-600">{record.wastage_number}</td>
+                        <td className="px-4 py-4 font-mono text-sm text-[#3C3C43]">{record.wastage_number}</td>
                         <td className="px-4 py-4">
                           <p className="font-medium">{record.item?.name}</p>
                           <p className="text-xs text-gray-500 font-mono">{record.item?.sku}</p>
                         </td>
                         <td className="px-4 py-4 text-sm">{record.branch?.name || '-'}</td>
-                        <td className="px-4 py-4 text-center font-bold text-red-600">{record.quantity}</td>
+                        <td className="px-4 py-4 text-center font-bold text-[#3C3C43]">{record.quantity}</td>
                         <td className="px-4 py-4">
-                          <Badge className={getReasonColor(record.reason)}>{record.reason}</Badge>
+                          <IOSBadge className={getReasonColor(record.reason)}>{record.reason}</IOSBadge>
                         </td>
-                        <td className="px-4 py-4 text-right font-medium text-red-600">
+                        <td className="px-4 py-4 text-right font-medium text-[#3C3C43]">
                           KES {record.total_loss?.toLocaleString()}
                         </td>
                         <td className="px-4 py-4">
-                          <Badge className={getStatusColor(record.status)}>{record.status}</Badge>
+                          <IOSBadge className={getStatusColor(record.status)}>{record.status}</IOSBadge>
                         </td>
                         <td className="px-4 py-4 text-sm text-gray-500">{formatDate(record.created_at)}</td>
                         <td className="px-4 py-4">
                           <div className="flex items-center justify-center gap-2">
-                            <Button size="sm" variant="outline" onClick={() => viewRecord(record)}>
+                            <IOSButton size="sm" variant="outline" onClick={() => viewRecord(record)}>
                               <Eye className="h-4 w-4" />
-                            </Button>
+                            </IOSButton>
                             {canApprove && record.status === 'PENDING' && (
                               <>
-                                <Button 
+                                <IOSButton 
                                   size="sm" 
                                   variant="outline" 
-                                  className="text-green-600 hover:bg-green-50"
+                                  className="text-[#3C3C43] hover:bg-[#F2F2F7]"
                                   onClick={() => handleApproval(record.id, 'approve')}
                                 >
                                   <CheckCircle className="h-4 w-4" />
-                                </Button>
-                                <Button 
+                                </IOSButton>
+                                <IOSButton 
                                   size="sm" 
                                   variant="outline" 
-                                  className="text-red-600 hover:bg-red-50"
+                                  className="text-[#3C3C43] hover:bg-[#F2F2F7]"
                                   onClick={() => handleApproval(record.id, 'reject')}
                                 >
                                   <X className="h-4 w-4" />
-                                </Button>
+                                </IOSButton>
                               </>
                             )}
                           </div>
@@ -641,21 +643,21 @@ export default function WastagePage() {
                 </table>
               </div>
             )}
-          </Card>
+          </IOSCard>
         </div>
 
         {/* Create Wastage Modal */}
         <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
           <DialogContent className="max-w-2xl w-[95vw]">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-red-600">
+              <DialogTitle className="flex items-center gap-2 text-[#3C3C43]">
                 <Trash2 className="h-5 w-5" />
                 Record Wastage
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-5 mt-4">
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-sm text-red-700 flex items-center gap-2">
+              <div className="bg-[#F2F2F7] border border-[rgba(60,60,67,0.12)] rounded-ios-lg p-4">
+                <p className="text-sm text-[#000000] flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                   <span>This will reduce stock quantity and record a financial loss</span>
                 </p>
@@ -668,7 +670,7 @@ export default function WastagePage() {
                     <select
                       value={formData.branch_id}
                       onChange={(e) => setFormData(prev => ({ ...prev, branch_id: e.target.value }))}
-                      className="w-full border rounded-lg px-3 py-2.5"
+                      className="w-full border rounded-ios-lg px-3 py-2.5"
                     >
                       <option value="">Select Branch</option>
                       {branches.map(b => (
@@ -683,7 +685,7 @@ export default function WastagePage() {
                   <select
                     value={formData.item_id}
                     onChange={(e) => setFormData(prev => ({ ...prev, item_id: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2.5"
+                    className="w-full border rounded-ios-lg px-3 py-2.5"
                   >
                     <option value="">Select Item</option>
                     {items.map(i => (
@@ -708,13 +710,13 @@ export default function WastagePage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Unit Cost</label>
-                  <div className="border rounded-lg px-3 py-2.5 bg-gray-50 text-gray-600">
+                  <div className="border rounded-ios-lg px-3 py-2.5 bg-gray-50 text-gray-600">
                     KES {(selectedItem?.cost_price || 0).toLocaleString()}
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Total Loss</label>
-                  <div className="border-2 border-red-200 rounded-lg px-3 py-2.5 bg-red-50 text-red-700 font-bold">
+                  <div className="border-2 border-[rgba(60,60,67,0.12)] rounded-ios-lg px-3 py-2.5 bg-[#F2F2F7] text-[#000000] font-bold">
                     KES {estimatedLoss.toLocaleString()}
                   </div>
                 </div>
@@ -726,7 +728,7 @@ export default function WastagePage() {
                   <select
                     value={formData.reason}
                     onChange={(e) => setFormData(prev => ({ ...prev, reason: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2.5"
+                    className="w-full border rounded-ios-lg px-3 py-2.5"
                   >
                     <option value="">Select Reason</option>
                     {reasons.map(r => (
@@ -739,7 +741,7 @@ export default function WastagePage() {
                   <select
                     value={formData.disposal_method}
                     onChange={(e) => setFormData(prev => ({ ...prev, disposal_method: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2.5"
+                    className="w-full border rounded-ios-lg px-3 py-2.5"
                   >
                     <option value="">Select Method</option>
                     {disposalMethods.map(d => (
@@ -754,24 +756,24 @@ export default function WastagePage() {
                 <textarea
                   value={formData.reason_details}
                   onChange={(e) => setFormData(prev => ({ ...prev, reason_details: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2.5"
+                  className="w-full border rounded-ios-lg px-3 py-2.5"
                   rows={3}
                   placeholder="Describe what happened, when it was discovered, etc..."
                 />
               </div>
 
               <div className="flex justify-end gap-3 pt-5 border-t">
-                <Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>
+                <IOSButton variant="outline" onClick={() => setIsCreateModalOpen(false)}>
                   Cancel
-                </Button>
-                <Button 
+                </IOSButton>
+                <IOSButton 
                   onClick={handleCreateWastage} 
                   disabled={!formData.item_id || !formData.reason}
-                  className="bg-red-600 hover:bg-red-700"
+                  className="bg-[#3C3C43] hover:bg-[#3C3C43]"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Record Wastage
-                </Button>
+                </IOSButton>
               </div>
             </div>
           </DialogContent>
@@ -782,28 +784,28 @@ export default function WastagePage() {
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-red-600" />
+                <FileText className="h-5 w-5 text-[#3C3C43]" />
                 Wastage Record Details
               </DialogTitle>
             </DialogHeader>
             {selectedRecord && (
               <div className="space-y-6 mt-4">
                 {/* Status Banner */}
-                <div className={`p-4 rounded-lg flex items-center justify-between ${
-                  selectedRecord.status === 'APPROVED' ? 'bg-green-50 border border-green-200' :
-                  selectedRecord.status === 'REJECTED' ? 'bg-red-50 border border-red-200' :
-                  'bg-yellow-50 border border-yellow-200'
+                <div className={`p-4 rounded-ios-lg flex items-center justify-between ${
+                  selectedRecord.status === 'APPROVED' ? 'bg-[#F2F2F7] border border-[rgba(60,60,67,0.12)]' :
+                  selectedRecord.status === 'REJECTED' ? 'bg-[#F2F2F7] border border-[rgba(60,60,67,0.12)]' :
+                  'bg-[#F2F2F7] border border-[rgba(60,60,67,0.12)]'
                 }`}>
                   <div className="flex items-center gap-3">
                     {selectedRecord.status === 'APPROVED' ? (
-                      <CheckCircle className="h-6 w-6 text-green-600" />
+                      <CheckCircle className="h-6 w-6 text-[#3C3C43]" />
                     ) : selectedRecord.status === 'REJECTED' ? (
-                      <XCircle className="h-6 w-6 text-red-600" />
+                      <XCircle className="h-6 w-6 text-[#3C3C43]" />
                     ) : (
-                      <Clock className="h-6 w-6 text-yellow-600" />
+                      <Clock className="h-6 w-6 text-[#3C3C43]" />
                     )}
                     <div>
-                      <p className="font-semibold">{selectedRecord.status}</p>
+                      <p className="font-semibold font-sf-pro-display">{selectedRecord.status}</p>
                       <p className="text-sm text-gray-600">
                         {selectedRecord.status === 'PENDING' ? 'Awaiting approval' : 
                          `${selectedRecord.status === 'APPROVED' ? 'Approved' : 'Rejected'} by ${selectedRecord.approved_by || 'Manager'}`}
@@ -818,7 +820,7 @@ export default function WastagePage() {
                   <div className="space-y-4">
                     <div>
                       <label className="text-xs text-gray-500 uppercase">Item</label>
-                      <p className="font-semibold text-lg">{selectedRecord.item?.name}</p>
+                      <p className="font-semibold font-sf-pro-display text-lg">{selectedRecord.item?.name}</p>
                       <p className="text-sm text-gray-500 font-mono">{selectedRecord.item?.sku}</p>
                     </div>
                     <div>
@@ -833,11 +835,11 @@ export default function WastagePage() {
                   <div className="space-y-4">
                     <div>
                       <label className="text-xs text-gray-500 uppercase">Quantity Wasted</label>
-                      <p className="font-bold text-2xl text-red-600">{selectedRecord.quantity}</p>
+                      <p className="font-bold text-2xl text-[#3C3C43]">{selectedRecord.quantity}</p>
                     </div>
                     <div>
                       <label className="text-xs text-gray-500 uppercase">Total Loss</label>
-                      <p className="font-bold text-xl text-red-600">KES {selectedRecord.total_loss?.toLocaleString()}</p>
+                      <p className="font-bold text-xl text-[#3C3C43]">KES {selectedRecord.total_loss?.toLocaleString()}</p>
                       <p className="text-xs text-gray-500">@ KES {selectedRecord.unit_cost?.toLocaleString()} per unit</p>
                     </div>
                     <div>
@@ -851,16 +853,16 @@ export default function WastagePage() {
                 <div className="border-t pt-4 space-y-3">
                   <div className="flex items-center gap-3">
                     <label className="text-xs text-gray-500 uppercase">Reason:</label>
-                    <Badge className={getReasonColor(selectedRecord.reason)}>{selectedRecord.reason}</Badge>
+                    <IOSBadge className={getReasonColor(selectedRecord.reason)}>{selectedRecord.reason}</IOSBadge>
                     {selectedRecord.disposal_method && (
                       <>
                         <label className="text-xs text-gray-500 uppercase ml-4">Disposal:</label>
-                        <Badge variant="outline">{selectedRecord.disposal_method}</Badge>
+                        <IOSBadge variant="outline">{selectedRecord.disposal_method}</IOSBadge>
                       </>
                     )}
                   </div>
                   {selectedRecord.reason_details && (
-                    <div className="bg-gray-50 rounded-lg p-3">
+                    <div className="bg-gray-50 rounded-ios-lg p-3">
                       <label className="text-xs text-gray-500 uppercase">Additional Details</label>
                       <p className="mt-1 text-sm">{selectedRecord.reason_details}</p>
                     </div>
@@ -869,26 +871,26 @@ export default function WastagePage() {
 
                 {/* Actions */}
                 <div className="flex justify-end gap-3 pt-4 border-t">
-                  <Button variant="outline" onClick={() => setIsViewModalOpen(false)}>
+                  <IOSButton variant="outline" onClick={() => setIsViewModalOpen(false)}>
                     Close
-                  </Button>
+                  </IOSButton>
                   {canApprove && selectedRecord.status === 'PENDING' && (
                     <>
-                      <Button 
+                      <IOSButton 
                         variant="outline" 
-                        className="text-red-600 border-red-200 hover:bg-red-50"
+                        className="text-[#3C3C43] border-[rgba(60,60,67,0.12)] hover:bg-[#F2F2F7]"
                         onClick={() => handleApproval(selectedRecord.id, 'reject')}
                       >
                         <X className="h-4 w-4 mr-2" />
                         Reject
-                      </Button>
-                      <Button 
-                        className="bg-green-600 hover:bg-green-700"
+                      </IOSButton>
+                      <IOSButton 
+                        className="bg-[#3C3C43] hover:bg-[#3C3C43]"
                         onClick={() => handleApproval(selectedRecord.id, 'approve')}
                       >
                         <CheckCircle className="h-4 w-4 mr-2" />
                         Approve
-                      </Button>
+                      </IOSButton>
                     </>
                   )}
                 </div>

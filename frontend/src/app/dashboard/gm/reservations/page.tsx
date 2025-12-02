@@ -1,295 +1,110 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { 
-  Calendar, Plus, Search, RefreshCw, Eye, Edit, Trash2,
-  User, Bed, Clock, DollarSign, CheckCircle, XCircle
-} from 'lucide-react';
-import { toast } from 'sonner';
-import { formatDate } from '@/lib/date-utils';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
+import { IOSBadge } from '@/components/ui/ios-badge';
+import { Input } from '@/components/ui/input';
+import { bookingsAPI } from '@/lib/api';
+import { Calendar, RefreshCw, Search, User, Building2, Bed, Clock } from 'lucide-react';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+interface Booking { id: string; guest_name: string; room_number: string; branch_name?: string; check_in: string; check_out: string; status: string; total: number; }
 
-interface Reservation {
-  id: string;
-  guest_name?: string;
-  guestName?: string;
-  room_number?: string;
-  roomNumber?: string;
-  room_type?: string;
-  check_in?: string;
-  checkIn?: string;
-  check_out?: string;
-  checkOut?: string;
-  status: string;
-  payment_status?: string;
-  paymentStatus?: string;
-  total_amount?: number;
-  totalAmount?: number;
-  guests?: number;
-  notes?: string;
-  created_at?: string;
-}
+const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
+  confirmed: { label: 'Confirmed', color: 'text-green-700', bg: 'bg-green-100' },
+  pending: { label: 'Pending', color: 'text-yellow-700', bg: 'bg-yellow-100' },
+  checked_in: { label: 'Checked In', color: 'text-blue-700', bg: 'bg-blue-100' },
+  checked_out: { label: 'Checked Out', color: 'text-gray-700', bg: 'bg-gray-100' },
+  cancelled: { label: 'Cancelled', color: 'text-red-700', bg: 'bg-red-100' },
+};
 
 export default function GMReservationsPage() {
   const { user } = useAuth();
-  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    fetchReservations();
-  }, []);
-
-  const fetchReservations = async () => {
+  const fetchBookings = useCallback(async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/bookings`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const response = await bookingsAPI.getBookings();
+      if (response.success) setBookings(response.data || []);
+    } catch (error) { console.error('Error:', error); }
+    finally { setIsLoading(false); }
+  }, []);
 
-      if (response.ok) {
-        const data = await response.json();
-        const reservationData = data?.data || data?.bookings || (Array.isArray(data) ? data : []);
-        setReservations(Array.isArray(reservationData) ? reservationData : []);
-      }
-    } catch (err) {
-      console.error('Error:', err);
-      toast.error('Failed to load reservations');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  useEffect(() => { fetchBookings(); }, [fetchBookings]);
 
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      'confirmed': 'bg-green-100 text-green-700',
-      'CONFIRMED': 'bg-green-100 text-green-700',
-      'pending': 'bg-yellow-100 text-yellow-700',
-      'PENDING': 'bg-yellow-100 text-yellow-700',
-      'checked-in': 'bg-blue-100 text-blue-700',
-      'CHECKED_IN': 'bg-blue-100 text-blue-700',
-      'checked-out': 'bg-gray-100 text-gray-700',
-      'CHECKED_OUT': 'bg-gray-100 text-gray-700',
-      'cancelled': 'bg-red-100 text-red-700',
-      'CANCELLED': 'bg-red-100 text-red-700'
-    };
-    return colors[status] || 'bg-gray-100 text-gray-700';
-  };
+  const filteredBookings = bookings.filter((b) => 
+    b.guest_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    b.room_number?.includes(searchQuery)
+  );
 
-  const getPaymentColor = (status: string) => {
-    const colors: Record<string, string> = {
-      'paid': 'bg-green-100 text-green-700',
-      'PAID': 'bg-green-100 text-green-700',
-      'partial': 'bg-yellow-100 text-yellow-700',
-      'PARTIAL': 'bg-yellow-100 text-yellow-700',
-      'unpaid': 'bg-red-100 text-red-700',
-      'UNPAID': 'bg-red-100 text-red-700'
-    };
-    return colors[status] || 'bg-gray-100 text-gray-700';
-  };
-
-  const filteredReservations = reservations.filter(r => {
-    const guestName = r.guest_name || r.guestName || '';
-    const roomNumber = r.room_number || r.roomNumber || '';
-    const status = r.status?.toLowerCase() || '';
-    
-    const matchesSearch = searchTerm === '' || 
-      guestName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      roomNumber.includes(searchTerm);
-    
-    const matchesStatus = filterStatus === 'all' || status === filterStatus.toLowerCase();
-    
-    return matchesSearch && matchesStatus;
-  });
-
-  // Stats
   const stats = {
-    total: reservations.length,
-    confirmed: reservations.filter(r => r.status?.toLowerCase() === 'confirmed').length,
-    pending: reservations.filter(r => r.status?.toLowerCase() === 'pending').length,
-    checkedIn: reservations.filter(r => r.status?.toLowerCase() === 'checked-in' || r.status?.toLowerCase() === 'checked_in').length
+    total: bookings.length,
+    confirmed: bookings.filter(b => b.status === 'confirmed').length,
+    checkedIn: bookings.filter(b => b.status === 'checked_in').length,
+    pending: bookings.filter(b => b.status === 'pending').length,
   };
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
       <DashboardLayout>
         <div className="space-y-6">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
-                <Calendar className="h-6 w-6 text-indigo-600" />
-                Reservations
-              </h1>
-              <p className="text-gray-600">Manage hotel bookings and reservations</p>
-            </div>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={fetchReservations} disabled={isLoading}>
-                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                New Reservation
-              </Button>
-            </div>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900">All Reservations</h1><p className="text-gray-500">View bookings across all branches</p></div>
+            <IOSButton variant="secondary" onClick={fetchBookings}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <Calendar className="h-8 w-8 text-blue-500" />
-                <div>
-                  <p className="text-sm text-gray-500">Total</p>
-                  <p className="text-2xl font-bold">{stats.total}</p>
-                </div>
-              </div>
-            </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <CheckCircle className="h-8 w-8 text-green-500" />
-                <div>
-                  <p className="text-sm text-gray-500">Confirmed</p>
-                  <p className="text-2xl font-bold">{stats.confirmed}</p>
-                </div>
-              </div>
-            </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <Clock className="h-8 w-8 text-yellow-500" />
-                <div>
-                  <p className="text-sm text-gray-500">Pending</p>
-                  <p className="text-2xl font-bold">{stats.pending}</p>
-                </div>
-              </div>
-            </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <Bed className="h-8 w-8 text-indigo-500" />
-                <div>
-                  <p className="text-sm text-gray-500">Checked In</p>
-                  <p className="text-2xl font-bold">{stats.checkedIn}</p>
-                </div>
-              </div>
-            </Card>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <IOSCard className="p-4"><Calendar className="h-6 w-6 text-[#007AFF] mb-2" /><p className="text-sm text-gray-500">Total</p><p className="text-xl font-bold">{stats.total}</p></IOSCard>
+            <IOSCard className="p-4"><Clock className="h-6 w-6 text-yellow-600 mb-2" /><p className="text-sm text-gray-500">Pending</p><p className="text-xl font-bold text-yellow-600">{stats.pending}</p></IOSCard>
+            <IOSCard className="p-4"><Bed className="h-6 w-6 text-[#34C759] mb-2" /><p className="text-sm text-gray-500">Confirmed</p><p className="text-xl font-bold text-[#34C759]">{stats.confirmed}</p></IOSCard>
+            <IOSCard className="p-4"><User className="h-6 w-6 text-[#007AFF] mb-2" /><p className="text-sm text-gray-500">Checked In</p><p className="text-xl font-bold text-[#007AFF]">{stats.checkedIn}</p></IOSCard>
           </div>
 
-          {/* Filters */}
-          <Card className="p-4">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by guest or room..."
-                  className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="border rounded-lg px-3 py-2"
-              >
-                <option value="all">All Status</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="pending">Pending</option>
-                <option value="checked-in">Checked In</option>
-                <option value="checked-out">Checked Out</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
+          <IOSCard className="p-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input placeholder="Search reservations..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
             </div>
-          </Card>
+          </IOSCard>
 
-          {/* Reservations Table */}
-          <Card>
-            {isLoading ? (
-              <div className="p-12 text-center text-gray-500">Loading reservations...</div>
-            ) : filteredReservations.length === 0 ? (
-              <div className="p-12 text-center text-gray-500">
-                <Calendar className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                <p>No reservations found</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Guest</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Room</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Check In</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Check Out</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {filteredReservations.map((reservation) => (
-                      <tr key={reservation.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-gray-400" />
-                            <span className="font-medium">{reservation.guest_name || reservation.guestName || '-'}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-2">
-                            <Bed className="h-4 w-4 text-gray-400" />
-                            <span>{reservation.room_number || reservation.roomNumber || '-'}</span>
-                            {reservation.room_type && (
-                              <span className="text-xs text-gray-500">({reservation.room_type})</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 text-sm">
-                          {formatDate(reservation.check_in || reservation.checkIn)}
-                        </td>
-                        <td className="px-4 py-4 text-sm">
-                          {formatDate(reservation.check_out || reservation.checkOut)}
-                        </td>
-                        <td className="px-4 py-4">
-                          <Badge className={getStatusColor(reservation.status)}>
-                            {reservation.status}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-4">
-                          <Badge className={getPaymentColor(reservation.payment_status || reservation.paymentStatus || 'unpaid')}>
-                            {reservation.payment_status || reservation.paymentStatus || 'Unpaid'}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-4 text-right font-medium">
-                          KES {(reservation.total_amount || reservation.totalAmount || 0).toLocaleString()}
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline">
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" variant="outline">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
+          ) : filteredBookings.length === 0 ? (
+            <IOSCard className="p-12 text-center"><Calendar className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No reservations found</p></IOSCard>
+          ) : (
+            <div className="space-y-3">
+              {filteredBookings.map((booking) => {
+                const status = statusConfig[booking.status] || statusConfig.pending;
+                return (
+                  <IOSCard key={booking.id} className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center"><User className="h-6 w-6 text-[#007AFF]" /></div>
+                        <div>
+                          <p className="font-bold">{booking.guest_name}</p>
+                          <p className="text-sm text-gray-500">Room {booking.room_number}</p>
+                          <p className="text-xs text-gray-400">{new Date(booking.check_in).toLocaleDateString()} - {new Date(booking.check_out).toLocaleDateString()}</p>
+                          {booking.branch_name && <p className="text-xs text-gray-400 flex items-center gap-1"><Building2 className="h-3 w-3" /> {booking.branch_name}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <p className="font-bold">KES {booking.total?.toLocaleString()}</p>
+                        <IOSBadge className={`${status.bg} ${status.color}`}>{status.label}</IOSBadge>
+                      </div>
+                    </div>
+                  </IOSCard>
+                );
+              })}
+            </div>
+          )}
         </div>
       </DashboardLayout>
     </ProtectedRoute>

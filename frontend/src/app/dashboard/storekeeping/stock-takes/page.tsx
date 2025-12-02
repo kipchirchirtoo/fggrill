@@ -4,14 +4,16 @@ import { useState, useEffect } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/minimal/button";
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
+import { IOSBadge } from '@/components/ui/ios-badge';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ClipboardList, Plus, Eye, RefreshCw, Play, CheckCircle, Clock, XCircle, AlertTriangle, Package, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/date-utils';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -141,9 +143,9 @@ export default function StockTakesPage() {
   };
 
   const getStatusColor = (s: string) => ({
-    IN_PROGRESS: 'bg-blue-100 text-blue-800',
-    COMPLETED: 'bg-green-100 text-green-800',
-    CANCELLED: 'bg-red-100 text-red-800'
+    IN_PROGRESS: 'bg-[#F2F2F7] text-[#000000]',
+    COMPLETED: 'bg-[#F2F2F7] text-[#000000]',
+    CANCELLED: 'bg-[#F2F2F7] text-[#000000]'
   }[s] || 'bg-gray-100 text-gray-800');
 
   const getStatusIcon = (s: string) => {
@@ -166,23 +168,23 @@ export default function StockTakesPage() {
               <p className="text-gray-600">Physical inventory counts and variance tracking</p>
             </div>
             <div className="flex gap-3">
-              <Button variant="outline" onClick={fetchData}><RefreshCw className="h-4 w-4 mr-2" />Refresh</Button>
-              {canEdit && <Button onClick={() => setIsNewModalOpen(true)}><Plus className="h-4 w-4 mr-2" />New Stock Take</Button>}
+              <IOSButton variant="outline" onClick={fetchData}><RefreshCw className="h-4 w-4 mr-2" />Refresh</IOSButton>
+              {canEdit && <IOSButton onClick={() => setIsNewModalOpen(true)}><Plus className="h-4 w-4 mr-2" />New Stock Take</IOSButton>}
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="p-4"><div className="flex items-center gap-3"><ClipboardList className="h-8 w-8 text-blue-500" /><div><p className="text-sm text-gray-500">Total Takes</p><p className="text-2xl font-bold">{stockTakes.length}</p></div></div></Card>
-            <Card className="p-4"><div className="flex items-center gap-3"><Clock className="h-8 w-8 text-amber-500" /><div><p className="text-sm text-gray-500">In Progress</p><p className="text-2xl font-bold text-amber-600">{inProgressCount}</p></div></div></Card>
-            <Card className="p-4"><div className="flex items-center gap-3"><CheckCircle className="h-8 w-8 text-green-500" /><div><p className="text-sm text-gray-500">Completed</p><p className="text-2xl font-bold text-green-600">{completedCount}</p></div></div></Card>
-            <Card className="p-4"><div className="flex items-center gap-3"><AlertTriangle className="h-8 w-8 text-red-500" /><div><p className="text-sm text-gray-500">With Variances</p><p className="text-2xl font-bold text-red-600">{stockTakes.filter(t => t.items_with_variance > 0).length}</p></div></div></Card>
+            <IOSCard className="p-4"><div className="flex items-center gap-3"><ClipboardList className="h-8 w-8 text-[#8E8E93]0" /><div><p className="text-sm text-gray-500">Total Takes</p><p className="text-2xl font-bold">{stockTakes.length}</p></div></div></IOSCard>
+            <IOSCard className="p-4"><div className="flex items-center gap-3"><Clock className="h-8 w-8 text-[#3C3C43]" /><div><p className="text-sm text-gray-500">In Progress</p><p className="text-2xl font-bold text-[#3C3C43]">{inProgressCount}</p></div></div></IOSCard>
+            <IOSCard className="p-4"><div className="flex items-center gap-3"><CheckCircle className="h-8 w-8 text-[#8E8E93]0" /><div><p className="text-sm text-gray-500">Completed</p><p className="text-2xl font-bold text-[#3C3C43]">{completedCount}</p></div></div></IOSCard>
+            <IOSCard className="p-4"><div className="flex items-center gap-3"><AlertTriangle className="h-8 w-8 text-[#8E8E93]0" /><div><p className="text-sm text-gray-500">With Variances</p><p className="text-2xl font-bold text-[#3C3C43]">{stockTakes.filter(t => t.items_with_variance > 0).length}</p></div></div></IOSCard>
           </div>
 
-          <Card>
+          <IOSCard>
             {isLoading ? (
-              <div className="p-12 text-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div></div>
+              <div className="p-12 text-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[rgba(60,60,67,0.12)] mx-auto"></div></div>
             ) : stockTakes.length === 0 ? (
-              <div className="p-12 text-center text-gray-500"><ClipboardList className="h-12 w-12 mx-auto mb-3 opacity-30" /><p>No stock takes yet</p>{canEdit && <Button className="mt-4" onClick={() => setIsNewModalOpen(true)}><Plus className="h-4 w-4 mr-2" />Start First Stock Take</Button>}</div>
+              <div className="p-12 text-center text-gray-500"><ClipboardList className="h-12 w-12 mx-auto mb-3 opacity-30" /><p>No stock takes yet</p>{canEdit && <IOSButton className="mt-4" onClick={() => setIsNewModalOpen(true)}><Plus className="h-4 w-4 mr-2" />Start First Stock Take</IOSButton>}</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -203,19 +205,19 @@ export default function StockTakesPage() {
                       <tr key={take.id} className="hover:bg-gray-50">
                         <td className="px-4 py-4 font-mono text-sm">{take.take_number}</td>
                         <td className="px-4 py-4">{take.branch?.name || 'Unknown'}</td>
-                        <td className="px-4 py-4"><Badge variant="outline">{take.take_type}</Badge></td>
-                        <td className="px-4 py-4"><Badge className={getStatusColor(take.status)}><span className="flex items-center gap-1">{getStatusIcon(take.status)} {take.status}</span></Badge></td>
+                        <td className="px-4 py-4"><IOSBadge variant="outline">{take.take_type}</IOSBadge></td>
+                        <td className="px-4 py-4"><IOSBadge className={getStatusColor(take.status)}><span className="flex items-center gap-1">{getStatusIcon(take.status)} {take.status}</span></IOSBadge></td>
                         <td className="px-4 py-4">{take.total_items_counted}</td>
                         <td className="px-4 py-4">
                           {take.items_with_variance > 0 ? (
-                            <span className="text-red-600 font-bold flex items-center gap-1"><AlertTriangle className="h-4 w-4" />{take.items_with_variance}</span>
-                          ) : <span className="text-green-600">0</span>}
+                            <span className="text-[#3C3C43] font-bold flex items-center gap-1"><AlertTriangle className="h-4 w-4" />{take.items_with_variance}</span>
+                          ) : <span className="text-[#3C3C43]">0</span>}
                         </td>
                         <td className="px-4 py-4 text-sm text-gray-500">{formatDate(take.started_at)}</td>
                         <td className="px-4 py-4">
-                          <Button size="sm" variant="outline" onClick={() => handleViewTake(take)}>
+                          <IOSButton size="sm" variant="outline" onClick={() => handleViewTake(take)}>
                             {take.status === 'IN_PROGRESS' ? <><Play className="h-4 w-4 mr-1" />Continue</> : <><Eye className="h-4 w-4 mr-1" />View</>}
-                          </Button>
+                          </IOSButton>
                         </td>
                       </tr>
                     ))}
@@ -223,34 +225,34 @@ export default function StockTakesPage() {
                 </table>
               </div>
             )}
-          </Card>
+          </IOSCard>
         </div>
 
         {/* New Stock Take Modal */}
         <Dialog open={isNewModalOpen} onOpenChange={setIsNewModalOpen}>
           <DialogContent>
-            <DialogHeader><DialogTitle className="flex items-center gap-2"><ClipboardList className="h-5 w-5 text-indigo-600" />Start New Stock Take</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle className="flex items-center gap-2"><ClipboardList className="h-5 w-5 text-[#3C3C43]" />Start New Stock Take</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium">Branch *</label>
-                <select value={newForm.branch_id} onChange={e => setNewForm({...newForm, branch_id: parseInt(e.target.value)})} className="w-full px-3 py-2 border rounded-lg">
+                <select value={newForm.branch_id} onChange={e => setNewForm({...newForm, branch_id: parseInt(e.target.value)})} className="w-full px-3 py-2 border rounded-ios-lg">
                   <option value={0}>Select branch...</option>
                   {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               </div>
               <div>
                 <label className="text-sm font-medium">Type</label>
-                <select value={newForm.take_type} onChange={e => setNewForm({...newForm, take_type: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                <select value={newForm.take_type} onChange={e => setNewForm({...newForm, take_type: e.target.value})} className="w-full px-3 py-2 border rounded-ios-lg">
                   {TAKE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
               <div>
                 <label className="text-sm font-medium">Notes</label>
-                <textarea value={newForm.notes} onChange={e => setNewForm({...newForm, notes: e.target.value})} className="w-full px-3 py-2 border rounded-lg" rows={2} placeholder="Optional notes..." />
+                <textarea value={newForm.notes} onChange={e => setNewForm({...newForm, notes: e.target.value})} className="w-full px-3 py-2 border rounded-ios-lg" rows={2} placeholder="Optional notes..." />
               </div>
               <div className="flex justify-end gap-3 pt-4">
-                <Button variant="outline" onClick={() => setIsNewModalOpen(false)}>Cancel</Button>
-                <Button onClick={handleStartStockTake}><Play className="h-4 w-4 mr-2" />Start</Button>
+                <IOSButton variant="outline" onClick={() => setIsNewModalOpen(false)}>Cancel</IOSButton>
+                <IOSButton onClick={handleStartStockTake}><Play className="h-4 w-4 mr-2" />Start</IOSButton>
               </div>
             </div>
           </DialogContent>
@@ -261,18 +263,18 @@ export default function StockTakesPage() {
           <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center justify-between">
-                <span className="flex items-center gap-2"><ClipboardList className="h-5 w-5 text-indigo-600" />{selectedTake?.take_number}</span>
-                <Badge className={getStatusColor(selectedTake?.status || '')}>{selectedTake?.status}</Badge>
+                <span className="flex items-center gap-2"><ClipboardList className="h-5 w-5 text-[#3C3C43]" />{selectedTake?.take_number}</span>
+                <IOSBadge className={getStatusColor(selectedTake?.status || '')}>{selectedTake?.status}</IOSBadge>
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 rounded-ios-lg">
                 <div><p className="text-sm text-gray-500">Branch</p><p className="font-medium">{selectedTake?.branch?.name}</p></div>
                 <div><p className="text-sm text-gray-500">Type</p><p className="font-medium">{selectedTake?.take_type}</p></div>
                 <div><p className="text-sm text-gray-500">Started</p><p className="font-medium">{selectedTake?.started_at ? new Date(selectedTake.started_at).toLocaleString() : '-'}</p></div>
               </div>
 
-              <div className="overflow-x-auto border rounded-lg">
+              <div className="overflow-x-auto border rounded-ios-lg">
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
@@ -307,13 +309,13 @@ export default function StockTakesPage() {
                           </td>
                           <td className="px-4 py-3">
                             {item.counted_quantity !== undefined && (
-                              <span className={`font-bold ${variance === 0 ? 'text-green-600' : variance > 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                              <span className={`font-bold ${variance === 0 ? 'text-[#3C3C43]' : variance > 0 ? 'text-[#3C3C43]' : 'text-[#3C3C43]'}`}>
                                 {variance > 0 ? '+' : ''}{variance}
                               </span>
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <Badge className={item.status === 'COUNTED' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>{item.status}</Badge>
+                            <IOSBadge className={item.status === 'COUNTED' ? 'bg-[#F2F2F7] text-[#000000]' : 'bg-gray-100 text-gray-800'}>{item.status}</IOSBadge>
                           </td>
                         </tr>
                       );
@@ -324,8 +326,8 @@ export default function StockTakesPage() {
 
               {selectedTake?.status === 'IN_PROGRESS' && (
                 <div className="flex justify-end gap-3 pt-4 border-t">
-                  <Button variant="outline" onClick={() => setIsViewModalOpen(false)}>Save & Close</Button>
-                  <Button className="bg-green-600 hover:bg-green-700" onClick={handleCompleteTake}><CheckCircle className="h-4 w-4 mr-2" />Complete Stock Take</Button>
+                  <IOSButton variant="outline" onClick={() => setIsViewModalOpen(false)}>Save & Close</IOSButton>
+                  <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleCompleteTake}><CheckCircle className="h-4 w-4 mr-2" />Complete Stock Take</IOSButton>
                 </div>
               )}
             </div>

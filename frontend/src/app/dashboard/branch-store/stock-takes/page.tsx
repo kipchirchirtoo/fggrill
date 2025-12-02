@@ -1,96 +1,87 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { ClipboardCheck, RefreshCw, Plus } from 'lucide-react';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
+import { IOSBadge } from '@/components/ui/ios-badge';
 import { storeAPI } from '@/lib/api';
-import { formatDate } from '@/lib/date-utils';
+import { ClipboardList, RefreshCw, Plus, Calendar, User } from 'lucide-react';
 import { toast } from 'sonner';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
-export default function StockTakesPage() {
+interface StockTake { id: string; take_number: string; take_type: string; status: string; created_by: string; created_at: string; }
+
+export default function BranchStockTakesPage() {
   const { user } = useAuth();
-  const [stockTakes, setStockTakes] = useState<any[]>([]);
+  const [stockTakes, setStockTakes] = useState<StockTake[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => { fetchStockTakes(); }, []);
-
-  const fetchStockTakes = async () => {
+  const fetchStockTakes = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await storeAPI.getStockTakes();
-      setStockTakes(Array.isArray(res.data) ? res.data : res.stock_takes || []);
-    } catch (error) {
-      console.error('Error:', error);
-    } finally {
-      setIsLoading(false);
-    }
+      const response = await storeAPI.getStockTakes();
+      if (response.success) setStockTakes(response.data || []);
+    } catch (error) { console.error('Error:', error); }
+    finally { setIsLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchStockTakes(); }, [fetchStockTakes]);
+
+  const handleStartStockTake = async () => {
+    try {
+      await storeAPI.createStockTake({ branch_id: user?.branch_id || 1, take_type: 'full' });
+      toast.success('Stock take started');
+      fetchStockTakes();
+    } catch (error: any) { toast.error(error.message || 'Failed'); }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'COMPLETED': return 'bg-green-100 text-green-700';
-      case 'IN_PROGRESS': return 'bg-blue-100 text-blue-700';
-      default: return 'bg-gray-100 text-gray-700';
-    }
+  const statusConfig: Record<string, { color: string; bg: string }> = {
+    in_progress: { color: 'text-blue-700', bg: 'bg-blue-100' },
+    completed: { color: 'text-green-700', bg: 'bg-green-100' },
   };
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_MANAGER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">Stock Takes</h1>
-              <p className="text-gray-600">Physical inventory counts</p>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900">Stock Takes</h1><p className="text-gray-500">Inventory audits</p></div>
+            <div className="flex gap-2">
+              <IOSButton variant="secondary" onClick={fetchStockTakes}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+              <IOSButton onClick={handleStartStockTake}><Plus className="h-4 w-4 mr-2" /> Start Stock Take</IOSButton>
             </div>
-            <Button onClick={fetchStockTakes} variant="outline" disabled={isLoading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
-            </Button>
           </div>
 
-          <Card className="p-4">
-            {isLoading ? (
-              <div className="text-center py-8 text-gray-500">Loading...</div>
-            ) : stockTakes.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <ClipboardCheck className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>No stock takes yet</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Take #</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Date</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Type</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Items</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {stockTakes.map((take) => (
-                      <tr key={take.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium">{take.take_number || take.id?.slice(0,8)}</td>
-                        <td className="px-4 py-3 text-sm">{formatDate(take.started_at)}</td>
-                        <td className="px-4 py-3 text-sm">{take.take_type || 'FULL'}</td>
-                        <td className="px-4 py-3 text-center">{take.total_items_counted || 0}</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 text-xs rounded ${getStatusColor(take.status)}`}>
-                            {take.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
+          ) : stockTakes.length === 0 ? (
+            <IOSCard className="p-12 text-center"><ClipboardList className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No stock takes</p></IOSCard>
+          ) : (
+            <div className="space-y-3">
+              {stockTakes.map((take) => {
+                const status = statusConfig[take.status] || statusConfig.in_progress;
+                return (
+                  <IOSCard key={take.id} className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-ios-lg bg-orange-100 flex items-center justify-center"><ClipboardList className="h-6 w-6 text-orange-600" /></div>
+                        <div>
+                          <p className="font-bold">#{take.take_number}</p>
+                          <p className="text-sm text-gray-500">{take.take_type}</p>
+                          <p className="text-xs text-gray-400 flex items-center gap-2"><User className="h-3 w-3" /> {take.created_by} <Calendar className="h-3 w-3 ml-2" /> {new Date(take.created_at).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      <IOSBadge className={`${status.bg} ${status.color}`}>{take.status?.replace('_', ' ')}</IOSBadge>
+                    </div>
+                  </IOSCard>
+                );
+              })}
+            </div>
+          )}
         </div>
       </DashboardLayout>
     </ProtectedRoute>

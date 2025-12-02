@@ -4,65 +4,51 @@ import { useState } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { BarChart3, FileText, Download, Calendar } from 'lucide-react';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
+import { FileText, Download, Package, Truck, TrendingUp, AlertTriangle, BarChart3, Building2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
-export default function CentralStoreReportsPage() {
-  const [selectedReport, setSelectedReport] = useState('stock');
+const reports = [
+  { id: 'inventory', name: 'Inventory Report', icon: Package, desc: 'Current stock levels' },
+  { id: 'movements', name: 'Stock Movements', icon: TrendingUp, desc: 'In/out transactions' },
+  { id: 'dispatch', name: 'Dispatch Report', icon: Truck, desc: 'Shipments to branches' },
+  { id: 'low-stock', name: 'Low Stock Report', icon: AlertTriangle, desc: 'Items below minimum' },
+  { id: 'branch-stock', name: 'Branch Stock', icon: Building2, desc: 'Stock by branch' },
+  { id: 'valuation', name: 'Stock Valuation', icon: BarChart3, desc: 'Inventory value' },
+];
 
-  const reports = [
-    { id: 'stock', name: 'Stock Report', description: 'Current stock levels and valuation' },
-    { id: 'movement', name: 'Stock Movement', description: 'Incoming and outgoing stock' },
-    { id: 'dispatch', name: 'Dispatch Report', description: 'All dispatches to branches' },
-    { id: 'variance', name: 'Variance Report', description: 'Stock count variances' }
-  ];
+export default function CentralReportsPage() {
+  const { user } = useAuth();
+
+  const handleExport = (reportId: string, format: 'pdf' | 'excel') => {
+    toast.success(`Exporting ${reportId} as ${format.toUpperCase()}...`);
+  };
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER]}>
+    <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Reports</h1>
-            <p className="text-gray-600 mt-1">Generate and download warehouse reports</p>
-          </div>
+          <div><h1 className="text-2xl font-bold text-gray-900">Reports</h1><p className="text-gray-500">Stock and inventory reports</p></div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {reports.map((report) => (
-              <div key={report.id} className={`bg-white rounded-xl p-6 border cursor-pointer transition-all ${selectedReport === report.id ? 'border-indigo-500 ring-2 ring-indigo-200' : 'hover:border-gray-300'}`}
-                onClick={() => setSelectedReport(report.id)}>
+              <IOSCard key={report.id} className="p-6">
                 <div className="flex items-start gap-4">
-                  <div className="p-3 bg-indigo-100 rounded-lg"><FileText className="h-6 w-6 text-indigo-600" /></div>
+                  <div className="p-3 bg-blue-100 rounded-ios-lg"><report.icon className="h-6 w-6 text-[#007AFF]" /></div>
                   <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900">{report.name}</h3>
-                    <p className="text-sm text-gray-500 mt-1">{report.description}</p>
+                    <h3 className="font-bold">{report.name}</h3>
+                    <p className="text-sm text-gray-500 mb-4">{report.desc}</p>
+                    <div className="flex gap-2">
+                      <IOSButton size="sm" variant="secondary" onClick={() => handleExport(report.id, 'pdf')}><Download className="h-3 w-3 mr-1" /> PDF</IOSButton>
+                      <IOSButton size="sm" variant="secondary" onClick={() => handleExport(report.id, 'excel')}><Download className="h-3 w-3 mr-1" /> Excel</IOSButton>
+                    </div>
                   </div>
                 </div>
-              </div>
+              </IOSCard>
             ))}
-          </div>
-
-          <div className="bg-white rounded-xl p-6 border">
-            <h2 className="text-lg font-semibold mb-4">Generate Report</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
-                <input type="date" className="w-full px-3 py-2 border rounded-lg" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
-                <input type="date" className="w-full px-3 py-2 border rounded-lg" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Format</label>
-                <select className="w-full px-3 py-2 border rounded-lg">
-                  <option>PDF</option>
-                  <option>Excel</option>
-                  <option>CSV</option>
-                </select>
-              </div>
-            </div>
-            <button className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-              <Download className="h-4 w-4" /> Generate Report
-            </button>
           </div>
         </div>
       </DashboardLayout>

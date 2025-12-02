@@ -66,6 +66,12 @@ router.get('/overview',
   getFinancialOverview
 );
 
+// Dashboard alias for overview
+router.get('/dashboard',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_MANAGER]),
+  getFinancialOverview
+);
+
 router.route('/budgets')
   .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]), getBudgets)
   .post(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), createBudget);

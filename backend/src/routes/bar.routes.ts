@@ -6,6 +6,7 @@ import * as menuController from '../controllers/bar/menu.controller';
 import * as tabController from '../controllers/bar/tabs.controller';
 import * as inventoryController from '../controllers/bar/inventory.controller';
 import * as reportController from '../controllers/bar/reports.controller';
+import * as stockRequestController from '../controllers/bar/stock-requests.controller';
 
 const router = express.Router();
 
@@ -56,5 +57,16 @@ router.put('/stock/:id', inventoryController.updateStock);
 // ====================
 router.get('/reports/daily-sales', reportController.getDailySales);
 router.get('/reports/popular-drinks', reportController.getPopularDrinks);
+
+// ====================
+// STOCK REQUESTS
+// ====================
+router.get('/stock-requests/low-stock', stockRequestController.getLowStockItems);
+router.get('/stock-requests', stockRequestController.getStockRequests);
+router.post('/stock-requests', stockRequestController.createStockRequest);
+router.get('/stock-requests/:id', stockRequestController.getStockRequest);
+router.put('/stock-requests/:id/status', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER]), stockRequestController.updateRequestStatus);
+router.put('/stock-requests/:id/fulfill', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER]), stockRequestController.fulfillStockRequest);
+router.delete('/stock-requests/:id', stockRequestController.deleteStockRequest);
 
 export default router;

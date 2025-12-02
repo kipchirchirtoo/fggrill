@@ -21,7 +21,8 @@ async function runMigration() {
     console.log('Enhanced Inventory Migration applied successfully.');
   } catch (err) {
     console.error('Migration failed:', err);
-    console.log('Please run the migration manually in Supabase SQL Editor.');
+    console.log('Please run the migratio
+      n manually in Supabase SQL Editor.');
   } finally {
     await client.end();
   }

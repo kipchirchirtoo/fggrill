@@ -4,10 +4,10 @@ import { useState, useEffect } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/minimal/button";
 import { Input } from '@/components/ui/input';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { 
   ShoppingCart, Plus, RefreshCw, Eye, Check, X, Clock, 
@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/date-utils';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -215,11 +217,11 @@ export default function PurchaseOrdersPage() {
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       'DRAFT': 'bg-gray-100 text-gray-700',
-      'PENDING': 'bg-yellow-100 text-yellow-700',
-      'APPROVED': 'bg-blue-100 text-blue-700',
-      'ORDERED': 'bg-purple-100 text-purple-700',
-      'RECEIVED': 'bg-green-100 text-green-700',
-      'CANCELLED': 'bg-red-100 text-red-700'
+      'PENDING': 'bg-[#F2F2F7] text-[#3C3C43]',
+      'APPROVED': 'bg-[#F2F2F7] text-[#000000]',
+      'ORDERED': 'bg-[#F2F2F7] text-[#3C3C43]',
+      'RECEIVED': 'bg-[#F2F2F7] text-[#000000]',
+      'CANCELLED': 'bg-[#F2F2F7] text-[#000000]'
     };
     return colors[status] || 'bg-gray-100';
   };
@@ -253,67 +255,67 @@ export default function PurchaseOrdersPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold flex items-center gap-2">
-                <ShoppingCart className="h-6 w-6 text-indigo-600" />
+                <ShoppingCart className="h-6 w-6 text-[#3C3C43]" />
                 Purchase Orders
               </h1>
               <p className="text-gray-600">Manage stock procurement and orders</p>
             </div>
             <div className="flex gap-3">
-              <Button variant="outline" onClick={fetchData} disabled={isLoading}>
+              <IOSButton variant="outline" onClick={fetchData} disabled={isLoading}>
                 <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh
-              </Button>
+              </IOSButton>
               {canManage && (
-                <Button onClick={() => setIsCreateModalOpen(true)}>
+                <IOSButton onClick={() => setIsCreateModalOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   New Order
-                </Button>
+                </IOSButton>
               )}
             </div>
           </div>
 
           {/* Stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="p-4">
+            <IOSCard className="p-4">
               <div className="flex items-center gap-3">
-                <Clock className="h-8 w-8 text-yellow-500" />
+                <Clock className="h-8 w-8 text-[#3C3C43]" />
                 <div>
                   <p className="text-sm text-gray-500">Pending</p>
                   <p className="text-2xl font-bold">{orders.filter(o => o.status === 'PENDING').length}</p>
                 </div>
               </div>
-            </Card>
-            <Card className="p-4">
+            </IOSCard>
+            <IOSCard className="p-4">
               <div className="flex items-center gap-3">
-                <CheckCircle className="h-8 w-8 text-blue-500" />
+                <CheckCircle className="h-8 w-8 text-[#8E8E93]0" />
                 <div>
                   <p className="text-sm text-gray-500">Approved</p>
                   <p className="text-2xl font-bold">{orders.filter(o => o.status === 'APPROVED').length}</p>
                 </div>
               </div>
-            </Card>
-            <Card className="p-4">
+            </IOSCard>
+            <IOSCard className="p-4">
               <div className="flex items-center gap-3">
-                <Truck className="h-8 w-8 text-purple-500" />
+                <Truck className="h-8 w-8 text-[#3C3C43]" />
                 <div>
                   <p className="text-sm text-gray-500">On Order</p>
                   <p className="text-2xl font-bold">{orders.filter(o => o.status === 'ORDERED').length}</p>
                 </div>
               </div>
-            </Card>
-            <Card className="p-4">
+            </IOSCard>
+            <IOSCard className="p-4">
               <div className="flex items-center gap-3">
-                <Package className="h-8 w-8 text-green-500" />
+                <Package className="h-8 w-8 text-[#8E8E93]0" />
                 <div>
                   <p className="text-sm text-gray-500">Received</p>
                   <p className="text-2xl font-bold">{orders.filter(o => o.status === 'RECEIVED').length}</p>
                 </div>
               </div>
-            </Card>
+            </IOSCard>
           </div>
 
           {/* Filters */}
-          <Card className="p-4">
+          <IOSCard className="p-4">
             <div className="flex flex-wrap items-center gap-4">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -327,7 +329,7 @@ export default function PurchaseOrdersPage() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="border rounded-lg px-3 py-2"
+                className="border rounded-ios-lg px-3 py-2"
               >
                 <option value="">All Status</option>
                 <option value="PENDING">Pending</option>
@@ -337,17 +339,17 @@ export default function PurchaseOrdersPage() {
                 <option value="CANCELLED">Cancelled</option>
               </select>
             </div>
-          </Card>
+          </IOSCard>
 
           {/* Orders Table */}
-          <Card>
+          <IOSCard>
             {isLoading ? (
               <div className="p-12 text-center text-gray-500">Loading orders...</div>
             ) : filteredOrders.length === 0 ? (
               <div className="p-12 text-center text-gray-500">
                 <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-30" />
                 <p>No purchase orders found</p>
-                {canManage && <Button className="mt-4" onClick={() => setIsCreateModalOpen(true)}>Create First Order</Button>}
+                {canManage && <IOSButton className="mt-4" onClick={() => setIsCreateModalOpen(true)}>Create First Order</IOSButton>}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -369,27 +371,27 @@ export default function PurchaseOrdersPage() {
                         <td className="px-4 py-4 font-mono text-sm font-medium">{order.po_number}</td>
                         <td className="px-4 py-4">{order.supplier?.name || '-'}</td>
                         <td className="px-4 py-4">
-                          <Badge className={getStatusColor(order.status)}>
+                          <IOSBadge className={getStatusColor(order.status)}>
                             <span className="flex items-center gap-1">{getStatusIcon(order.status)} {order.status}</span>
-                          </Badge>
+                          </IOSBadge>
                         </td>
                         <td className="px-4 py-4 text-right font-medium">KES {order.total_amount?.toLocaleString() || 0}</td>
                         <td className="px-4 py-4 text-sm">{order.expected_delivery ? formatDate(order.expected_delivery) : '-'}</td>
                         <td className="px-4 py-4 text-sm text-gray-500">{formatDate(order.created_at)}</td>
                         <td className="px-4 py-4">
                           <div className="flex gap-2">
-                            <Button size="sm" variant="outline" onClick={() => { setSelectedOrder(order); setIsViewModalOpen(true); }}>
+                            <IOSButton size="sm" variant="outline" onClick={() => { setSelectedOrder(order); setIsViewModalOpen(true); }}>
                               <Eye className="h-4 w-4" />
-                            </Button>
+                            </IOSButton>
                             {order.status === 'PENDING' && canManage && (
-                              <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleApprove(order.id)}>
+                              <IOSButton size="sm" className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={() => handleApprove(order.id)}>
                                 <Check className="h-4 w-4" />
-                              </Button>
+                              </IOSButton>
                             )}
                             {order.status === 'APPROVED' && canManage && (
-                              <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => handleReceive(order.id)}>
+                              <IOSButton size="sm" className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={() => handleReceive(order.id)}>
                                 <Package className="h-4 w-4 mr-1" /> Receive
-                              </Button>
+                              </IOSButton>
                             )}
                           </div>
                         </td>
@@ -399,7 +401,7 @@ export default function PurchaseOrdersPage() {
                 </table>
               </div>
             )}
-          </Card>
+          </IOSCard>
         </div>
 
         {/* Create Order Modal */}
@@ -418,7 +420,7 @@ export default function PurchaseOrdersPage() {
                   <select
                     value={formData.supplier_id}
                     onChange={(e) => setFormData(prev => ({ ...prev, supplier_id: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="w-full border rounded-ios-lg px-3 py-2"
                   >
                     <option value="">Select Supplier</option>
                     {suppliers.map(s => (
@@ -439,17 +441,17 @@ export default function PurchaseOrdersPage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium">Order Items *</label>
-                  <Button size="sm" variant="outline" onClick={addItemRow}>
+                  <IOSButton size="sm" variant="outline" onClick={addItemRow}>
                     <Plus className="h-4 w-4 mr-1" /> Add Item
-                  </Button>
+                  </IOSButton>
                 </div>
-                <div className="space-y-2 border rounded-lg p-3 bg-gray-50">
+                <div className="space-y-2 border rounded-ios-lg p-3 bg-gray-50">
                   {formData.items.map((item, index) => (
                     <div key={index} className="flex items-center gap-2">
                       <select
                         value={item.item_id}
                         onChange={(e) => updateItemRow(index, 'item_id', e.target.value)}
-                        className="flex-1 border rounded-lg px-3 py-2 text-sm"
+                        className="flex-1 border rounded-ios-lg px-3 py-2 text-sm"
                       >
                         <option value="">Select Item</option>
                         {items.map(i => (
@@ -474,9 +476,9 @@ export default function PurchaseOrdersPage() {
                         KES {(item.quantity * item.unit_price).toLocaleString()}
                       </span>
                       {formData.items.length > 1 && (
-                        <Button size="sm" variant="ghost" onClick={() => removeItemRow(index)}>
-                          <X className="h-4 w-4 text-red-500" />
-                        </Button>
+                        <IOSButton size="sm" variant="ghost" onClick={() => removeItemRow(index)}>
+                          <X className="h-4 w-4 text-[#8E8E93]0" />
+                        </IOSButton>
                       )}
                     </div>
                   ))}
@@ -491,17 +493,17 @@ export default function PurchaseOrdersPage() {
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2"
+                  className="w-full border rounded-ios-lg px-3 py-2"
                   rows={2}
                   placeholder="Additional notes..."
                 />
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>Cancel</Button>
-                <Button onClick={handleCreateOrder} disabled={!formData.supplier_id || !formData.items.some(i => i.item_id)}>
+                <IOSButton variant="outline" onClick={() => setIsCreateModalOpen(false)}>Cancel</IOSButton>
+                <IOSButton onClick={handleCreateOrder} disabled={!formData.supplier_id || !formData.items.some(i => i.item_id)}>
                   Create Order
-                </Button>
+                </IOSButton>
               </div>
             </div>
           </DialogContent>
@@ -525,7 +527,7 @@ export default function PurchaseOrdersPage() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Status</p>
-                    <Badge className={getStatusColor(selectedOrder.status)}>{selectedOrder.status}</Badge>
+                    <IOSBadge className={getStatusColor(selectedOrder.status)}>{selectedOrder.status}</IOSBadge>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Created</p>
@@ -539,7 +541,7 @@ export default function PurchaseOrdersPage() {
                 
                 <div>
                   <p className="text-sm font-medium mb-2">Order Items</p>
-                  <div className="border rounded-lg overflow-hidden">
+                  <div className="border rounded-ios-lg overflow-hidden">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50">
                         <tr>

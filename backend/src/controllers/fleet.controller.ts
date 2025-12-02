@@ -59,7 +59,7 @@ export const getVehicle = async (
         *,
         assignments:vehicle_assignments(
           *,
-          driver:users(id, full_name),
+          driver:users(id, first_name, last_name),
           transfer:stock_transfers(id, transfer_number)
         )
       `)

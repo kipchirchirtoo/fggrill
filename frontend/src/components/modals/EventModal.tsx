@@ -83,7 +83,7 @@ export function EventModal({ isOpen, onClose }: EventModalProps): JSX.Element | 
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900">Add New Event</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -97,7 +97,7 @@ export function EventModal({ isOpen, onClose }: EventModalProps): JSX.Element | 
             <select
               value={eventData.type}
               onChange={(e) => handleInputChange('type', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
             >
               <option value="meeting">Meeting</option>
               <option value="event">Event</option>
@@ -115,7 +115,7 @@ export function EventModal({ isOpen, onClose }: EventModalProps): JSX.Element | 
               value={eventData.title}
               onChange={(e) => handleInputChange('title', e.target.value)}
               placeholder="Enter event title"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
             />
           </div>
 
@@ -129,7 +129,7 @@ export function EventModal({ isOpen, onClose }: EventModalProps): JSX.Element | 
                 type="date"
                 value={eventData.date}
                 onChange={(e) => handleInputChange('date', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
             </div>
             <div>
@@ -140,7 +140,7 @@ export function EventModal({ isOpen, onClose }: EventModalProps): JSX.Element | 
                 type="time"
                 value={eventData.startTime}
                 onChange={(e) => handleInputChange('startTime', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
             </div>
             <div>
@@ -151,7 +151,7 @@ export function EventModal({ isOpen, onClose }: EventModalProps): JSX.Element | 
                 type="time"
                 value={eventData.endTime}
                 onChange={(e) => handleInputChange('endTime', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
             </div>
           </div>
@@ -167,7 +167,7 @@ export function EventModal({ isOpen, onClose }: EventModalProps): JSX.Element | 
                 value={eventData.location}
                 onChange={(e) => handleInputChange('location', e.target.value)}
                 placeholder="Enter location"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
             </div>
             <div>
@@ -179,7 +179,7 @@ export function EventModal({ isOpen, onClose }: EventModalProps): JSX.Element | 
                 value={eventData.attendees}
                 onChange={(e) => handleInputChange('attendees', parseInt(e.target.value) || 0)}
                 min="0"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
             </div>
           </div>
@@ -194,7 +194,7 @@ export function EventModal({ isOpen, onClose }: EventModalProps): JSX.Element | 
               onChange={(e) => handleInputChange('notes', e.target.value)}
               placeholder="Add any additional notes or details"
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg resize-none"
             />
           </div>
 
@@ -202,7 +202,7 @@ export function EventModal({ isOpen, onClose }: EventModalProps): JSX.Element | 
           <div className="flex justify-end pt-4 border-t">
             <button
               onClick={handleSubmit}
-              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+              className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700 flex items-center gap-2"
             >
               <Save className="h-4 w-4" />
               Save Event

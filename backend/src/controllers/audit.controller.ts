@@ -21,7 +21,7 @@ export const getAuditLogs = async (
       .from('audit_logs')
       .select(`
         *,
-        user:users(id, full_name, email)
+        user:users(id, first_name, last_name, email)
       `)
       .order('created_at', { ascending: false })
       .limit(Number(limit));

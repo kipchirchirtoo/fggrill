@@ -1,98 +1,112 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Package, RefreshCw, AlertTriangle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
+import { IOSBadge } from '@/components/ui/ios-badge';
+import { Input } from '@/components/ui/input';
 import { storeAPI } from '@/lib/api';
+import { Package, RefreshCw, Search, AlertTriangle, TrendingDown, CheckCircle, ShoppingCart } from 'lucide-react';
+import { toast } from 'sonner';
+import Link from 'next/link';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
-export default function BranchManagerStockPage() {
+interface StockItem { id: string; sku: string; name: string; category: string; quantity: number; min_quantity: number; unit: string; }
+
+export default function BranchStockPage() {
   const { user } = useAuth();
-  const [stock, setStock] = useState<any[]>([]);
+  const [items, setItems] = useState<StockItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => { fetchStock(); }, [user]);
-
-  const fetchStock = async () => {
+  const fetchItems = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await storeAPI.getBranchStock(user?.branch_id);
-      const stockData = res?.data?.stock || res?.data || res?.stock || (Array.isArray(res) ? res : []);
-      setStock(Array.isArray(stockData) ? stockData : []);
-    } catch (error) { console.error('Error:', error); } 
+      const response = await storeAPI.getBranchStock();
+      if (response.success) setItems(response.data || []);
+    } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  };
+  }, []);
 
-  const lowStock = stock.filter((s: any) => s.quantity <= (s.reorder_level || 10));
+  useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  const filteredItems = items.filter((i) => i.name?.toLowerCase().includes(searchQuery.toLowerCase()));
+  const lowStockItems = items.filter(i => i.quantity <= i.min_quantity);
+  const stats = { total: items.length, lowStock: lowStockItems.length, outOfStock: items.filter(i => i.quantity === 0).length };
+
+  const handleRequestStock = async (item: StockItem) => {
+    try {
+      await storeAPI.createStockRequest({
+        items: [{ item_sku: item.sku, requested_quantity: item.min_quantity * 2, current_branch_stock: item.quantity }],
+        priority: item.quantity === 0 ? 'urgent' : 'normal',
+        reason: 'Stock replenishment',
+      });
+      toast.success('Request submitted');
+    } catch (error: any) { toast.error(error.message || 'Failed'); }
+  };
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">Branch Stock</h1>
-              <p className="text-gray-600">View branch inventory levels</p>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900">Stock</h1><p className="text-gray-500">Branch inventory</p></div>
+            <div className="flex gap-2">
+              <IOSButton variant="secondary" onClick={fetchItems}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+              <Link href="/dashboard/branch-manager/requests"><IOSButton><ShoppingCart className="h-4 w-4 mr-2" /> Requests</IOSButton></Link>
             </div>
-            <Button onClick={fetchStock} variant="outline">
-              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
-            </Button>
           </div>
 
-          {lowStock.length > 0 && (
-            <Card className="p-4 bg-amber-50 border-amber-200">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-amber-600" />
-                <p className="font-medium text-amber-800">{lowStock.length} items need restocking</p>
+          <div className="grid grid-cols-3 gap-4">
+            <IOSCard className="p-4"><Package className="h-6 w-6 text-[#007AFF] mb-2" /><p className="text-sm text-gray-500">Total Items</p><p className="text-xl font-bold">{stats.total}</p></IOSCard>
+            <IOSCard className="p-4 border-l-4 border-yellow-500"><TrendingDown className="h-6 w-6 text-yellow-600 mb-2" /><p className="text-sm text-gray-500">Low Stock</p><p className="text-xl font-bold text-yellow-600">{stats.lowStock}</p></IOSCard>
+            <IOSCard className="p-4 border-l-4 border-red-500"><AlertTriangle className="h-6 w-6 text-[#FF3B30] mb-2" /><p className="text-sm text-gray-500">Out of Stock</p><p className="text-xl font-bold text-[#FF3B30]">{stats.outOfStock}</p></IOSCard>
+          </div>
+
+          {lowStockItems.length > 0 && (
+            <IOSCard className="p-4 bg-yellow-50 border-yellow-200">
+              <div className="flex items-center gap-2 mb-3"><AlertTriangle className="h-5 w-5 text-yellow-600" /><p className="font-medium text-yellow-800">Low Stock Alert ({lowStockItems.length})</p></div>
+              <div className="flex flex-wrap gap-2">
+                {lowStockItems.slice(0, 5).map((item) => (
+                  <IOSButton key={item.id} size="sm" variant="secondary" onClick={() => handleRequestStock(item)}>{item.name} ({item.quantity})</IOSButton>
+                ))}
               </div>
-            </Card>
+            </IOSCard>
           )}
 
-          <Card>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">SKU</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {stock.map((s: any) => {
-                    const itemName = s.item_name || s.name || s.item?.name || `Item #${s.item_id || s.id}`;
-                    const itemSku = s.sku || s.item_sku || s.item?.sku || '-';
-                    const qty = s.quantity ?? 0;
-                    const isLow = qty <= (s.reorder_level || s.item?.reorder_level || 10);
-                    
-                    return (
-                      <tr key={s.id || s.item_id || itemSku} className="hover:bg-gray-50">
-                        <td className="px-4 py-3">
-                          <div>
-                            <p className="font-medium text-gray-900">{itemName}</p>
-                            {s.category && <p className="text-xs text-gray-500">{s.category}</p>}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-gray-600 font-mono text-sm">{itemSku}</td>
-                        <td className="px-4 py-3 font-medium">{qty}</td>
-                        <td className="px-4 py-3">
-                          <Badge className={isLow ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}>
-                            {isLow ? 'Low Stock' : 'In Stock'}
-                          </Badge>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          <IOSCard className="p-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input placeholder="Search items..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
             </div>
-            {stock.length === 0 && <div className="p-8 text-center text-gray-500">{isLoading ? 'Loading...' : 'No stock data'}</div>}
-          </Card>
+          </IOSCard>
+
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filteredItems.map((item) => {
+                const isLow = item.quantity <= item.min_quantity;
+                const isOut = item.quantity === 0;
+                return (
+                  <IOSCard key={item.id} className={`p-4 ${isOut ? 'border-red-200 bg-red-50' : isLow ? 'border-yellow-200 bg-yellow-50' : ''}`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <div><p className="font-bold">{item.name}</p><p className="text-sm text-gray-500">{item.category}</p></div>
+                      {isOut ? <IOSBadge variant="error">Out</IOSBadge> : isLow ? <IOSBadge variant="warning">Low</IOSBadge> : null}
+                    </div>
+                    <div className="flex items-end justify-between mt-4">
+                      <div><p className="text-2xl font-bold">{item.quantity}</p><p className="text-xs text-gray-500">Min: {item.min_quantity} {item.unit}</p></div>
+                      {(isLow || isOut) && <IOSButton size="sm" onClick={() => handleRequestStock(item)}>Request</IOSButton>}
+                    </div>
+                  </IOSCard>
+                );
+              })}
+            </div>
+          )}
         </div>
       </DashboardLayout>
     </ProtectedRoute>

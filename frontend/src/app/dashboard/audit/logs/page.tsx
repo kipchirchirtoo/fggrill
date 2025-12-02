@@ -1,112 +1,99 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { FileSearch, RefreshCw, ArrowLeft, Filter } from 'lucide-react';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
+import { IOSBadge } from '@/components/ui/ios-badge';
+import { Input } from '@/components/ui/input';
 import { auditAPI } from '@/lib/api';
-import { formatDateTime } from '@/lib/date-utils';
-import Link from 'next/link';
+import { ClipboardList, RefreshCw, Search, User, Calendar, Eye, Filter } from 'lucide-react';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
+
+interface AuditLog { id: string; action: string; module: string; user_name: string; user_role: string; details?: string; created_at: string; severity: 'low' | 'medium' | 'high'; }
+
+const severityConfig: Record<string, { label: string; color: string; bg: string }> = {
+  low: { label: 'Low', color: 'text-green-700', bg: 'bg-green-100' },
+  medium: { label: 'Medium', color: 'text-yellow-700', bg: 'bg-yellow-100' },
+  high: { label: 'High', color: 'text-red-700', bg: 'bg-red-100' },
+};
 
 export default function AuditLogsPage() {
+  const { user } = useAuth();
+  const [logs, setLogs] = useState<AuditLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [logs, setLogs] = useState<any[]>([]);
-  const [filter, setFilter] = useState({ module: '', from_date: '', to_date: '' });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [moduleFilter, setModuleFilter] = useState<string>('all');
 
-  useEffect(() => { fetchLogs(); }, [filter]);
-
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await auditAPI.getAuditLogs(filter);
-      setLogs(Array.isArray(res.logs || res.data) ? (res.logs || res.data) : []);
-    } catch (error) {
-      console.error('Error:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      const response = await auditAPI.getAuditLogs({ module: moduleFilter !== 'all' ? moduleFilter : undefined });
+      if (response.success) setLogs(response.data || []);
+    } catch (error) { console.error('Error:', error); }
+    finally { setIsLoading(false); }
+  }, [moduleFilter]);
+
+  useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+  const modules = [...new Set(logs.map(l => l.module))].filter(Boolean);
+  const filteredLogs = logs.filter((l) => l.action?.toLowerCase().includes(searchQuery.toLowerCase()) || l.user_name?.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]}>
+    <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link href="/dashboard/audit">
-                <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" /> Back</Button>
-              </Link>
-              <h1 className="text-2xl font-bold">Audit Logs</h1>
-            </div>
-            <Button onClick={fetchLogs} variant="outline" disabled={isLoading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
-            </Button>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900">Audit Logs</h1><p className="text-gray-500">System activity and changes</p></div>
+            <IOSButton variant="secondary" onClick={fetchLogs}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
           </div>
 
-          <Card className="p-4">
-            <div className="flex items-center gap-4 flex-wrap">
-              <Filter className="h-5 w-5 text-gray-400" />
-              <select value={filter.module} onChange={(e) => setFilter(prev => ({ ...prev, module: e.target.value }))}
-                className="border rounded-lg px-3 py-2 text-sm">
-                <option value="">All Modules</option>
-                <option value="inventory">Inventory</option>
-                <option value="finance">Finance</option>
-                <option value="users">Users</option>
-                <option value="bookings">Bookings</option>
+          <IOSCard className="p-4">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input placeholder="Search logs..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
+              </div>
+              <select value={moduleFilter} onChange={(e) => setModuleFilter(e.target.value)} className="px-3 py-2 border rounded-ios-lg">
+                <option value="all">All Modules</option>
+                {modules.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
-              <input type="date" value={filter.from_date}
-                onChange={(e) => setFilter(prev => ({ ...prev, from_date: e.target.value }))}
-                className="border rounded-lg px-3 py-2 text-sm" placeholder="From" />
-              <input type="date" value={filter.to_date}
-                onChange={(e) => setFilter(prev => ({ ...prev, to_date: e.target.value }))}
-                className="border rounded-lg px-3 py-2 text-sm" placeholder="To" />
             </div>
-          </Card>
+          </IOSCard>
 
-          <Card className="p-4">
-            {isLoading ? (
-              <div className="text-center py-8 text-gray-500">Loading logs...</div>
-            ) : logs.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Date</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">User</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Module</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Action</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Details</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {logs.map((log, idx) => (
-                      <tr key={log.id || idx} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm">{formatDateTime(log.created_at)}</td>
-                        <td className="px-4 py-3 text-sm">{log.user_name || log.user_email || '-'}</td>
-                        <td className="px-4 py-3 text-sm">{log.module || '-'}</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 text-xs rounded ${
-                            log.action_type === 'CREATE' ? 'bg-green-100 text-green-700' :
-                            log.action_type === 'UPDATE' ? 'bg-blue-100 text-blue-700' :
-                            log.action_type === 'DELETE' ? 'bg-red-100 text-red-700' : 'bg-gray-100'
-                          }`}>{log.action_type || log.action || '-'}</span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">{log.details || '-'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <FileSearch className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>No audit logs found</p>
-              </div>
-            )}
-          </Card>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
+          ) : filteredLogs.length === 0 ? (
+            <IOSCard className="p-12 text-center"><ClipboardList className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No logs found</p></IOSCard>
+          ) : (
+            <div className="space-y-3">
+              {filteredLogs.map((log) => {
+                const severity = severityConfig[log.severity] || severityConfig.low;
+                return (
+                  <IOSCard key={log.id} className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="font-bold">{log.action}</p>
+                          <IOSBadge className={`${severity.bg} ${severity.color}`}>{severity.label}</IOSBadge>
+                        </div>
+                        <p className="text-sm text-gray-500">{log.module}</p>
+                        {log.details && <p className="text-sm text-gray-400 mt-1">{log.details}</p>}
+                        <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
+                          <span className="flex items-center gap-1"><User className="h-3 w-3" /> {log.user_name} ({log.user_role})</span>
+                          <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {new Date(log.created_at).toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <IOSButton size="sm" variant="ghost"><Eye className="h-4 w-4" /></IOSButton>
+                    </div>
+                  </IOSCard>
+                );
+              })}
+            </div>
+          )}
         </div>
       </DashboardLayout>
     </ProtectedRoute>

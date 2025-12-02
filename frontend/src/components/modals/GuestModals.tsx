@@ -7,6 +7,7 @@ import {
   Briefcase, Star, MessageSquare, Save
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { guestAPI } from '@/lib/api';
 
 interface GuestModalProps {
   isOpen: boolean;
@@ -39,19 +40,15 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
 
   const handleSubmit = async () => {
     try {
-      // TODO: Implement API call
-      const response = await fetch('/api/guests', {
-        method: mode === 'create' ? 'POST' : 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(guestData)
-      });
-
-      if (!response.ok) throw new Error('Failed to save guest');
-
+      if (mode === 'edit' && initialData?.id) {
+        await guestAPI.updateGuest(initialData.id, guestData);
+      } else {
+        await guestAPI.createGuest(guestData);
+      }
       toast.success('Guest ' + (mode === 'create' ? 'created' : 'updated') + ' successfully!');
       onClose();
-    } catch (error) {
-      toast.error('Failed to save guest');
+    } catch (error:any) {
+      toast.error(error.message || 'Failed to save guest');
     }
   };
 
@@ -76,7 +73,7 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
           <h2 className="text-xl font-bold text-gray-900">
             {mode === 'create' ? 'Add New Guest' : 'Edit Guest'}
           </h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -84,7 +81,7 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
         <div className="space-y-6">
           {/* Personal Information */}
           <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            <h3 className="font-semibold font-sf-pro-display text-gray-900 flex items-center gap-2">
               <User className="h-5 w-5" />
               Personal Information
             </h3>
@@ -95,7 +92,7 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
                 value={guestData.firstName}
                 onChange={handleChange}
                 placeholder="First Name"
-                className="px-3 py-2 border border-gray-300 rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
               <input
                 type="text"
@@ -103,7 +100,7 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
                 value={guestData.lastName}
                 onChange={handleChange}
                 placeholder="Last Name"
-                className="px-3 py-2 border border-gray-300 rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
               <input
                 type="email"
@@ -111,7 +108,7 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
                 value={guestData.email}
                 onChange={handleChange}
                 placeholder="Email"
-                className="px-3 py-2 border border-gray-300 rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
               <input
                 type="tel"
@@ -119,14 +116,14 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
                 value={guestData.phone}
                 onChange={handleChange}
                 placeholder="Phone"
-                className="px-3 py-2 border border-gray-300 rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
             </div>
           </div>
 
           {/* Additional Details */}
           <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            <h3 className="font-semibold font-sf-pro-display text-gray-900 flex items-center gap-2">
               <Hash className="h-5 w-5" />
               Additional Details
             </h3>
@@ -137,7 +134,7 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
                 value={guestData.idNumber}
                 onChange={handleChange}
                 placeholder="ID/Passport Number"
-                className="px-3 py-2 border border-gray-300 rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
               <input
                 type="text"
@@ -145,7 +142,7 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
                 value={guestData.nationality}
                 onChange={handleChange}
                 placeholder="Nationality"
-                className="px-3 py-2 border border-gray-300 rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
               <input
                 type="text"
@@ -153,7 +150,7 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
                 value={guestData.company}
                 onChange={handleChange}
                 placeholder="Company (if applicable)"
-                className="px-3 py-2 border border-gray-300 rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
               <div className="flex items-center gap-2">
                 <input
@@ -170,7 +167,7 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
 
           {/* Address */}
           <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            <h3 className="font-semibold font-sf-pro-display text-gray-900 flex items-center gap-2">
               <MapPin className="h-5 w-5" />
               Address
             </h3>
@@ -180,13 +177,13 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
               onChange={handleChange}
               placeholder="Full Address"
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
             />
           </div>
 
           {/* Notes */}
           <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            <h3 className="font-semibold font-sf-pro-display text-gray-900 flex items-center gap-2">
               <MessageSquare className="h-5 w-5" />
               Notes
             </h3>
@@ -196,7 +193,7 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
               onChange={handleChange}
               placeholder="Additional Notes"
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
             />
           </div>
         </div>
@@ -204,7 +201,7 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
         <div className="flex justify-end mt-6 pt-6 border-t">
           <button
             onClick={handleSubmit}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700"
           >
             <Save className="inline h-4 w-4 mr-2" />
             {mode === 'create' ? 'Add Guest' : 'Update Guest'}

@@ -1,173 +1,107 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Receipt, ArrowLeft, RefreshCw, ArrowUpRight, ArrowDownRight, Clock, AlertTriangle } from 'lucide-react';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
+import { IOSBadge } from '@/components/ui/ios-badge';
 import { financeAPI } from '@/lib/api';
-import { toast } from 'sonner';
-import Link from 'next/link';
+import { ArrowDownRight, ArrowUpRight, RefreshCw, User, Building2, Calendar, AlertTriangle } from 'lucide-react';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
+
+interface ARAPItem { id: string; type: 'receivable' | 'payable'; entity_name: string; amount: number; due_date: string; status: 'current' | 'overdue' | 'paid'; days_overdue?: number; }
 
 export default function ARAPPage() {
+  const { user } = useAuth();
+  const [items, setItems] = useState<ARAPItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [arapData, setArapData] = useState<any>(null);
+  const [typeFilter, setTypeFilter] = useState<'all' | 'receivable' | 'payable'>('all');
 
-  useEffect(() => { fetchARAP(); }, []);
-
-  const fetchARAP = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await financeAPI.getArAp();
-      setArapData(res.data);
-    } catch (error) {
-      console.error('Error:', error);
-      toast.error('Failed to load AR/AP data');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      const response = await financeAPI.getArAp();
+      if (response.success) setItems(response.data || []);
+    } catch (error) { console.error('Error:', error); }
+    finally { setIsLoading(false); }
+  }, []);
 
-  const formatCurrency = (amount: number) => `KES ${(amount || 0).toLocaleString()}`;
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const filtered = items.filter(i => typeFilter === 'all' || i.type === typeFilter);
+  const totalAR = items.filter(i => i.type === 'receivable' && i.status !== 'paid').reduce((sum, i) => sum + i.amount, 0);
+  const totalAP = items.filter(i => i.type === 'payable' && i.status !== 'paid').reduce((sum, i) => sum + i.amount, 0);
+  const overdueAR = items.filter(i => i.type === 'receivable' && i.status === 'overdue').reduce((sum, i) => sum + i.amount, 0);
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]}>
+    <ProtectedRoute allowedRoles={[UserRole.ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link href="/dashboard/finance">
-                <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" /> Back</Button>
-              </Link>
-              <div>
-                <h1 className="text-2xl font-bold flex items-center gap-2">
-                  <Receipt className="h-6 w-6 text-teal-600" />
-                  Accounts Receivable / Payable
-                </h1>
-                <p className="text-gray-600">Outstanding invoices and pending payments</p>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900">Accounts Receivable & Payable</h1><p className="text-gray-500">Track money owed to and by you</p></div>
+            <IOSButton variant="secondary" onClick={fetchData}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <IOSCard className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-100 rounded-ios-lg"><ArrowDownRight className="h-5 w-5 text-[#34C759]" /></div>
+                <div><p className="text-sm text-gray-500">Receivables</p><p className="text-xl font-bold text-[#34C759]">KES {totalAR.toLocaleString()}</p></div>
               </div>
-            </div>
-            <Button onClick={fetchARAP} variant="outline" disabled={isLoading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
-            </Button>
+            </IOSCard>
+            <IOSCard className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-100 rounded-ios-lg"><ArrowUpRight className="h-5 w-5 text-[#FF3B30]" /></div>
+                <div><p className="text-sm text-gray-500">Payables</p><p className="text-xl font-bold text-[#FF3B30]">KES {totalAP.toLocaleString()}</p></div>
+              </div>
+            </IOSCard>
+            <IOSCard className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-yellow-100 rounded-ios-lg"><AlertTriangle className="h-5 w-5 text-yellow-600" /></div>
+                <div><p className="text-sm text-gray-500">Overdue AR</p><p className="text-xl font-bold text-yellow-600">KES {overdueAR.toLocaleString()}</p></div>
+              </div>
+            </IOSCard>
+          </div>
+
+          <div className="flex gap-2">
+            {(['all', 'receivable', 'payable'] as const).map((type) => (
+              <IOSButton key={type} variant={typeFilter === type ? 'primary' : 'secondary'} size="sm" onClick={() => setTypeFilter(type)}>
+                {type === 'all' ? 'All' : type === 'receivable' ? 'Receivables' : 'Payables'}
+              </IOSButton>
+            ))}
           </div>
 
           {isLoading ? (
-            <div className="text-center py-12 text-gray-500">Loading AR/AP data...</div>
-          ) : arapData ? (
-            <>
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="p-6 bg-green-50 border-green-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-green-700">Accounts Receivable</p>
-                      <p className="text-2xl font-bold text-green-800">{formatCurrency(arapData.accountsReceivable?.total)}</p>
-                      <p className="text-xs text-green-600 mt-1">{arapData.accountsReceivable?.count} unpaid invoices</p>
-                    </div>
-                    <ArrowUpRight className="h-8 w-8 text-green-600" />
-                  </div>
-                </Card>
-
-                <Card className="p-6 bg-red-50 border-red-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-red-700">Accounts Payable</p>
-                      <p className="text-2xl font-bold text-red-800">{formatCurrency(arapData.accountsPayable?.total)}</p>
-                      <p className="text-xs text-red-600 mt-1">{arapData.accountsPayable?.count} pending payments</p>
-                    </div>
-                    <ArrowDownRight className="h-8 w-8 text-red-600" />
-                  </div>
-                </Card>
-
-                <Card className={`p-6 ${arapData.netPosition >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'}`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-700">Net Position</p>
-                      <p className={`text-2xl font-bold ${arapData.netPosition >= 0 ? 'text-blue-800' : 'text-amber-800'}`}>
-                        {formatCurrency(arapData.netPosition)}
-                      </p>
-                      <p className="text-xs text-gray-600 mt-1">AR - AP</p>
-                    </div>
-                    <Receipt className={`h-8 w-8 ${arapData.netPosition >= 0 ? 'text-blue-600' : 'text-amber-600'}`} />
-                  </div>
-                </Card>
-              </div>
-
-              {/* Aging Analysis */}
-              <Card className="p-6">
-                <h3 className="font-semibold mb-4 flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-gray-600" />
-                  Accounts Receivable Aging
-                </h3>
-                <div className="grid grid-cols-5 gap-4">
-                  <div className="text-center p-4 bg-green-50 rounded-lg">
-                    <p className="text-xs text-gray-600 mb-1">Current</p>
-                    <p className="text-lg font-bold text-green-700">{formatCurrency(arapData.accountsReceivable?.aging?.current)}</p>
-                  </div>
-                  <div className="text-center p-4 bg-yellow-50 rounded-lg">
-                    <p className="text-xs text-gray-600 mb-1">1-30 Days</p>
-                    <p className="text-lg font-bold text-yellow-700">{formatCurrency(arapData.accountsReceivable?.aging?.days30)}</p>
-                  </div>
-                  <div className="text-center p-4 bg-orange-50 rounded-lg">
-                    <p className="text-xs text-gray-600 mb-1">31-60 Days</p>
-                    <p className="text-lg font-bold text-orange-700">{formatCurrency(arapData.accountsReceivable?.aging?.days60)}</p>
-                  </div>
-                  <div className="text-center p-4 bg-red-50 rounded-lg">
-                    <p className="text-xs text-gray-600 mb-1">61-90 Days</p>
-                    <p className="text-lg font-bold text-red-700">{formatCurrency(arapData.accountsReceivable?.aging?.days90)}</p>
-                  </div>
-                  <div className="text-center p-4 bg-red-100 rounded-lg border-2 border-red-300">
-                    <p className="text-xs text-gray-600 mb-1">Over 90 Days</p>
-                    <p className="text-lg font-bold text-red-800">{formatCurrency(arapData.accountsReceivable?.aging?.over90)}</p>
-                    {arapData.accountsReceivable?.aging?.over90 > 0 && (
-                      <AlertTriangle className="h-4 w-4 text-red-600 mx-auto mt-1" />
-                    )}
-                  </div>
-                </div>
-              </Card>
-
-              {/* Summary */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="p-6 bg-green-50">
-                  <h3 className="font-semibold mb-4 text-green-800">Money Coming In</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span>Total Receivables</span>
-                      <span className="font-bold">{formatCurrency(arapData.accountsReceivable?.total)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm text-gray-600">
-                      <span>Number of Invoices</span>
-                      <span>{arapData.accountsReceivable?.count}</span>
-                    </div>
-                    <div className="pt-2 border-t mt-2">
-                      <p className="text-sm text-green-700">Follow up on overdue invoices to improve cash flow.</p>
-                    </div>
-                  </div>
-                </Card>
-
-                <Card className="p-6 bg-red-50">
-                  <h3 className="font-semibold mb-4 text-red-800">Money Going Out</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span>Total Payables</span>
-                      <span className="font-bold">{formatCurrency(arapData.accountsPayable?.total)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm text-gray-600">
-                      <span>Pending Payments</span>
-                      <span>{arapData.accountsPayable?.count}</span>
-                    </div>
-                    <div className="pt-2 border-t mt-2">
-                      <p className="text-sm text-red-700">Manage payables to maintain good supplier relationships.</p>
-                    </div>
-                  </div>
-                </Card>
-              </div>
-            </>
+            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
+          ) : filtered.length === 0 ? (
+            <IOSCard className="p-12 text-center"><Building2 className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No items found</p></IOSCard>
           ) : (
-            <div className="text-center py-12 text-gray-500">No AR/AP data available</div>
+            <div className="space-y-3">
+              {filtered.map((item) => (
+                <IOSCard key={item.id} className={`p-4 ${item.status === 'overdue' ? 'border-l-4 border-red-500' : ''}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-ios-lg flex items-center justify-center ${item.type === 'receivable' ? 'bg-green-100' : 'bg-red-100'}`}>
+                        {item.type === 'receivable' ? <ArrowDownRight className="h-5 w-5 text-[#34C759]" /> : <ArrowUpRight className="h-5 w-5 text-[#FF3B30]" />}
+                      </div>
+                      <div>
+                        <p className="font-bold">{item.entity_name}</p>
+                        <p className="text-sm text-gray-500 flex items-center gap-1"><Calendar className="h-3 w-3" /> Due: {new Date(item.due_date).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <p className={`font-bold text-lg ${item.type === 'receivable' ? 'text-[#34C759]' : 'text-[#FF3B30]'}`}>KES {item.amount.toLocaleString()}</p>
+                      <IOSBadge variant={item.status === 'overdue' ? 'error' : item.status === 'paid' ? 'success' : 'info'}>
+                        {item.status === 'overdue' ? `${item.days_overdue}d overdue` : item.status}
+                      </IOSBadge>
+                    </div>
+                  </div>
+                </IOSCard>
+              ))}
+            </div>
           )}
         </div>
       </DashboardLayout>

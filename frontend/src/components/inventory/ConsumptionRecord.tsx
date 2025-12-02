@@ -71,7 +71,7 @@ export function ConsumptionRecordModal({ isOpen, onClose, branch, department, it
           </div>
 
           {selectedItemDetails && (
-            <div className="p-3 bg-gray-50 rounded-lg">
+            <div className="p-3 bg-gray-50 rounded-ios-lg">
               <p className="text-sm text-gray-500">Current Stock: {selectedItemDetails.currentStock}</p>
               <p className="text-sm text-gray-500">Unit: {selectedItemDetails.unit}</p>
             </div>

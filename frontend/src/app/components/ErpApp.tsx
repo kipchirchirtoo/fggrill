@@ -134,7 +134,7 @@ function Dashboard({ logout }) {
             <button
               key={module.id}
               onClick={() => setState(prev => ({ ...prev, currentModule: module.id }))}
-              className={`flex w-full items-center space-x-2 rounded-lg px-4 py-2 text-left transition-colors ${currentModule === module.id ? 'bg-indigo-600' : 'hover:bg-slate-700'}`}
+              className={`flex w-full items-center space-x-2 rounded-ios-lg px-4 py-2 text-left transition-colors ${currentModule === module.id ? 'bg-indigo-600' : 'hover:bg-slate-700'}`}
             >
               <module.icon className="h-5 w-5" />
               <span>{module.name}</span>
@@ -143,7 +143,7 @@ function Dashboard({ logout }) {
         </nav>
         <button
           onClick={logout}
-          className="mt-8 flex w-full items-center space-x-2 rounded-lg px-4 py-2 text-left text-red-400 hover:bg-slate-700"
+          className="mt-8 flex w-full items-center space-x-2 rounded-ios-lg px-4 py-2 text-left text-red-400 hover:bg-slate-700"
         >
           <Icons.LogOut className="h-5 w-5" />
           <span>Logout</span>
@@ -176,7 +176,7 @@ function DashboardModule() {
   const totalInventoryValue = products.reduce((sum, product) => sum + (product.price * product.stock), 0);
 
   const DashboardCard = ({ title, value, icon: Icon }) => (
-    <div className="rounded-lg bg-white p-6 shadow-md">
+    <div className="rounded-ios-lg bg-white p-6 shadow-md">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-slate-600">{title}</p>
@@ -216,8 +216,8 @@ function DashboardModule() {
               />
             </div>
             <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="rounded-lg bg-white p-6 shadow-md">
-                <h3 className="mb-4 text-lg font-semibold">Low Stock Alerts</h3>
+              <div className="rounded-ios-lg bg-white p-6 shadow-md">
+                <h3 className="mb-4 text-lg font-semibold font-sf-pro-display">Low Stock Alerts</h3>
                 <div className="space-y-4">
                   {products
                     .filter(product => product.stock < 30)
@@ -227,13 +227,13 @@ function DashboardModule() {
                           <span className="text-2xl">{product.image}</span>
                           <span>{product.name}</span>
                         </div>
-                        <span className="font-semibold text-red-500">{product.stock} left</span>
+                        <span className="font-semibold font-sf-pro-display text-red-500">{product.stock} left</span>
                       </div>
                     ))}
                 </div>
               </div>
-              <div className="rounded-lg bg-white p-6 shadow-md">
-                <h3 className="mb-4 text-lg font-semibold">Top Performers</h3>
+              <div className="rounded-ios-lg bg-white p-6 shadow-md">
+                <h3 className="mb-4 text-lg font-semibold font-sf-pro-display">Top Performers</h3>
                 <div className="space-y-4">
                   {[...employees]
                     .sort((a, b) => b.performance - a.performance)
@@ -277,8 +277,8 @@ function DashboardModule() {
                 icon={Icons.AlertCircle}
               />
             </div>
-            <div className="mt-8 rounded-lg bg-white p-6 shadow-md">
-              <h3 className="mb-4 text-lg font-semibold">Employee Performance Overview</h3>
+            <div className="mt-8 rounded-ios-lg bg-white p-6 shadow-md">
+              <h3 className="mb-4 text-lg font-semibold font-sf-pro-display">Employee Performance Overview</h3>
               <div className="space-y-4">
                 {employees.map(employee => (
                   <div key={employee.id} className="flex items-center justify-between">
@@ -305,8 +305,8 @@ function DashboardModule() {
       default:
         return (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <div className="rounded-lg bg-white p-6 shadow-md">
-              <h3 className="mb-4 text-lg font-semibold">Your Performance</h3>
+            <div className="rounded-ios-lg bg-white p-6 shadow-md">
+              <h3 className="mb-4 text-lg font-semibold font-sf-pro-display">Your Performance</h3>
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-slate-600">Attendance Rate</p>
@@ -334,22 +334,22 @@ function DashboardModule() {
                 </div>
               </div>
             </div>
-            <div className="rounded-lg bg-white p-6 shadow-md">
-              <h3 className="mb-4 text-lg font-semibold">Quick Actions</h3>
+            <div className="rounded-ios-lg bg-white p-6 shadow-md">
+              <h3 className="mb-4 text-lg font-semibold font-sf-pro-display">Quick Actions</h3>
               <div className="grid grid-cols-2 gap-4">
-                <button className="rounded-lg border border-slate-200 p-4 text-center hover:bg-slate-50">
+                <button className="rounded-ios-lg border border-slate-200 p-4 text-center hover:bg-slate-50">
                   <Icons.Clock className="mx-auto h-6 w-6 text-indigo-600" />
                   <span className="mt-2 block text-sm">Clock In/Out</span>
                 </button>
-                <button className="rounded-lg border border-slate-200 p-4 text-center hover:bg-slate-50">
+                <button className="rounded-ios-lg border border-slate-200 p-4 text-center hover:bg-slate-50">
                   <Icons.Calendar className="mx-auto h-6 w-6 text-indigo-600" />
                   <span className="mt-2 block text-sm">Request Leave</span>
                 </button>
-                <button className="rounded-lg border border-slate-200 p-4 text-center hover:bg-slate-50">
+                <button className="rounded-ios-lg border border-slate-200 p-4 text-center hover:bg-slate-50">
                   <Icons.FileText className="mx-auto h-6 w-6 text-indigo-600" />
                   <span className="mt-2 block text-sm">View Payslip</span>
                 </button>
-                <button className="rounded-lg border border-slate-200 p-4 text-center hover:bg-slate-50">
+                <button className="rounded-ios-lg border border-slate-200 p-4 text-center hover:bg-slate-50">
                   <Icons.MessageSquare className="mx-auto h-6 w-6 text-indigo-600" />
                   <span className="mt-2 block text-sm">Support</span>
                 </button>
@@ -373,10 +373,10 @@ function DashboardModule() {
           <p className="text-slate-600">Here's what's happening today</p>
         </div>
         <div className="flex space-x-2">
-          <button className="rounded-lg bg-white p-2 text-slate-600 shadow-sm hover:text-indigo-600">
+          <button className="rounded-ios-lg bg-white p-2 text-slate-600 shadow-sm hover:text-indigo-600">
             <Icons.Bell className="h-5 w-5" />
           </button>
-          <button className="rounded-lg bg-white p-2 text-slate-600 shadow-sm hover:text-indigo-600">
+          <button className="rounded-ios-lg bg-white p-2 text-slate-600 shadow-sm hover:text-indigo-600">
             <Icons.Settings className="h-5 w-5" />
           </button>
         </div>
@@ -507,9 +507,9 @@ function POSModule() {
       exit={{ opacity: 0, scale: 0.95 }}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4"
     >
-      <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+      <div className="w-full max-w-md rounded-ios-lg bg-white p-6 shadow-xl">
         <div className="mb-6 flex items-center justify-between">
-          <h3 className="text-lg font-semibold">Receipt</h3>
+          <h3 className="text-lg font-semibold font-sf-pro-display">Receipt</h3>
           <button
             onClick={() => setShowReceipt(false)}
             className="text-slate-400 hover:text-slate-600"
@@ -549,7 +549,7 @@ function POSModule() {
         </div>
         <button
           onClick={() => setShowReceipt(false)}
-          className="mt-6 w-full rounded-lg bg-indigo-600 py-2 text-white hover:bg-indigo-700"
+          className="mt-6 w-full rounded-ios-lg bg-indigo-600 py-2 text-white hover:bg-indigo-700"
         >
           Close
         </button>
@@ -574,7 +574,7 @@ function POSModule() {
               <input
                 type="text"
                 placeholder="Search products..."
-                className="w-64 rounded-lg border-slate-200 pl-10 focus:border-indigo-500 focus:ring-indigo-500"
+                className="w-64 rounded-ios-lg border-slate-200 pl-10 focus:border-indigo-500 focus:ring-indigo-500"
               />
             </div>
           </div>
@@ -584,11 +584,11 @@ function POSModule() {
           {products.map(product => (
             <div
               key={product.id}
-              className={`rounded-lg bg-white p-4 shadow-md transition-colors ${product.stock === 0 ? 'opacity-50' : ''}`}
+              className={`rounded-ios-lg bg-white p-4 shadow-md transition-colors ${product.stock === 0 ? 'opacity-50' : ''}`}
             >
               <div className="mb-4 text-center text-4xl">{product.image}</div>
               <div className="mb-4 text-center">
-                <h3 className="font-semibold">{product.name}</h3>
+                <h3 className="font-semibold font-sf-pro-display">{product.name}</h3>
                 <p className="text-lg font-bold text-indigo-600">{formatCurrency(product.price)}</p>
                 <p className={`text-sm ${product.stock < 10 ? 'text-red-500' : 'text-slate-500'}`}>
                   {product.stock} in stock
@@ -597,7 +597,7 @@ function POSModule() {
               <button
                 onClick={() => addToCart(product)}
                 disabled={product.stock === 0}
-                className="w-full rounded-lg bg-indigo-600 py-2 text-white transition-colors hover:bg-indigo-700 disabled:bg-slate-300"
+                className="w-full rounded-ios-lg bg-indigo-600 py-2 text-white transition-colors hover:bg-indigo-700 disabled:bg-slate-300"
               >
                 Add to Cart
               </button>
@@ -607,9 +607,9 @@ function POSModule() {
       </div>
 
       {/* Cart */}
-      <div className="w-96 space-y-6 rounded-lg bg-white p-6 shadow-lg">
+      <div className="w-96 space-y-6 rounded-ios-lg bg-white p-6 shadow-lg">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold">Shopping Cart</h3>
+          <h3 className="text-lg font-semibold font-sf-pro-display">Shopping Cart</h3>
           <button
             onClick={clearCart}
             className="text-sm text-red-500 hover:text-red-700"
@@ -669,7 +669,7 @@ function POSModule() {
 
             <button
               onClick={handleCheckout}
-              className="w-full rounded-lg bg-green-600 py-2 text-white hover:bg-green-700"
+              className="w-full rounded-ios-lg bg-green-600 py-2 text-white hover:bg-green-700"
             >
               Checkout
             </button>
@@ -757,8 +757,8 @@ function InventoryModule() {
         exit={{ opacity: 0, scale: 0.95 }}
         className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4"
       >
-        <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-          <h3 className="mb-4 text-lg font-semibold">
+        <div className="w-full max-w-md rounded-ios-lg bg-white p-6 shadow-xl">
+          <h3 className="mb-4 text-lg font-semibold font-sf-pro-display">
             {product ? 'Edit Product' : 'Add New Product'}
           </h3>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -845,7 +845,7 @@ function InventoryModule() {
         <h2 className="text-2xl font-bold text-slate-800">Inventory Management</h2>
         <button
           onClick={() => setShowAddModal(true)}
-          className="flex items-center space-x-2 rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
+          className="flex items-center space-x-2 rounded-ios-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
         >
           <Icons.Plus className="h-5 w-5" />
           <span>Add Product</span>
@@ -860,13 +860,13 @@ function InventoryModule() {
             placeholder="Search products..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="w-full rounded-lg border-slate-200 pl-10 focus:border-indigo-500 focus:ring-indigo-500"
+            className="w-full rounded-ios-lg border-slate-200 pl-10 focus:border-indigo-500 focus:ring-indigo-500"
           />
         </div>
         <select
           value={selectedCategory}
           onChange={e => setSelectedCategory(e.target.value)}
-          className="rounded-lg border-slate-200 focus:border-indigo-500 focus:ring-indigo-500"
+          className="rounded-ios-lg border-slate-200 focus:border-indigo-500 focus:ring-indigo-500"
         >
           {categories.map(category => (
             <option key={category} value={category}>
@@ -876,7 +876,7 @@ function InventoryModule() {
         </select>
       </div>
 
-      <div className="rounded-lg bg-white shadow-md">
+      <div className="rounded-ios-lg bg-white shadow-md">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -903,7 +903,7 @@ function InventoryModule() {
                   <td className="p-4">{product.stock}</td>
                   <td className="p-4">
                     <span
-                      className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${product.stock === 0
+                      className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold font-sf-pro-display ${product.stock === 0
                         ? 'bg-red-100 text-red-700'
                         : product.stock < 10
                           ? 'bg-yellow-100 text-yellow-700'
@@ -921,13 +921,13 @@ function InventoryModule() {
                     <div className="flex space-x-2">
                       <button
                         onClick={() => setEditingProduct(product)}
-                        className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+                        className="rounded-ios-lg p-2 text-slate-600 hover:bg-slate-100"
                       >
                         <Icons.Edit className="h-5 w-5" />
                       </button>
                       <button
                         onClick={() => handleDeleteProduct(product.id)}
-                        className="rounded-lg p-2 text-red-600 hover:bg-red-50"
+                        className="rounded-ios-lg p-2 text-red-600 hover:bg-red-50"
                       >
                         <Icons.Trash className="h-5 w-5" />
                       </button>
@@ -999,9 +999,9 @@ function HRModule() {
         exit={{ opacity: 0, scale: 0.95 }}
         className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4"
       >
-        <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+        <div className="w-full max-w-md rounded-ios-lg bg-white p-6 shadow-xl">
           <div className="mb-6 flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Payroll Details</h3>
+            <h3 className="text-lg font-semibold font-sf-pro-display">Payroll Details</h3>
             <button
               onClick={() => setShowPayrollModal(false)}
               className="text-slate-400 hover:text-slate-600"
@@ -1016,19 +1016,19 @@ function HRModule() {
           </div>
 
           <div className="space-y-4">
-            <div className="flex justify-between rounded-lg bg-slate-50 p-4">
+            <div className="flex justify-between rounded-ios-lg bg-slate-50 p-4">
               <span className="font-medium">Gross Pay</span>
               <span className="font-bold text-green-600">{formatCurrency(payroll.grossPay)}</span>
             </div>
-            <div className="flex justify-between rounded-lg bg-slate-50 p-4">
+            <div className="flex justify-between rounded-ios-lg bg-slate-50 p-4">
               <span className="font-medium">Tax Deduction (20%)</span>
               <span className="font-bold text-red-600">{formatCurrency(payroll.taxDeduction)}</span>
             </div>
-            <div className="flex justify-between rounded-lg bg-slate-50 p-4">
+            <div className="flex justify-between rounded-ios-lg bg-slate-50 p-4">
               <span className="font-medium">Benefits (10%)</span>
               <span className="font-bold text-blue-600">{formatCurrency(payroll.benefits)}</span>
             </div>
-            <div className="flex justify-between rounded-lg bg-emerald-50 p-4">
+            <div className="flex justify-between rounded-ios-lg bg-emerald-50 p-4">
               <span className="font-bold">Net Pay</span>
               <span className="font-bold text-emerald-600">{formatCurrency(payroll.netPay)}</span>
             </div>
@@ -1036,7 +1036,7 @@ function HRModule() {
 
           <button
             onClick={() => setShowPayrollModal(false)}
-            className="mt-6 w-full rounded-lg bg-indigo-600 py-2 text-white hover:bg-indigo-700"
+            className="mt-6 w-full rounded-ios-lg bg-indigo-600 py-2 text-white hover:bg-indigo-700"
           >
             Close
           </button>
@@ -1061,7 +1061,7 @@ function HRModule() {
             placeholder="Search employees..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="w-64 rounded-lg border-slate-200 pl-10 focus:border-indigo-500 focus:ring-indigo-500"
+            className="w-64 rounded-ios-lg border-slate-200 pl-10 focus:border-indigo-500 focus:ring-indigo-500"
           />
         </div>
       </div>
@@ -1070,11 +1070,11 @@ function HRModule() {
         {filteredEmployees.map(employee => (
           <div
             key={employee.id}
-            className="rounded-lg bg-white p-6 shadow-md transition-shadow hover:shadow-lg"
+            className="rounded-ios-lg bg-white p-6 shadow-md transition-shadow hover:shadow-lg"
           >
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold">{employee.name}</h3>
+                <h3 className="text-lg font-semibold font-sf-pro-display">{employee.name}</h3>
                 <p className="text-sm text-slate-600">{employee.role}</p>
               </div>
               <button
@@ -1082,18 +1082,18 @@ function HRModule() {
                   setSelectedEmployee(employee);
                   setShowPayrollModal(true);
                 }}
-                className="rounded-lg bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-600 hover:bg-indigo-100"
+                className="rounded-ios-lg bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-600 hover:bg-indigo-100"
               >
                 View Payroll
               </button>
             </div>
 
             <div className="mb-4 grid grid-cols-2 gap-4">
-              <div className="rounded-lg bg-slate-50 p-3">
+              <div className="rounded-ios-lg bg-slate-50 p-3">
                 <p className="text-sm text-slate-600">Base Salary</p>
                 <p className="font-bold">{formatCurrency(employee.salary)}</p>
               </div>
-              <div className="rounded-lg bg-slate-50 p-3">
+              <div className="rounded-ios-lg bg-slate-50 p-3">
                 <p className="text-sm text-slate-600">Status</p>
                 <p className="font-medium text-green-600">Active</p>
               </div>
@@ -1133,13 +1133,13 @@ function HRModule() {
             </div>
 
             <div className="mt-4 flex justify-end space-x-2">
-              <button className="rounded-lg p-2 text-slate-600 hover:bg-slate-100">
+              <button className="rounded-ios-lg p-2 text-slate-600 hover:bg-slate-100">
                 <Icons.Mail className="h-5 w-5" />
               </button>
-              <button className="rounded-lg p-2 text-slate-600 hover:bg-slate-100">
+              <button className="rounded-ios-lg p-2 text-slate-600 hover:bg-slate-100">
                 <Icons.Phone className="h-5 w-5" />
               </button>
-              <button className="rounded-lg p-2 text-slate-600 hover:bg-slate-100">
+              <button className="rounded-ios-lg p-2 text-slate-600 hover:bg-slate-100">
                 <Icons.FileText className="h-5 w-5" />
               </button>
             </div>
@@ -1205,9 +1205,9 @@ function EmployeeModule() {
         exit={{ opacity: 0, scale: 0.95 }}
         className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4"
       >
-        <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+        <div className="w-full max-w-md rounded-ios-lg bg-white p-6 shadow-xl">
           <div className="mb-6 flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Request Leave</h3>
+            <h3 className="text-lg font-semibold font-sf-pro-display">Request Leave</h3>
             <button
               onClick={() => setShowLeaveModal(false)}
               className="text-slate-400 hover:text-slate-600"
@@ -1298,7 +1298,7 @@ function EmployeeModule() {
         </div>
         <button
           onClick={handleClockInOut}
-          className={`flex items-center space-x-2 rounded-lg px-4 py-2 text-white ${clockedIn ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
+          className={`flex items-center space-x-2 rounded-ios-lg px-4 py-2 text-white ${clockedIn ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
         >
           {clockedIn ? (
             <>
@@ -1316,12 +1316,12 @@ function EmployeeModule() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Time Tracking Card */}
-        <div className="rounded-lg bg-white p-6 shadow-md">
-          <h3 className="mb-4 text-lg font-semibold">Time Tracking</h3>
+        <div className="rounded-ios-lg bg-white p-6 shadow-md">
+          <h3 className="mb-4 text-lg font-semibold font-sf-pro-display">Time Tracking</h3>
           <div className="space-y-4">
-            <div className="rounded-lg bg-slate-50 p-4">
+            <div className="rounded-ios-lg bg-slate-50 p-4">
               <p className="text-sm text-slate-600">Current Status</p>
-              <p className="mt-1 font-semibold">
+              <p className="mt-1 font-semibold font-sf-pro-display">
                 {clockedIn ? (
                   <span className="text-green-600">Clocked In</span>
                 ) : (
@@ -1335,21 +1335,21 @@ function EmployeeModule() {
               )}
             </div>
 
-            <div className="rounded-lg bg-slate-50 p-4">
+            <div className="rounded-ios-lg bg-slate-50 p-4">
               <p className="text-sm text-slate-600">Today's Hours</p>
-              <p className="mt-1 font-semibold">6h 30m</p>
+              <p className="mt-1 font-semibold font-sf-pro-display">6h 30m</p>
             </div>
 
-            <div className="rounded-lg bg-slate-50 p-4">
+            <div className="rounded-ios-lg bg-slate-50 p-4">
               <p className="text-sm text-slate-600">This Week</p>
-              <p className="mt-1 font-semibold">32h 15m</p>
+              <p className="mt-1 font-semibold font-sf-pro-display">32h 15m</p>
             </div>
           </div>
         </div>
 
         {/* Performance Card */}
-        <div className="rounded-lg bg-white p-6 shadow-md">
-          <h3 className="mb-4 text-lg font-semibold">Your Performance</h3>
+        <div className="rounded-ios-lg bg-white p-6 shadow-md">
+          <h3 className="mb-4 text-lg font-semibold font-sf-pro-display">Your Performance</h3>
           <div className="space-y-4">
             <div>
               <div className="mb-1 flex items-center justify-between">
@@ -1380,12 +1380,12 @@ function EmployeeModule() {
         </div>
 
         {/* Leave Requests Card */}
-        <div className="rounded-lg bg-white p-6 shadow-md lg:col-span-2">
+        <div className="rounded-ios-lg bg-white p-6 shadow-md lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Leave Requests</h3>
+            <h3 className="text-lg font-semibold font-sf-pro-display">Leave Requests</h3>
             <button
               onClick={() => setShowLeaveModal(true)}
-              className="flex items-center space-x-2 rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
+              className="flex items-center space-x-2 rounded-ios-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
             >
               <Icons.Plus className="h-5 w-5" />
               <span>Request Leave</span>
@@ -1537,9 +1537,9 @@ function BookingModule() {
         exit={{ opacity: 0, scale: 0.95 }}
         className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4"
       >
-        <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+        <div className="w-full max-w-md rounded-ios-lg bg-white p-6 shadow-xl">
           <div className="mb-6 flex items-center justify-between">
-            <h3 className="text-lg font-semibold">New Booking</h3>
+            <h3 className="text-lg font-semibold font-sf-pro-display">New Booking</h3>
             <button
               onClick={() => setShowBookingModal(false)}
               className="text-slate-400 hover:text-slate-600"
@@ -1656,7 +1656,7 @@ function BookingModule() {
         </div>
         <button
           onClick={() => setShowBookingModal(true)}
-          className="flex items-center space-x-2 rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
+          className="flex items-center space-x-2 rounded-ios-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
         >
           <Icons.Plus className="h-5 w-5" />
           <span>New Booking</span>
@@ -1665,13 +1665,13 @@ function BookingModule() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Calendar View */}
-        <div className="rounded-lg bg-white p-6 shadow-md">
+        <div className="rounded-ios-lg bg-white p-6 shadow-md">
           <div className="space-y-4">
             <input
               type="date"
               value={selectedDate.toISOString().split('T')[0]}
               onChange={e => setSelectedDate(new Date(e.target.value))}
-              className="w-full rounded-lg border-slate-200 focus:border-indigo-500 focus:ring-indigo-500"
+              className="w-full rounded-ios-lg border-slate-200 focus:border-indigo-500 focus:ring-indigo-500"
             />
 
             <div className="space-y-2">
@@ -1683,7 +1683,7 @@ function BookingModule() {
                 return (
                   <div
                     key={time}
-                    className={`flex items-center justify-between rounded-lg p-2 ${isAvailable ? 'bg-slate-50' : 'bg-red-50'}`}
+                    className={`flex items-center justify-between rounded-ios-lg p-2 ${isAvailable ? 'bg-slate-50' : 'bg-red-50'}`}
                   >
                     <span className="font-medium">{time}</span>
                     <span
@@ -1707,11 +1707,11 @@ function BookingModule() {
               .map(booking => (
                 <div
                   key={booking.id}
-                  className="rounded-lg bg-white p-6 shadow-md transition-shadow hover:shadow-lg"
+                  className="rounded-ios-lg bg-white p-6 shadow-md transition-shadow hover:shadow-lg"
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-lg font-semibold">{booking.customerName}</h3>
+                      <h3 className="text-lg font-semibold font-sf-pro-display">{booking.customerName}</h3>
                       <p className="text-sm text-slate-600">
                         {booking.time} · {booking.guests} guests
                       </p>
@@ -1764,7 +1764,7 @@ function LoginPage({ login }) {
       exit={{ opacity: 0 }}
       className="flex min-h-screen items-center justify-center bg-slate-100"
     >
-      <div className="w-full max-w-md space-y-8 rounded-lg bg-white p-8 shadow-lg">
+      <div className="w-full max-w-md space-y-8 rounded-ios-lg bg-white p-8 shadow-lg">
         <div className="text-center">
           <h2 className="text-3xl font-bold text-slate-900">Welcome to ERP</h2>
           <p className="mt-2 text-sm text-slate-600">Please sign in to continue</p>

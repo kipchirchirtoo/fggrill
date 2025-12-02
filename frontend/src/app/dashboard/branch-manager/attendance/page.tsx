@@ -1,81 +1,77 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Users, RefreshCw, CheckCircle, XCircle, Clock } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
+import { IOSBadge } from '@/components/ui/ios-badge';
 import { staffAPI } from '@/lib/api';
+import { UserCheck, RefreshCw, Clock, User, CheckCircle, XCircle } from 'lucide-react';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
-export default function BranchManagerAttendancePage() {
+interface Attendance { id: string; employee_name: string; check_in?: string; check_out?: string; status: 'present' | 'absent' | 'late'; }
+
+export default function BranchAttendancePage() {
   const { user } = useAuth();
-  const [attendance, setAttendance] = useState<any[]>([]);
+  const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => { fetchAttendance(); }, [user]);
-
-  const fetchAttendance = async () => {
+  const fetchAttendance = useCallback(async () => {
     setIsLoading(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const res = await staffAPI.getAttendance({ branch_id: user?.branch_id, date: today });
-      setAttendance(res.attendance || res || []);
-    } catch (error) { console.error('Error:', error); } 
+      const response = await staffAPI.getAttendance();
+      if (response.success) setAttendance(response.data || []);
+    } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  };
+  }, []);
+
+  useEffect(() => { fetchAttendance(); }, [fetchAttendance]);
+
+  const stats = { present: attendance.filter(a => a.status === 'present').length, absent: attendance.filter(a => a.status === 'absent').length, late: attendance.filter(a => a.status === 'late').length };
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">Staff Attendance</h1>
-              <p className="text-gray-600">Today's attendance record</p>
-            </div>
-            <Button onClick={fetchAttendance} variant="outline">
-              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
-            </Button>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900">Attendance</h1><p className="text-gray-500">Today's staff attendance</p></div>
+            <IOSButton variant="secondary" onClick={fetchAttendance}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
           </div>
 
           <div className="grid grid-cols-3 gap-4">
-            <Card className="p-4 bg-green-50">
-              <CheckCircle className="h-6 w-6 text-green-600 mb-2" />
-              <p className="text-2xl font-bold">{attendance.filter(a => a.status === 'present').length}</p>
-              <p className="text-sm text-green-700">Present</p>
-            </Card>
-            <Card className="p-4 bg-red-50">
-              <XCircle className="h-6 w-6 text-red-600 mb-2" />
-              <p className="text-2xl font-bold">{attendance.filter(a => a.status === 'absent').length}</p>
-              <p className="text-sm text-red-700">Absent</p>
-            </Card>
-            <Card className="p-4 bg-amber-50">
-              <Clock className="h-6 w-6 text-amber-600 mb-2" />
-              <p className="text-2xl font-bold">{attendance.filter(a => a.status === 'late').length}</p>
-              <p className="text-sm text-amber-700">Late</p>
-            </Card>
+            <IOSCard className="p-4 border-l-4 border-green-500"><CheckCircle className="h-6 w-6 text-[#34C759] mb-2" /><p className="text-sm text-gray-500">Present</p><p className="text-xl font-bold text-[#34C759]">{stats.present}</p></IOSCard>
+            <IOSCard className="p-4 border-l-4 border-red-500"><XCircle className="h-6 w-6 text-[#FF3B30] mb-2" /><p className="text-sm text-gray-500">Absent</p><p className="text-xl font-bold text-[#FF3B30]">{stats.absent}</p></IOSCard>
+            <IOSCard className="p-4 border-l-4 border-yellow-500"><Clock className="h-6 w-6 text-yellow-600 mb-2" /><p className="text-sm text-gray-500">Late</p><p className="text-xl font-bold text-yellow-600">{stats.late}</p></IOSCard>
           </div>
 
-          <Card>
-            <div className="divide-y">
-              {attendance.map((a: any) => (
-                <div key={a.id} className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Users className="h-5 w-5 text-gray-400" />
-                    <div>
-                      <p className="font-medium">{a.staff_name}</p>
-                      <p className="text-sm text-gray-500">{a.check_in_time || '-'}</p>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
+          ) : attendance.length === 0 ? (
+            <IOSCard className="p-12 text-center"><UserCheck className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No attendance records</p></IOSCard>
+          ) : (
+            <div className="space-y-3">
+              {attendance.map((record) => (
+                <IOSCard key={record.id} className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center"><User className="h-5 w-5 text-[#007AFF]" /></div>
+                      <div>
+                        <p className="font-bold">{record.employee_name}</p>
+                        <p className="text-sm text-gray-500">
+                          {record.check_in && `In: ${record.check_in}`}
+                          {record.check_out && ` • Out: ${record.check_out}`}
+                        </p>
+                      </div>
                     </div>
+                    <IOSBadge variant={record.status === 'present' ? 'success' : record.status === 'absent' ? 'error' : 'warning'}>{record.status}</IOSBadge>
                   </div>
-                  <Badge className={a.status === 'present' ? 'bg-green-100 text-green-800' : a.status === 'absent' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}>{a.status}</Badge>
-                </div>
+                </IOSCard>
               ))}
-              {attendance.length === 0 && <div className="p-8 text-center text-gray-500">{isLoading ? 'Loading...' : 'No attendance records'}</div>}
             </div>
-          </Card>
+          )}
         </div>
       </DashboardLayout>
     </ProtectedRoute>

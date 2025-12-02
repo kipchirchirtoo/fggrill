@@ -83,8 +83,36 @@ export const storeAPI = {
   },
   
   // Stock Requests
-  createStockRequest: (data: { items: Array<{ item_sku: string; quantity: number }>; notes?: string; priority?: string }) =>
-    fetchAPI<any>('/store/stock-requests', { method: 'POST', body: JSON.stringify(data) }),
+  createStockRequest: (data: {
+    items: Array<{
+      item_sku: string;
+      quantity?: number;
+      requested_quantity?: number;
+      current_branch_stock?: number;
+    }>;
+    request_type?: string;
+    priority?: string;
+    reason?: string;
+    notes?: string;
+    needed_by_date?: string;
+  }) => {
+    const payload = {
+      items: data.items.map((item) => ({
+        item_sku: item.item_sku,
+        requested_quantity: item.requested_quantity ?? item.quantity ?? 0,
+        current_branch_stock: item.current_branch_stock ?? 0,
+      })),
+      request_type: data.request_type,
+      priority: data.priority,
+      reason: data.reason ?? data.notes,
+      needed_by_date: data.needed_by_date,
+    };
+
+    return fetchAPI<any>('/store/stock-requests', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
   getBranchRequests: () => fetchAPI<any>('/store/stock-requests'),
   getPendingRequests: () => fetchAPI<any>('/store/stock-requests/pending'),
   reviewStockRequest: (id: string, data: { action: 'APPROVE' | 'REJECT'; notes?: string }) =>
@@ -97,11 +125,46 @@ export const storeAPI = {
     const query = status ? `?status=${status}` : '';
     return fetchAPI<any>(`/store/dispatch-notes${query}`);
   },
-  dispatchItems: (id: string, data: { vehicle_id?: string; driver_id?: string }) =>
-    fetchAPI<any>(`/store/dispatch-notes/${id}/dispatch`, { method: 'PUT', body: JSON.stringify(data) }),
+  dispatchItems: (id: string, data?: { vehicle_id?: string; driver_id?: string }) =>
+    fetchAPI<any>(`/store/dispatch-notes/${id}/dispatch`, {
+      method: 'PUT',
+      ...(data ? { body: JSON.stringify(data) } : {}),
+    }),
   getIncomingDispatches: () => fetchAPI<any>('/store/incoming-dispatches'),
-  confirmDelivery: (id: string, data: { received_items?: Array<{ item_sku: string; received_quantity: number }>; notes?: string }) =>
-    fetchAPI<any>(`/store/dispatch-notes/${id}/confirm`, { method: 'PUT', body: JSON.stringify(data) }),
+  confirmDelivery: (id: string, data: {
+    received_items: Array<{
+      id: string;
+      received_quantity: number;
+      damaged_quantity?: number;
+      missing_quantity?: number;
+      discrepancy_reason?: string;
+    }>;
+    delivery_notes?: string;
+  }) =>
+    fetchAPI<any>(`/store/dispatch-notes/${id}/confirm`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  // Transfer cart / simple_transfer_items
+  getTransferItems: (params?: { search?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.search) query.append('search', params.search);
+    const qs = query.toString();
+    return fetchAPI<any>(`/store/transfer_items${qs ? `?${qs}` : ''}`);
+  },
+  transferItem: (data: { sku: string; transfer_quantity: number }) =>
+    fetchAPI<any>('/store/transfer', { method: 'POST', body: JSON.stringify(data) }),
+  submitTransferRequest: () =>
+    fetchAPI<any>('/store/submit-transfer-request', { method: 'POST' }),
+  completeTransfer: (data: { sku: string; quantity: number; shop_user_id: string; cancel?: boolean }) =>
+    fetchAPI<any>('/store/complete-transfer', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...data,
+        cancel: data.cancel ?? false,
+      }),
+    }),
   
   // Branches
   getBranches: () => fetchAPI<any>('/store/branches'),
@@ -220,6 +283,9 @@ export const staffAPI = {
   updateStaffMember: (id: string, data: any) => fetchAPI<any>(`/staff/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteStaffMember: (id: string) => fetchAPI<any>(`/staff/${id}`, { method: 'DELETE' }),
   
+  // Roles
+  getRoles: () => fetchAPI<any>('/staff/roles'),
+  
   // Current user
   getCurrentUser: () => fetchAPI<any>('/staff/me'),
   updateProfile: (data: any) => fetchAPI<any>('/staff/me', { method: 'PUT', body: JSON.stringify(data) }),
@@ -263,13 +329,17 @@ export const staffAPI = {
   },
   
   // Leave Management
-  getLeaveRequests: (params?: { staff_id?: string; status?: string }) => {
+  getLeaveRequests: (params?: { staff_id?: string; employee_id?: string; branch_id?: number; status?: string }) => {
     const query = new URLSearchParams();
     if (params?.staff_id) query.append('staff_id', params.staff_id);
+    if (params?.employee_id) query.append('employee_id', params.employee_id);
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
     if (params?.status) query.append('status', params.status);
     return fetchAPI<any>(`/staff/leave?${query}`);
   },
   submitLeaveRequest: (data: any) => fetchAPI<any>('/staff/leave', { method: 'POST', body: JSON.stringify(data) }),
+  createLeaveRequest: (data: any) => fetchAPI<any>('/staff/leave', { method: 'POST', body: JSON.stringify(data) }),
+  updateLeaveRequest: (id: string, data: any) => fetchAPI<any>(`/staff/leave/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   approveLeaveRequest: (id: string) => fetchAPI<any>(`/staff/leave/${id}/approve`, { method: 'PUT' }),
   rejectLeaveRequest: (id: string, reason?: string) => 
     fetchAPI<any>(`/staff/leave/${id}/reject`, { method: 'PUT', body: JSON.stringify({ reason }) }),
@@ -307,10 +377,57 @@ export const roomsAPI = {
     return fetchAPI<any>(`/rooms${query}`);
   },
   getRoom: (id: string) => fetchAPI<any>(`/rooms/${id}`),
+  getRoomTypes: () => fetchAPI<any>('/rooms/types'),
   createRoom: (data: any) => fetchAPI<any>('/rooms', { method: 'POST', body: JSON.stringify(data) }),
   updateRoom: (id: string, data: any) => fetchAPI<any>(`/rooms/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   updateRoomStatus: (id: string, status: string) => 
     fetchAPI<any>(`/rooms/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+  deleteRoom: (id: string) =>
+    fetchAPI<any>(`/rooms/${id}`, { method: 'DELETE' }),
+  getRoomBookings: (id: string) =>
+    fetchAPI<any>(`/rooms/${id}/bookings`),
+  getRoomMaintenance: (id: string) =>
+    fetchAPI<any>(`/rooms/${id}/maintenance`),
+  getRoomReviews: (id: string) =>
+    fetchAPI<any>(`/rooms/${id}/reviews`),
+};
+
+// =====================================================
+// GUEST API
+// =====================================================
+
+export const guestAPI = {
+  getGuests: (search?: string) => {
+    const query = search ? `?search=${search}` : '';
+    return fetchAPI<any>(`/guests${query}`);
+  },
+  getGuest: (id: string) => fetchAPI<any>(`/guests/${id}`),
+  createGuest: (data: any) => fetchAPI<any>('/guests', { method: 'POST', body: JSON.stringify(data) }),
+  updateGuest: (id: string, data: any) => fetchAPI<any>(`/guests/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteGuest: (id: string) => fetchAPI<any>(`/guests/${id}`, { method: 'DELETE' }),
+  updatePreferences: (id: string, preferences: any) => 
+    fetchAPI<any>(`/guests/${id}/preferences`, { method: 'PUT', body: JSON.stringify({ preferences }) })
+};
+
+// =====================================================
+// FOLIO API
+// =====================================================
+
+export const folioAPI = {
+  getFolio: (reservationId: string) => fetchAPI<any>(`/folios/reservation/${reservationId}`),
+  addTransaction: (reservationId: string, data: any) => 
+    fetchAPI<any>(`/folios/reservation/${reservationId}/transaction`, { method: 'POST', body: JSON.stringify(data) })
+};
+
+// =====================================================
+// =====================================================
+// REPORTS API
+// =====================================================
+
+export const reportAPI = {
+  getReports: () => fetchAPI<any>('/reports'),
+  createReport: (data: any) => fetchAPI<any>('/reports', { method: 'POST', body: JSON.stringify(data) }),
+  generateReport: (id: string) => fetchAPI<any>(`/reports/${id}/generate`, { method: 'POST' })
 };
 
 // =====================================================
@@ -318,12 +435,12 @@ export const roomsAPI = {
 // =====================================================
 
 export const bookingsAPI = {
-  getBookings: (params?: { branch_id?: number; status?: string; from_date?: string; to_date?: string }) => {
+  getBookings: (params?: { status?: string; checkIn?: string; checkOut?: string; roomType?: string }) => {
     const query = new URLSearchParams();
-    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
     if (params?.status) query.append('status', params.status);
-    if (params?.from_date) query.append('from_date', params.from_date);
-    if (params?.to_date) query.append('to_date', params.to_date);
+    if (params?.checkIn) query.append('checkIn', params.checkIn);
+    if (params?.checkOut) query.append('checkOut', params.checkOut);
+    if (params?.roomType) query.append('roomType', params.roomType);
     return fetchAPI<any>(`/bookings?${query}`);
   },
   getBooking: (id: string) => fetchAPI<any>(`/bookings/${id}`),
@@ -331,8 +448,13 @@ export const bookingsAPI = {
   updateBooking: (id: string, data: any) => fetchAPI<any>(`/bookings/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   cancelBooking: (id: string, reason?: string) => 
     fetchAPI<any>(`/bookings/${id}/cancel`, { method: 'PUT', body: JSON.stringify({ reason }) }),
-  checkIn: (id: string, data: any) => fetchAPI<any>(`/bookings/${id}/checkin`, { method: 'POST', body: JSON.stringify(data) }),
-  checkOut: (id: string, data: any) => fetchAPI<any>(`/bookings/${id}/checkout`, { method: 'POST', body: JSON.stringify(data) }),
+  checkIn: (id: string) => fetchAPI<any>(`/bookings/${id}/check-in`, { method: 'PUT' }),
+  checkOut: (id: string) => fetchAPI<any>(`/bookings/${id}/check-out`, { method: 'PUT' }), 
+  getAvailableRooms: (checkIn: string, checkOut: string, guests?: number) => {
+    const query = new URLSearchParams({ checkIn, checkOut });
+    if (guests) query.append('guests', String(guests));
+    return fetchAPI<any>(`/bookings/available?${query}`);
+  }
 };
 
 // =====================================================
@@ -697,6 +819,64 @@ export const housekeepingAPI = {
 };
 
 // =====================================================
+// INVENTORY API (legacy inventory module)
+// =====================================================
+
+export const inventoryAPI = {
+  // Item Management
+  createItem: (data: any) =>
+    fetchAPI<any>('/inventory/items', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getItems: (branch: string) =>
+    fetchAPI<any>(`/inventory/items?branch=${encodeURIComponent(branch)}`),
+
+  // Stock Transfers
+  createTransfer: (data: any) =>
+    fetchAPI<any>('/inventory/transfers', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getTransfers: (branch: string) =>
+    fetchAPI<any>(`/inventory/transfers?branch=${encodeURIComponent(branch)}`),
+
+  // Consumption Records
+  recordConsumption: (data: any) =>
+    fetchAPI<any>('/inventory/consumption', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getConsumptionRecords: (params: {
+    branch: string;
+    department?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => {
+    const search = new URLSearchParams({ branch: params.branch });
+    if (params.department) search.append('department', params.department);
+    if (params.startDate) search.append('startDate', params.startDate);
+    if (params.endDate) search.append('endDate', params.endDate);
+    return fetchAPI<any>(`/inventory/consumption?${search.toString()}`);
+  },
+
+  // Stock Alerts
+  getLowStockAlerts: (branch: string) =>
+    fetchAPI<any>(`/inventory/alerts/low-stock?branch=${encodeURIComponent(branch)}`),
+
+  // Reports
+  generateInventoryReport: (branch: string, type: 'daily' | 'weekly' | 'monthly') =>
+    fetchAPI<any>(`/inventory/reports?branch=${encodeURIComponent(branch)}&type=${type}`),
+
+  // Requests (used by InventoryModals)
+  createRequest: (data: { branchId: string; items: Array<{ itemId: string; requestedQuantity: number }> }) =>
+    fetchAPI<any>('/inventory/requests', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+};
+
+// =====================================================
 // MAINTENANCE API
 // =====================================================
 
@@ -736,17 +916,30 @@ export const restaurantAPI = {
   deleteCategory: (id: string) => fetchAPI<any>(`/restaurant/menu/categories/${id}`, { method: 'DELETE' }),
   
   // Menu Items
-  getMenuItems: (categoryId?: string, branchId?: number) => {
+  getMenuItems: (categoryId?: string, branchId?: number, onlyAvailable: boolean = false) => {
     const query = new URLSearchParams();
-    if (categoryId) query.append('category_id', categoryId);
+    if (categoryId) query.append('category', categoryId);
     if (branchId) query.append('branch_id', String(branchId));
-    return fetchAPI<any>(`/restaurant/menu/items?${query}`);
+    if (onlyAvailable) query.append('available', 'true');
+
+    const qs = query.toString();
+    const suffix = qs ? `?${qs}` : '';
+    return fetchAPI<any>(`/restaurant/menu/items${suffix}`);
   },
   getMenuItem: (id: string) => fetchAPI<any>(`/restaurant/menu/items/${id}`),
   createMenuItem: (data: any) => fetchAPI<any>('/restaurant/menu/items', { method: 'POST', body: JSON.stringify(data) }),
   updateMenuItem: (id: string, data: any) => fetchAPI<any>(`/restaurant/menu/items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteMenuItem: (id: string) => fetchAPI<any>(`/restaurant/menu/items/${id}`, { method: 'DELETE' }),
   toggleItemAvailability: (id: string) => fetchAPI<any>(`/restaurant/menu/items/${id}/toggle`, { method: 'PUT' }),
+  
+  // Menu Item Images
+  uploadMenuItemImage: (id: string, imageBase64: string, contentType: string) => 
+    fetchAPI<any>(`/restaurant/menu/items/${id}/image`, { 
+      method: 'POST', 
+      body: JSON.stringify({ imageBase64, contentType }) 
+    }),
+  deleteMenuItemImage: (id: string) => 
+    fetchAPI<any>(`/restaurant/menu/items/${id}/image`, { method: 'DELETE' }),
   
   // Tables
   getTables: (branchId?: number) => {
@@ -772,6 +965,21 @@ export const restaurantAPI = {
     const query = days ? `?days=${days}` : '';
     return fetchAPI<any>(`/restaurant/reports/popular-items${query}`);
   },
+  getTerminals: (branchId?: number) => fetchAPI<any>(`/restaurant/terminals${branchId ? `?branch_id=${branchId}` : ''}`),
+  
+  // Room Service
+  createRoomServiceOrder: (data: { 
+    room_number: string; 
+    items: Array<{ menu_item_id: string; quantity: number; notes?: string }>; 
+    special_instructions?: string;
+    guest_name?: string;
+  }) => fetchAPI<any>('/restaurant/room-service', { method: 'POST', body: JSON.stringify(data) }),
+  getRoomServiceOrders: (status?: string) => {
+    const query = status ? `?status=${status}` : '';
+    return fetchAPI<any>(`/restaurant/room-service${query}`);
+  },
+  updateRoomServiceStatus: (orderId: string, status: string) => 
+    fetchAPI<any>(`/restaurant/room-service/${orderId}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
 };
 
 // =====================================================
@@ -835,6 +1043,25 @@ export const barAPI = {
     const query = days ? `?days=${days}` : '';
     return fetchAPI<any>(`/bar/reports/popular-drinks${query}`);
   },
+
+  // Stock Requests
+  getStockRequests: (params?: { status?: string; branch_id?: number; date_from?: string; date_to?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.date_from) query.append('date_from', params.date_from);
+    if (params?.date_to) query.append('date_to', params.date_to);
+    return fetchAPI<any>(`/bar/stock-requests?${query}`);
+  },
+  getStockRequest: (id: string) => fetchAPI<any>(`/bar/stock-requests/${id}`),
+  createStockRequest: (data: any) => fetchAPI<any>('/bar/stock-requests', { method: 'POST', body: JSON.stringify(data) }),
+  updateRequestStatus: (id: string, data: any) => fetchAPI<any>(`/bar/stock-requests/${id}/status`, { method: 'PUT', body: JSON.stringify(data) }),
+  fulfillStockRequest: (id: string, data: any) => fetchAPI<any>(`/bar/stock-requests/${id}/fulfill`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteStockRequest: (id: string) => fetchAPI<any>(`/bar/stock-requests/${id}`, { method: 'DELETE' }),
+  getLowStockItems: (branchId?: number) => {
+    const query = branchId ? `?branch_id=${branchId}` : '';
+    return fetchAPI<any>(`/bar/stock-requests/low-stock${query}`);
+  },
 };
 
 // =====================================================
@@ -855,6 +1082,19 @@ export const financeAPI = {
     return fetchAPI<any>(`/finance/transactions?${query}`);
   },
   createTransaction: (data: any) => fetchAPI<any>('/finance/transactions', { method: 'POST', body: JSON.stringify(data) }),
+  
+  // Expense Management
+  getExpenses: (params?: any) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.status) query.append('status', params.status);
+    if (params?.category) query.append('category', params.category);
+    return fetchAPI<any>(`/finance/expenses?${query}`);
+  },
+  createExpense: (data: any) => fetchAPI<any>('/finance/expenses', { method: 'POST', body: JSON.stringify(data) }),
+  updateExpense: (id: string, data: any) => fetchAPI<any>(`/finance/expenses/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteExpense: (id: string) => fetchAPI<any>(`/finance/expenses/${id}`, { method: 'DELETE' }),
+  
   getInvoices: () => fetchAPI<any>('/finance/invoices'),
   createInvoice: (data: any) => fetchAPI<any>('/finance/invoices', { method: 'POST', body: JSON.stringify(data) }),
   
@@ -901,11 +1141,77 @@ export const financeAPI = {
     const query = period ? `?period=${period}` : '';
     return fetchAPI<any>(`/finance/kpis${query}`);
   },
-  getExpenses: () => fetchAPI<any>('/finance/expenses'),
-  createExpense: (data: any) => fetchAPI<any>('/finance/expenses', { method: 'POST', body: JSON.stringify(data) }),
   approveExpense: (id: string) => fetchAPI<any>(`/finance/expenses/${id}/approve`, { method: 'PUT' }),
   getBudgets: () => fetchAPI<any>('/finance/budgets'),
   createBudget: (data: any) => fetchAPI<any>('/finance/budgets', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+// =====================================================
+// RECEIPTS API
+// =====================================================
+
+const PYTHON_SERVICE_URL = process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL || 'http://localhost:5001';
+
+export const receiptsAPI = {
+  // Get receipts with filters
+  getReceipts: (params?: { branch_id?: string; receipt_type?: string; payment_status?: string; start_date?: string; end_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', params.branch_id);
+    if (params?.receipt_type) query.append('receipt_type', params.receipt_type);
+    if (params?.payment_status) query.append('payment_status', params.payment_status);
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/receipts?${query}`);
+  },
+  
+  // Get single receipt
+  getReceipt: (id: string) => fetchAPI<any>(`/receipts/${id}`),
+  
+  // Create receipt
+  createReceipt: (data: any) => fetchAPI<any>('/receipts', { method: 'POST', body: JSON.stringify(data) }),
+  
+  // Update receipt
+  updateReceipt: (id: string, data: any) => fetchAPI<any>(`/receipts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  
+  // Get receipt stats
+  getStats: (params?: { branch_id?: string; period?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', params.branch_id);
+    if (params?.period) query.append('period', params.period);
+    return fetchAPI<any>(`/receipts/stats?${query}`);
+  },
+  
+  // Get daily revenue
+  getDailyRevenue: (params?: { branch_id?: string; start_date?: string; end_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', params.branch_id);
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/receipts/revenue?${query}`);
+  },
+  
+  // Generate PDF receipt via Python service
+  generatePDF: async (receiptData: any): Promise<Blob> => {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/receipts/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(receiptData),
+    });
+    if (!response.ok) throw new Error('Failed to generate PDF');
+    return response.blob();
+  },
+  
+  // Generate PDF as base64 for preview
+  generatePDFBase64: async (receiptData: any): Promise<{ pdf_base64: string; filename: string }> => {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/receipts/generate/base64`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(receiptData),
+    });
+    if (!response.ok) throw new Error('Failed to generate PDF');
+    const data = await response.json();
+    return data.data;
+  },
 };
 
 // =====================================================
@@ -952,6 +1258,280 @@ export const auditAPI = {
   getInventoryAudit: () => fetchAPI<any>('/audit/inventory'),
 };
 
+// =====================================================
+// USER MANAGEMENT API
+// =====================================================
+
+export const userAPI = {
+  // User CRUD operations
+  getUsers: () => fetchAPI<any>('/users'),
+  getUser: (id: string) => fetchAPI<any>(`/users/${id}`),
+  createUser: (data: any) => fetchAPI<any>('/users', { method: 'POST', body: JSON.stringify(data) }),
+  updateUser: (id: string, data: any) => fetchAPI<any>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteUser: (id: string) => fetchAPI<any>(`/users/${id}`, { method: 'DELETE' }),
+  
+  // User profile operations
+  getUserProfile: () => fetchAPI<any>('/users/profile'),
+  updateUserProfile: (data: any) => fetchAPI<any>('/users/profile', { method: 'PUT', body: JSON.stringify(data) }),
+  updateUserPassword: (data: any) => fetchAPI<any>('/users/password', { method: 'PUT', body: JSON.stringify(data) }),
+  
+  // User photo upload
+  uploadProfilePhoto: (formData: FormData) => fetchAPI<any>('/users/profile/photo', { 
+    method: 'POST', 
+    body: formData,
+    headers: {} // Let browser set Content-Type for FormData
+  }),
+};
+
+// =====================================================
+// AUTH API
+// =====================================================
+
+export const authAPI = {
+  // Authentication
+  register: (data: any) => fetchAPI<any>('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
+  login: (data: any) => fetchAPI<any>('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
+  logout: () => fetchAPI<any>('/auth/logout', { method: 'POST' }),
+  refreshToken: (data: any) => fetchAPI<any>('/auth/refresh-token', { method: 'POST', body: JSON.stringify(data) }),
+  
+  // User account management
+  getMe: () => fetchAPI<any>('/auth/me'),
+  updateDetails: (data: any) => fetchAPI<any>('/auth/updatedetails', { method: 'PUT', body: JSON.stringify(data) }),
+  updatePassword: (data: any) => fetchAPI<any>('/auth/updatepassword', { method: 'PUT', body: JSON.stringify(data) }),
+  forgotPassword: (data: any) => fetchAPI<any>('/auth/forgotpassword', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+// =====================================================
+// PAYROLL API
+// =====================================================
+
+export const payrollAPI = {
+  getSummary: (params?: { startDate?: string; endDate?: string; department?: string; branch?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    if (params?.department) query.append('department', params.department);
+    if (params?.branch) query.append('branch', params.branch);
+    return fetchAPI<any>(`/payroll/summary?${query}`);
+  },
+  calculate: (data: any) => fetchAPI<any>('/payroll/calculate', { method: 'POST', body: JSON.stringify(data) }),
+  pay: (data: { payrollRecordId: string; paymentMethod: 'mpesa' | 'paystack'; employeePhone?: string; employeeEmail?: string; bankDetails?: any }) =>
+    fetchAPI<any>('/payroll/pay', { method: 'POST', body: JSON.stringify(data) }),
+  bulkPay: (data: { payrollRecordIds: string[]; paymentMethod: 'mpesa' | 'paystack' }) =>
+    fetchAPI<any>('/payroll/bulk-pay', { method: 'POST', body: JSON.stringify(data) }),
+  getBanks: () => fetchAPI<any>('/payroll/banks'),
+  verifyBankAccount: (data: { accountNumber: string; bankCode: string }) =>
+    fetchAPI<any>('/payroll/verify-bank', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+// =====================================================
+// NOTIFICATIONS API
+// =====================================================
+
+export const notificationsAPI = {
+  getNotifications: (params?: { is_read?: boolean; type?: string; category?: string; priority?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.is_read !== undefined) query.append('is_read', String(params.is_read));
+    if (params?.type) query.append('type', params.type);
+    if (params?.category) query.append('category', params.category);
+    if (params?.priority) query.append('priority', params.priority);
+    return fetchAPI<any>(`/notifications?${query}`);
+  },
+  getUnreadCount: () => fetchAPI<any>('/notifications/unread-count'),
+  markAsRead: (notificationId: number) => 
+    fetchAPI<any>(`/notifications/${notificationId}/read`, { method: 'PATCH' }),
+  markAllAsRead: () =>
+    fetchAPI<any>('/notifications/mark-all-read', { method: 'PATCH' }),
+  createNotification: (data: any) => 
+    fetchAPI<any>('/notifications', { method: 'POST', body: JSON.stringify(data) }),
+  bulkCreate: (notifications: any[]) =>
+    fetchAPI<any>('/notifications/bulk', { method: 'POST', body: JSON.stringify({ notifications }) }),
+  deleteNotification: (notificationId: number) =>
+    fetchAPI<any>(`/notifications/${notificationId}`, { method: 'DELETE' }),
+  notifyRole: (data: any) => 
+    fetchAPI<any>('/notifications/notify-role', { method: 'POST', body: JSON.stringify(data) }),
+  notifyBranch: (data: any) => 
+    fetchAPI<any>('/notifications/notify-branch', { method: 'POST', body: JSON.stringify(data) }),
+  notifyUser: (data: any) => 
+    fetchAPI<any>('/notifications/notify-user', { method: 'POST', body: JSON.stringify(data) }),
+  cleanup: () => fetchAPI<any>('/notifications/cleanup', { method: 'POST' }),
+};
+
+// =====================================================
+// REPORTS SERVICE (Python Microservice)
+// =====================================================
+
+const REPORTS_SERVICE_URL = process.env.NEXT_PUBLIC_REPORTS_SERVICE_URL || 'http://localhost:5001';
+
+export const reportsService = {
+  // Health check
+  healthCheck: async () => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/health`);
+    return response.json();
+  },
+
+  // Generate branded PDF report (with FG styling)
+  exportBrandedPdf: async (reportType: string, filters: Record<string, any> = {}, useRealData: boolean = true) => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/generate/branded-pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reportType, filters, useRealData }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to generate PDF report' }));
+      throw new Error(error.error || 'Failed to generate PDF report');
+    }
+
+    return response.blob();
+  },
+
+  // Generate standard PDF report
+  exportPdf: async (reportType: string, filters: Record<string, any> = {}) => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/generate/pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reportType, filters }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to generate PDF report' }));
+      throw new Error(error.error || 'Failed to generate PDF report');
+    }
+
+    return response.blob();
+  },
+
+  // Generate Excel report
+  exportExcel: async (reportType: string, filters: Record<string, any> = {}) => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/generate/excel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reportType, filters }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to generate Excel report' }));
+      throw new Error(error.error || 'Failed to generate Excel report');
+    }
+
+    return response.blob();
+  },
+
+  // Get available report types
+  getReportTypes: async () => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/types`);
+    return response.json();
+  },
+
+  // Schedule a report
+  scheduleReport: async (data: {
+    name?: string;
+    reportType: string;
+    frequency: 'daily' | 'weekly' | 'monthly';
+    scheduleTime?: string;
+    scheduleDay?: number;
+    recipients?: string[];
+    parameters?: Record<string, any>;
+    branchId?: number;
+  }) => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/schedule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return response.json();
+  },
+
+  // Get scheduled reports
+  getScheduledReports: async () => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/schedules`);
+    return response.json();
+  },
+
+  // Delete scheduled report
+  deleteScheduledReport: async (scheduleId: string) => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/schedules/${scheduleId}`, {
+      method: 'DELETE',
+    });
+    return response.json();
+  },
+
+  // Toggle scheduled report active/inactive
+  toggleScheduledReport: async (scheduleId: string) => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/schedules/${scheduleId}/toggle`, {
+      method: 'PUT',
+    });
+    return response.json();
+  },
+
+  // Run a scheduled report immediately
+  runReportNow: async (scheduleId: string) => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/run-now`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduleId }),
+    });
+    return response.json();
+  },
+
+  // Get report history
+  getReportHistory: async (limit?: number, reportType?: string) => {
+    const params = new URLSearchParams();
+    if (limit) params.append('limit', String(limit));
+    if (reportType) params.append('type', reportType);
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/history?${params}`);
+    return response.json();
+  },
+
+  // Download helper - triggers browser download
+  downloadReport: async (reportType: string, filters: Record<string, any> = {}, format: 'pdf' | 'excel' = 'pdf') => {
+    try {
+      let blob: Blob;
+      let filename: string;
+      
+      if (format === 'pdf') {
+        blob = await reportsService.exportBrandedPdf(reportType, filters);
+        filename = `FG_${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
+      } else {
+        blob = await reportsService.exportExcel(reportType, filters);
+        filename = `FG_${reportType}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      }
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      return { success: true, filename };
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Get KPI dashboard data
+  getKPIDashboard: async (branchId?: number, period?: string) => {
+    const params = new URLSearchParams();
+    if (branchId) params.append('branch_id', String(branchId));
+    if (period) params.append('period', period);
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/kpi/dashboard?${params}`);
+    return response.json();
+  },
+
+  // Get KPI summary cards
+  getKPISummary: async (branchId?: number) => {
+    const params = new URLSearchParams();
+    if (branchId) params.append('branch_id', String(branchId));
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/kpi/summary?${params}`);
+    return response.json();
+  },
+};
+
 // Export all APIs as a single object
 export const api = {
   store: storeAPI,
@@ -965,6 +1545,12 @@ export const api = {
   finance: financeAPI,
   reports: reportsAPI,
   audit: auditAPI,
+  users: userAPI,
+  auth: authAPI,
+  payroll: payrollAPI,
+  bar: barAPI,
+  notifications: notificationsAPI,
+  reportsService: reportsService,
 };
 
 export default api;

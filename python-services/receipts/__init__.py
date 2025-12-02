@@ -1,0 +1,1 @@
+# Receipt generation module

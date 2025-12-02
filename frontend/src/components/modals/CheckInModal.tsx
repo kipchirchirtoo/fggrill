@@ -7,6 +7,7 @@ import {
   Clock, DollarSign, FileText, Key
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { bookingsAPI } from '@/lib/api';
 
 interface CheckInModalProps {
   isOpen: boolean;
@@ -21,11 +22,34 @@ export function CheckInModal({ isOpen, onClose }: CheckInModalProps): JSX.Elemen
 
   const handleSearch = async () => {
     try {
-      // TODO: Implement API call
-      const response = await fetch('/api/bookings/search?term=' + searchTerm);
-      if (!response.ok) throw new Error('Failed to search bookings');
-      const data = await response.json();
-      setSelectedBooking(data);
+      const res = await bookingsAPI.getBookings({ status: 'confirmed' });
+      const list = res.data || [];
+      const term = (searchTerm || '').toLowerCase();
+      const found = list.find((b: any) => {
+        const conf = (b.confirmation_number || '').toLowerCase();
+        const guestName = ((b.guest?.first_name || '') + ' ' + (b.guest?.last_name || '')).trim().toLowerCase();
+        const roomNo = (b.room?.room_number || '').toLowerCase();
+        return conf.includes(term) || guestName.includes(term) || roomNo.includes(term);
+      });
+      if (!found) {
+        toast.error('No matching confirmed bookings');
+        return;
+      }
+      // Map to UI shape
+      const nights = Math.max(
+        1,
+        Math.ceil(
+          (new Date(found.check_out_date).getTime() - new Date(found.check_in_date).getTime()) / (1000 * 60 * 60 * 24)
+        )
+      );
+      setSelectedBooking({
+        id: found.id,
+        guestName: `${found.guest?.first_name || ''} ${found.guest?.last_name || ''}`.trim() || 'Guest',
+        roomNumber: found.room?.room_number || 'Unassigned',
+        checkIn: found.check_in_date,
+        checkOut: found.check_out_date,
+        nights
+      });
     } catch (error) {
       toast.error('Failed to search bookings');
     }
@@ -33,18 +57,8 @@ export function CheckInModal({ isOpen, onClose }: CheckInModalProps): JSX.Elemen
 
   const handleCheckIn = async () => {
     try {
-      // TODO: Implement API call
-      const response = await fetch('/api/bookings/' + selectedBooking.id + '/check-in', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          paymentMethod,
-          amount
-        })
-      });
-
-      if (!response.ok) throw new Error('Failed to check in guest');
-      
+      if (!selectedBooking) return;
+      await bookingsAPI.checkIn(selectedBooking.id);
       toast.success('Guest checked in successfully!');
       onClose();
     } catch (error) {
@@ -71,7 +85,7 @@ export function CheckInModal({ isOpen, onClose }: CheckInModalProps): JSX.Elemen
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900">Guest Check-In</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -86,12 +100,12 @@ export function CheckInModal({ isOpen, onClose }: CheckInModalProps): JSX.Elemen
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search by booking number or guest name"
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-ios-lg"
               />
             </div>
             <button
               onClick={handleSearch}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              className="px-4 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700"
             >
               Search
             </button>
@@ -100,7 +114,7 @@ export function CheckInModal({ isOpen, onClose }: CheckInModalProps): JSX.Elemen
           {/* Booking Details */}
           {selectedBooking && (
             <div className="space-y-4">
-              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+              <div className="bg-gray-50 rounded-ios-lg p-4 space-y-2">
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     <User className="h-5 w-5 text-gray-500" />
@@ -134,7 +148,7 @@ export function CheckInModal({ isOpen, onClose }: CheckInModalProps): JSX.Elemen
                     <select
                       value={paymentMethod}
                       onChange={(e) => setPaymentMethod(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
                     >
                       <option value="cash">Cash</option>
                       <option value="card">Card</option>
@@ -149,7 +163,7 @@ export function CheckInModal({ isOpen, onClose }: CheckInModalProps): JSX.Elemen
                       type="number"
                       value={amount}
                       onChange={(e) => setAmount(Number(e.target.value))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
                     />
                   </div>
                 </div>
@@ -159,7 +173,7 @@ export function CheckInModal({ isOpen, onClose }: CheckInModalProps): JSX.Elemen
               <div className="flex justify-end pt-4 border-t">
                 <button
                   onClick={handleCheckIn}
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  className="px-6 py-2 bg-green-600 text-white rounded-ios-lg hover:bg-green-700"
                 >
                   <Key className="inline h-4 w-4 mr-2" />
                   Complete Check-In

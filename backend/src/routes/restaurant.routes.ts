@@ -4,15 +4,26 @@ import {
   getMenuItems,
   createMenuItem,
   updateMenuItem,
+  deleteMenuItem,
+  toggleItemAvailability,
   createOrder,
   updateOrderStatus,
   getOrder,
   getOrders,
   getInventoryItems,
-  updateInventoryStock
+  updateInventoryStock,
+  createRoomServiceOrder,
+  getRoomServiceOrders,
+  updateRoomServiceOrderStatus,
+  uploadMenuItemImage,
+  deleteMenuItemImage
 } from '../controllers/restaurant.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
+
+// Import new sub-routes
+import tableRoutes from './restaurant.table.routes';
+import reservationRoutes from './restaurant.reservation.routes';
 
 const router = express.Router();
 
@@ -51,6 +62,27 @@ router.put('/menu/items/:id',
   updateMenuItem
 );
 
+router.delete('/menu/items/:id',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT]),
+  deleteMenuItem
+);
+
+router.put('/menu/items/:id/toggle',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT]),
+  toggleItemAvailability
+);
+
+// Menu item image upload
+router.post('/menu/items/:id/image',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT]),
+  uploadMenuItemImage
+);
+
+router.delete('/menu/items/:id/image',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT]),
+  deleteMenuItemImage
+);
+
 router.put('/orders/:id/status',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT]),
   updateOrderStatus
@@ -65,5 +97,25 @@ router.post('/inventory/:id/stock',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT]),
   updateInventoryStock
 );
+
+// Room Service routes
+router.post('/room-service',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.RECEPTIONIST]),
+  createRoomServiceOrder
+);
+
+router.get('/room-service',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.RECEPTIONIST]),
+  getRoomServiceOrders
+);
+
+router.put('/room-service/:id/status',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT]),
+  updateRoomServiceOrderStatus
+);
+
+// Register sub-routes
+router.use('/tables', tableRoutes);
+router.use('/reservations', reservationRoutes);
 
 export default router;

@@ -1,0 +1,126 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth, UserRole } from '@/lib/auth-context';
+import { ProtectedRoute } from '@/components/auth/protected-route';
+import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { IOSCard } from '@/components/ui/ios-card';
+import { IOSButton } from '@/components/ui/ios-button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { financeAPI } from '@/lib/api';
+import { PieChart, RefreshCw, Plus, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
+import { toast } from 'sonner';
+
+interface Budget { id: string; name: string; category: string; allocated: number; spent: number; remaining: number; period: string; }
+
+export default function AdminBudgetsPage() {
+  const { user } = useAuth();
+  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [formData, setFormData] = useState({ name: '', category: 'operations', allocated: 0, period: 'monthly' });
+
+  const fetchBudgets = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const response = await financeAPI.getBudgets();
+      if (response.success) setBudgets(response.data || []);
+    } catch (error) { console.error('Error:', error); }
+    finally { setIsLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchBudgets(); }, [fetchBudgets]);
+
+  const handleAddBudget = async () => {
+    if (!formData.name || !formData.allocated) { toast.error('Fill required fields'); return; }
+    try {
+      await financeAPI.createBudget(formData);
+      toast.success('Budget created');
+      setAddModalOpen(false);
+      fetchBudgets();
+    } catch (error: any) { toast.error(error.message || 'Failed'); }
+  };
+
+  const totalAllocated = budgets.reduce((sum, b) => sum + (b.allocated || 0), 0);
+  const totalSpent = budgets.reduce((sum, b) => sum + (b.spent || 0), 0);
+
+  return (
+    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]}>
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900">Budgets</h1><p className="text-gray-500">Budget allocation and tracking</p></div>
+            <div className="flex gap-2">
+              <IOSButton variant="secondary" onClick={fetchBudgets}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+              <IOSButton onClick={() => setAddModalOpen(true)}><Plus className="h-4 w-4 mr-2" /> Add Budget</IOSButton>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <IOSCard className="p-4"><DollarSign className="h-6 w-6 text-blue-600 mb-2" /><p className="text-sm text-gray-500">Total Allocated</p><p className="text-xl font-bold">KES {totalAllocated.toLocaleString()}</p></IOSCard>
+            <IOSCard className="p-4"><TrendingDown className="h-6 w-6 text-red-600 mb-2" /><p className="text-sm text-gray-500">Total Spent</p><p className="text-xl font-bold text-red-600">KES {totalSpent.toLocaleString()}</p></IOSCard>
+            <IOSCard className="p-4"><TrendingUp className="h-6 w-6 text-green-600 mb-2" /><p className="text-sm text-gray-500">Remaining</p><p className="text-xl font-bold text-green-600">KES {(totalAllocated - totalSpent).toLocaleString()}</p></IOSCard>
+          </div>
+
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
+          ) : budgets.length === 0 ? (
+            <IOSCard className="p-12 text-center"><PieChart className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No budgets</p></IOSCard>
+          ) : (
+            <div className="grid md:grid-cols-2 gap-4">
+              {budgets.map((budget) => {
+                const percentage = budget.allocated > 0 ? (budget.spent / budget.allocated) * 100 : 0;
+                const isOverBudget = percentage > 100;
+                return (
+                  <IOSCard key={budget.id} className="p-4">
+                    <div className="flex items-start justify-between mb-4">
+                      <div><p className="font-bold">{budget.name}</p><p className="text-sm text-gray-500">{budget.category} • {budget.period}</p></div>
+                      <p className={`font-bold ${isOverBudget ? 'text-red-600' : 'text-green-600'}`}>{percentage.toFixed(0)}%</p>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                      <div className={`h-2 rounded-full ${isOverBudget ? 'bg-red-500' : percentage > 80 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(percentage, 100)}%` }} />
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Spent: KES {budget.spent?.toLocaleString()}</span>
+                      <span>Budget: KES {budget.allocated?.toLocaleString()}</span>
+                    </div>
+                  </IOSCard>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader><DialogTitle>Add Budget</DialogTitle></DialogHeader>
+            <div className="space-y-4 mt-4">
+              <div><label className="text-sm font-medium">Name *</label><Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} /></div>
+              <div><label className="text-sm font-medium">Category</label>
+                <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full p-2 border rounded-ios-lg">
+                  <option value="operations">Operations</option>
+                  <option value="marketing">Marketing</option>
+                  <option value="maintenance">Maintenance</option>
+                  <option value="supplies">Supplies</option>
+                </select>
+              </div>
+              <div><label className="text-sm font-medium">Allocated Amount *</label><Input type="number" value={formData.allocated} onChange={(e) => setFormData({ ...formData, allocated: parseFloat(e.target.value) || 0 })} /></div>
+              <div><label className="text-sm font-medium">Period</label>
+                <select value={formData.period} onChange={(e) => setFormData({ ...formData, period: e.target.value })} className="w-full p-2 border rounded-ios-lg">
+                  <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+              </div>
+              <div className="flex gap-3">
+                <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
+                <IOSButton onClick={handleAddBudget} className="flex-1">Create</IOSButton>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </DashboardLayout>
+    </ProtectedRoute>
+  );
+}

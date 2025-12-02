@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   X, Save, Plus, Minus, UtensilsCrossed, DollarSign,
   Clock, User, Hash, FileText
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { restaurantAPI } from '@/lib/api';
 
 interface MenuItem {
   id: string;
@@ -50,19 +51,15 @@ export function MenuItemModal({ isOpen, onClose, mode = 'create', initialData }:
 
   const handleSubmit = async () => {
     try {
-      // TODO: Implement API call
-      const response = await fetch('/api/menu-items', {
-        method: mode === 'create' ? 'POST' : 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(itemData)
-      });
-
-      if (!response.ok) throw new Error('Failed to save menu item');
-
+      if (mode === 'create') {
+        await restaurantAPI.createMenuItem(itemData);
+      } else if (initialData?.id) {
+        await restaurantAPI.updateMenuItem(initialData.id, itemData);
+      }
       toast.success('Menu item ' + (mode === 'create' ? 'created' : 'updated') + ' successfully!');
       onClose();
-    } catch (error) {
-      toast.error('Failed to save menu item');
+    } catch (error:any) {
+      toast.error(error.message || 'Failed to save menu item');
     }
   };
 
@@ -87,7 +84,7 @@ export function MenuItemModal({ isOpen, onClose, mode = 'create', initialData }:
           <h2 className="text-xl font-bold text-gray-900">
             {mode === 'create' ? 'Add Menu Item' : 'Edit Menu Item'}
           </h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -102,7 +99,7 @@ export function MenuItemModal({ isOpen, onClose, mode = 'create', initialData }:
               name="name"
               value={itemData.name}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
             />
           </div>
 
@@ -115,7 +112,7 @@ export function MenuItemModal({ isOpen, onClose, mode = 'create', initialData }:
               value={itemData.description}
               onChange={handleChange}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
             />
           </div>
 
@@ -130,7 +127,7 @@ export function MenuItemModal({ isOpen, onClose, mode = 'create', initialData }:
                 value={itemData.price}
                 onChange={handleChange}
                 min="0"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
             </div>
 
@@ -142,7 +139,7 @@ export function MenuItemModal({ isOpen, onClose, mode = 'create', initialData }:
                 name="category"
                 value={itemData.category}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
               >
                 <option value="">Select category</option>
                 <option value="starters">Starters</option>
@@ -168,7 +165,7 @@ export function MenuItemModal({ isOpen, onClose, mode = 'create', initialData }:
         <div className="flex justify-end mt-6 pt-6 border-t">
           <button
             onClick={handleSubmit}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700"
           >
             <Save className="inline h-4 w-4 mr-2" />
             {mode === 'create' ? 'Add Item' : 'Update Item'}
@@ -184,25 +181,20 @@ export function OrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =
   const [tableNumber, setTableNumber] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [notes, setNotes] = useState('');
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
 
-  const menuItems: MenuItem[] = [
-    {
-      id: '1',
-      name: 'Chicken Tikka',
-      description: 'Grilled chicken with Indian spices',
-      price: 850,
-      category: 'main',
-      available: true
-    },
-    {
-      id: '2',
-      name: 'Greek Salad',
-      description: 'Fresh vegetables with feta cheese',
-      price: 450,
-      category: 'starters',
-      available: true
-    }
-  ];
+  useEffect(() => {
+    const loadMenu = async () => {
+      try {
+        const res = await restaurantAPI.getMenuItems();
+        const items = res.data || res.items || res || [];
+        setMenuItems(items);
+      } catch {
+        setMenuItems([]);
+      }
+    };
+    if (isOpen) loadMenu();
+  }, [isOpen]);
 
   const addItem = (item: MenuItem) => {
     setOrderItems(prev => {
@@ -240,25 +232,17 @@ export function OrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =
 
   const handleSubmit = async () => {
     try {
-      // TODO: Implement API call
-      const response = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tableNumber,
-          customerName,
-          items: orderItems,
-          notes,
-          total: calculateTotal()
-        })
+      await restaurantAPI.createOrder({
+        tableNumber,
+        customerName,
+        items: orderItems,
+        notes,
+        total: calculateTotal()
       });
-
-      if (!response.ok) throw new Error('Failed to create order');
-
       toast.success('Order created successfully!');
       onClose();
-    } catch (error) {
-      toast.error('Failed to create order');
+    } catch (error:any) {
+      toast.error(error.message || 'Failed to create order');
     }
   };
 
@@ -281,7 +265,7 @@ export function OrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900">New Order</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -289,12 +273,12 @@ export function OrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =
         <div className="grid grid-cols-2 gap-6">
           {/* Menu Items */}
           <div>
-            <h3 className="font-semibold text-gray-900 mb-4">Menu Items</h3>
+            <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-4">Menu Items</h3>
             <div className="space-y-4">
               {menuItems.map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-ios-lg"
                 >
                   <div>
                     <p className="font-medium text-gray-900">{item.name}</p>
@@ -302,7 +286,7 @@ export function OrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                   </div>
                   <button
                     onClick={() => addItem(item)}
-                    className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200"
+                    className="p-2 bg-indigo-100 text-indigo-600 rounded-ios-lg hover:bg-indigo-200"
                   >
                     <Plus className="h-4 w-4" />
                   </button>
@@ -313,7 +297,7 @@ export function OrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =
 
           {/* Order Details */}
           <div>
-            <h3 className="font-semibold text-gray-900 mb-4">Order Details</h3>
+            <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-4">Order Details</h3>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -324,7 +308,7 @@ export function OrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                     type="text"
                     value={tableNumber}
                     onChange={(e) => setTableNumber(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
                   />
                 </div>
                 <div>
@@ -335,7 +319,7 @@ export function OrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                     type="text"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
                   />
                 </div>
               </div>
@@ -343,7 +327,7 @@ export function OrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =
               {orderItems.length > 0 ? (
                 <div className="space-y-3">
                   {orderItems.map((item) => (
-                    <div key={item.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                    <div key={item.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-ios-lg">
                       <div className="flex-1">
                         <p className="font-medium text-gray-900">{item.name}</p>
                         <input
@@ -375,7 +359,7 @@ export function OrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                     </div>
                   ))}
 
-                  <div className="p-4 bg-gray-100 rounded-lg">
+                  <div className="p-4 bg-gray-100 rounded-ios-lg">
                     <div className="flex justify-between font-medium">
                       <span>Subtotal</span>
                       <span>KES {calculateTotal()}</span>
@@ -405,7 +389,7 @@ export function OrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
                   placeholder="Any special instructions..."
                 />
               </div>
@@ -417,7 +401,7 @@ export function OrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =
           <button
             onClick={handleSubmit}
             disabled={orderItems.length === 0}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400"
+            className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700 disabled:bg-gray-400"
           >
             <FileText className="inline h-4 w-4 mr-2" />
             Place Order

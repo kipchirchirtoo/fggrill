@@ -21,8 +21,7 @@ import type {
   StockRequestItem
 } from '@/types/inventory.types';
 
-// API base URL
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+import { inventoryAPI } from '@/lib/api';
 
 interface NewItemModalProps {
   isOpen: boolean;
@@ -105,20 +104,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/inventory/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create item');
-      }
-
+      await inventoryAPI.createItem(formData);
       toast.success('Item created successfully');
       onSuccess?.();
       onClose();
@@ -139,7 +125,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900">Add New Item</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -154,7 +140,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
                 type="text"
                 value={formData.code}
                 onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                 required
               />
             </div>
@@ -166,7 +152,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                 required
               />
             </div>
@@ -179,7 +165,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
               rows={3}
             />
           </div>
@@ -192,7 +178,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
               <select
                 value={formData.branch}
                 onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                 required
               >
                 <option value="Bomet">Bomet</option>
@@ -208,7 +194,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
               <select
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                 required
               >
                 <option value="">Select Category</option>
@@ -228,7 +214,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
             <select
               value={formData.subCategory}
               onChange={(e) => setFormData({ ...formData, subCategory: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
               required
             >
               <option value="">Select Sub Category</option>
@@ -279,7 +265,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
               type="text"
               value={formData.unit}
               onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
               required
               placeholder="e.g., kg, liters, pieces"
             />
@@ -294,7 +280,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
                 type="number"
                 value={formData.minStock}
                 onChange={(e) => setFormData({ ...formData, minStock: parseInt(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                 required
                 min="0"
               />
@@ -307,7 +293,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
                 type="number"
                 value={formData.maxStock}
                 onChange={(e) => setFormData({ ...formData, maxStock: parseInt(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                 required
                 min="0"
               />
@@ -320,7 +306,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
                 type="number"
                 value={formData.reorderPoint}
                 onChange={(e) => setFormData({ ...formData, reorderPoint: parseInt(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                 required
                 min="0"
               />
@@ -336,7 +322,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
                 type="number"
                 value={formData.unitCost}
                 onChange={(e) => setFormData({ ...formData, unitCost: parseFloat(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                 required
                 min="0"
                 step="0.01"
@@ -350,7 +336,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
                 type="text"
                 value={formData.supplier}
                 onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
               />
             </div>
           </div>
@@ -366,7 +352,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
                   type="number"
                   value={formData.parStock}
                   onChange={(e) => setFormData({ ...formData, parStock: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                   min="0"
                 />
               </div>
@@ -382,7 +368,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
                 <select
                   value={formData.isReusable ? 'yes' : 'no'}
                   onChange={(e) => setFormData({ ...formData, isReusable: e.target.value === 'yes' })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                 >
                   <option value="no">No</option>
                   <option value="yes">Yes</option>
@@ -397,7 +383,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
                     type="number"
                     value={formData.replacementCycle}
                     onChange={(e) => setFormData({ ...formData, replacementCycle: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                     min="0"
                   />
                 </div>
@@ -414,7 +400,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
                 <select
                   value={formData.isMinibarItem ? 'yes' : 'no'}
                   onChange={(e) => setFormData({ ...formData, isMinibarItem: e.target.value === 'yes' })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                 >
                   <option value="no">No</option>
                   <option value="yes">Yes</option>
@@ -427,7 +413,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
                 <select
                   value={formData.isAmenity ? 'yes' : 'no'}
                   onChange={(e) => setFormData({ ...formData, isAmenity: e.target.value === 'yes' })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                 >
                   <option value="no">No</option>
                   <option value="yes">Yes</option>
@@ -440,13 +426,13 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="px-4 py-2 border border-gray-300 rounded-ios-lg hover:bg-gray-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              className="px-4 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700"
             >
               Create Item
             </button>
@@ -463,24 +449,11 @@ export function TransferModal({ isOpen, onClose, onSuccess, items, fromBranchId,
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/inventory/transfers`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          fromBranchId,
-          toBranchId,
-          items: selectedItems
-        })
+      await inventoryAPI.createTransfer({
+        fromBranchId,
+        toBranchId,
+        items: selectedItems,
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to create transfer');
-      }
-
       toast.success('Transfer created successfully');
       onSuccess?.();
       onClose();
@@ -523,7 +496,7 @@ export function TransferModal({ isOpen, onClose, onSuccess, items, fromBranchId,
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900">Create Stock Transfer</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -535,7 +508,7 @@ export function TransferModal({ isOpen, onClose, onSuccess, items, fromBranchId,
             </label>
             <select
               onChange={(e) => addItem(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
               value=""
             >
               <option value="">Add Item</option>
@@ -553,7 +526,7 @@ export function TransferModal({ isOpen, onClose, onSuccess, items, fromBranchId,
             {selectedItems.map(selectedItem => {
               const item = items.find(i => i.id === selectedItem.itemId);
               return (
-                <div key={selectedItem.itemId} className="flex items-center gap-4 p-3 border rounded-lg">
+                <div key={selectedItem.itemId} className="flex items-center gap-4 p-3 border rounded-ios-lg">
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">{item?.name}</p>
                     <p className="text-sm text-gray-500">{item?.unit}</p>
@@ -565,7 +538,7 @@ export function TransferModal({ isOpen, onClose, onSuccess, items, fromBranchId,
                       onChange={(e) =>
                         updateQuantity(selectedItem.itemId, parseInt(e.target.value))
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                       min="1"
                       required
                     />
@@ -573,7 +546,7 @@ export function TransferModal({ isOpen, onClose, onSuccess, items, fromBranchId,
                   <button
                     type="button"
                     onClick={() => removeItem(selectedItem.itemId)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                    className="p-2 text-red-600 hover:bg-red-50 rounded-ios-lg"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -586,13 +559,13 @@ export function TransferModal({ isOpen, onClose, onSuccess, items, fromBranchId,
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="px-4 py-2 border border-gray-300 rounded-ios-lg hover:bg-gray-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              className="px-4 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700"
               disabled={selectedItems.length === 0}
             >
               Create Transfer
@@ -610,23 +583,10 @@ export function RequestModal({ isOpen, onClose, onSuccess, items, branchId }: Re
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/inventory/requests`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          branchId,
-          items: selectedItems
-        })
+      await inventoryAPI.createRequest({
+        branchId,
+        items: selectedItems,
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to create request');
-      }
-
       toast.success('Request created successfully');
       onSuccess?.();
       onClose();
@@ -669,7 +629,7 @@ export function RequestModal({ isOpen, onClose, onSuccess, items, branchId }: Re
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900">Create Stock Request</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -681,7 +641,7 @@ export function RequestModal({ isOpen, onClose, onSuccess, items, branchId }: Re
             </label>
             <select
               onChange={(e) => addItem(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
               value=""
             >
               <option value="">Add Item</option>
@@ -699,7 +659,7 @@ export function RequestModal({ isOpen, onClose, onSuccess, items, branchId }: Re
             {selectedItems.map(selectedItem => {
               const item = items.find(i => i.id === selectedItem.itemId);
               return (
-                <div key={selectedItem.itemId} className="flex items-center gap-4 p-3 border rounded-lg">
+                <div key={selectedItem.itemId} className="flex items-center gap-4 p-3 border rounded-ios-lg">
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">{item?.name}</p>
                     <p className="text-sm text-gray-500">{item?.unit}</p>
@@ -711,7 +671,7 @@ export function RequestModal({ isOpen, onClose, onSuccess, items, branchId }: Re
                       onChange={(e) =>
                         updateQuantity(selectedItem.itemId, parseInt(e.target.value))
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                       min="1"
                       required
                     />
@@ -719,7 +679,7 @@ export function RequestModal({ isOpen, onClose, onSuccess, items, branchId }: Re
                   <button
                     type="button"
                     onClick={() => removeItem(selectedItem.itemId)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                    className="p-2 text-red-600 hover:bg-red-50 rounded-ios-lg"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -732,13 +692,13 @@ export function RequestModal({ isOpen, onClose, onSuccess, items, branchId }: Re
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="px-4 py-2 border border-gray-300 rounded-ios-lg hover:bg-gray-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              className="px-4 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700"
               disabled={selectedItems.length === 0}
             >
               Submit Request

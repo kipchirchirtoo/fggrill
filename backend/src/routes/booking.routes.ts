@@ -3,9 +3,11 @@ import {
   getBookings,
   getBooking,
   createBooking,
-  processPayment,
+  updateBooking,
+  checkInBooking,
+  checkOutBooking,
   cancelBooking,
-  checkInBooking
+  getAvailableRooms
 } from '../controllers/booking.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -13,31 +15,37 @@ import { UserRole } from '../models/User';
 const router = express.Router();
 
 // Public routes
-router.get('/', getBookings);
-router.get('/:id', getBooking);
+router.get('/available', getAvailableRooms);
 
 // Protected routes
 router.use(protect);
 
-// Staff routes (Admin, Manager, Receptionist)
+router.get('/', getBookings);
+router.get('/:id', getBooking);
+
 router.post('/', 
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST]),
   createBooking
 );
 
-router.post('/:id/payment',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST, UserRole.ACCOUNTANT]),
-  processPayment
-);
-
-router.post('/:id/cancel',
+router.put('/:id',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST]),
-  cancelBooking
+  updateBooking
 );
 
-router.post('/:id/check-in',
+router.put('/:id/check-in',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST]),
   checkInBooking
+);
+
+router.put('/:id/check-out',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST]),
+  checkOutBooking
+);
+
+router.put('/:id/cancel',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST]),
+  cancelBooking
 );
 
 export default router;

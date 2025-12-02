@@ -1,100 +1,77 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Users, Search, Plus, RefreshCw, Phone, Mail } from 'lucide-react';
-import { toast } from 'sonner';
-import { bookingsAPI } from '@/lib/api';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
+import { Input } from '@/components/ui/input';
+import { guestAPI } from '@/lib/api';
+import { Users, RefreshCw, Search, User, Mail, Phone } from 'lucide-react';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
-export default function BranchManagerGuestsPage() {
+interface Guest { id: string; first_name: string; last_name: string; email?: string; phone?: string; room_number?: string; }
+
+export default function BranchGuestsPage() {
+  const { user } = useAuth();
+  const [guests, setGuests] = useState<Guest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [guests, setGuests] = useState<any[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => { fetchData(); }, []);
-
-  const fetchData = async () => {
+  const fetchGuests = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await bookingsAPI.getBookings().catch(() => ({ bookings: [] }));
-      const bookings = res.bookings || res.data || [];
-      const guestList = bookings.filter((b: any) => b.status === 'checked_in').map((b: any) => ({
-        id: b.id,
-        name: b.guest_name,
-        email: b.guest_email,
-        phone: b.guest_phone || b.phone,
-        room: b.room_number,
-        checkIn: b.check_in_date,
-        checkOut: b.check_out_date
-      }));
-      setGuests(guestList);
-    } catch (error) {
-      toast.error('Failed to load guests');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      const response = await guestAPI.getGuests();
+      if (response.success) setGuests(response.data || []);
+    } catch (error) { console.error('Error:', error); }
+    finally { setIsLoading(false); }
+  }, []);
 
-  const filteredGuests = guests.filter(g => 
-    g.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    g.email?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => { fetchGuests(); }, [fetchGuests]);
+
+  const filteredGuests = guests.filter((g) => `${g.first_name} ${g.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) || g.email?.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER]}>
+    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN, UserRole.RECEPTIONIST]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Guests</h1>
-              <p className="text-gray-600 mt-1">Manage current guests</p>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900">Guests</h1><p className="text-gray-500">Current and past guests</p></div>
+            <IOSButton variant="secondary" onClick={fetchGuests}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+          </div>
+
+          <IOSCard className="p-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input placeholder="Search guests..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
             </div>
-            <button onClick={fetchData} className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50">
-              <RefreshCw className="h-4 w-4" /> Refresh
-            </button>
-          </div>
+          </IOSCard>
 
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input type="text" placeholder="Search guests..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border rounded-lg" />
-          </div>
-
-          <div className="bg-white rounded-xl border overflow-hidden">
-            {isLoading ? (
-              <div className="text-center py-12"><div className="animate-spin h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto"></div></div>
-            ) : filteredGuests.length === 0 ? (
-              <div className="text-center py-12 text-gray-500"><Users className="h-12 w-12 mx-auto mb-3 text-gray-300" /><p>No guests found</p></div>
-            ) : (
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Guest</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Room</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Check Out</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {filteredGuests.map((guest) => (
-                    <tr key={guest.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 font-medium">{guest.name}</td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm space-y-1">
-                          {guest.phone && <div className="flex items-center gap-2"><Phone className="h-3 w-3" />{guest.phone}</div>}
-                          {guest.email && <div className="flex items-center gap-2"><Mail className="h-3 w-3" />{guest.email}</div>}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">{guest.room}</td>
-                      <td className="px-6 py-4 text-sm">{guest.checkOut ? new Date(guest.checkOut).toLocaleDateString() : '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
+          ) : filteredGuests.length === 0 ? (
+            <IOSCard className="p-12 text-center"><Users className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No guests found</p></IOSCard>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredGuests.map((guest) => (
+                <IOSCard key={guest.id} className="p-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold">
+                      {(guest.first_name || 'G')[0]}{(guest.last_name || '')[0]}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-bold">{guest.first_name} {guest.last_name}</p>
+                      {guest.room_number && <p className="text-sm text-gray-500">Room {guest.room_number}</p>}
+                      {guest.email && <p className="text-xs text-gray-400 flex items-center gap-1"><Mail className="h-3 w-3" /> {guest.email}</p>}
+                      {guest.phone && <p className="text-xs text-gray-400 flex items-center gap-1"><Phone className="h-3 w-3" /> {guest.phone}</p>}
+                    </div>
+                  </div>
+                </IOSCard>
+              ))}
+            </div>
+          )}
         </div>
       </DashboardLayout>
     </ProtectedRoute>

@@ -78,7 +78,7 @@ export default function AuditPage() {
             <h1 className="text-2xl font-bold text-gray-900">Inventory Audits</h1>
             <button
               onClick={() => setShowNewAuditModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              className="flex items-center gap-2 px-4 py-2 bg-[#3C3C43] text-white rounded-ios-lg hover:bg-[#3C3C43]"
             >
               <Plus className="h-4 w-4" />
               New Audit
@@ -87,36 +87,36 @@ export default function AuditPage() {
 
           {/* Stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <div className="bg-[#FFFFFF] rounded-xl shadow-none 0_1px_3px_rgba(0,0,0,0.04)] p-6 border border-gray-100">
               <div className="flex items-center gap-4">
-                <ClipboardCheck className="h-8 w-8 text-indigo-600" />
+                <ClipboardCheck className="h-8 w-8 text-[#3C3C43]" />
                 <div>
                   <p className="text-sm font-medium text-gray-500">Total Audits</p>
                   <p className="text-2xl font-bold text-gray-900">{stats.totalAudits}</p>
                 </div>
               </div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <div className="bg-[#FFFFFF] rounded-xl shadow-none 0_1px_3px_rgba(0,0,0,0.04)] p-6 border border-gray-100">
               <div className="flex items-center gap-4">
-                <AlertTriangle className="h-8 w-8 text-yellow-600" />
+                <AlertTriangle className="h-8 w-8 text-[#3C3C43]" />
                 <div>
                   <p className="text-sm font-medium text-gray-500">Pending</p>
                   <p className="text-2xl font-bold text-gray-900">{stats.pendingAudits}</p>
                 </div>
               </div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <div className="bg-[#FFFFFF] rounded-xl shadow-none 0_1px_3px_rgba(0,0,0,0.04)] p-6 border border-gray-100">
               <div className="flex items-center gap-4">
-                <ClipboardCheck className="h-8 w-8 text-blue-600" />
+                <ClipboardCheck className="h-8 w-8 text-[#3C3C43]" />
                 <div>
                   <p className="text-sm font-medium text-gray-500">In Progress</p>
                   <p className="text-2xl font-bold text-gray-900">{stats.inProgressAudits}</p>
                 </div>
               </div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <div className="bg-[#FFFFFF] rounded-xl shadow-none 0_1px_3px_rgba(0,0,0,0.04)] p-6 border border-gray-100">
               <div className="flex items-center gap-4">
-                <CheckCircle className="h-8 w-8 text-green-600" />
+                <CheckCircle className="h-8 w-8 text-[#3C3C43]" />
                 <div>
                   <p className="text-sm font-medium text-gray-500">Completed</p>
                   <p className="text-2xl font-bold text-gray-900">{stats.completedAudits}</p>
@@ -126,7 +126,7 @@ export default function AuditPage() {
           </div>
 
           {/* Content */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="bg-[#FFFFFF] rounded-xl shadow-none 0_1px_3px_rgba(0,0,0,0.04)] border border-gray-100">
             {/* Search and Filter */}
             <div className="p-6 border-b border-gray-100">
               <div className="flex items-center gap-4">
@@ -137,7 +137,7 @@ export default function AuditPage() {
                     placeholder="Search audits..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                    className="w-full pl-10 pr-4 py-2 border border-[#E5E5EA] rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                   />
                 </div>
                 <div className="relative">
@@ -145,7 +145,7 @@ export default function AuditPage() {
                   <select
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value)}
-                    className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent appearance-none bg-white"
+                    className="pl-10 pr-8 py-2 border border-[#E5E5EA] rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent appearance-none bg-[#FFFFFF]"
                   >
                     <option value="all">All Status</option>
                     <option value="pending">Pending</option>
@@ -189,10 +189,10 @@ export default function AuditPage() {
                             <span
                               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                 audit.status === 'completed'
-                                  ? 'bg-green-100 text-green-800'
+                                  ? 'bg-[#F2F2F7] text-[#000000]'
                                   : audit.status === 'in-progress'
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-yellow-100 text-yellow-800'
+                                  ? 'bg-[#F2F2F7] text-[#000000]'
+                                  : 'bg-[#F2F2F7] text-[#3C3C43]'
                               }`}
                             >
                               {audit.status}
@@ -203,7 +203,7 @@ export default function AuditPage() {
                             {new Date(audit.startedAt).toLocaleDateString()}
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-900">
-                            <button className="text-indigo-600 hover:text-indigo-900">View</button>
+                            <button className="text-[#3C3C43] hover:text-[#3C3C43]">View</button>
                           </td>
                         </tr>
                       );

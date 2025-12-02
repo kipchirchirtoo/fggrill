@@ -1,9 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-
-// API base URL
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 import { motion } from 'framer-motion';
 import {
   X, Bed, Users, DollarSign, Wifi, Coffee, Wind, Bath, MapPin,
@@ -11,6 +8,7 @@ import {
   Trash2, Plus, Shield, Key, Settings, Star, MessageSquare
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { roomsAPI } from '@/lib/api';
 
 // ============= ADD/EDIT ROOM MODAL =============
 export function RoomModal({ isOpen, onClose, room = null }: any) {
@@ -40,21 +38,23 @@ export function RoomModal({ isOpen, onClose, room = null }: any) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('token');
-      const url = `${API_URL}/api/rooms${room ? `/${room.id}` : ''}`;
-      const method = room ? 'PUT' : 'POST';
+      const payload: any = {
+        roomNumber: roomData.roomNumber,
+        floor: roomData.floor,
+        // Map simple type/status strings into backend fields where possible
+        // For now, we just forward them; the backend will validate
+        type: roomData.type,
+        status: roomData.status,
+        price: roomData.price,
+        maxOccupancy: roomData.maxOccupancy,
+        amenities: roomData.amenities,
+        description: roomData.description,
+      };
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(roomData)
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to ' + (room ? 'update' : 'create') + ' room');
+      if (room?.id) {
+        await roomsAPI.updateRoom(room.id, payload);
+      } else {
+        await roomsAPI.createRoom(payload);
       }
 
       toast.success(room ? 'Room updated successfully!' : 'Room added successfully!');
@@ -92,7 +92,7 @@ export function RoomModal({ isOpen, onClose, room = null }: any) {
           <h2 className="text-xl font-bold text-gray-900">
             {room ? 'Edit Room' : 'Add New Room'}
           </h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -100,7 +100,7 @@ export function RoomModal({ isOpen, onClose, room = null }: any) {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Basic Information */}
           <div>
-            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-4 flex items-center gap-2">
               <Bed className="h-5 w-5" />
               Room Information
             </h3>
@@ -112,7 +112,7 @@ export function RoomModal({ isOpen, onClose, room = null }: any) {
                   required
                   value={roomData.roomNumber}
                   onChange={(e) => setRoomData({ ...roomData, roomNumber: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
               <div>
@@ -123,7 +123,7 @@ export function RoomModal({ isOpen, onClose, room = null }: any) {
                   min="1"
                   value={roomData.floor}
                   onChange={(e) => setRoomData({ ...roomData, floor: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
               <div>
@@ -131,7 +131,7 @@ export function RoomModal({ isOpen, onClose, room = null }: any) {
                 <select
                   value={roomData.type}
                   onChange={(e) => setRoomData({ ...roomData, type: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="Standard">Standard</option>
                   <option value="Deluxe">Deluxe</option>
@@ -145,7 +145,7 @@ export function RoomModal({ isOpen, onClose, room = null }: any) {
                 <select
                   value={roomData.status}
                   onChange={(e) => setRoomData({ ...roomData, status: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="available">Available</option>
                   <option value="occupied">Occupied</option>
@@ -162,7 +162,7 @@ export function RoomModal({ isOpen, onClose, room = null }: any) {
                   min="0"
                   value={roomData.price}
                   onChange={(e) => setRoomData({ ...roomData, price: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
               <div>
@@ -173,7 +173,7 @@ export function RoomModal({ isOpen, onClose, room = null }: any) {
                   min="1"
                   value={roomData.maxOccupancy}
                   onChange={(e) => setRoomData({ ...roomData, maxOccupancy: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
             </div>
@@ -181,7 +181,7 @@ export function RoomModal({ isOpen, onClose, room = null }: any) {
 
           {/* Amenities */}
           <div>
-            <h3 className="font-semibold text-gray-900 mb-4">Amenities</h3>
+            <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-4">Amenities</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {amenitiesList.map(amenity => {
                 const Icon = amenity.icon;
@@ -191,7 +191,7 @@ export function RoomModal({ isOpen, onClose, room = null }: any) {
                     key={amenity.id}
                     type="button"
                     onClick={() => toggleAmenity(amenity.id)}
-                    className={'p-3 rounded-lg border-2 transition-colors ' + (isSelected ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 hover:border-gray-300')}
+                    className={'p-3 rounded-ios-lg border-2 transition-colors ' + (isSelected ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 hover:border-gray-300')}
                   >
                     <Icon className="h-5 w-5 mx-auto mb-1" />
                     <span className="text-xs">{amenity.label}</span>
@@ -207,7 +207,7 @@ export function RoomModal({ isOpen, onClose, room = null }: any) {
             <textarea
               value={roomData.description}
               onChange={(e) => setRoomData({ ...roomData, description: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500"
               rows={4}
               placeholder="Room description and special features..."
             />
@@ -216,7 +216,7 @@ export function RoomModal({ isOpen, onClose, room = null }: any) {
           {/* Photos */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Photos</label>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+            <div className="border-2 border-dashed border-gray-300 rounded-ios-lg p-6 text-center">
               <Camera className="h-8 w-8 text-gray-400 mx-auto mb-2" />
               <p className="text-sm text-gray-600">Click to upload room photos</p>
               <input type="file" multiple accept="image/*" className="hidden" />
@@ -234,7 +234,7 @@ export function RoomModal({ isOpen, onClose, room = null }: any) {
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+              className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700 flex items-center gap-2"
             >
               <Save className="h-4 w-4" />
               {room ? 'Update Room' : 'Add Room'}
@@ -270,41 +270,23 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
         let endpoint = '';
 
         switch (activeTab) {
-          case 'history':
-            endpoint = `/api/rooms/${room.id}/bookings`;
+          case 'history': {
+            const data = await roomsAPI.getRoomBookings(room.id);
+            setBookingHistory(data.data || data || []);
             break;
-          case 'maintenance':
-            endpoint = `/api/rooms/${room.id}/maintenance`;
+          }
+          case 'maintenance': {
+            const data = await roomsAPI.getRoomMaintenance(room.id);
+            setMaintenanceRecords(data.data || data || []);
             break;
-          case 'reviews':
-            endpoint = `/api/rooms/${room.id}/reviews`;
+          }
+          case 'reviews': {
+            const data = await roomsAPI.getRoomReviews(room.id);
+            setReviews(data.data || data || []);
             break;
+          }
           default:
             return;
-        }
-
-        const response = await fetch(`${API_URL}${endpoint}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch ${activeTab}`);
-        }
-
-        const data = await response.json();
-
-        switch (activeTab) {
-          case 'history':
-            setBookingHistory(data.data);
-            break;
-          case 'maintenance':
-            setMaintenanceRecords(data.data);
-            break;
-          case 'reviews':
-            setReviews(data.data);
-            break;
         }
       } catch (err) {
         toast.error(err instanceof Error ? err.message : `Failed to fetch ${activeTab}`);
@@ -334,7 +316,7 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
             <h2 className="text-xl font-bold text-gray-900">Room {room.roomNumber}</h2>
             <p className="text-sm text-gray-500">{room.type} • Floor {room.floor}</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -359,7 +341,7 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-6">
               <div>
-                <h3 className="font-semibold text-gray-900 mb-3">Room Information</h3>
+                <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-3">Room Information</h3>
                 <dl className="space-y-2">
                   <div className="flex justify-between">
                     <dt className="text-gray-600">Status:</dt>
@@ -380,9 +362,9 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
                 </dl>
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900 mb-3">Current Guest</h3>
+                <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-3">Current Guest</h3>
                 {room.currentGuest ? (
-                  <div className="bg-blue-50 rounded-lg p-4">
+                  <div className="bg-blue-50 rounded-ios-lg p-4">
                     <p className="font-medium text-blue-900">{room.currentGuest}</p>
                     <p className="text-sm text-blue-700">Check-out: {room.checkOut}</p>
                   </div>
@@ -393,7 +375,7 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
             </div>
 
             <div>
-              <h3 className="font-semibold text-gray-900 mb-3">Amenities</h3>
+              <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-3">Amenities</h3>
               <div className="flex flex-wrap gap-2">
                 {room.amenities?.map((amenity: string) => (
                   <span key={amenity} className="px-3 py-1 bg-gray-100 rounded-full text-sm capitalize">
@@ -411,34 +393,21 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
                     onClose();
                   }
                 }}
-                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700">
                 <Edit className="inline h-4 w-4 mr-2" />
                 Edit Room
               </button>
               <button 
                 onClick={async () => {
                   try {
-                    const token = localStorage.getItem('token');
-                    const response = await fetch(`${API_URL}/api/rooms/${room.id}/status`, {
-                      method: 'PUT',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                      },
-                      body: JSON.stringify({ status: 'maintenance' })
-                    });
-
-                    if (!response.ok) {
-                      throw new Error('Failed to update room status');
-                    }
-
+                    await roomsAPI.updateRoomStatus(room.id, 'maintenance');
                     toast.success('Room status updated successfully');
                     onClose();
                   } catch (err) {
                     toast.error(err instanceof Error ? err.message : 'Failed to update room status');
                   }
                 }}
-                className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700">
+                className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-ios-lg hover:bg-yellow-700">
                 <AlertCircle className="inline h-4 w-4 mr-2" />
                 Change Status
               </button>
@@ -446,18 +415,7 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
                 onClick={async () => {
                   if (confirm('Are you sure you want to delete this room?')) {
                     try {
-                      const token = localStorage.getItem('token');
-                      const response = await fetch(`${API_URL}/api/rooms/${room.id}`, {
-                        method: 'DELETE',
-                        headers: {
-                          'Authorization': `Bearer ${token}`
-                        }
-                      });
-
-                      if (!response.ok) {
-                        throw new Error('Failed to delete room');
-                      }
-
+                      await roomsAPI.deleteRoom(room.id);
                       toast.success('Room deleted successfully');
                       onClose();
                     } catch (err) {
@@ -465,7 +423,7 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
                     }
                   }
                 }}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-ios-lg hover:bg-red-700">
                 <Trash2 className="inline h-4 w-4 mr-2" />
                 Delete Room
               </button>
@@ -475,11 +433,11 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
 
         {activeTab === 'history' && (
           <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900">Booking History</h3>
+            <h3 className="font-semibold font-sf-pro-display text-gray-900">Booking History</h3>
             <div className="space-y-3">
               {bookingHistory.length > 0 ? (
                 bookingHistory.map(booking => (
-                  <div key={booking.id} className="border rounded-lg p-4">
+                  <div key={booking.id} className="border rounded-ios-lg p-4">
                     <div className="flex justify-between">
                       <div>
                         <p className="font-medium">{booking.guest?.firstName} {booking.guest?.lastName}</p>
@@ -504,8 +462,8 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
         {activeTab === 'maintenance' && (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="font-semibold text-gray-900">Maintenance Records</h3>
-              <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">
+              <h3 className="font-semibold font-sf-pro-display text-gray-900">Maintenance Records</h3>
+              <button className="px-4 py-2 bg-indigo-600 text-white rounded-ios-lg text-sm">
                 <Plus className="inline h-4 w-4 mr-1" />
                 Add Record
               </button>
@@ -513,7 +471,7 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
             <div className="space-y-3">
               {maintenanceRecords.length > 0 ? (
                 maintenanceRecords.map(record => (
-                  <div key={record.id} className="border rounded-lg p-4">
+                  <div key={record.id} className="border rounded-ios-lg p-4">
                     <div className="flex justify-between mb-2">
                       <div>
                         <p className="font-medium">{record.type}</p>
@@ -539,11 +497,11 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
 
         {activeTab === 'reviews' && (
           <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900">Guest Reviews</h3>
+            <h3 className="font-semibold font-sf-pro-display text-gray-900">Guest Reviews</h3>
             <div className="space-y-3">
               {reviews.length > 0 ? (
                 reviews.map(review => (
-                  <div key={review.id} className="border rounded-lg p-4">
+                  <div key={review.id} className="border rounded-ios-lg p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <div className="flex text-yellow-400">
                         {[...Array(5)].map((_, i) => (

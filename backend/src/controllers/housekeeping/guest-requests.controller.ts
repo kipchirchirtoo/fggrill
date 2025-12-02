@@ -81,7 +81,7 @@ export const getGuestRequest = async (
       .select(`
         *,
         room:rooms(*),
-        assignee:hk_staff_profiles!assigned_to(id, staff_code, user:users(first_name, last_name, phone)),
+        assignee:hk_staff_profiles!assigned_to(id, staff_code, user:users(first_name, last_name, phone_number)),
         completed_by_staff:hk_staff_profiles!completed_by(id, staff_code, user:users(first_name, last_name))
       `)
       .eq('id', id)

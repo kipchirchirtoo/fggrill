@@ -1,79 +1,63 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Building2, Package, AlertTriangle, RefreshCw, Search } from 'lucide-react';
-import { toast } from 'sonner';
-import { storeAPI } from '@/lib/api';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
+import { storeAPI, systemAPI } from '@/lib/api';
+import { Building2, RefreshCw, Package, AlertTriangle } from 'lucide-react';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
-export default function AdminBranchStockPage() {
+interface Branch { id: number; name: string; location: string; totalItems: number; lowStock: number; }
+
+export default function AdminBranchStorePage() {
+  const { user } = useAuth();
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [branches, setBranches] = useState<any[]>([]);
-  const [selectedBranch, setSelectedBranch] = useState<string>('all');
-  const [branchStock, setBranchStock] = useState<any[]>([]);
 
-  useEffect(() => { fetchData(); }, []);
-
-  const fetchData = async () => {
+  const fetchBranches = useCallback(async () => {
     setIsLoading(true);
     try {
-      const branchesRes = await storeAPI.getBranchesWithStock().catch(() => ({ branches: [] }));
-      setBranches(branchesRes.branches || branchesRes.data || []);
-      const stockRes = await storeAPI.getBranchStock().catch(() => ({ items: [] }));
-      setBranchStock(stockRes.items || stockRes.data || []);
-    } catch (error) {
-      toast.error('Failed to load branch stock');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      const response = await storeAPI.getBranchesWithStock();
+      if (response.success) setBranches(response.data || []);
+    } catch (error) { console.error('Error:', error); }
+    finally { setIsLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchBranches(); }, [fetchBranches]);
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Branch Stock</h1>
-              <p className="text-gray-600 mt-1">View stock levels across all branches</p>
-            </div>
-            <button onClick={fetchData} className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50">
-              <RefreshCw className="h-4 w-4" /> Refresh
-            </button>
-          </div>
-
-          <div className="flex gap-4">
-            <select value={selectedBranch} onChange={(e) => setSelectedBranch(e.target.value)} className="px-4 py-2 border rounded-lg">
-              <option value="all">All Branches</option>
-              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900">Branch Stores</h1><p className="text-gray-500">Stock levels by branch</p></div>
+            <IOSButton variant="secondary" onClick={fetchBranches}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
           </div>
 
           {isLoading ? (
-            <div className="text-center py-12"><div className="animate-spin h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto"></div></div>
+            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
+          ) : branches.length === 0 ? (
+            <IOSCard className="p-12 text-center"><Building2 className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No branches</p></IOSCard>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {branches.map(branch => (
-                <div key={branch.id} className="bg-white rounded-xl p-6 border hover:shadow-md transition-shadow">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 bg-indigo-100 rounded-lg"><Building2 className="h-5 w-5 text-indigo-600" /></div>
-                    <div>
-                      <h3 className="font-semibold">{branch.name}</h3>
-                      <p className="text-sm text-gray-500">{branch.code}</p>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {branches.map((branch) => (
+                <IOSCard key={branch.id} className="p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="p-3 bg-blue-100 rounded-ios-lg"><Building2 className="h-6 w-6 text-[#007AFF]" /></div>
+                    <div className="flex-1">
+                      <p className="font-bold text-lg">{branch.name}</p>
+                      <p className="text-sm text-gray-500">{branch.location}</p>
+                      <div className="grid grid-cols-2 gap-4 mt-4">
+                        <div className="flex items-center gap-2"><Package className="h-4 w-4 text-[#007AFF]" /><span className="text-sm">{branch.totalItems || 0} items</span></div>
+                        <div className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-yellow-600" /><span className="text-sm text-yellow-600">{branch.lowStock || 0} low</span></div>
+                      </div>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between"><span className="text-gray-500">Items</span><span className="font-medium">{branch.item_count || 0}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-500">Total Value</span><span className="font-medium">KES {((branch.total_value || 0)/1000).toFixed(0)}K</span></div>
-                    {(branch.low_stock_count || 0) > 0 && (
-                      <div className="flex items-center gap-2 text-red-600 text-sm mt-2">
-                        <AlertTriangle className="h-4 w-4" /> {branch.low_stock_count} items low
-                      </div>
-                    )}
-                  </div>
-                </div>
+                </IOSCard>
               ))}
             </div>
           )}

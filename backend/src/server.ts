@@ -11,17 +11,28 @@ import { errorHandler } from './middleware/errorHandler';
 import { logRequest } from './middleware/auth';
 import { logger } from './utils/logger';
 import routes from './routes';
+import { automationService } from './services/automation.service';
 
 // Initialize app with Socket.IO
 initializeApp().then(({ app, httpServer }) => {
   // Middleware
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+  
+  // Relaxed CORS for development
   app.use(cors({
-    origin: [process.env.FRONTEND_URL || 'http://localhost:3000', 'http://localhost:3001'],
-    credentials: true
+    origin: true, // Allow all origins temporarily for debugging
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
   }));
-  app.use(helmet());
+  
+  // Relaxed Helmet for development
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: false // Disable CSP for development
+  }));
+  
   app.use(morgan('dev'));
   app.use(logRequest);
 

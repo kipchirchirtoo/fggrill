@@ -4,13 +4,15 @@ import { useState, useEffect } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/minimal/button";
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
+import { IOSBadge } from '@/components/ui/ios-badge';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Building2, Plus, Edit, Trash2, RefreshCw, Save, Phone, Mail, MapPin, CheckCircle, XCircle, Ban } from 'lucide-react';
 import { toast } from 'sonner';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -136,9 +138,9 @@ export default function SuppliersPage() {
   };
 
   const getStatusColor = (s: string) => ({
-    ACTIVE: 'bg-green-100 text-green-800',
+    ACTIVE: 'bg-[#F2F2F7] text-[#000000]',
     INACTIVE: 'bg-gray-100 text-gray-800',
-    BLOCKED: 'bg-red-100 text-red-800'
+    BLOCKED: 'bg-[#F2F2F7] text-[#000000]'
   }[s] || 'bg-gray-100 text-gray-800');
 
   const getStatusIcon = (s: string) => {
@@ -166,24 +168,24 @@ export default function SuppliersPage() {
               <p className="text-gray-600">Manage vendors and suppliers</p>
             </div>
             <div className="flex gap-3">
-              <Button variant="outline" onClick={fetchSuppliers}><RefreshCw className="h-4 w-4 mr-2" />Refresh</Button>
-              {canEdit && <Button onClick={openAddModal}><Plus className="h-4 w-4 mr-2" />Add Supplier</Button>}
+              <IOSButton variant="outline" onClick={fetchSuppliers}><RefreshCw className="h-4 w-4 mr-2" />Refresh</IOSButton>
+              {canEdit && <IOSButton onClick={openAddModal}><Plus className="h-4 w-4 mr-2" />Add Supplier</IOSButton>}
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="p-4"><div className="flex items-center gap-3"><Building2 className="h-8 w-8 text-blue-500" /><div><p className="text-sm text-gray-500">Total Suppliers</p><p className="text-2xl font-bold">{suppliers.length}</p></div></div></Card>
-            <Card className="p-4"><div className="flex items-center gap-3"><CheckCircle className="h-8 w-8 text-green-500" /><div><p className="text-sm text-gray-500">Active</p><p className="text-2xl font-bold text-green-600">{activeCount}</p></div></div></Card>
-            <Card className="p-4"><div className="flex items-center gap-3"><Ban className="h-8 w-8 text-red-500" /><div><p className="text-sm text-gray-500">Blocked</p><p className="text-2xl font-bold text-red-600">{suppliers.filter(s => s.status === 'BLOCKED').length}</p></div></div></Card>
+            <IOSCard className="p-4"><div className="flex items-center gap-3"><Building2 className="h-8 w-8 text-[#8E8E93]0" /><div><p className="text-sm text-gray-500">Total Suppliers</p><p className="text-2xl font-bold">{suppliers.length}</p></div></div></IOSCard>
+            <IOSCard className="p-4"><div className="flex items-center gap-3"><CheckCircle className="h-8 w-8 text-[#8E8E93]0" /><div><p className="text-sm text-gray-500">Active</p><p className="text-2xl font-bold text-[#3C3C43]">{activeCount}</p></div></div></IOSCard>
+            <IOSCard className="p-4"><div className="flex items-center gap-3"><Ban className="h-8 w-8 text-[#8E8E93]0" /><div><p className="text-sm text-gray-500">Blocked</p><p className="text-2xl font-bold text-[#3C3C43]">{suppliers.filter(s => s.status === 'BLOCKED').length}</p></div></div></IOSCard>
           </div>
 
           <div className="flex gap-4">
             <Input placeholder="Search suppliers..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="max-w-md" />
           </div>
 
-          <Card>
+          <IOSCard>
             {isLoading ? (
-              <div className="p-12 text-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div></div>
+              <div className="p-12 text-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[rgba(60,60,67,0.12)] mx-auto"></div></div>
             ) : filteredSuppliers.length === 0 ? (
               <div className="p-12 text-center text-gray-500"><Building2 className="h-12 w-12 mx-auto mb-3 opacity-30" /><p>No suppliers found</p></div>
             ) : (
@@ -223,17 +225,17 @@ export default function SuppliersPage() {
                             </div>
                           ) : <span className="text-gray-400">-</span>}
                         </td>
-                        <td className="px-4 py-4"><Badge variant="outline">{s.payment_terms || 'NET30'}</Badge></td>
+                        <td className="px-4 py-4"><IOSBadge variant="outline">{s.payment_terms || 'NET30'}</IOSBadge></td>
                         <td className="px-4 py-4">
-                          <Badge className={getStatusColor(s.status)}>
+                          <IOSBadge className={getStatusColor(s.status)}>
                             <span className="flex items-center gap-1">{getStatusIcon(s.status)} {s.status}</span>
-                          </Badge>
+                          </IOSBadge>
                         </td>
                         {canEdit && (
                           <td className="px-4 py-4">
                             <div className="flex gap-2">
-                              <Button size="sm" variant="outline" onClick={() => openEditModal(s)}><Edit className="h-4 w-4" /></Button>
-                              <Button size="sm" variant="outline" className="text-red-600" onClick={() => { setSelectedSupplier(s); setIsDeleteModalOpen(true); }}><Trash2 className="h-4 w-4" /></Button>
+                              <IOSButton size="sm" variant="outline" onClick={() => openEditModal(s)}><Edit className="h-4 w-4" /></IOSButton>
+                              <IOSButton size="sm" variant="outline" className="text-[#3C3C43]" onClick={() => { setSelectedSupplier(s); setIsDeleteModalOpen(true); }}><Trash2 className="h-4 w-4" /></IOSButton>
                             </div>
                           </td>
                         )}
@@ -243,7 +245,7 @@ export default function SuppliersPage() {
                 </table>
               </div>
             )}
-          </Card>
+          </IOSCard>
         </div>
 
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
@@ -264,19 +266,19 @@ export default function SuppliersPage() {
                 <div><label className="text-sm font-medium">Address</label><Input value={form.address} onChange={e => setForm({...form, address: e.target.value})} placeholder="Street address" /></div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm font-medium">Payment Terms</label><select value={form.payment_terms} onChange={e => setForm({...form, payment_terms: e.target.value})} className="w-full px-3 py-2 border rounded-lg">{PAYMENT_TERMS.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                <div><label className="text-sm font-medium">Status</label><select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full px-3 py-2 border rounded-lg">{STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                <div><label className="text-sm font-medium">Payment Terms</label><select value={form.payment_terms} onChange={e => setForm({...form, payment_terms: e.target.value})} className="w-full px-3 py-2 border rounded-ios-lg">{PAYMENT_TERMS.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                <div><label className="text-sm font-medium">Status</label><select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full px-3 py-2 border rounded-ios-lg">{STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
               </div>
-              <div className="flex justify-end gap-3 pt-4"><Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button><Button onClick={handleSave}><Save className="h-4 w-4 mr-2" />Save</Button></div>
+              <div className="flex justify-end gap-3 pt-4"><IOSButton variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</IOSButton><IOSButton onClick={handleSave}><Save className="h-4 w-4 mr-2" />Save</IOSButton></div>
             </div>
           </DialogContent>
         </Dialog>
 
         <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
           <DialogContent>
-            <DialogHeader><DialogTitle className="text-red-600">Delete Supplier</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle className="text-[#3C3C43]">Delete Supplier</DialogTitle></DialogHeader>
             <p>Are you sure you want to delete <strong>{selectedSupplier?.name}</strong>?</p>
-            <div className="flex justify-end gap-3 pt-4"><Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button><Button className="bg-red-600 hover:bg-red-700" onClick={handleDelete}><Trash2 className="h-4 w-4 mr-2" />Delete</Button></div>
+            <div className="flex justify-end gap-3 pt-4"><IOSButton variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</IOSButton><IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleDelete}><Trash2 className="h-4 w-4 mr-2" />Delete</IOSButton></div>
           </DialogContent>
         </Dialog>
       </DashboardLayout>

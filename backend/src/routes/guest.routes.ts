@@ -15,7 +15,6 @@ const router = express.Router();
 // Protected routes
 router.use(protect);
 
-// Staff routes (Admin, Manager, Receptionist)
 router.get('/',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST]),
   getGuests
@@ -41,7 +40,6 @@ router.put('/:id/preferences',
   updateGuestPreferences
 );
 
-// Admin only routes
 router.delete('/:id',
   authorize([UserRole.SUPER_ADMIN]),
   deleteGuest

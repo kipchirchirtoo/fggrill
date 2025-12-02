@@ -4,62 +4,50 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   X, FileText, Calendar, DollarSign, BarChart3,
-  Download, Save, Filter, ChevronDown
+  Download, Save, Filter, ChevronDown, Loader2, Bed, Home, Wrench
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { reportsService } from '@/lib/api';
 
 interface ReportModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialReportType?: string;
 }
 
-export function ReportModal({ isOpen, onClose }: ReportModalProps): JSX.Element | null {
-  const [reportType, setReportType] = useState('occupancy');
+export function ReportModal({ isOpen, onClose, initialReportType }: ReportModalProps): JSX.Element | null {
+  const [reportType, setReportType] = useState(initialReportType || 'occupancy');
   const [dateRange, setDateRange] = useState({
-    startDate: '',
-    endDate: ''
+    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0]
   });
-  const [filters, setFilters] = useState({
-    roomType: 'all',
-    paymentStatus: 'all'
-  });
+  const [format, setFormat] = useState<'pdf' | 'excel'>('pdf');
+  const [generating, setGenerating] = useState(false);
 
   const reportTypes = [
-    { id: 'occupancy', name: 'Occupancy Report', icon: BarChart3 },
-    { id: 'revenue', name: 'Revenue Report', icon: DollarSign },
-    { id: 'housekeeping', name: 'Housekeeping Report', icon: FileText },
-    { id: 'maintenance', name: 'Maintenance Report', icon: FileText }
+    { id: 'occupancy', name: 'Occupancy Report', icon: Bed },
+    { id: 'daily_sales', name: 'Daily Sales', icon: DollarSign },
+    { id: 'financial_summary', name: 'Financial Summary', icon: BarChart3 },
+    { id: 'housekeeping', name: 'Housekeeping', icon: Home },
+    { id: 'maintenance', name: 'Maintenance', icon: Wrench },
+    { id: 'inventory_status', name: 'Inventory Status', icon: FileText }
   ];
 
   const handleGenerateReport = async () => {
+    setGenerating(true);
     try {
-      // TODO: Implement API call
-      const response = await fetch('/api/reports', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: reportType,
-          dateRange,
-          filters
-        })
-      });
-
-      if (!response.ok) throw new Error('Failed to generate report');
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = reportType + '-report.pdf';
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      toast.success('Report generated successfully!');
+      const filters = {
+        start_date: dateRange.startDate,
+        end_date: dateRange.endDate
+      };
+      
+      await reportsService.downloadReport(reportType, filters, format);
+      toast.success('Report downloaded successfully!');
       onClose();
-    } catch (error) {
-      toast.error('Failed to generate report');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to generate report');
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -82,7 +70,7 @@ export function ReportModal({ isOpen, onClose }: ReportModalProps): JSX.Element 
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900">Generate Report</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -98,7 +86,7 @@ export function ReportModal({ isOpen, onClose }: ReportModalProps): JSX.Element 
                 <button
                   key={type.id}
                   onClick={() => setReportType(type.id)}
-                  className={'flex items-center gap-2 p-3 rounded-lg border ' + (reportType === type.id ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-gray-200 hover:border-gray-300')}
+                  className={'flex items-center gap-2 p-3 rounded-ios-lg border ' + (reportType === type.id ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-gray-200 hover:border-gray-300')}
                 >
                   <type.icon className="h-5 w-5" />
                   <span className="text-sm font-medium">{type.name}</span>
@@ -120,7 +108,7 @@ export function ReportModal({ isOpen, onClose }: ReportModalProps): JSX.Element 
                   ...prev,
                   startDate: e.target.value
                 }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
             </div>
             <div>
@@ -134,43 +122,39 @@ export function ReportModal({ isOpen, onClose }: ReportModalProps): JSX.Element 
                   ...prev,
                   endDate: e.target.value
                 }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
             </div>
           </div>
 
-          {/* Filters */}
+          {/* Format Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Filters
+              Output Format
             </label>
             <div className="grid grid-cols-2 gap-4">
-              <select
-                value={filters.roomType}
-                onChange={(e) => setFilters(prev => ({
-                  ...prev,
-                  roomType: e.target.value
-                }))}
-                className="px-3 py-2 border border-gray-300 rounded-lg"
+              <button
+                onClick={() => setFormat('pdf')}
+                className={`flex items-center justify-center gap-2 p-3 rounded-ios-lg border ${
+                  format === 'pdf' 
+                    ? 'border-[#3C3C43] bg-[#F2F2F7] text-[#3C3C43]' 
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
               >
-                <option value="all">All Room Types</option>
-                <option value="standard">Standard</option>
-                <option value="deluxe">Deluxe</option>
-                <option value="suite">Suite</option>
-              </select>
-              <select
-                value={filters.paymentStatus}
-                onChange={(e) => setFilters(prev => ({
-                  ...prev,
-                  paymentStatus: e.target.value
-                }))}
-                className="px-3 py-2 border border-gray-300 rounded-lg"
+                <FileText className="h-5 w-5" />
+                <span className="text-sm font-medium">PDF</span>
+              </button>
+              <button
+                onClick={() => setFormat('excel')}
+                className={`flex items-center justify-center gap-2 p-3 rounded-ios-lg border ${
+                  format === 'excel' 
+                    ? 'border-[#3C3C43] bg-[#F2F2F7] text-[#3C3C43]' 
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
               >
-                <option value="all">All Payment Status</option>
-                <option value="paid">Paid</option>
-                <option value="pending">Pending</option>
-                <option value="overdue">Overdue</option>
-              </select>
+                <Download className="h-5 w-5" />
+                <span className="text-sm font-medium">Excel</span>
+              </button>
             </div>
           </div>
         </div>
@@ -178,10 +162,15 @@ export function ReportModal({ isOpen, onClose }: ReportModalProps): JSX.Element 
         <div className="flex justify-end mt-6 pt-6 border-t">
           <button
             onClick={handleGenerateReport}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            disabled={generating}
+            className="px-6 py-2 bg-[#3C3C43] text-white rounded-ios-lg hover:bg-[#2C2C33] disabled:opacity-50 flex items-center gap-2"
           >
-            <FileText className="inline h-4 w-4 mr-2" />
-            Generate Report
+            {generating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            {generating ? 'Generating...' : 'Download Report'}
           </button>
         </div>
       </motion.div>

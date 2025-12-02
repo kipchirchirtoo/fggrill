@@ -12,15 +12,17 @@ import { UserRole } from '../models/User';
 
 const router = express.Router();
 
-// Apply authentication to all routes
+// Public reference data (no authentication needed)
+router.get('/branches', getBranches);
+
+// Apply authentication to all other routes
 router.use(protect);
 
 // =====================================================
-// BRANCHES ROUTES
+// BRANCHES ROUTES (Protected)
 // =====================================================
 
 router.route('/branches')
-  .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER]), getBranches)
   .post(authorize([UserRole.SUPER_ADMIN]), createBranch);
 
 // =====================================================

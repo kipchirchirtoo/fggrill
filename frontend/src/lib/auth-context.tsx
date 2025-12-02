@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { api } from '@/lib/api';
 
 // User roles for Famous Gate Hotel
 export enum UserRole {
@@ -50,246 +51,94 @@ interface AuthContextType {
 // Create context
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// API base URL
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
-// Demo login credentials
-const DEMO_USERS = [
-  // === ADMINISTRATION ===
-  {
-    id: 'admin-1',
-    email: 'admin@famousgate.com',
-    password: 'admin123',
-    firstName: 'John',
-    lastName: 'Doe',
-    role: UserRole.SUPER_ADMIN,
-    department: 'IT Administration',
-    branch_id: null,
-    branch_name: 'All Branches'
-  },
-  {
-    id: 'gm-1',
-    email: 'gm@famousgate.com',
-    password: 'gm123',
-    firstName: 'Jane',
-    lastName: 'Muthoni',
-    role: UserRole.GENERAL_MANAGER,
-    department: 'Executive Management',
-    branch_id: null,
-    branch_name: 'All Branches'
-  },
-  // === BRANCH MANAGERS ===
-  {
-    id: 'bm-bomet-1',
-    email: 'manager.bomet@famousgate.com',
-    password: 'bomet123',
-    firstName: 'Samuel',
-    lastName: 'Kipchoge',
-    role: UserRole.BRANCH_MANAGER,
-    department: 'Branch Management',
-    branch_id: 1,
-    branch_name: 'Famous Gate Bomet (HQ)'
-  },
-  {
-    id: 'bm-kericho-1',
-    email: 'manager.kericho@famousgate.com',
-    password: 'kericho123',
-    firstName: 'Grace',
-    lastName: 'Chebet',
-    role: UserRole.BRANCH_MANAGER,
-    department: 'Branch Management',
-    branch_id: 3,
-    branch_name: 'Famous Gate Kericho'
-  },
-  {
-    id: 'bm-litein-1',
-    email: 'manager.litein@famousgate.com',
-    password: 'litein123',
-    firstName: 'Daniel',
-    lastName: 'Kosgei',
-    role: UserRole.BRANCH_MANAGER,
-    department: 'Branch Management',
-    branch_id: 6,
-    branch_name: 'Famous Gate Litein'
-  },
-  // === CENTRAL WAREHOUSE ===
-  {
-    id: 'central-store-1',
-    email: 'central@famousgate.com',
-    password: 'central123',
-    firstName: 'Peter',
-    lastName: 'Kimani',
-    role: UserRole.CENTRAL_STOREKEEPER,
-    department: 'Central Warehouse',
-    branch_id: 1,
-    branch_name: 'Central Warehouse (Bomet HQ)'
-  },
-  // === BRANCH STOREKEEPERS ===
-  {
-    id: 'branch-store-bomet',
-    email: 'store.bomet@famousgate.com',
-    password: 'store123',
-    firstName: 'Mary',
-    lastName: 'Wanjiku',
-    role: UserRole.BRANCH_STOREKEEPER,
-    department: 'Branch Store',
-    branch_id: 2,
-    branch_name: 'Famous Gate Bomet Town'
-  },
-  {
-    id: 'branch-store-kericho',
-    email: 'store.kericho@famousgate.com',
-    password: 'store123',
-    firstName: 'James',
-    lastName: 'Korir',
-    role: UserRole.BRANCH_STOREKEEPER,
-    department: 'Branch Store',
-    branch_id: 3,
-    branch_name: 'Famous Gate Kericho'
-  },
-  {
-    id: 'branch-store-kapsoit',
-    email: 'store.kapsoit@famousgate.com',
-    password: 'store123',
-    firstName: 'Alice',
-    lastName: 'Tanui',
-    role: UserRole.BRANCH_STOREKEEPER,
-    department: 'Branch Store',
-    branch_id: 4,
-    branch_name: 'Famous Gate Kapsoit'
-  },
-  // === FINANCE ===
-  {
-    id: 'accountant-1',
-    email: 'accountant@famousgate.com',
-    password: 'account123',
-    firstName: 'Emily',
-    lastName: 'Davis',
-    role: UserRole.ACCOUNTANT,
-    department: 'Finance',
-    branch_id: null,
-    branch_name: 'All Branches'
-  },
-  {
-    id: 'auditor-1',
-    email: 'auditor@famousgate.com',
-    password: 'audit123',
-    firstName: 'David',
-    lastName: 'Anderson',
-    role: UserRole.AUDITOR,
-    department: 'Audit',
-    branch_id: null,
-    branch_name: 'All Branches'
-  },
-  // === OPERATIONS ===
-  {
-    id: 'reception-1',
-    email: 'reception@famousgate.com',
-    password: 'reception123',
-    firstName: 'Mike',
-    lastName: 'Johnson',
-    role: UserRole.RECEPTIONIST,
-    department: 'Front Desk',
-    branch_id: 1,
-    branch_name: 'Famous Gate Bomet (HQ)'
-  },
-  {
-    id: 'housekeeping-1',
-    email: 'housekeeping@famousgate.com',
-    password: 'house123',
-    firstName: 'Sarah',
-    lastName: 'Wilson',
-    role: UserRole.HOUSEKEEPING,
-    department: 'Housekeeping',
-    branch_id: 1,
-    branch_name: 'Famous Gate Bomet (HQ)'
-  },
-  {
-    id: 'restaurant-1',
-    email: 'restaurant@famousgate.com',
-    password: 'rest123',
-    firstName: 'Tom',
-    lastName: 'Brown',
-    role: UserRole.RESTAURANT,
-    department: 'Restaurant & Kitchen',
-    branch_id: 1,
-    branch_name: 'Famous Gate Bomet (HQ)'
-  },
-  // === BARTENDERS ===
-  {
-    id: 'bartender-1',
-    email: 'bar.bomet@famousgate.com',
-    password: 'bar123',
-    firstName: 'Kevin',
-    lastName: 'Omondi',
-    role: UserRole.BARTENDER,
-    department: 'Bar & Lounge',
-    branch_id: 1,
-    branch_name: 'Famous Gate Bomet (HQ)'
-  },
-  {
-    id: 'bartender-2',
-    email: 'bar.kericho@famousgate.com',
-    password: 'bar123',
-    firstName: 'Brian',
-    lastName: 'Kiprop',
-    role: UserRole.BARTENDER,
-    department: 'Bar & Lounge',
-    branch_id: 3,
-    branch_name: 'Famous Gate Kericho'
-  },
-  {
-    id: 'bartender-3',
-    email: 'bar.litein@famousgate.com',
-    password: 'bar123',
-    firstName: 'Joyce',
-    lastName: 'Cherop',
-    role: UserRole.BARTENDER,
-    department: 'Bar & Lounge',
-    branch_id: 6,
-    branch_name: 'Famous Gate Litein'
-  },
-  {
-    id: 'maintenance-1',
-    email: 'maintenance@famousgate.com',
-    password: 'maint123',
-    firstName: 'Bob',
-    lastName: 'Miller',
-    role: UserRole.MAINTENANCE,
-    department: 'Maintenance',
-    branch_id: 1,
-    branch_name: 'Famous Gate Bomet (HQ)'
-  }
-];
-
 // Auth Provider Component
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
+
+  // Handle mounting to prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Check authentication status on mount
   useEffect(() => {
-    checkAuth();
-  }, []);
+    if (mounted) {
+      checkAuth();
+    }
+  }, [mounted]);
 
   const checkAuth = async () => {
     try {
-      setIsLoading(true);
-      // Check for stored session
-      const storedUser = localStorage.getItem('user');
-      const token = localStorage.getItem('token');
+      if (typeof window === 'undefined') {
+        setIsLoading(false);
+        return;
+      }
       
-      if (storedUser && token) {
-        // For demo purposes, always accept stored user
-        const userData = JSON.parse(storedUser);
-        setUser(userData);
-        // Don't redirect here - let individual pages handle redirects
+      const token = localStorage.getItem('token');
+      const storedUser = localStorage.getItem('user');
+      
+      // If demo mode (token starts with 'demo-token-'), use stored user
+      if (token && token.startsWith('demo-token-') && storedUser) {
+        try {
+          const userData = JSON.parse(storedUser);
+          setUser(userData);
+          setIsLoading(false);
+          return;
+        } catch (e) {
+          console.error('Failed to parse stored user:', e);
+        }
+      }
+      
+      if (token) {
+        try {
+          const res = await api.auth.getMe();
+          if (res.success && res.data) {
+            // Transform API user data to Context User interface if needed
+            // Assuming API returns data matching the interface or close to it
+            const apiUser = res.data;
+            const userData: User = {
+              id: apiUser.id,
+              email: apiUser.email,
+              firstName: apiUser.first_name, // Map snake_case to camelCase
+              lastName: apiUser.last_name,
+              role: apiUser.role as UserRole,
+              branch_id: apiUser.branch_id,
+              branch_name: apiUser.branch_name || 'Unknown Branch', // Handle potentially missing data
+              is_central: apiUser.is_central,
+              department: apiUser.department,
+              permissions: apiUser.permissions
+            };
+            setUser(userData);
+          } else {
+            // Token invalid or expired
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            setUser(null);
+          }
+        } catch (error: any) {
+          // In development, if backend is down, try to use stored user temporarily
+          if (process.env.NODE_ENV === 'development' && storedUser && error.message?.includes('fetch')) {
+            console.warn('Backend unreachable, using cached user (dev mode)');
+            try {
+              const userData = JSON.parse(storedUser);
+              setUser(userData);
+              return;
+            } catch (e) {
+              console.error('Failed to parse stored user:', e);
+            }
+          }
+          
+          // If API call fails (e.g. 401), clear session
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setUser(null);
+        }
       }
     } catch (error) {
       console.error('Auth check failed:', error);
-      localStorage.removeItem('user');
-      localStorage.removeItem('token');
     } finally {
       setIsLoading(false);
     }
@@ -299,52 +148,293 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true);
       
-      // For demo purposes, use demo users
-      const demoUser = DEMO_USERS.find(u => u.email === email && u.password === password);
-      
-      if (!demoUser) {
-        throw new Error('Invalid credentials');
-      }
-
-      // Create user object
-      const userData: User = {
-        id: demoUser.id,
-        email: demoUser.email,
-        firstName: demoUser.firstName,
-        lastName: demoUser.lastName,
-        role: demoUser.role,
-        department: demoUser.department,
-        branch_id: (demoUser as any).branch_id || null,
-        branch_name: (demoUser as any).branch_name || null,
-        is_central: (demoUser as any).is_central || false
+      // Demo accounts mapping for development
+      const demoUsers: Record<string, User> = {
+        // Development
+        'admin@dev.com': {
+          id: 'dev-admin-001',
+          email: 'admin@dev.com',
+          firstName: 'Dev',
+          lastName: 'Admin',
+          role: UserRole.SUPER_ADMIN,
+          branch_id: null,
+          branch_name: 'All Branches',
+          is_central: true,
+          department: 'Administration'
+        },
+        
+        // Management
+        'admin@famousgate.com': {
+          id: 'admin-001',
+          email: 'admin@famousgate.com',
+          firstName: 'Super',
+          lastName: 'Admin',
+          role: UserRole.SUPER_ADMIN,
+          branch_id: null,
+          branch_name: 'All Branches',
+          is_central: true,
+          department: 'Administration'
+        },
+        'gm@famousgate.com': {
+          id: 'gm-001',
+          email: 'gm@famousgate.com',
+          firstName: 'General',
+          lastName: 'Manager',
+          role: UserRole.GENERAL_MANAGER,
+          branch_id: null,
+          branch_name: 'All Branches',
+          is_central: true,
+          department: 'Management'
+        },
+        
+        // Branch Managers
+        'manager.bomet@famousgate.com': {
+          id: 'mgr-bomet-001',
+          email: 'manager.bomet@famousgate.com',
+          firstName: 'Bomet',
+          lastName: 'Manager',
+          role: UserRole.BRANCH_MANAGER,
+          branch_id: 1,
+          branch_name: 'Famous Gate Bomet (Central)',
+          is_central: true,
+          department: 'Management'
+        },
+        'manager.kericho@famousgate.com': {
+          id: 'mgr-kericho-001',
+          email: 'manager.kericho@famousgate.com',
+          firstName: 'Kericho',
+          lastName: 'Manager',
+          role: UserRole.BRANCH_MANAGER,
+          branch_id: 3,
+          branch_name: 'Famous Gate Kericho',
+          is_central: false,
+          department: 'Management'
+        },
+        'manager.litein@famousgate.com': {
+          id: 'mgr-litein-001',
+          email: 'manager.litein@famousgate.com',
+          firstName: 'Litein',
+          lastName: 'Manager',
+          role: UserRole.BRANCH_MANAGER,
+          branch_id: 6,
+          branch_name: 'Famous Gate Litein',
+          is_central: false,
+          department: 'Management'
+        },
+        
+        // Storekeeping
+        'central@famousgate.com': {
+          id: 'store-central-001',
+          email: 'central@famousgate.com',
+          firstName: 'Central',
+          lastName: 'Storekeeper',
+          role: UserRole.CENTRAL_STOREKEEPER,
+          branch_id: 1,
+          branch_name: 'Famous Gate Bomet (Central)',
+          is_central: true,
+          department: 'Storekeeping'
+        },
+        'store.bomet@famousgate.com': {
+          id: 'store-bomet-001',
+          email: 'store.bomet@famousgate.com',
+          firstName: 'Bomet',
+          lastName: 'Storekeeper',
+          role: UserRole.BRANCH_STOREKEEPER,
+          branch_id: 1,
+          branch_name: 'Famous Gate Bomet (Central)',
+          is_central: false,
+          department: 'Storekeeping'
+        },
+        'store.kericho@famousgate.com': {
+          id: 'store-kericho-001',
+          email: 'store.kericho@famousgate.com',
+          firstName: 'Kericho',
+          lastName: 'Storekeeper',
+          role: UserRole.BRANCH_STOREKEEPER,
+          branch_id: 3,
+          branch_name: 'Famous Gate Kericho',
+          is_central: false,
+          department: 'Storekeeping'
+        },
+        
+        // Operations
+        'reception@famousgate.com': {
+          id: 'reception-001',
+          email: 'reception@famousgate.com',
+          firstName: 'Front',
+          lastName: 'Desk',
+          role: UserRole.RECEPTIONIST,
+          branch_id: 1,
+          branch_name: 'Famous Gate Bomet (Central)',
+          is_central: false,
+          department: 'Reception'
+        },
+        'housekeeping@famousgate.com': {
+          id: 'housekeeping-001',
+          email: 'housekeeping@famousgate.com',
+          firstName: 'House',
+          lastName: 'Keeper',
+          role: UserRole.HOUSEKEEPING,
+          branch_id: 1,
+          branch_name: 'Famous Gate Bomet (Central)',
+          is_central: false,
+          department: 'Housekeeping'
+        },
+        'restaurant@famousgate.com': {
+          id: 'restaurant-001',
+          email: 'restaurant@famousgate.com',
+          firstName: 'Restaurant',
+          lastName: 'Staff',
+          role: UserRole.RESTAURANT,
+          branch_id: 1,
+          branch_name: 'Famous Gate Bomet (Central)',
+          is_central: false,
+          department: 'Restaurant'
+        },
+        'maintenance@famousgate.com': {
+          id: 'maintenance-001',
+          email: 'maintenance@famousgate.com',
+          firstName: 'Maintenance',
+          lastName: 'Staff',
+          role: UserRole.MAINTENANCE,
+          branch_id: 1,
+          branch_name: 'Famous Gate Bomet (Central)',
+          is_central: false,
+          department: 'Maintenance'
+        },
+        
+        // Finance
+        'accountant@famousgate.com': {
+          id: 'accountant-001',
+          email: 'accountant@famousgate.com',
+          firstName: 'Chief',
+          lastName: 'Accountant',
+          role: UserRole.ACCOUNTANT,
+          branch_id: null,
+          branch_name: 'All Branches',
+          is_central: true,
+          department: 'Finance'
+        },
+        'auditor@famousgate.com': {
+          id: 'auditor-001',
+          email: 'auditor@famousgate.com',
+          firstName: 'Internal',
+          lastName: 'Auditor',
+          role: UserRole.AUDITOR,
+          branch_id: null,
+          branch_name: 'All Branches',
+          is_central: true,
+          department: 'Finance'
+        },
+        
+        // Bar
+        'bar.bomet@famousgate.com': {
+          id: 'bar-bomet-001',
+          email: 'bar.bomet@famousgate.com',
+          firstName: 'Bomet',
+          lastName: 'Bartender',
+          role: UserRole.BARTENDER,
+          branch_id: 1,
+          branch_name: 'Famous Gate Bomet (Central)',
+          is_central: false,
+          department: 'Bar & Lounge'
+        },
+        'bar.kericho@famousgate.com': {
+          id: 'bar-kericho-001',
+          email: 'bar.kericho@famousgate.com',
+          firstName: 'Kericho',
+          lastName: 'Bartender',
+          role: UserRole.BARTENDER,
+          branch_id: 3,
+          branch_name: 'Famous Gate Kericho',
+          is_central: false,
+          department: 'Bar & Lounge'
+        },
+        'bar.litein@famousgate.com': {
+          id: 'bar-litein-001',
+          email: 'bar.litein@famousgate.com',
+          firstName: 'Litein',
+          lastName: 'Bartender',
+          role: UserRole.BARTENDER,
+          branch_id: 6,
+          branch_name: 'Famous Gate Litein',
+          is_central: false,
+          department: 'Bar & Lounge'
+        }
       };
 
-      // Store user and demo token
-      localStorage.setItem('user', JSON.stringify(userData));
-      localStorage.setItem('token', `demo-token-${demoUser.id}`);
-
-      setUser(userData);
-      toast.success(`Welcome back, ${userData.firstName}!`);
+      // Check if this is a demo account
+      const demoUser = demoUsers[email];
+      if (process.env.NODE_ENV === 'development' && demoUser) {
+        localStorage.setItem('user', JSON.stringify(demoUser));
+        localStorage.setItem('token', 'demo-token-' + Date.now());
+        
+        setUser(demoUser);
+        toast.success(`Welcome, ${demoUser.firstName}! (Demo Mode)`);
+        
+        redirectToDashboard(demoUser.role, demoUser.is_central);
+        return;
+      }
       
-      // Redirect to appropriate dashboard
-      redirectToDashboard(userData.role, userData.is_central);
+      const res = await api.auth.login({ email, password });
+      
+      if (res.success && res.data) {
+        const { user: apiUser, session } = res.data;
+        const token = session.access_token;
+        
+        const userData: User = {
+          id: apiUser.id,
+          email: apiUser.email,
+          firstName: apiUser.first_name,
+          lastName: apiUser.last_name,
+          role: apiUser.role as UserRole,
+          branch_id: apiUser.branch_id,
+          branch_name: apiUser.branch_name || (apiUser.branch_id ? 'Branch' : 'HQ'),
+          is_central: apiUser.is_central || false,
+          department: apiUser.department || 'Staff'
+        };
+
+        // Store user and token
+        localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem('token', token);
+
+        setUser(userData);
+        toast.success(`Welcome back, ${userData.firstName}!`);
+        
+        // Redirect to appropriate dashboard
+        redirectToDashboard(userData.role, userData.is_central);
+      }
     } catch (error: any) {
-      toast.error(error.message || 'Login failed');
+      console.error('Login error:', error);
+      
+      // Provide helpful error message for development
+      if (process.env.NODE_ENV === 'development') {
+        toast.error(`Login failed: ${error.message}. Try clicking any demo account button below for instant access!`);
+      } else {
+        toast.error(error.message || 'Login failed');
+      }
       throw error;
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
-    setUser(null);
-    toast.info('Logged out successfully');
-    router.push('/login');
+  const logout = async () => {
+    try {
+      await api.auth.logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+      setUser(null);
+      toast.info('Logged out successfully');
+      router.push('/login');
+    }
   };
 
   const redirectToDashboard = (role: UserRole, isCentral?: boolean) => {
+    // Dynamic routing logic
     const roleRedirects: Record<UserRole, string> = {
       [UserRole.SUPER_ADMIN]: '/dashboard/admin',
       [UserRole.GENERAL_MANAGER]: '/dashboard/gm',
@@ -363,7 +453,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       [UserRole.GUEST]: '/dashboard/guest'
     };
     
-    router.push(roleRedirects[role] || '/dashboard');
+    const path = roleRedirects[role] || '/dashboard';
+    router.push(path);
   };
 
   return (

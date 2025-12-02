@@ -67,7 +67,7 @@ export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManag
         <DialogHeader className="pb-4 border-b">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-100 rounded-lg">
+              <div className="p-2 bg-indigo-100 rounded-ios-lg">
                 <Package className="h-6 w-6 text-indigo-600" />
               </div>
               <div>
@@ -132,7 +132,7 @@ export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManag
 
               {/* Details Grid */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="p-4 bg-gray-50 rounded-ios-lg">
                   <div className="flex items-center gap-2 text-gray-500 mb-1">
                     <Tag className="h-4 w-4" />
                     <span className="text-xs uppercase">Category</span>
@@ -140,7 +140,7 @@ export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManag
                   <p className="font-medium">{item.category || 'General'}</p>
                 </div>
 
-                <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="p-4 bg-gray-50 rounded-ios-lg">
                   <div className="flex items-center gap-2 text-gray-500 mb-1">
                     <DollarSign className="h-4 w-4" />
                     <span className="text-xs uppercase">Retail Price</span>
@@ -148,7 +148,7 @@ export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManag
                   <p className="font-medium text-lg">KSh {(item.retail_price || 0).toLocaleString()}</p>
                 </div>
 
-                <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="p-4 bg-gray-50 rounded-ios-lg">
                   <div className="flex items-center gap-2 text-gray-500 mb-1">
                     <DollarSign className="h-4 w-4" />
                     <span className="text-xs uppercase">Cost Price</span>
@@ -156,7 +156,7 @@ export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManag
                   <p className="font-medium">KSh {(item.cost_price || 0).toLocaleString()}</p>
                 </div>
 
-                <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="p-4 bg-gray-50 rounded-ios-lg">
                   <div className="flex items-center gap-2 text-gray-500 mb-1">
                     <Truck className="h-4 w-4" />
                     <span className="text-xs uppercase">Supplier</span>
@@ -167,7 +167,7 @@ export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManag
 
               {/* Barcode */}
               {item.barcode && (
-                <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="p-4 bg-gray-50 rounded-ios-lg">
                   <div className="flex items-center gap-2 text-gray-500 mb-1">
                     <span className="text-xs uppercase">Barcode</span>
                   </div>
@@ -198,7 +198,7 @@ export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManag
               ) : (
                 <div className="space-y-3">
                   {stockHistory.slice(0, 20).map((record, idx) => (
-                    <div key={idx} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                    <div key={idx} className="flex items-center gap-4 p-3 bg-gray-50 rounded-ios-lg">
                       <div className={`p-2 rounded-full ${
                         record.change_type === 'IN' ? 'bg-green-100 text-green-600' : 
                         record.change_type === 'OUT' ? 'bg-red-100 text-red-600' : 

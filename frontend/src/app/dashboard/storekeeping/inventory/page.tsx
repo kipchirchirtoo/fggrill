@@ -4,10 +4,10 @@ import { useState, useEffect } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/minimal/button";
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
+import { IOSBadge } from '@/components/ui/ios-badge';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import {
   Dialog,
   DialogContent,
@@ -168,6 +168,8 @@ export default function InventoryPage() {
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to import data');
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
     } finally {
       setIsImporting(false);
       event.target.value = '';
@@ -308,79 +310,79 @@ export default function InventoryPage() {
             <div className="flex gap-3">
               {/* Edit Lock Indicator */}
               {editLock && (
-                <Badge className="bg-amber-500 text-white flex items-center gap-1 h-10 px-3">
+                <IOSBadge className="bg-[#F2F2F7] text-white flex items-center gap-1 h-10 px-3">
                   <Lock className="h-4 w-4" />
                   Maintenance Mode
-                </Badge>
+                </IOSBadge>
               )}
-              <Button variant="outline" onClick={handleExport} disabled={isExporting}>
+              <IOSButton variant="outline" onClick={handleExport} disabled={isExporting}>
                 <Download className="h-4 w-4 mr-2" />
                 {isExporting ? 'Exporting...' : 'Export'}
-              </Button>
+              </IOSButton>
               {canEdit && (
                 <label className="cursor-pointer">
                   <input type="file" accept=".xlsx,.xls" onChange={handleImport} className="hidden" disabled={isImporting} />
-                  <Button variant="outline" asChild disabled={isImporting}>
+                  <IOSButton variant="outline" asChild disabled={isImporting}>
                     <span><Upload className="h-4 w-4 mr-2" />{isImporting ? 'Importing...' : 'Import'}</span>
-                  </Button>
+                  </IOSButton>
                 </label>
               )}
-              <Button variant="outline" onClick={fetchItems}>
+              <IOSButton variant="outline" onClick={fetchItems}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh
-              </Button>
+              </IOSButton>
               {canEdit && (
-                <Button variant="outline" onClick={() => setIsConfigModalOpen(true)}>
+                <IOSButton variant="outline" onClick={() => setIsConfigModalOpen(true)}>
                   <Settings className="h-4 w-4" />
-                </Button>
+                </IOSButton>
               )}
               {canEdit && (
-                <Button onClick={openAddModal} disabled={editLock}>
+                <IOSButton onClick={openAddModal} disabled={editLock}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Item
-                </Button>
+                </IOSButton>
               )}
             </div>
           </div>
 
           {/* Stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="p-4">
+            <IOSCard className="p-4">
               <div className="flex items-center gap-3">
-                <Package className="h-8 w-8 text-blue-500" />
+                <Package className="h-8 w-8 text-[#8E8E93]0" />
                 <div>
                   <p className="text-sm text-gray-500">Total Items</p>
                   <p className="text-2xl font-bold">{items.length}</p>
                 </div>
               </div>
-            </Card>
-            <Card className="p-4">
+            </IOSCard>
+            <IOSCard className="p-4">
               <div className="flex items-center gap-3">
-                <AlertTriangle className="h-8 w-8 text-amber-500" />
+                <AlertTriangle className="h-8 w-8 text-[#3C3C43]" />
                 <div>
                   <p className="text-sm text-gray-500">Low Stock</p>
-                  <p className="text-2xl font-bold text-amber-600">{lowStockCount}</p>
+                  <p className="text-2xl font-bold text-[#3C3C43]">{lowStockCount}</p>
                 </div>
               </div>
-            </Card>
-            <Card className="p-4">
+            </IOSCard>
+            <IOSCard className="p-4">
               <div className="flex items-center gap-3">
-                <BarChart3 className="h-8 w-8 text-green-500" />
+                <BarChart3 className="h-8 w-8 text-[#8E8E93]0" />
                 <div>
                   <p className="text-sm text-gray-500">Total Value</p>
                   <p className="text-2xl font-bold">KES {totalValue.toLocaleString()}</p>
                 </div>
               </div>
-            </Card>
-            <Card className="p-4">
+            </IOSCard>
+            <IOSCard className="p-4">
               <div className="flex items-center gap-3">
-                <Filter className="h-8 w-8 text-purple-500" />
+                <Filter className="h-8 w-8 text-[#3C3C43]" />
                 <div>
                   <p className="text-sm text-gray-500">Categories</p>
                   <p className="text-2xl font-bold">{new Set(items.map(i => i.category)).size}</p>
                 </div>
               </div>
-            </Card>
+            </IOSCard>
           </div>
 
           {/* Filters */}
@@ -397,7 +399,7 @@ export default function InventoryPage() {
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="px-4 py-2 border rounded-lg"
+              className="px-4 py-2 border rounded-ios-lg"
             >
               <option value="">All Categories</option>
               {CATEGORIES.map(cat => (
@@ -407,7 +409,7 @@ export default function InventoryPage() {
           </div>
 
           {/* Items Table */}
-          <Card>
+          <IOSCard>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50">
@@ -429,11 +431,11 @@ export default function InventoryPage() {
                       </td>
                       <td className="px-4 py-4 font-mono text-sm">{item.sku}</td>
                       <td className="px-4 py-4">
-                        <Badge variant="outline">{item.category}</Badge>
+                        <IOSBadge variant="outline">{item.category}</IOSBadge>
                       </td>
                       <td className="px-4 py-4">
                         <span className={`font-bold ${
-                          (item.quantity || 0) <= (item.reorder_level || 10) ? 'text-red-600' : 'text-green-600'
+                          (item.quantity || 0) <= (item.reorder_level || 10) ? 'text-[#3C3C43]' : 'text-[#3C3C43]'
                         }`}>
                           {item.quantity || 0}
                         </span>
@@ -442,15 +444,15 @@ export default function InventoryPage() {
                       {canEdit && (
                         <td className="px-4 py-4">
                           <div className="flex gap-2">
-                            <Button size="sm" variant="outline" onClick={() => openEditModal(item)}>
+                            <IOSButton size="sm" variant="outline" onClick={() => openEditModal(item)}>
                               <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" variant="outline" className="text-red-600" onClick={() => {
+                            </IOSButton>
+                            <IOSButton size="sm" variant="outline" className="text-[#3C3C43]" onClick={() => {
                               setSelectedItem(item);
                               setIsDeleteModalOpen(true);
                             }}>
                               <Trash2 className="h-4 w-4" />
-                            </Button>
+                            </IOSButton>
                           </div>
                         </td>
                       )}
@@ -465,7 +467,7 @@ export default function InventoryPage() {
                 </div>
               )}
             </div>
-          </Card>
+          </IOSCard>
         </div>
 
         {/* Add Modal */}
@@ -497,7 +499,7 @@ export default function InventoryPage() {
                   <select
                     value={itemForm.category}
                     onChange={(e) => setItemForm({ ...itemForm, category: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-ios-lg"
                   >
                     {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                   </select>
@@ -507,7 +509,7 @@ export default function InventoryPage() {
                   <select
                     value={itemForm.unit_of_measure}
                     onChange={(e) => setItemForm({ ...itemForm, unit_of_measure: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-ios-lg"
                   >
                     {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                   </select>
@@ -528,8 +530,8 @@ export default function InventoryPage() {
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-4">
-                <Button variant="outline" onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
-                <Button onClick={handleAddItem}><Save className="h-4 w-4 mr-2" />Add Item</Button>
+                <IOSButton variant="outline" onClick={() => setIsAddModalOpen(false)}>Cancel</IOSButton>
+                <IOSButton onClick={handleAddItem}><Save className="h-4 w-4 mr-2" />Add Item</IOSButton>
               </div>
             </div>
           </DialogContent>
@@ -555,13 +557,13 @@ export default function InventoryPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium">Category</label>
-                  <select value={itemForm.category} onChange={(e) => setItemForm({ ...itemForm, category: e.target.value })} className="w-full px-3 py-2 border rounded-lg">
+                  <select value={itemForm.category} onChange={(e) => setItemForm({ ...itemForm, category: e.target.value })} className="w-full px-3 py-2 border rounded-ios-lg">
                     {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="text-sm font-medium">Unit</label>
-                  <select value={itemForm.unit_of_measure} onChange={(e) => setItemForm({ ...itemForm, unit_of_measure: e.target.value })} className="w-full px-3 py-2 border rounded-lg">
+                  <select value={itemForm.unit_of_measure} onChange={(e) => setItemForm({ ...itemForm, unit_of_measure: e.target.value })} className="w-full px-3 py-2 border rounded-ios-lg">
                     {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                   </select>
                 </div>
@@ -581,8 +583,8 @@ export default function InventoryPage() {
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-4">
-                <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>Cancel</Button>
-                <Button onClick={handleUpdateItem}><Save className="h-4 w-4 mr-2" />Update</Button>
+                <IOSButton variant="outline" onClick={() => setIsEditModalOpen(false)}>Cancel</IOSButton>
+                <IOSButton onClick={handleUpdateItem}><Save className="h-4 w-4 mr-2" />Update</IOSButton>
               </div>
             </div>
           </DialogContent>
@@ -592,14 +594,14 @@ export default function InventoryPage() {
         <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle className="text-red-600">Delete Item</DialogTitle>
+              <DialogTitle className="text-[#3C3C43]">Delete Item</DialogTitle>
             </DialogHeader>
             <p>Are you sure you want to delete <strong>{selectedItem?.item_name}</strong>?</p>
             <div className="flex justify-end gap-3 pt-4">
-              <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
-              <Button className="bg-red-600 hover:bg-red-700" onClick={handleDeleteItem}>
+              <IOSButton variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</IOSButton>
+              <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleDeleteItem}>
                 <Trash2 className="h-4 w-4 mr-2" />Delete
-              </Button>
+              </IOSButton>
             </div>
           </DialogContent>
         </Dialog>
@@ -609,48 +611,48 @@ export default function InventoryPage() {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5 text-indigo-600" />
+                <Settings className="h-5 w-5 text-[#3C3C43]" />
                 Inventory Settings
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-6 pt-4">
               {/* Edit Lock Toggle */}
-              <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex items-center justify-between p-4 border rounded-ios-lg">
                 <div>
                   <p className="font-medium flex items-center gap-2">
-                    {editLock ? <Lock className="h-4 w-4 text-amber-500" /> : <Unlock className="h-4 w-4 text-green-500" />}
+                    {editLock ? <Lock className="h-4 w-4 text-[#3C3C43]" /> : <Unlock className="h-4 w-4 text-[#8E8E93]0" />}
                     Maintenance Mode
                   </p>
                   <p className="text-sm text-gray-500 mt-1">
                     When enabled, transfers and edits are disabled
                   </p>
                 </div>
-                <Button
+                <IOSButton
                   variant={editLock ? 'default' : 'outline'}
-                  className={editLock ? 'bg-amber-500 hover:bg-amber-600' : ''}
+                  className={editLock ? 'bg-[#F2F2F7] hover:bg-[#F2F2F7]' : ''}
                   onClick={toggleEditLock}
                 >
                   {editLock ? 'Disable' : 'Enable'}
-                </Button>
+                </IOSButton>
               </div>
 
               {/* Quick Actions */}
               <div className="space-y-3">
                 <p className="font-medium text-sm text-gray-500">Quick Actions</p>
-                <Button variant="outline" className="w-full justify-start" onClick={handleExport}>
+                <IOSButton variant="outline" className="w-full justify-start" onClick={handleExport}>
                   <Download className="h-4 w-4 mr-2" />
                   Export All Items to Excel
-                </Button>
+                </IOSButton>
                 <label className="block">
                   <input type="file" accept=".xlsx,.xls" onChange={handleImport} className="hidden" />
-                  <Button variant="outline" className="w-full justify-start" asChild>
+                  <IOSButton variant="outline" className="w-full justify-start" asChild>
                     <span><Upload className="h-4 w-4 mr-2" />Import from Excel</span>
-                  </Button>
+                  </IOSButton>
                 </label>
               </div>
 
               <div className="flex justify-end pt-4 border-t">
-                <Button variant="outline" onClick={() => setIsConfigModalOpen(false)}>Close</Button>
+                <IOSButton variant="outline" onClick={() => setIsConfigModalOpen(false)}>Close</IOSButton>
               </div>
             </div>
           </DialogContent>

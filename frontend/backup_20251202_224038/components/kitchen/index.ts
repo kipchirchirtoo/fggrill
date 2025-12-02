@@ -1,0 +1,1 @@
+export { KitchenInventory } from './KitchenInventory';

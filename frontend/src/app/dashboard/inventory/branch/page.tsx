@@ -92,7 +92,7 @@ export default function BranchInventoryPage() {
             <h1 className="text-2xl font-bold text-gray-900">Branch Inventory Management</h1>
             <button
               onClick={() => setShowRequestModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              className="flex items-center gap-2 px-4 py-2 bg-[#3C3C43] text-white rounded-ios-lg hover:bg-[#3C3C43]"
             >
               <Send className="h-4 w-4" />
               New Stock Request
@@ -101,36 +101,36 @@ export default function BranchInventoryPage() {
 
           {/* Stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <div className="bg-[#FFFFFF] rounded-xl shadow-none 0_1px_3px_rgba(0,0,0,0.04)] p-6 border border-gray-100">
               <div className="flex items-center gap-4">
-                <Package className="h-8 w-8 text-indigo-600" />
+                <Package className="h-8 w-8 text-[#3C3C43]" />
                 <div>
                   <p className="text-sm font-medium text-gray-500">Total Items</p>
                   <p className="text-2xl font-bold text-gray-900">{stats.totalItems}</p>
                 </div>
               </div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <div className="bg-[#FFFFFF] rounded-xl shadow-none 0_1px_3px_rgba(0,0,0,0.04)] p-6 border border-gray-100">
               <div className="flex items-center gap-4">
-                <AlertTriangle className="h-8 w-8 text-yellow-600" />
+                <AlertTriangle className="h-8 w-8 text-[#3C3C43]" />
                 <div>
                   <p className="text-sm font-medium text-gray-500">Low Stock Items</p>
                   <p className="text-2xl font-bold text-gray-900">{stats.lowStock}</p>
                 </div>
               </div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <div className="bg-[#FFFFFF] rounded-xl shadow-none 0_1px_3px_rgba(0,0,0,0.04)] p-6 border border-gray-100">
               <div className="flex items-center gap-4">
-                <ClipboardCheck className="h-8 w-8 text-blue-600" />
+                <ClipboardCheck className="h-8 w-8 text-[#3C3C43]" />
                 <div>
                   <p className="text-sm font-medium text-gray-500">Pending Requests</p>
                   <p className="text-2xl font-bold text-gray-900">{stats.pendingRequests}</p>
                 </div>
               </div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <div className="bg-[#FFFFFF] rounded-xl shadow-none 0_1px_3px_rgba(0,0,0,0.04)] p-6 border border-gray-100">
               <div className="flex items-center gap-4">
-                <Package className="h-8 w-8 text-green-600" />
+                <Package className="h-8 w-8 text-[#3C3C43]" />
                 <div>
                   <p className="text-sm font-medium text-gray-500">Total Value</p>
                   <p className="text-2xl font-bold text-gray-900">
@@ -142,14 +142,14 @@ export default function BranchInventoryPage() {
           </div>
 
           {/* Tabs */}
-          <div className="border-b border-gray-200">
+          <div className="border-b border-[#E5E5EA]">
             <nav className="-mb-px flex gap-6">
               <button
                 onClick={() => setActiveTab('stock')}
                 className={`pb-4 px-1 ${
                   activeTab === 'stock'
-                    ? 'border-b-2 border-indigo-600 text-indigo-600'
-                    : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-b-2 border-[rgba(60,60,67,0.12)] text-[#3C3C43]'
+                    : 'text-gray-500 hover:text-gray-700 hover:border-[#E5E5EA]'
                 }`}
               >
                 Stock Overview
@@ -158,8 +158,8 @@ export default function BranchInventoryPage() {
                 onClick={() => setActiveTab('requests')}
                 className={`pb-4 px-1 ${
                   activeTab === 'requests'
-                    ? 'border-b-2 border-indigo-600 text-indigo-600'
-                    : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-b-2 border-[rgba(60,60,67,0.12)] text-[#3C3C43]'
+                    : 'text-gray-500 hover:text-gray-700 hover:border-[#E5E5EA]'
                 }`}
               >
                 Stock Requests
@@ -168,7 +168,7 @@ export default function BranchInventoryPage() {
           </div>
 
           {/* Content */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="bg-[#FFFFFF] rounded-xl shadow-none 0_1px_3px_rgba(0,0,0,0.04)] border border-gray-100">
             {/* Search and Filter */}
             <div className="p-6 border-b border-gray-100">
               <div className="flex items-center gap-4">
@@ -179,7 +179,7 @@ export default function BranchInventoryPage() {
                     placeholder="Search items..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                    className="w-full pl-10 pr-4 py-2 border border-[#E5E5EA] rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                   />
                 </div>
                 <div className="relative">
@@ -187,7 +187,7 @@ export default function BranchInventoryPage() {
                   <select
                     value={filterCategory}
                     onChange={(e) => setFilterCategory(e.target.value)}
-                    className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent appearance-none bg-white"
+                    className="pl-10 pr-8 py-2 border border-[#E5E5EA] rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent appearance-none bg-[#FFFFFF]"
                   >
                     <option value="all">All Categories</option>
                     <option value="food">Food</option>
@@ -239,7 +239,7 @@ export default function BranchInventoryPage() {
                               <div>
                                 <p className="text-sm font-medium text-gray-900">{stock?.currentStock || 0} {item.unit}</p>
                                 {stock && stock.currentStock <= item.reorderPoint && (
-                                  <p className="text-xs text-red-600">Low Stock</p>
+                                  <p className="text-xs text-[#3C3C43]">Low Stock</p>
                                 )}
                               </div>
                             </td>
@@ -247,7 +247,7 @@ export default function BranchInventoryPage() {
                               <span
                                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                   item.status === 'active'
-                                    ? 'bg-green-100 text-green-800'
+                                    ? 'bg-[#F2F2F7] text-[#000000]'
                                     : 'bg-gray-100 text-gray-800'
                                 }`}
                               >
@@ -255,7 +255,7 @@ export default function BranchInventoryPage() {
                               </span>
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-900">
-                              <button className="text-indigo-600 hover:text-indigo-900">Request</button>
+                              <button className="text-[#3C3C43] hover:text-[#3C3C43]">Request</button>
                             </td>
                           </tr>
                         );
@@ -292,14 +292,14 @@ export default function BranchInventoryPage() {
                             <span
                               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                 request.status === 'fulfilled'
-                                  ? 'bg-green-100 text-green-800'
+                                  ? 'bg-[#F2F2F7] text-[#000000]'
                                   : request.status === 'approved'
-                                  ? 'bg-blue-100 text-blue-800'
+                                  ? 'bg-[#F2F2F7] text-[#000000]'
                                   : request.status === 'rejected'
-                                  ? 'bg-red-100 text-red-800'
+                                  ? 'bg-[#F2F2F7] text-[#000000]'
                                   : request.status === 'cancelled'
                                   ? 'bg-gray-100 text-gray-800'
-                                  : 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-[#F2F2F7] text-[#3C3C43]'
                               }`}
                             >
                               {request.status}
@@ -313,7 +313,7 @@ export default function BranchInventoryPage() {
                             {new Date(request.requestedAt).toLocaleDateString()}
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-900">
-                            <button className="text-indigo-600 hover:text-indigo-900">View</button>
+                            <button className="text-[#3C3C43] hover:text-[#3C3C43]">View</button>
                           </td>
                         </tr>
                       ))}

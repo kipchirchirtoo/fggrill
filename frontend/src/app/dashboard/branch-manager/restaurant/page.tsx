@@ -1,78 +1,90 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { UtensilsCrossed, RefreshCw, DollarSign, ShoppingCart } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
+import { IOSBadge } from '@/components/ui/ios-badge';
 import { restaurantAPI } from '@/lib/api';
+import { Utensils, RefreshCw, ShoppingCart, DollarSign, Clock, ChefHat } from 'lucide-react';
+import Link from 'next/link';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
-export default function BranchManagerRestaurantPage() {
+export default function BranchRestaurantPage() {
   const { user } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
+  const [stats, setStats] = useState({ total: 0, pending: 0, revenue: 0 });
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => { fetchOrders(); }, [user]);
-
-  const fetchOrders = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await restaurantAPI.getOrders(user?.branch_id);
-      setOrders(res.orders || res || []);
-    } catch (error) { console.error('Error:', error); } 
+      const [ordersRes, salesRes] = await Promise.all([
+        restaurantAPI.getOrders(),
+        restaurantAPI.getDailySales(),
+      ]);
+      if (ordersRes.success) {
+        const data = ordersRes.data || [];
+        setOrders(data.slice(0, 10));
+        setStats({
+          total: data.length,
+          pending: data.filter((o: any) => ['pending', 'preparing'].includes(o.status)).length,
+          revenue: salesRes.data?.total || data.reduce((sum: number, o: any) => sum + (o.total || 0), 0),
+        });
+      }
+    } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  };
+  }, []);
 
-  const todayRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">Restaurant Overview</h1>
-              <p className="text-gray-600">Monitor restaurant operations</p>
-            </div>
-            <Button onClick={fetchOrders} variant="outline">
-              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
-            </Button>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900">Restaurant</h1><p className="text-gray-500">Food & beverage operations</p></div>
+            <IOSButton variant="secondary" onClick={fetchData}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Card className="p-4 bg-emerald-50">
-              <DollarSign className="h-6 w-6 text-emerald-600 mb-2" />
-              <p className="text-2xl font-bold">KES {todayRevenue.toLocaleString()}</p>
-              <p className="text-sm text-emerald-700">Today's Revenue</p>
-            </Card>
-            <Card className="p-4 bg-blue-50">
-              <ShoppingCart className="h-6 w-6 text-blue-600 mb-2" />
-              <p className="text-2xl font-bold">{orders.length}</p>
-              <p className="text-sm text-blue-700">Orders Today</p>
-            </Card>
+          <div className="grid grid-cols-3 gap-4">
+            <IOSCard className="p-4"><ShoppingCart className="h-6 w-6 text-[#007AFF] mb-2" /><p className="text-sm text-gray-500">Orders Today</p><p className="text-xl font-bold">{stats.total}</p></IOSCard>
+            <IOSCard className="p-4"><Clock className="h-6 w-6 text-yellow-600 mb-2" /><p className="text-sm text-gray-500">Pending</p><p className="text-xl font-bold text-yellow-600">{stats.pending}</p></IOSCard>
+            <IOSCard className="p-4"><DollarSign className="h-6 w-6 text-[#34C759] mb-2" /><p className="text-sm text-gray-500">Revenue</p><p className="text-xl font-bold text-[#34C759]">KES {stats.revenue.toLocaleString()}</p></IOSCard>
           </div>
 
-          <Card>
-            <div className="p-4 border-b font-semibold">Recent Orders</div>
-            <div className="divide-y">
-              {orders.slice(0, 10).map((o: any) => (
-                <div key={o.id} className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{o.order_number || `#${o.id}`}</p>
-                    <p className="text-sm text-gray-500">Table {o.table_number || 'N/A'}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold">KES {(o.total || 0).toLocaleString()}</p>
-                    <Badge className={o.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}>{o.status}</Badge>
-                  </div>
+          <div className="grid md:grid-cols-2 gap-6">
+            <IOSCard className="p-6">
+              <h2 className="text-lg font-semibold font-sf-pro-display mb-4">Quick Actions</h2>
+              <div className="grid grid-cols-2 gap-3">
+                <Link href="/dashboard/restaurant/pos"><IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-blue-50 text-center"><ShoppingCart className="h-6 w-6 mx-auto text-[#007AFF] mb-2" /><p className="text-sm font-medium">POS</p></IOSCard></Link>
+                <Link href="/dashboard/restaurant/kitchen"><IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-orange-50 text-center"><ChefHat className="h-6 w-6 mx-auto text-orange-600 mb-2" /><p className="text-sm font-medium">Kitchen</p></IOSCard></Link>
+                <Link href="/dashboard/restaurant/orders"><IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-green-50 text-center"><Clock className="h-6 w-6 mx-auto text-[#34C759] mb-2" /><p className="text-sm font-medium">Orders</p></IOSCard></Link>
+                <Link href="/dashboard/restaurant/menu"><IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-purple-50 text-center"><Utensils className="h-6 w-6 mx-auto text-purple-600 mb-2" /><p className="text-sm font-medium">Menu</p></IOSCard></Link>
+              </div>
+            </IOSCard>
+
+            <IOSCard className="p-6">
+              <h2 className="text-lg font-semibold font-sf-pro-display mb-4">Recent Orders</h2>
+              {isLoading ? (
+                <div className="flex justify-center py-8"><RefreshCw className="h-6 w-6 animate-spin text-gray-400" /></div>
+              ) : orders.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No orders today</p>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {orders.map((order) => (
+                    <div key={order.id} className="flex justify-between p-2 bg-gray-50 rounded">
+                      <span>#{order.order_number}</span>
+                      <span className="font-medium">KES {order.total?.toLocaleString()}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-              {orders.length === 0 && <div className="p-8 text-center text-gray-500">{isLoading ? 'Loading...' : 'No orders'}</div>}
-            </div>
-          </Card>
+              )}
+            </IOSCard>
+          </div>
         </div>
       </DashboardLayout>
     </ProtectedRoute>

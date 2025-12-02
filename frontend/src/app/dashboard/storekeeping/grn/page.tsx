@@ -4,10 +4,10 @@ import { useState, useEffect } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/minimal/button";
 import { Input } from '@/components/ui/input';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { 
   ClipboardCheck, Plus, RefreshCw, Eye, Check, X, Clock, 
@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate, formatDateTime } from '@/lib/date-utils';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -214,20 +216,20 @@ export default function GRNPage() {
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       'DRAFT': 'bg-gray-100 text-gray-700',
-      'PENDING': 'bg-yellow-100 text-yellow-700',
-      'PARTIAL': 'bg-orange-100 text-orange-700',
-      'COMPLETED': 'bg-green-100 text-green-700',
-      'CANCELLED': 'bg-red-100 text-red-700'
+      'PENDING': 'bg-[#F2F2F7] text-[#3C3C43]',
+      'PARTIAL': 'bg-[#F2F2F7] text-[#3C3C43]',
+      'COMPLETED': 'bg-[#F2F2F7] text-[#000000]',
+      'CANCELLED': 'bg-[#F2F2F7] text-[#000000]'
     };
     return colors[status] || 'bg-gray-100';
   };
 
   const getConditionColor = (condition: string) => {
     const colors: Record<string, string> = {
-      'GOOD': 'bg-green-100 text-green-700',
-      'DAMAGED': 'bg-red-100 text-red-700',
-      'EXPIRED': 'bg-orange-100 text-orange-700',
-      'REJECTED': 'bg-red-100 text-red-700'
+      'GOOD': 'bg-[#F2F2F7] text-[#000000]',
+      'DAMAGED': 'bg-[#F2F2F7] text-[#000000]',
+      'EXPIRED': 'bg-[#F2F2F7] text-[#3C3C43]',
+      'REJECTED': 'bg-[#F2F2F7] text-[#000000]'
     };
     return colors[condition] || 'bg-gray-100';
   };
@@ -249,67 +251,67 @@ export default function GRNPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold flex items-center gap-2">
-                <ClipboardCheck className="h-6 w-6 text-green-600" />
+                <ClipboardCheck className="h-6 w-6 text-[#3C3C43]" />
                 Goods Received Notes
               </h1>
               <p className="text-gray-600">Record and track stock receipts</p>
             </div>
             <div className="flex gap-3">
-              <Button variant="outline" onClick={fetchData} disabled={isLoading}>
+              <IOSButton variant="outline" onClick={fetchData} disabled={isLoading}>
                 <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh
-              </Button>
+              </IOSButton>
               {canManage && (
-                <Button onClick={() => setIsCreateModalOpen(true)}>
+                <IOSButton onClick={() => setIsCreateModalOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   New GRN
-                </Button>
+                </IOSButton>
               )}
             </div>
           </div>
 
           {/* Stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="p-4">
+            <IOSCard className="p-4">
               <div className="flex items-center gap-3">
-                <Clock className="h-8 w-8 text-yellow-500" />
+                <Clock className="h-8 w-8 text-[#3C3C43]" />
                 <div>
                   <p className="text-sm text-gray-500">Pending</p>
                   <p className="text-2xl font-bold">{grns.filter(g => g.status === 'PENDING').length}</p>
                 </div>
               </div>
-            </Card>
-            <Card className="p-4">
+            </IOSCard>
+            <IOSCard className="p-4">
               <div className="flex items-center gap-3">
-                <AlertTriangle className="h-8 w-8 text-orange-500" />
+                <AlertTriangle className="h-8 w-8 text-[#3C3C43]" />
                 <div>
                   <p className="text-sm text-gray-500">Partial</p>
                   <p className="text-2xl font-bold">{grns.filter(g => g.status === 'PARTIAL').length}</p>
                 </div>
               </div>
-            </Card>
-            <Card className="p-4">
+            </IOSCard>
+            <IOSCard className="p-4">
               <div className="flex items-center gap-3">
-                <CheckCircle className="h-8 w-8 text-green-500" />
+                <CheckCircle className="h-8 w-8 text-[#8E8E93]0" />
                 <div>
                   <p className="text-sm text-gray-500">Completed</p>
                   <p className="text-2xl font-bold">{grns.filter(g => g.status === 'COMPLETED').length}</p>
                 </div>
               </div>
-            </Card>
-            <Card className="p-4">
+            </IOSCard>
+            <IOSCard className="p-4">
               <div className="flex items-center gap-3">
-                <Package className="h-8 w-8 text-blue-500" />
+                <Package className="h-8 w-8 text-[#8E8E93]0" />
                 <div>
                   <p className="text-sm text-gray-500">Total Items Received</p>
                   <p className="text-2xl font-bold">{grns.reduce((sum, g) => sum + (g.total_items || 0), 0)}</p>
                 </div>
               </div>
-            </Card>
+            </IOSCard>
           </div>
 
           {/* Filters */}
-          <Card className="p-4">
+          <IOSCard className="p-4">
             <div className="flex flex-wrap items-center gap-4">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -323,7 +325,7 @@ export default function GRNPage() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="border rounded-lg px-3 py-2"
+                className="border rounded-ios-lg px-3 py-2"
               >
                 <option value="">All Status</option>
                 <option value="PENDING">Pending</option>
@@ -331,17 +333,17 @@ export default function GRNPage() {
                 <option value="COMPLETED">Completed</option>
               </select>
             </div>
-          </Card>
+          </IOSCard>
 
           {/* GRN Table */}
-          <Card>
+          <IOSCard>
             {isLoading ? (
               <div className="p-12 text-center text-gray-500">Loading GRNs...</div>
             ) : filteredGRNs.length === 0 ? (
               <div className="p-12 text-center text-gray-500">
                 <ClipboardCheck className="h-12 w-12 mx-auto mb-3 opacity-30" />
                 <p>No goods received notes found</p>
-                {canManage && <Button className="mt-4" onClick={() => setIsCreateModalOpen(true)}>Create First GRN</Button>}
+                {canManage && <IOSButton className="mt-4" onClick={() => setIsCreateModalOpen(true)}>Create First GRN</IOSButton>}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -365,20 +367,20 @@ export default function GRNPage() {
                         <td className="px-4 py-4">{grn.supplier?.name || '-'}</td>
                         <td className="px-4 py-4 text-sm">{grn.purchase_order?.po_number || '-'}</td>
                         <td className="px-4 py-4">
-                          <Badge className={getStatusColor(grn.status)}>{grn.status}</Badge>
+                          <IOSBadge className={getStatusColor(grn.status)}>{grn.status}</IOSBadge>
                         </td>
                         <td className="px-4 py-4 text-center">{grn.total_items}</td>
                         <td className="px-4 py-4 text-right font-medium">KES {grn.total_value?.toLocaleString() || 0}</td>
                         <td className="px-4 py-4 text-sm text-gray-500">{grn.received_at ? formatDateTime(grn.received_at) : formatDate(grn.created_at)}</td>
                         <td className="px-4 py-4">
                           <div className="flex gap-2">
-                            <Button size="sm" variant="outline" onClick={() => { setSelectedGRN(grn); setIsViewModalOpen(true); }}>
+                            <IOSButton size="sm" variant="outline" onClick={() => { setSelectedGRN(grn); setIsViewModalOpen(true); }}>
                               <Eye className="h-4 w-4" />
-                            </Button>
+                            </IOSButton>
                             {grn.status === 'PENDING' && canManage && (
-                              <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleComplete(grn.id)}>
+                              <IOSButton size="sm" className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={() => handleComplete(grn.id)}>
                                 <Check className="h-4 w-4" />
-                              </Button>
+                              </IOSButton>
                             )}
                           </div>
                         </td>
@@ -388,7 +390,7 @@ export default function GRNPage() {
                 </table>
               </div>
             )}
-          </Card>
+          </IOSCard>
         </div>
 
         {/* Create GRN Modal */}
@@ -407,7 +409,7 @@ export default function GRNPage() {
                   <select
                     value={formData.supplier_id}
                     onChange={(e) => setFormData(prev => ({ ...prev, supplier_id: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="w-full border rounded-ios-lg px-3 py-2"
                   >
                     <option value="">Select Supplier</option>
                     {suppliers.map(s => (
@@ -427,15 +429,15 @@ export default function GRNPage() {
 
               <div>
                 <label className="block text-sm font-medium mb-2">Items Received *</label>
-                <div className="space-y-4 border rounded-lg p-4 bg-gray-50">
+                <div className="space-y-4 border rounded-ios-lg p-4 bg-gray-50">
                   {formData.items.map((item, index) => (
-                    <div key={index} className="bg-white rounded-lg p-4 border shadow-sm space-y-3">
+                    <div key={index} className="bg-[#FFFFFF] rounded-ios-lg p-4 border shadow-none 0_1px_3px_rgba(0,0,0,0.04)] space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-gray-700">Item #{index + 1}</span>
                         {formData.items.length > 1 && (
-                          <Button size="sm" variant="ghost" onClick={() => removeItemRow(index)}>
-                            <X className="h-4 w-4 text-red-500" />
-                          </Button>
+                          <IOSButton size="sm" variant="ghost" onClick={() => removeItemRow(index)}>
+                            <X className="h-4 w-4 text-[#8E8E93]0" />
+                          </IOSButton>
                         )}
                       </div>
                       
@@ -445,7 +447,7 @@ export default function GRNPage() {
                           <select
                             value={item.item_id}
                             onChange={(e) => updateItemRow(index, 'item_id', e.target.value)}
-                            className="w-full border rounded-lg px-3 py-2 text-sm"
+                            className="w-full border rounded-ios-lg px-3 py-2 text-sm"
                           >
                             <option value="">Select Item</option>
                             {items.map(i => (
@@ -458,7 +460,7 @@ export default function GRNPage() {
                           <select
                             value={item.condition}
                             onChange={(e) => updateItemRow(index, 'condition', e.target.value)}
-                            className="w-full border rounded-lg px-3 py-2 text-sm"
+                            className="w-full border rounded-ios-lg px-3 py-2 text-sm"
                           >
                             <option value="GOOD">Good</option>
                             <option value="DAMAGED">Damaged</option>
@@ -500,7 +502,7 @@ export default function GRNPage() {
                         </div>
                         <div>
                           <label className="block text-xs text-gray-500 mb-1">Line Total</label>
-                          <div className="px-3 py-2 bg-gray-100 rounded-lg text-sm font-medium">
+                          <div className="px-3 py-2 bg-gray-100 rounded-ios-lg text-sm font-medium">
                             KES {(item.received_quantity * item.unit_price).toLocaleString()}
                           </div>
                         </div>
@@ -529,13 +531,13 @@ export default function GRNPage() {
                     </div>
                   ))}
                   
-                  <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-                    <Button size="sm" variant="outline" onClick={addItemRow} className="text-sm">
+                  <div className="flex items-center justify-between pt-3 border-t border-[#E5E5EA]">
+                    <IOSButton size="sm" variant="outline" onClick={addItemRow} className="text-sm">
                       <Plus className="h-4 w-4 mr-1" /> Add Another Item
-                    </Button>
+                    </IOSButton>
                     <div className="text-right">
                       <p className="text-sm text-gray-500">Total Value</p>
-                      <p className="text-xl font-bold text-green-600">KES {totalReceivedValue.toLocaleString()}</p>
+                      <p className="text-xl font-bold text-[#3C3C43]">KES {totalReceivedValue.toLocaleString()}</p>
                     </div>
                   </div>
                 </div>
@@ -546,18 +548,18 @@ export default function GRNPage() {
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2"
+                  className="w-full border rounded-ios-lg px-3 py-2"
                   rows={2}
                   placeholder="Delivery notes, discrepancies, etc..."
                 />
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>Cancel</Button>
-                <Button onClick={handleCreateGRN} disabled={!formData.supplier_id || !formData.items.some(i => i.item_id)}>
+                <IOSButton variant="outline" onClick={() => setIsCreateModalOpen(false)}>Cancel</IOSButton>
+                <IOSButton onClick={handleCreateGRN} disabled={!formData.supplier_id || !formData.items.some(i => i.item_id)}>
                   <CheckCircle className="h-4 w-4 mr-2" />
                   Record Receipt
-                </Button>
+                </IOSButton>
               </div>
             </div>
           </DialogContent>
@@ -581,7 +583,7 @@ export default function GRNPage() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Status</p>
-                    <Badge className={getStatusColor(selectedGRN.status)}>{selectedGRN.status}</Badge>
+                    <IOSBadge className={getStatusColor(selectedGRN.status)}>{selectedGRN.status}</IOSBadge>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">PO Reference</p>
@@ -591,7 +593,7 @@ export default function GRNPage() {
                 
                 <div>
                   <p className="text-sm font-medium mb-2">Items Received</p>
-                  <div className="border rounded-lg overflow-hidden">
+                  <div className="border rounded-ios-lg overflow-hidden">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50">
                         <tr>
@@ -610,7 +612,7 @@ export default function GRNPage() {
                             <td className="px-3 py-2 text-center">{item.ordered_quantity}</td>
                             <td className="px-3 py-2 text-center font-medium">{item.received_quantity}</td>
                             <td className="px-3 py-2">
-                              <Badge className={getConditionColor(item.condition)}>{item.condition}</Badge>
+                              <IOSBadge className={getConditionColor(item.condition)}>{item.condition}</IOSBadge>
                             </td>
                             <td className="px-3 py-2 font-mono text-xs">{item.batch_number || '-'}</td>
                             <td className="px-3 py-2">{item.expiry_date ? formatDate(item.expiry_date) : '-'}</td>

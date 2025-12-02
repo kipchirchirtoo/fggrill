@@ -2,18 +2,28 @@ import express from 'express';
 import {
   getStaff,
   getStaffMember,
+  createStaffMember,
   updateStaffMember,
+  getRoles,
   createStaffSchedule,
   processPayroll,
   submitPerformanceReview,
   getAttendance,
   recordAttendance,
-  getAttendanceSummary
+  getAttendanceSummary,
+  getLeaveRequests,
+  createLeaveRequest,
+  updateLeaveRequest,
+  approveLeaveRequest,
+  rejectLeaveRequest
 } from '../controllers/staff.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
 
 const router = express.Router();
+
+// Public reference data (no authentication needed)
+router.get('/roles', getRoles);
 
 // Protected routes
 router.use(protect);
@@ -22,6 +32,11 @@ router.use(protect);
 router.get('/',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]),
   getStaff
+);
+
+router.post('/',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
+  createStaffMember
 );
 
 router.get('/:id',
@@ -58,6 +73,26 @@ router.route('/attendance')
 router.get('/attendance/summary',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
   getAttendanceSummary
+);
+
+// Leave management routes
+router.route('/leave')
+  .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), getLeaveRequests)
+  .post(protect, createLeaveRequest);
+
+router.put('/leave/:id',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
+  updateLeaveRequest
+);
+
+router.put('/leave/:id/approve',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
+  approveLeaveRequest
+);
+
+router.put('/leave/:id/reject',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
+  rejectLeaveRequest
 );
 
 export default router;

@@ -3,10 +3,12 @@
 import { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
 import { Settings, Bell, Lock, Moon, Globe, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -30,10 +32,10 @@ export default function SettingsPage() {
         </div>
 
         {/* Notifications */}
-        <Card className="p-6">
+        <IOSCard className="p-6">
           <div className="flex items-center gap-3 mb-4">
-            <Bell className="h-5 w-5 text-indigo-600" />
-            <h2 className="font-semibold">Notifications</h2>
+            <Bell className="h-5 w-5 text-[#3C3C43]" />
+            <h2 className="font-semibold font-sf-pro-display">Notifications</h2>
           </div>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -48,7 +50,7 @@ export default function SettingsPage() {
                   onChange={(e) => setSettings({...settings, notifications: e.target.checked})}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[#FFFFFF] after:border-[#E5E5EA] after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#3C3C43]"></div>
               </label>
             </div>
             <div className="flex items-center justify-between">
@@ -63,17 +65,17 @@ export default function SettingsPage() {
                   onChange={(e) => setSettings({...settings, emailAlerts: e.target.checked})}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[#FFFFFF] after:border-[#E5E5EA] after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#3C3C43]"></div>
               </label>
             </div>
           </div>
-        </Card>
+        </IOSCard>
 
         {/* Appearance */}
-        <Card className="p-6">
+        <IOSCard className="p-6">
           <div className="flex items-center gap-3 mb-4">
-            <Moon className="h-5 w-5 text-indigo-600" />
-            <h2 className="font-semibold">Appearance</h2>
+            <Moon className="h-5 w-5 text-[#3C3C43]" />
+            <h2 className="font-semibold font-sf-pro-display">Appearance</h2>
           </div>
           <div className="flex items-center justify-between">
             <div>
@@ -87,39 +89,39 @@ export default function SettingsPage() {
                 onChange={(e) => setSettings({...settings, darkMode: e.target.checked})}
                 className="sr-only peer"
               />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[#FFFFFF] after:border-[#E5E5EA] after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#3C3C43]"></div>
             </label>
           </div>
-        </Card>
+        </IOSCard>
 
         {/* Language */}
-        <Card className="p-6">
+        <IOSCard className="p-6">
           <div className="flex items-center gap-3 mb-4">
-            <Globe className="h-5 w-5 text-indigo-600" />
-            <h2 className="font-semibold">Language</h2>
+            <Globe className="h-5 w-5 text-[#3C3C43]" />
+            <h2 className="font-semibold font-sf-pro-display">Language</h2>
           </div>
           <select
             value={settings.language}
             onChange={(e) => setSettings({...settings, language: e.target.value})}
-            className="w-full border rounded-lg px-3 py-2"
+            className="w-full border rounded-ios-lg px-3 py-2"
           >
             <option value="en">English</option>
             <option value="sw">Swahili</option>
           </select>
-        </Card>
+        </IOSCard>
 
         {/* Security */}
-        <Card className="p-6">
+        <IOSCard className="p-6">
           <div className="flex items-center gap-3 mb-4">
-            <Lock className="h-5 w-5 text-indigo-600" />
-            <h2 className="font-semibold">Security</h2>
+            <Lock className="h-5 w-5 text-[#3C3C43]" />
+            <h2 className="font-semibold font-sf-pro-display">Security</h2>
           </div>
-          <Button variant="outline">Change Password</Button>
-        </Card>
+          <IOSButton variant="outline">Change Password</IOSButton>
+        </IOSCard>
 
-        <Button onClick={handleSave} className="w-full">
+        <IOSButton onClick={handleSave} className="w-full">
           <Save className="h-4 w-4 mr-2" /> Save Settings
-        </Button>
+        </IOSButton>
       </div>
     </DashboardLayout>
   );

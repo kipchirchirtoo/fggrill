@@ -1,230 +1,106 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { 
-  Wallet, TrendingUp, TrendingDown, ArrowLeft, RefreshCw, 
-  Calendar, DollarSign, ArrowUpRight, ArrowDownRight, Filter
-} from 'lucide-react';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
 import { financeAPI } from '@/lib/api';
-import { formatDate } from '@/lib/date-utils';
-import { toast } from 'sonner';
-import Link from 'next/link';
+import { TrendingUp, TrendingDown, RefreshCw, ArrowUpRight, ArrowDownRight, DollarSign, Calendar } from 'lucide-react';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
+
+interface CashFlowData { period: string; inflow: number; outflow: number; net: number; }
 
 export default function CashFlowPage() {
   const { user } = useAuth();
+  const [data, setData] = useState<CashFlowData[]>([]);
+  const [summary, setSummary] = useState({ totalInflow: 0, totalOutflow: 0, netCashFlow: 0 });
   const [isLoading, setIsLoading] = useState(true);
-  const [cashFlowData, setCashFlowData] = useState<any>(null);
-  const [dateRange, setDateRange] = useState({
-    startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0]
-  });
+  const [period, setPeriod] = useState<'week' | 'month' | 'quarter'>('month');
 
-  useEffect(() => {
-    fetchCashFlow();
-  }, [dateRange]);
-
-  const fetchCashFlow = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await financeAPI.getCashFlow({
-        startDate: dateRange.startDate,
-        endDate: dateRange.endDate
-      });
-      setCashFlowData(res.data);
-    } catch (error) {
-      console.error('Error:', error);
-      toast.error('Failed to load cash flow data');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      const response = await financeAPI.getCashFlow();
+      if (response.success) {
+        setData(response.data?.periods || []);
+        setSummary(response.data?.summary || { totalInflow: 0, totalOutflow: 0, netCashFlow: 0 });
+      }
+    } catch (error) { console.error('Error:', error); }
+    finally { setIsLoading(false); }
+  }, []);
 
-  const formatCurrency = (amount: number) => `KES ${amount?.toLocaleString() || 0}`;
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]}>
+    <ProtectedRoute allowedRoles={[UserRole.ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link href="/dashboard/finance">
-                <Button variant="ghost" size="sm">
-                  <ArrowLeft className="h-4 w-4 mr-1" /> Back
-                </Button>
-              </Link>
-              <div>
-                <h1 className="text-2xl font-bold flex items-center gap-2">
-                  <Wallet className="h-6 w-6 text-blue-600" />
-                  Cash Flow Report
-                </h1>
-                <p className="text-gray-600">Track money coming in and going out</p>
-              </div>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900">Cash Flow</h1><p className="text-gray-500">Track money in and out</p></div>
+            <div className="flex gap-2">
+              {(['week', 'month', 'quarter'] as const).map((p) => (
+                <IOSButton key={p} variant={period === p ? 'primary' : 'secondary'} size="sm" onClick={() => setPeriod(p)}>
+                  {p.charAt(0).toUpperCase() + p.slice(1)}
+                </IOSButton>
+              ))}
+              <IOSButton variant="secondary" onClick={fetchData}><RefreshCw className="h-4 w-4" /></IOSButton>
             </div>
-            <Button onClick={fetchCashFlow} variant="outline" disabled={isLoading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
           </div>
 
-          {/* Date Filter */}
-          <Card className="p-4">
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-gray-400" />
-                <span className="text-sm font-medium">Period:</span>
+          <div className="grid grid-cols-3 gap-4">
+            <IOSCard className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-100 rounded-ios-lg"><ArrowDownRight className="h-5 w-5 text-[#34C759]" /></div>
+                <div><p className="text-sm text-gray-500">Total Inflow</p><p className="text-xl font-bold text-[#34C759]">KES {summary.totalInflow.toLocaleString()}</p></div>
               </div>
-              <input
-                type="date"
-                value={dateRange.startDate}
-                onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-                className="border rounded-lg px-3 py-2 text-sm"
-              />
-              <span>to</span>
-              <input
-                type="date"
-                value={dateRange.endDate}
-                onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-                className="border rounded-lg px-3 py-2 text-sm"
-              />
-            </div>
-          </Card>
-
-          {isLoading ? (
-            <div className="text-center py-12 text-gray-500">Loading cash flow data...</div>
-          ) : cashFlowData ? (
-            <>
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <Card className="p-4 bg-green-50 border-green-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-green-700">Total Income</p>
-                      <p className="text-2xl font-bold text-green-800">
-                        {formatCurrency(cashFlowData.summary?.totalIncome)}
-                      </p>
-                    </div>
-                    <ArrowUpRight className="h-8 w-8 text-green-600" />
-                  </div>
-                </Card>
-
-                <Card className="p-4 bg-red-50 border-red-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-red-700">Total Expenses</p>
-                      <p className="text-2xl font-bold text-red-800">
-                        {formatCurrency(cashFlowData.summary?.totalExpenses)}
-                      </p>
-                    </div>
-                    <ArrowDownRight className="h-8 w-8 text-red-600" />
-                  </div>
-                </Card>
-
-                <Card className="p-4 bg-blue-50 border-blue-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-blue-700">Net Cash Flow</p>
-                      <p className={`text-2xl font-bold ${cashFlowData.summary?.netCashFlow >= 0 ? 'text-green-800' : 'text-red-800'}`}>
-                        {formatCurrency(cashFlowData.summary?.netCashFlow)}
-                      </p>
-                    </div>
-                    <DollarSign className="h-8 w-8 text-blue-600" />
-                  </div>
-                </Card>
-
-                <Card className="p-4 bg-purple-50 border-purple-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-purple-700">Profit Margin</p>
-                      <p className="text-2xl font-bold text-purple-800">
-                        {cashFlowData.summary?.profitMargin}%
-                      </p>
-                    </div>
-                    <TrendingUp className="h-8 w-8 text-purple-600" />
-                  </div>
-                </Card>
+            </IOSCard>
+            <IOSCard className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-100 rounded-ios-lg"><ArrowUpRight className="h-5 w-5 text-[#FF3B30]" /></div>
+                <div><p className="text-sm text-gray-500">Total Outflow</p><p className="text-xl font-bold text-[#FF3B30]">KES {summary.totalOutflow.toLocaleString()}</p></div>
               </div>
-
-              {/* Income & Expense Breakdown */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="p-6">
-                  <h3 className="font-semibold mb-4 flex items-center gap-2">
-                    <ArrowUpRight className="h-5 w-5 text-green-600" />
-                    Income by Category
-                  </h3>
-                  <div className="space-y-3">
-                    {Object.entries(cashFlowData.incomeByCategory || {}).map(([category, amount]) => (
-                      <div key={category} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                        <span className="text-sm font-medium">{category}</span>
-                        <span className="font-bold text-green-700">{formatCurrency(amount as number)}</span>
-                      </div>
-                    ))}
-                    {Object.keys(cashFlowData.incomeByCategory || {}).length === 0 && (
-                      <p className="text-gray-500 text-center py-4">No income data</p>
-                    )}
-                  </div>
-                </Card>
-
-                <Card className="p-6">
-                  <h3 className="font-semibold mb-4 flex items-center gap-2">
-                    <ArrowDownRight className="h-5 w-5 text-red-600" />
-                    Expenses by Category
-                  </h3>
-                  <div className="space-y-3">
-                    {Object.entries(cashFlowData.expensesByCategory || {}).map(([category, amount]) => (
-                      <div key={category} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                        <span className="text-sm font-medium">{category}</span>
-                        <span className="font-bold text-red-700">{formatCurrency(amount as number)}</span>
-                      </div>
-                    ))}
-                    {Object.keys(cashFlowData.expensesByCategory || {}).length === 0 && (
-                      <p className="text-gray-500 text-center py-4">No expense data</p>
-                    )}
-                  </div>
-                </Card>
-              </div>
-
-              {/* Daily Cash Flow */}
-              <Card className="p-6">
-                <h3 className="font-semibold mb-4">Daily Cash Flow</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Date</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">Income</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">Expenses</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">Net</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {(cashFlowData.dailyCashFlow || []).map((day: any) => (
-                        <tr key={day.date} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm">{formatDate(day.date)}</td>
-                          <td className="px-4 py-3 text-right text-sm text-green-600 font-medium">
-                            {formatCurrency(day.income)}
-                          </td>
-                          <td className="px-4 py-3 text-right text-sm text-red-600 font-medium">
-                            {formatCurrency(day.expenses)}
-                          </td>
-                          <td className={`px-4 py-3 text-right text-sm font-bold ${day.net >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatCurrency(day.net)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            </IOSCard>
+            <IOSCard className="p-4">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-ios-lg ${summary.netCashFlow >= 0 ? 'bg-blue-100' : 'bg-orange-100'}`}>
+                  {summary.netCashFlow >= 0 ? <TrendingUp className="h-5 w-5 text-[#007AFF]" /> : <TrendingDown className="h-5 w-5 text-orange-600" />}
                 </div>
-              </Card>
-            </>
-          ) : (
-            <div className="text-center py-12 text-gray-500">No cash flow data available</div>
-          )}
+                <div><p className="text-sm text-gray-500">Net Cash Flow</p><p className={`text-xl font-bold ${summary.netCashFlow >= 0 ? 'text-[#007AFF]' : 'text-orange-600'}`}>KES {summary.netCashFlow.toLocaleString()}</p></div>
+              </div>
+            </IOSCard>
+          </div>
+
+          <IOSCard className="p-6">
+            <h2 className="text-lg font-semibold font-sf-pro-display mb-4">Cash Flow by Period</h2>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
+            ) : data.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">No data available</div>
+            ) : (
+              <div className="space-y-4">
+                {data.map((item, i) => (
+                  <div key={i} className="p-4 bg-gray-50 rounded-ios-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-medium">{item.period}</p>
+                      <p className={`font-bold ${item.net >= 0 ? 'text-[#34C759]' : 'text-[#FF3B30]'}`}>
+                        {item.net >= 0 ? '+' : ''}KES {item.net.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="flex gap-4 text-sm">
+                      <span className="text-[#34C759]">↓ KES {item.inflow.toLocaleString()}</span>
+                      <span className="text-[#FF3B30]">↑ KES {item.outflow.toLocaleString()}</span>
+                    </div>
+                    <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#34C759]" style={{ width: `${(item.inflow / (item.inflow + item.outflow)) * 100}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </IOSCard>
         </div>
       </DashboardLayout>
     </ProtectedRoute>

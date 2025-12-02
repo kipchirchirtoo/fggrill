@@ -82,7 +82,7 @@ export function BatchTracking({ itemId, branch, onBatchAdded }: BatchTrackingPro
 
   return (
     <Card className="p-6">
-      <h3 className="text-lg font-semibold mb-4">Add New Batch</h3>
+      <h3 className="text-lg font-semibold font-sf-pro-display mb-4">Add New Batch</h3>
       
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">

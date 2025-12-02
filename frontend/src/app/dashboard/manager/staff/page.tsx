@@ -14,7 +14,7 @@ export default function ManagerStaffPage() {
             <h1 className="text-3xl font-bold text-gray-900">Staff Management</h1>
             <p className="text-gray-600 mt-1">Manage staff schedules and assignments</p>
           </div>
-          <div className="bg-white rounded-lg p-6 border border-gray-100">
+          <div className="bg-[#FFFFFF] rounded-ios-lg p-6 border border-gray-100">
             <div className="flex items-center justify-center h-64 text-gray-400">
               <div className="text-center">
                 <Users className="h-12 w-12 mx-auto mb-4" />

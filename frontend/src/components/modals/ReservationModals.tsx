@@ -7,6 +7,7 @@ import {
   ChevronRight, User, Mail, Phone, CreditCard
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { bookingsAPI } from '@/lib/api';
 
 interface ReservationModalProps {
   isOpen: boolean;
@@ -42,14 +43,13 @@ export function ReservationModal({ isOpen, onClose, initialData, mode = 'create'
 
   const handleSubmit = async () => {
     try {
-      // TODO: Implement API call
-      const response = await fetch('/api/reservations', {
-        method: mode === 'create' ? 'POST' : 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(reservationData)
-      });
-
-      if (!response.ok) throw new Error('Failed to save reservation');
+      // Map the simple reservation wizard data into a booking payload.
+      // For now we forward the raw data and let the backend validation surface issues.
+      if (mode === 'create') {
+        await bookingsAPI.createBooking(reservationData);
+      } else if (reservationData.id) {
+        await bookingsAPI.updateBooking(reservationData.id, reservationData);
+      }
       
       toast.success('Reservation ' + (mode === 'create' ? 'created' : 'updated') + ' successfully!');
       onClose();
@@ -83,7 +83,7 @@ export function ReservationModal({ isOpen, onClose, initialData, mode = 'create'
             </h2>
             <p className="text-sm text-gray-500">Step {step} of 3</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -97,7 +97,7 @@ export function ReservationModal({ isOpen, onClose, initialData, mode = 'create'
 
         {step === 1 && (
           <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            <h3 className="font-semibold font-sf-pro-display text-gray-900 flex items-center gap-2">
               <User className="h-5 w-5" />
               Guest Information
             </h3>
@@ -108,7 +108,7 @@ export function ReservationModal({ isOpen, onClose, initialData, mode = 'create'
                 value={reservationData.guestName}
                 onChange={handleChange}
                 placeholder="Guest Name"
-                className="px-3 py-2 border border-gray-300 rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
               <input
                 type="email"
@@ -116,7 +116,7 @@ export function ReservationModal({ isOpen, onClose, initialData, mode = 'create'
                 value={reservationData.guestEmail}
                 onChange={handleChange}
                 placeholder="Email"
-                className="px-3 py-2 border border-gray-300 rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
               <input
                 type="tel"
@@ -124,7 +124,7 @@ export function ReservationModal({ isOpen, onClose, initialData, mode = 'create'
                 value={reservationData.guestPhone}
                 onChange={handleChange}
                 placeholder="Phone"
-                className="px-3 py-2 border border-gray-300 rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
               <div className="flex gap-4">
                 <input
@@ -134,7 +134,7 @@ export function ReservationModal({ isOpen, onClose, initialData, mode = 'create'
                   onChange={handleChange}
                   min="1"
                   placeholder="Adults"
-                  className="px-3 py-2 border border-gray-300 rounded-lg w-full"
+                  className="px-3 py-2 border border-gray-300 rounded-ios-lg w-full"
                 />
                 <input
                   type="number"
@@ -143,7 +143,7 @@ export function ReservationModal({ isOpen, onClose, initialData, mode = 'create'
                   onChange={handleChange}
                   min="0"
                   placeholder="Children"
-                  className="px-3 py-2 border border-gray-300 rounded-lg w-full"
+                  className="px-3 py-2 border border-gray-300 rounded-ios-lg w-full"
                 />
               </div>
             </div>
@@ -152,7 +152,7 @@ export function ReservationModal({ isOpen, onClose, initialData, mode = 'create'
 
         {step === 2 && (
           <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            <h3 className="font-semibold font-sf-pro-display text-gray-900 flex items-center gap-2">
               <Bed className="h-5 w-5" />
               Room Details
             </h3>
@@ -161,7 +161,7 @@ export function ReservationModal({ isOpen, onClose, initialData, mode = 'create'
                 name="roomType"
                 value={reservationData.roomType}
                 onChange={handleChange}
-                className="px-3 py-2 border border-gray-300 rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-ios-lg"
               >
                 <option value="Standard">Standard</option>
                 <option value="Deluxe">Deluxe</option>
@@ -173,28 +173,28 @@ export function ReservationModal({ isOpen, onClose, initialData, mode = 'create'
                 value={reservationData.roomNumber}
                 onChange={handleChange}
                 placeholder="Room Number"
-                className="px-3 py-2 border border-gray-300 rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
               <input
                 type="date"
                 name="checkIn"
                 value={reservationData.checkIn}
                 onChange={handleChange}
-                className="px-3 py-2 border border-gray-300 rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
               <input
                 type="date"
                 name="checkOut"
                 value={reservationData.checkOut}
                 onChange={handleChange}
-                className="px-3 py-2 border border-gray-300 rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-ios-lg"
               />
               <textarea
                 name="specialRequests"
                 value={reservationData.specialRequests}
                 onChange={handleChange}
                 placeholder="Special Requests"
-                className="px-3 py-2 border border-gray-300 rounded-lg col-span-2"
+                className="px-3 py-2 border border-gray-300 rounded-ios-lg col-span-2"
                 rows={3}
               />
             </div>
@@ -203,11 +203,11 @@ export function ReservationModal({ isOpen, onClose, initialData, mode = 'create'
 
         {step === 3 && (
           <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            <h3 className="font-semibold font-sf-pro-display text-gray-900 flex items-center gap-2">
               <CreditCard className="h-5 w-5" />
               Payment Details
             </h3>
-            <div className="bg-gray-50 rounded-lg p-4">
+            <div className="bg-gray-50 rounded-ios-lg p-4">
               <div className="flex justify-between mb-2">
                 <span>Room Charges</span>
                 <span className="font-bold">KES {reservationData.amount}</span>
@@ -225,7 +225,7 @@ export function ReservationModal({ isOpen, onClose, initialData, mode = 'create'
               name="paymentMethod"
               value={reservationData.paymentMethod}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
             >
               <option value="cash">Cash</option>
               <option value="card">Card</option>
@@ -244,14 +244,14 @@ export function ReservationModal({ isOpen, onClose, initialData, mode = 'create'
           {step < 3 ? (
             <button
               onClick={() => setStep(step + 1)}
-              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700"
             >
               Next <ChevronRight className="inline h-4 w-4" />
             </button>
           ) : (
             <button
               onClick={handleSubmit}
-              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              className="px-6 py-2 bg-green-600 text-white rounded-ios-lg hover:bg-green-700"
             >
               <CheckCircle className="inline h-4 w-4 mr-2" />
               {mode === 'create' ? 'Complete Reservation' : 'Update Reservation'}
@@ -266,13 +266,12 @@ export function ReservationModal({ isOpen, onClose, initialData, mode = 'create'
 export function CancelReservationModal({ isOpen, onClose, reservation }: { isOpen: boolean; onClose: () => void; reservation: any }): JSX.Element | null {
   const handleCancel = async () => {
     try {
-      // TODO: Implement API call
-      const response = await fetch('/api/reservations/' + reservation.id + '/cancel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
+      if (!reservation?.id) {
+        toast.error('Missing reservation ID');
+        return;
+      }
 
-      if (!response.ok) throw new Error('Failed to cancel reservation');
+      await bookingsAPI.cancelBooking(reservation.id);
       
       toast.success('Reservation cancelled successfully!');
       onClose();
@@ -300,7 +299,7 @@ export function CancelReservationModal({ isOpen, onClose, reservation }: { isOpe
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900">Cancel Reservation</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -310,7 +309,7 @@ export function CancelReservationModal({ isOpen, onClose, reservation }: { isOpe
             Are you sure you want to cancel this reservation? This action cannot be undone.
           </p>
 
-          <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+          <div className="bg-gray-50 rounded-ios-lg p-4 space-y-2">
             <div className="flex justify-between">
               <span className="text-gray-600">Guest Name:</span>
               <span className="font-medium">{reservation?.guestName}</span>
@@ -332,13 +331,13 @@ export function CancelReservationModal({ isOpen, onClose, reservation }: { isOpe
           <div className="flex justify-end gap-4 mt-6 pt-6 border-t">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+              className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-ios-lg"
             >
               Keep Reservation
             </button>
             <button
               onClick={handleCancel}
-              className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+              className="px-6 py-2 bg-red-600 text-white rounded-ios-lg hover:bg-red-700"
             >
               Cancel Reservation
             </button>

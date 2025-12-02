@@ -5,10 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/minimal/button";
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
+import { IOSBadge } from '@/components/ui/ios-badge';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,8 @@ import {
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/date-utils';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -687,23 +689,23 @@ export default function CentralWarehousePage() {
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'URGENT': return 'bg-red-500';
-      case 'HIGH': return 'bg-orange-500';
-      case 'NORMAL': return 'bg-blue-500';
-      case 'LOW': return 'bg-gray-500';
-      default: return 'bg-gray-500';
+      case 'URGENT': return 'bg-[#F2F2F7]0';
+      case 'HIGH': return 'bg-[#F2F2F7]';
+      case 'NORMAL': return 'bg-[#F2F2F7]0';
+      case 'LOW': return 'bg-[#8E8E93]';
+      default: return 'bg-[#8E8E93]';
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'PENDING': return 'bg-yellow-500';
-      case 'APPROVED': return 'bg-green-500';
-      case 'REJECTED': return 'bg-red-500';
-      case 'DISPATCHED': return 'bg-blue-500';
-      case 'IN_TRANSIT': return 'bg-purple-500';
-      case 'DELIVERED': return 'bg-green-600';
-      default: return 'bg-gray-500';
+      case 'PENDING': return 'bg-[#F2F2F7]';
+      case 'APPROVED': return 'bg-[#F2F2F7]0';
+      case 'REJECTED': return 'bg-[#F2F2F7]0';
+      case 'DISPATCHED': return 'bg-[#F2F2F7]0';
+      case 'IN_TRANSIT': return 'bg-[#F2F2F7]';
+      case 'DELIVERED': return 'bg-[#3C3C43]';
+      default: return 'bg-[#8E8E93]';
     }
   };
 
@@ -713,7 +715,7 @@ export default function CentralWarehousePage() {
         <DashboardLayout>
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[rgba(60,60,67,0.12)] mx-auto"></div>
               <p className="mt-4 text-gray-600">Loading central warehouse...</p>
             </div>
           </div>
@@ -730,7 +732,7 @@ export default function CentralWarehousePage() {
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-3">
-                <Warehouse className="h-8 w-8 text-indigo-600" />
+                <Warehouse className="h-8 w-8 text-[#3C3C43]" />
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900">Central Warehouse</h1>
                   <p className="text-gray-600">Manage inventory dispatch to all branches</p>
@@ -738,70 +740,70 @@ export default function CentralWarehousePage() {
               </div>
             </div>
             <div className="flex gap-3">
-              <Button variant="outline" onClick={fetchDashboardData}>
+              <IOSButton variant="outline" onClick={fetchDashboardData}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh
-              </Button>
-              <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={openAddItemModal}>
+              </IOSButton>
+              <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={openAddItemModal}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add to Master Catalog
-              </Button>
+              </IOSButton>
             </div>
           </div>
 
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <Card className="p-6 bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
+            <IOSCard className="p-6 bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]">
               <div className="flex items-center gap-4">
-                <div className="p-3 bg-orange-500 rounded-xl">
+                <div className="p-3 bg-[#F2F2F7] rounded-xl">
                   <ClipboardList className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-orange-700">Pending Requests</p>
-                  <p className="text-3xl font-bold text-orange-900">{stats.pendingRequests}</p>
+                  <p className="text-sm font-medium text-[#3C3C43]">Pending Requests</p>
+                  <p className="text-3xl font-bold text-[#3C3C43]">{stats.pendingRequests}</p>
                 </div>
               </div>
-            </Card>
+            </IOSCard>
 
-            <Card className="p-6 bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+            <IOSCard className="p-6 bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]">
               <div className="flex items-center gap-4">
-                <div className="p-3 bg-blue-500 rounded-xl">
+                <div className="p-3 bg-[#F2F2F7]0 rounded-xl">
                   <Truck className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-blue-700">In Transit</p>
-                  <p className="text-3xl font-bold text-blue-900">{stats.inTransit}</p>
+                  <p className="text-sm font-medium text-[#000000]">In Transit</p>
+                  <p className="text-3xl font-bold text-[#000000]">{stats.inTransit}</p>
                 </div>
               </div>
-            </Card>
+            </IOSCard>
 
-            <Card className="p-6 bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200">
+            <IOSCard className="p-6 bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]">
               <div className="flex items-center gap-4">
-                <div className="p-3 bg-amber-500 rounded-xl">
+                <div className="p-3 bg-[#F2F2F7] rounded-xl">
                   <AlertTriangle className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-amber-700">Low Stock Branches</p>
-                  <p className="text-3xl font-bold text-amber-900">{stats.lowStockBranches}</p>
+                  <p className="text-sm font-medium text-[#3C3C43]">Low Stock Branches</p>
+                  <p className="text-3xl font-bold text-[#3C3C43]">{stats.lowStockBranches}</p>
                 </div>
               </div>
-            </Card>
+            </IOSCard>
 
-            <Card className="p-6 bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+            <IOSCard className="p-6 bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]">
               <div className="flex items-center gap-4">
-                <div className="p-3 bg-green-500 rounded-xl">
+                <div className="p-3 bg-[#F2F2F7]0 rounded-xl">
                   <Send className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-green-700">Weekly Dispatches</p>
-                  <p className="text-3xl font-bold text-green-900">{stats.weeklyDispatches}</p>
+                  <p className="text-sm font-medium text-[#000000]">Weekly Dispatches</p>
+                  <p className="text-3xl font-bold text-[#000000]">{stats.weeklyDispatches}</p>
                 </div>
               </div>
-            </Card>
+            </IOSCard>
           </div>
 
           {/* Tabs */}
-          <div className="border-b border-gray-200">
+          <div className="border-b border-[#E5E5EA]">
             <nav className="-mb-px flex gap-6">
               {[
                 { id: 'overview', label: 'Overview', icon: Warehouse },
@@ -816,7 +818,7 @@ export default function CentralWarehousePage() {
                   onClick={() => setActiveTab(tab.id as any)}
                   className={`pb-4 px-1 flex items-center gap-2 ${
                     activeTab === tab.id
-                      ? 'border-b-2 border-indigo-600 text-indigo-600'
+                      ? 'border-b-2 border-[rgba(60,60,67,0.12)] text-[#3C3C43]'
                       : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
@@ -828,7 +830,7 @@ export default function CentralWarehousePage() {
           </div>
 
           {/* Tab Content */}
-          <div className="bg-white rounded-xl shadow-sm border">
+          <div className="bg-[#FFFFFF] rounded-xl shadow-none 0_1px_3px_rgba(0,0,0,0.04)] border">
             
             {/* Overview Tab */}
             {activeTab === 'overview' && (
@@ -837,26 +839,26 @@ export default function CentralWarehousePage() {
                   {/* Pending Requests Preview */}
                   <div>
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-gray-900">Recent Requests</h3>
-                      <Button variant="ghost" size="sm" onClick={() => setActiveTab('requests')}>
+                      <h3 className="font-semibold font-sf-pro-display text-gray-900">Recent Requests</h3>
+                      <IOSButton variant="ghost" size="sm" onClick={() => setActiveTab('requests')}>
                         View All <ChevronRight className="h-4 w-4 ml-1" />
-                      </Button>
+                      </IOSButton>
                     </div>
                     <div className="space-y-3">
                       {pendingRequests.slice(0, 5).map((request) => (
-                        <div key={request.id} className="p-4 border rounded-lg hover:bg-gray-50">
+                        <div key={request.id} className="p-4 border rounded-ios-lg hover:bg-gray-50">
                           <div className="flex items-center justify-between">
                             <div>
                               <p className="font-medium">{request.request_number}</p>
                               <p className="text-sm text-gray-500">{request.branch.name}</p>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Badge className={getPriorityColor(request.priority)}>
+                              <IOSBadge className={getPriorityColor(request.priority)}>
                                 {request.priority}
-                              </Badge>
-                              <Button size="sm" onClick={() => openReviewModal(request)}>
+                              </IOSBadge>
+                              <IOSButton size="sm" onClick={() => openReviewModal(request)}>
                                 Review
-                              </Button>
+                              </IOSButton>
                             </div>
                           </div>
                         </div>
@@ -870,21 +872,21 @@ export default function CentralWarehousePage() {
                   {/* Low Stock Items */}
                   <div>
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-gray-900">Low Stock Items</h3>
+                      <h3 className="font-semibold font-sf-pro-display text-gray-900">Low Stock Items</h3>
                     </div>
                     <div className="space-y-3">
                       {masterItems
                         .filter(item => (item.quantity || 0) <= (item.reorder_level || 10))
                         .slice(0, 5)
                         .map((item) => (
-                          <div key={item.sku} className="p-4 border rounded-lg">
+                          <div key={item.sku} className="p-4 border rounded-ios-lg">
                             <div className="flex items-center justify-between">
                               <div>
                                 <p className="font-medium">{item.item_name || item.description}</p>
                                 <p className="text-sm text-gray-500 font-mono">{item.sku}</p>
                               </div>
                               <div className="text-right">
-                                <p className="text-lg font-bold text-red-600">{item.quantity || 0}</p>
+                                <p className="text-lg font-bold text-[#3C3C43]">{item.quantity || 0}</p>
                                 <p className="text-xs text-gray-500">Reorder: {item.reorder_level || 10}</p>
                               </div>
                             </div>
@@ -913,17 +915,17 @@ export default function CentralWarehousePage() {
                   <select
                     value={categoryFilter}
                     onChange={(e) => setCategoryFilter(e.target.value)}
-                    className="px-4 py-2 border rounded-lg text-sm"
+                    className="px-4 py-2 border rounded-ios-lg text-sm"
                   >
                     <option value="">All Categories</option>
                     {CATEGORIES.map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
-                  <Button onClick={openAddItemModal}>
+                  <IOSButton onClick={openAddItemModal}>
                     <Plus className="h-4 w-4 mr-2" />
                     Add Item
-                  </Button>
+                  </IOSButton>
                 </div>
 
                 {/* Items Table */}
@@ -951,11 +953,11 @@ export default function CentralWarehousePage() {
                           </td>
                           <td className="px-4 py-4 font-mono text-sm">{item.sku}</td>
                           <td className="px-4 py-4">
-                            <Badge variant="outline">{item.category}</Badge>
+                            <IOSBadge variant="outline">{item.category}</IOSBadge>
                           </td>
                           <td className="px-4 py-4">
                             <span className={`font-bold ${
-                              (item.quantity || 0) <= (item.reorder_level || 10) ? 'text-red-600' : 'text-green-600'
+                              (item.quantity || 0) <= (item.reorder_level || 10) ? 'text-[#3C3C43]' : 'text-[#3C3C43]'
                             }`}>
                               {item.quantity || 0}
                             </span>
@@ -970,12 +972,12 @@ export default function CentralWarehousePage() {
                           </td>
                           <td className="px-4 py-4">
                             <div className="flex items-center gap-2">
-                              <Button size="sm" variant="outline" onClick={() => openEditItemModal(item)}>
+                              <IOSButton size="sm" variant="outline" onClick={() => openEditItemModal(item)}>
                                 <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button size="sm" variant="outline" className="text-red-600 hover:bg-red-50" onClick={() => openDeleteConfirm(item)}>
+                              </IOSButton>
+                              <IOSButton size="sm" variant="outline" className="text-[#3C3C43] hover:bg-[#F2F2F7]" onClick={() => openDeleteConfirm(item)}>
                                 <Trash2 className="h-4 w-4" />
-                              </Button>
+                              </IOSButton>
                             </div>
                           </td>
                         </tr>
@@ -996,7 +998,7 @@ export default function CentralWarehousePage() {
             {activeTab === 'requests' && (
               <div className="p-6">
                 <div className="mb-4">
-                  <h3 className="font-semibold text-gray-900">Pending Stock Requests</h3>
+                  <h3 className="font-semibold font-sf-pro-display text-gray-900">Pending Stock Requests</h3>
                   <p className="text-sm text-gray-500">Review and approve requests from branches</p>
                 </div>
                 
@@ -1025,7 +1027,7 @@ export default function CentralWarehousePage() {
                           </td>
                           <td className="px-4 py-4">{request.request_type}</td>
                           <td className="px-4 py-4">
-                            <Badge className={getPriorityColor(request.priority)}>{request.priority}</Badge>
+                            <IOSBadge className={getPriorityColor(request.priority)}>{request.priority}</IOSBadge>
                           </td>
                           <td className="px-4 py-4">{request.items.length} items</td>
                           <td className="px-4 py-4 text-sm text-gray-500">
@@ -1034,13 +1036,13 @@ export default function CentralWarehousePage() {
                           <td className="px-4 py-4">
                             <div className="flex gap-2">
                               {(request.status === 'APPROVED' || request.status === 'PARTIALLY_APPROVED') ? (
-                                <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => openCreateDispatchModal(request)}>
+                                <IOSButton size="sm" className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={() => openCreateDispatchModal(request)}>
                                   <Truck className="h-4 w-4 mr-1" /> Dispatch
-                                </Button>
+                                </IOSButton>
                               ) : (
-                                <Button size="sm" onClick={() => openReviewModal(request)}>
+                                <IOSButton size="sm" onClick={() => openReviewModal(request)}>
                                   <Eye className="h-4 w-4 mr-1" /> Review
-                                </Button>
+                                </IOSButton>
                               )}
                             </div>
                           </td>
@@ -1062,7 +1064,7 @@ export default function CentralWarehousePage() {
             {activeTab === 'dispatches' && (
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900">Dispatch Notes</h3>
+                  <h3 className="font-semibold font-sf-pro-display text-gray-900">Dispatch Notes</h3>
                   <p className="text-sm text-gray-500">Dispatches are created from approved stock requests</p>
                 </div>
                 <div className="overflow-x-auto">
@@ -1089,9 +1091,9 @@ export default function CentralWarehousePage() {
                             </div>
                           </td>
                           <td className="px-4 py-4">
-                            <Badge className={getStatusColor(dispatch.status)}>
+                            <IOSBadge className={getStatusColor(dispatch.status)}>
                               {dispatch.status}
-                            </Badge>
+                            </IOSBadge>
                           </td>
                           <td className="px-4 py-4">
                             <div className="flex items-center gap-1">
@@ -1107,15 +1109,15 @@ export default function CentralWarehousePage() {
                           </td>
                           <td className="px-4 py-4">
                             {dispatch.status === 'PENDING' && (
-                              <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => handleDispatchItem(dispatch.id)}>
+                              <IOSButton size="sm" className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={() => handleDispatchItem(dispatch.id)}>
                                 <Send className="h-4 w-4 mr-1" /> Send
-                              </Button>
+                              </IOSButton>
                             )}
                             {dispatch.status === 'IN_TRANSIT' && (
-                              <Badge className="bg-purple-500">In Transit</Badge>
+                              <IOSBadge className="bg-[#F2F2F7]">In Transit</IOSBadge>
                             )}
                             {dispatch.status === 'DELIVERED' && (
-                              <Badge className="bg-green-600"><CheckCircle className="h-3 w-3 mr-1" /> Delivered</Badge>
+                              <IOSBadge className="bg-[#3C3C43]"><CheckCircle className="h-3 w-3 mr-1" /> Delivered</IOSBadge>
                             )}
                           </td>
                         </tr>
@@ -1137,11 +1139,11 @@ export default function CentralWarehousePage() {
             {activeTab === 'transfers' && (
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900">Branch-to-Branch Transfers</h3>
-                  <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={openCreateTransferModal}>
+                  <h3 className="font-semibold font-sf-pro-display text-gray-900">Branch-to-Branch Transfers</h3>
+                  <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={openCreateTransferModal}>
                     <Plus className="h-4 w-4 mr-2" />
                     New Transfer
-                  </Button>
+                  </IOSButton>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -1167,14 +1169,14 @@ export default function CentralWarehousePage() {
                           </td>
                           <td className="px-4 py-4">
                             <div className="flex items-center gap-2">
-                              <ArrowRight className="h-4 w-4 text-indigo-400" />
+                              <ArrowRight className="h-4 w-4 text-[#3C3C43]" />
                               <span>{transfer.to_branch?.name || 'Unknown'}</span>
                             </div>
                           </td>
                           <td className="px-4 py-4">
-                            <Badge className={getStatusColor(transfer.status)}>
+                            <IOSBadge className={getStatusColor(transfer.status)}>
                               {transfer.status}
-                            </Badge>
+                            </IOSBadge>
                           </td>
                           <td className="px-4 py-4">
                             <div className="flex items-center gap-1">
@@ -1213,9 +1215,9 @@ export default function CentralWarehousePage() {
             </DialogHeader>
             
             <div className="space-y-4">
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <p className="text-sm text-blue-800 mb-2">Dispatching for Request: <strong>{selectedRequest?.request_number}</strong></p>
-                <p className="text-sm text-blue-800">To: <strong>{selectedRequest?.branch.name}</strong></p>
+              <div className="bg-[#F2F2F7] p-4 rounded-ios-lg">
+                <p className="text-sm text-[#000000] mb-2">Dispatching for Request: <strong>{selectedRequest?.request_number}</strong></p>
+                <p className="text-sm text-[#000000]">To: <strong>{selectedRequest?.branch.name}</strong></p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1266,13 +1268,13 @@ export default function CentralWarehousePage() {
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button variant="outline" onClick={() => setIsCreateDispatchOpen(false)}>
+                <IOSButton variant="outline" onClick={() => setIsCreateDispatchOpen(false)}>
                   Cancel
-                </Button>
-                <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleCreateDispatch}>
+                </IOSButton>
+                <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleCreateDispatch}>
                   <Send className="h-4 w-4 mr-2" />
                   Create Dispatch
-                </Button>
+                </IOSButton>
               </div>
             </div>
           </DialogContent>
@@ -1291,7 +1293,7 @@ export default function CentralWarehousePage() {
             {selectedRequest && (
               <div className="space-y-6">
                 {/* Request Info */}
-                <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="bg-gray-50 p-4 rounded-ios-lg">
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <p className="text-gray-500">Request Number</p>
@@ -1303,9 +1305,9 @@ export default function CentralWarehousePage() {
                     </div>
                     <div>
                       <p className="text-gray-500">Priority</p>
-                      <Badge className={getPriorityColor(selectedRequest.priority)}>
+                      <IOSBadge className={getPriorityColor(selectedRequest.priority)}>
                         {selectedRequest.priority}
-                      </Badge>
+                      </IOSBadge>
                     </div>
                     <div>
                       <p className="text-gray-500">Type</p>
@@ -1317,7 +1319,7 @@ export default function CentralWarehousePage() {
                 {/* Items Table */}
                 <div>
                   <h4 className="font-medium mb-3">Items</h4>
-                  <div className="border rounded-lg overflow-hidden">
+                  <div className="border rounded-ios-lg overflow-hidden">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50">
                         <tr>
@@ -1388,13 +1390,13 @@ export default function CentralWarehousePage() {
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t">
-                  <Button variant="outline" onClick={() => setIsReviewModalOpen(false)}>
+                  <IOSButton variant="outline" onClick={() => setIsReviewModalOpen(false)}>
                     Cancel
-                  </Button>
-                  <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={handleApproveRequest}>
+                  </IOSButton>
+                  <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleApproveRequest}>
                     <Check className="h-4 w-4 mr-2" />
                     Submit Review
-                  </Button>
+                  </IOSButton>
                 </div>
               </div>
             )}
@@ -1406,7 +1408,7 @@ export default function CentralWarehousePage() {
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Scan className="h-5 w-5 text-indigo-600" />
+                <Scan className="h-5 w-5 text-[#3C3C43]" />
                 Add Master Item
               </DialogTitle>
             </DialogHeader>
@@ -1414,24 +1416,24 @@ export default function CentralWarehousePage() {
             {/* Camera Scanner Overlay */}
             {isScannerActive && (
               <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4">
-                <div className="bg-white rounded-2xl p-6 w-full max-w-lg relative">
-                  <Button 
+                <div className="bg-[#FFFFFF] rounded-2xl p-6 w-full max-w-lg relative">
+                  <IOSButton 
                     type="button" 
                     variant="ghost" 
                     size="icon" 
-                    className="absolute right-3 top-3 z-10 bg-white/80 hover:bg-white"
+                    className="absolute right-3 top-3 z-10 bg-[#FFFFFF]/80 hover:bg-[#FFFFFF]"
                     onClick={stopCameraScanner}
                   >
                     <X className="h-6 w-6" />
-                  </Button>
+                  </IOSButton>
                   
                   <div className="text-center mb-4">
-                    <Camera className="h-8 w-8 mx-auto mb-2 text-indigo-600" />
-                    <h3 className="text-lg font-semibold">Scan Barcode</h3>
+                    <Camera className="h-8 w-8 mx-auto mb-2 text-[#3C3C43]" />
+                    <h3 className="text-lg font-semibold font-sf-pro-display">Scan Barcode</h3>
                     <p className="text-sm text-gray-500">Point camera at product barcode</p>
                   </div>
                   
-                  <div id="add-item-barcode-reader" className="w-full overflow-hidden rounded-xl border-2 border-indigo-200"></div>
+                  <div id="add-item-barcode-reader" className="w-full overflow-hidden rounded-xl border-2 border-[rgba(60,60,67,0.12)]"></div>
                   
                   <p className="text-center text-xs text-gray-400 mt-4">
                     Supports: UPC, EAN, Code 128, Code 39
@@ -1442,10 +1444,10 @@ export default function CentralWarehousePage() {
 
             <div className="space-y-4">
               {/* Barcode Scanner Section */}
-              <div className="bg-gradient-to-br from-indigo-50 to-blue-50 p-4 rounded-xl border border-indigo-100">
+              <div className="bg-[#F2F2F7] p-4 rounded-xl border border-[rgba(60,60,67,0.12)]">
                 <div className="flex items-center gap-2 mb-3">
-                  <Scan className="h-4 w-4 text-indigo-600" />
-                  <label className="text-sm font-semibold text-indigo-900">
+                  <Scan className="h-4 w-4 text-[#3C3C43]" />
+                  <label className="text-sm font-semibold font-sf-pro-display text-[#3C3C43]">
                     Scan Barcode or Enter SKU
                   </label>
                 </div>
@@ -1458,19 +1460,19 @@ export default function CentralWarehousePage() {
                       onChange={(e) => setItemForm({...itemForm, barcode: e.target.value})}
                       onKeyDown={handleBarcodeKeyDown}
                       placeholder="Scan barcode or type SKU..."
-                      className="h-11 font-mono bg-white border-2 border-indigo-200 focus:border-indigo-500"
+                      className="h-11 font-mono bg-[#FFFFFF] border-2 border-[rgba(60,60,67,0.12)] focus:border-[rgba(60,60,67,0.12)]"
                       autoComplete="off"
                     />
                   </div>
-                  <Button 
+                  <IOSButton 
                     type="button" 
                     size="icon"
-                    className="h-11 w-11 bg-indigo-600 hover:bg-indigo-700"
+                    className="h-11 w-11 bg-[#3C3C43] hover:bg-[#3C3C43]"
                     onClick={() => lookupBarcode(itemForm.barcode || '')}
                   >
                     <Search className="h-5 w-5" />
-                  </Button>
-                  <Button 
+                  </IOSButton>
+                  <IOSButton 
                     type="button"
                     size="icon"
                     variant="outline"
@@ -1478,7 +1480,7 @@ export default function CentralWarehousePage() {
                     onClick={startCameraScanner}
                   >
                     <Camera className="h-5 w-5" />
-                  </Button>
+                  </IOSButton>
                 </div>
                 
                 <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
@@ -1518,7 +1520,7 @@ export default function CentralWarehousePage() {
                   <select 
                     value={itemForm.category}
                     onChange={(e) => setItemForm({...itemForm, category: e.target.value})}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-ios-lg"
                   >
                     {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                   </select>
@@ -1528,7 +1530,7 @@ export default function CentralWarehousePage() {
                   <select 
                     value={itemForm.unit_of_measure}
                     onChange={(e) => setItemForm({...itemForm, unit_of_measure: e.target.value})}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-ios-lg"
                   >
                     {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                   </select>
@@ -1566,13 +1568,13 @@ export default function CentralWarehousePage() {
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button variant="outline" onClick={() => setIsAddItemModalOpen(false)}>
+                <IOSButton variant="outline" onClick={() => setIsAddItemModalOpen(false)}>
                   Cancel
-                </Button>
-                <Button onClick={handleAddItem}>
+                </IOSButton>
+                <IOSButton onClick={handleAddItem}>
                   <Save className="h-4 w-4 mr-2" />
                   Save Item
-                </Button>
+                </IOSButton>
               </div>
             </div>
           </DialogContent>
@@ -1583,13 +1585,13 @@ export default function CentralWarehousePage() {
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Edit className="h-5 w-5 text-indigo-600" />
+                <Edit className="h-5 w-5 text-[#3C3C43]" />
                 Edit Master Item
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               {/* SKU and Barcode Info */}
-              <div className="bg-gray-50 p-3 rounded-lg">
+              <div className="bg-gray-50 p-3 rounded-ios-lg">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="text-gray-500">SKU:</span>
@@ -1627,7 +1629,7 @@ export default function CentralWarehousePage() {
                   <select 
                     value={itemForm.category}
                     onChange={(e) => setItemForm({...itemForm, category: e.target.value})}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-ios-lg"
                   >
                     {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                   </select>
@@ -1637,7 +1639,7 @@ export default function CentralWarehousePage() {
                   <select 
                     value={itemForm.unit_of_measure}
                     onChange={(e) => setItemForm({...itemForm, unit_of_measure: e.target.value})}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-ios-lg"
                   >
                     {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                   </select>
@@ -1672,13 +1674,13 @@ export default function CentralWarehousePage() {
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button variant="outline" onClick={() => setIsEditItemModalOpen(false)}>
+                <IOSButton variant="outline" onClick={() => setIsEditItemModalOpen(false)}>
                   Cancel
-                </Button>
-                <Button onClick={handleUpdateItem}>
+                </IOSButton>
+                <IOSButton onClick={handleUpdateItem}>
                   <Save className="h-4 w-4 mr-2" />
                   Update Item
-                </Button>
+                </IOSButton>
               </div>
             </div>
           </DialogContent>
@@ -1688,7 +1690,7 @@ export default function CentralWarehousePage() {
         <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle className="text-red-600 flex items-center gap-2">
+              <DialogTitle className="text-[#3C3C43] flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5" />
                 Confirm Deletion
               </DialogTitle>
@@ -1696,13 +1698,13 @@ export default function CentralWarehousePage() {
             <p>Are you sure you want to delete <strong>{selectedItem?.item_name}</strong>?</p>
             <p className="text-sm text-gray-500 mt-2">This action cannot be undone and will remove the item from the master catalog.</p>
             <div className="flex justify-end gap-3 pt-4">
-              <Button variant="outline" onClick={() => setIsDeleteConfirmOpen(false)}>
+              <IOSButton variant="outline" onClick={() => setIsDeleteConfirmOpen(false)}>
                 Cancel
-              </Button>
-              <Button className="bg-red-600 hover:bg-red-700" onClick={handleDeleteItem}>
+              </IOSButton>
+              <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleDeleteItem}>
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete
-              </Button>
+              </IOSButton>
             </div>
           </DialogContent>
         </Dialog>
@@ -1724,7 +1726,7 @@ export default function CentralWarehousePage() {
                   <select 
                     value={transferForm.from_branch_id}
                     onChange={(e) => setTransferForm({...transferForm, from_branch_id: parseInt(e.target.value)})}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-ios-lg"
                   >
                     <option value={0}>Select source branch...</option>
                     {branches.map(b => (
@@ -1737,7 +1739,7 @@ export default function CentralWarehousePage() {
                   <select 
                     value={transferForm.to_branch_id}
                     onChange={(e) => setTransferForm({...transferForm, to_branch_id: parseInt(e.target.value)})}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-ios-lg"
                   >
                     <option value={0}>Select destination branch...</option>
                     {branches.filter(b => b.id !== transferForm.from_branch_id).map(b => (
@@ -1750,9 +1752,9 @@ export default function CentralWarehousePage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-sm font-medium">Items to Transfer</label>
-                  <Button size="sm" variant="outline" onClick={addTransferItem}>
+                  <IOSButton size="sm" variant="outline" onClick={addTransferItem}>
                     <Plus className="h-4 w-4 mr-1" /> Add Item
-                  </Button>
+                  </IOSButton>
                 </div>
                 <div className="space-y-2 max-h-60 overflow-y-auto">
                   {transferItems.map((item, index) => (
@@ -1760,7 +1762,7 @@ export default function CentralWarehousePage() {
                       <select 
                         value={item.item_sku}
                         onChange={(e) => updateTransferItem(index, 'item_sku', e.target.value)}
-                        className="flex-1 px-3 py-2 border rounded-lg text-sm"
+                        className="flex-1 px-3 py-2 border rounded-ios-lg text-sm"
                       >
                         <option value="">Select item...</option>
                         {masterItems.map(mi => (
@@ -1776,9 +1778,9 @@ export default function CentralWarehousePage() {
                         placeholder="Qty"
                       />
                       {transferItems.length > 1 && (
-                        <Button size="sm" variant="ghost" onClick={() => removeTransferItem(index)}>
-                          <X className="h-4 w-4 text-red-500" />
-                        </Button>
+                        <IOSButton size="sm" variant="ghost" onClick={() => removeTransferItem(index)}>
+                          <X className="h-4 w-4 text-[#8E8E93]0" />
+                        </IOSButton>
                       )}
                     </div>
                   ))}
@@ -1795,13 +1797,13 @@ export default function CentralWarehousePage() {
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button variant="outline" onClick={() => setIsCreateTransferOpen(false)}>
+                <IOSButton variant="outline" onClick={() => setIsCreateTransferOpen(false)}>
                   Cancel
-                </Button>
-                <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={handleCreateTransfer}>
+                </IOSButton>
+                <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleCreateTransfer}>
                   <Send className="h-4 w-4 mr-2" />
                   Create Transfer
-                </Button>
+                </IOSButton>
               </div>
             </div>
           </DialogContent>

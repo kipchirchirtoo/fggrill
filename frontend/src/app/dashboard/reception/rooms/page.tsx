@@ -1,341 +1,563 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
+import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { roomsAPI, bookingsAPI, guestAPI } from '@/lib/api';
 import { 
-  Bed, Users, Wifi, Coffee, Utensils, Star, Crown, Sparkles,
-  ChevronLeft, ChevronRight, X, Check, Calendar, Phone, Mail,
-  Tv, Wind, Bath, Car, Clock, Heart, Shield, Award, MapPin,
-  BedDouble, BedSingle, Sun, Moon, UtensilsCrossed, Image as ImageIcon
+  Bed, Users, Search, Plus, RefreshCw, Filter, Eye, Edit2, Trash2,
+  CheckCircle, XCircle, Clock, Wrench, Sparkles, Calendar, Phone, Mail,
+  DoorOpen, DoorClosed, AlertTriangle, ChevronDown, MoreVertical,
+  UserPlus, LogIn, LogOut, ClipboardList, Settings, Building2
 } from 'lucide-react';
 import { toast } from 'sonner';
-import Link from 'next/link';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
-// Room Images from Unsplash (hotel room images)
-const roomImages = {
-  deluxe: [
-    'https://images.unsplash.com/photo-1611892440504-42a792e24d32?w=800&q=80',
-    'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&q=80',
-    'https://images.unsplash.com/photo-1590490360182-c33d57733427?w=800&q=80',
-    'https://images.unsplash.com/photo-1566665797739-1674de7a421a?w=800&q=80'
-  ],
-  executive: [
-    'https://images.unsplash.com/photo-1618773928121-c32242e63f39?w=800&q=80',
-    'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800&q=80',
-    'https://images.unsplash.com/photo-1591088398332-8a7791972843?w=800&q=80',
-    'https://images.unsplash.com/photo-1596394516093-501ba68a0ba6?w=800&q=80'
-  ]
+// Room status configuration
+const roomStatusConfig: Record<string, { label: string; color: string; bgColor: string; icon: any }> = {
+  available: { label: 'Available', color: 'text-green-700', bgColor: 'bg-green-100', icon: CheckCircle },
+  occupied: { label: 'Occupied', color: 'text-blue-700', bgColor: 'bg-blue-100', icon: DoorClosed },
+  reserved: { label: 'Reserved', color: 'text-purple-700', bgColor: 'bg-purple-100', icon: Calendar },
+  maintenance: { label: 'Maintenance', color: 'text-orange-700', bgColor: 'bg-orange-100', icon: Wrench },
+  cleaning: { label: 'Cleaning', color: 'text-yellow-700', bgColor: 'bg-yellow-100', icon: Sparkles },
+  checkout: { label: 'Checkout', color: 'text-red-700', bgColor: 'bg-red-100', icon: LogOut },
 };
 
-// Room Types Data
-const roomCategories = [
-  {
-    id: 'deluxe',
-    name: 'Deluxe Rooms',
-    tagline: 'Comfort meets elegance',
-    description: 'Our Deluxe rooms offer a perfect blend of comfort and style. Featuring modern amenities, plush bedding, and stunning views, these rooms are ideal for both business and leisure travelers.',
-    icon: Bed,
-    color: 'from-blue-500 to-indigo-600',
-    bgColor: 'bg-blue-50',
-    borderColor: 'border-blue-200',
-    images: roomImages.deluxe,
-    occupancyTypes: [
-      {
-        type: 'Single Occupancy',
-        icon: BedSingle,
-        description: 'Perfect for solo travelers',
-        maxGuests: 1,
-        pricing: {
-          bedAndBreakfast: 3500,
-          halfBoard: 4500,
-          fullBoard: 5500
-        }
-      },
-      {
-        type: 'Double Occupancy',
-        icon: BedDouble,
-        description: 'Ideal for couples',
-        maxGuests: 2,
-        pricing: {
-          bedAndBreakfast: 4500,
-          halfBoard: 6500,
-          fullBoard: 8500
-        }
-      },
-      {
-        type: 'Twin (Two Separate Beds)',
-        icon: Users,
-        description: 'Great for friends or colleagues',
-        maxGuests: 2,
-        pricing: {
-          bedAndBreakfast: 5000,
-          halfBoard: 7000,
-          fullBoard: 9000
-        }
-      }
-    ],
-    amenities: ['Free Wi-Fi', 'Air Conditioning', 'Flat Screen TV', 'Mini Bar', 'Work Desk', 'En-suite Bathroom', 'Room Service', 'Daily Housekeeping']
-  },
-  {
-    id: 'executive',
-    name: 'Executive Rooms',
-    tagline: 'Luxury redefined',
-    description: 'Experience the pinnacle of luxury in our Executive rooms. Spacious layouts, premium furnishings, and exclusive amenities create an unforgettable stay for discerning guests.',
-    icon: Crown,
-    color: 'from-amber-500 to-orange-600',
-    bgColor: 'bg-amber-50',
-    borderColor: 'border-amber-200',
-    images: roomImages.executive,
-    occupancyTypes: [
-      {
-        type: 'Single Occupancy',
-        icon: BedSingle,
-        description: 'Exclusive comfort for one',
-        maxGuests: 1,
-        pricing: {
-          bedAndBreakfast: 5000,
-          halfBoard: 6500,
-          fullBoard: 7500
-        }
-      },
-      {
-        type: 'Double Occupancy',
-        icon: BedDouble,
-        description: 'Premium experience for two',
-        maxGuests: 2,
-        pricing: {
-          bedAndBreakfast: 6500,
-          halfBoard: 8500,
-          fullBoard: 10000
-        }
-      }
-    ],
-    amenities: ['Free High-Speed Wi-Fi', 'Climate Control', '55" Smart TV', 'Fully Stocked Mini Bar', 'Executive Work Station', 'Luxury Bathroom', '24/7 Room Service', 'Turn-down Service', 'Complimentary Newspaper', 'Premium Toiletries']
-  }
-];
+// Room type configuration
+const roomTypeConfig: Record<string, { label: string; color: string }> = {
+  deluxe: { label: 'Deluxe', color: 'bg-[#007AFF]' },
+  executive: { label: 'Executive', color: 'bg-amber-500' },
+  standard: { label: 'Standard', color: 'bg-[#8E8E93]' },
+  suite: { label: 'Suite', color: 'bg-purple-500' },
+};
 
-// Meal Plan Info
-const mealPlans = [
-  {
-    name: 'Bed & Breakfast',
-    shortName: 'B&B',
-    icon: Coffee,
-    description: 'Includes accommodation and a sumptuous breakfast buffet',
-    color: 'text-amber-600 bg-amber-100'
-  },
-  {
-    name: 'Half Board',
-    shortName: 'HB',
-    icon: UtensilsCrossed,
-    description: 'Includes breakfast and dinner at our restaurant',
-    color: 'text-blue-600 bg-blue-100'
-  },
-  {
-    name: 'Full Board',
-    shortName: 'FB',
-    icon: Utensils,
-    description: 'All meals included - breakfast, lunch, and dinner',
-    color: 'text-emerald-600 bg-emerald-100'
-  }
-];
-
-interface GalleryModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  images: string[];
-  roomName: string;
+interface Room {
+  id: string;
+  room_number: string;
+  room_type: string;
+  floor: number;
+  status: string;
+  price_per_night: number;
+  max_occupancy: number;
+  amenities: string[];
+  current_guest?: {
+    id: string;
+    name: string;
+    check_in: string;
+    check_out: string;
+    phone?: string;
+  };
+  notes?: string;
 }
 
-function GalleryModal({ isOpen, onClose, images, roomName }: GalleryModalProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
+interface Guest {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  id_number?: string;
+}
 
-  const nextImage = () => setCurrentIndex((prev) => (prev + 1) % images.length);
-  const prevImage = () => setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
+interface BookingFormData {
+  room_id: string;
+  guest_id: string;
+  check_in: string;
+  check_out: string;
+  adults: number;
+  children: number;
+  meal_plan: 'bed_breakfast' | 'half_board' | 'full_board';
+  special_requests: string;
+  total_amount: number;
+}
+
+// Quick Check-in Modal
+function QuickCheckInModal({ 
+  isOpen, 
+  onClose, 
+  room, 
+  onSuccess 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  room: Room | null;
+  onSuccess: () => void;
+}) {
+  const [step, setStep] = useState<'guest' | 'booking'>('guest');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [guests, setGuests] = useState<Guest[]>([]);
+  const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null);
+  const [isNewGuest, setIsNewGuest] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // New guest form
+  const [newGuest, setNewGuest] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    id_number: '',
+  });
+
+  // Booking details
+  const [booking, setBooking] = useState({
+    check_in: new Date().toISOString().split('T')[0],
+    check_out: '',
+    adults: 1,
+    children: 0,
+    meal_plan: 'bed_breakfast' as const,
+    special_requests: '',
+  });
+
+  const searchGuests = useCallback(async () => {
+    if (!searchQuery.trim()) return;
+    setIsLoading(true);
+    try {
+      const response = await guestAPI.getGuests(searchQuery);
+      if (response.success) {
+        setGuests(response.data || []);
+      }
+    } catch (error) {
+      console.error('Error searching guests:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [searchQuery]);
+
+  const handleCreateGuest = async () => {
+    if (!newGuest.first_name || !newGuest.last_name || !newGuest.phone) {
+      toast.error('Please fill in required fields');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const response = await guestAPI.createGuest(newGuest);
+      if (response.success) {
+        setSelectedGuest(response.data);
+        setIsNewGuest(false);
+        setStep('booking');
+        toast.success('Guest created successfully');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to create guest');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCheckIn = async () => {
+    if (!room || !selectedGuest) return;
+    if (!booking.check_out) {
+      toast.error('Please select check-out date');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // Create booking
+      const bookingData = {
+        room_id: room.id,
+        guest_id: selectedGuest.id,
+        check_in: booking.check_in,
+        check_out: booking.check_out,
+        adults: booking.adults,
+        children: booking.children,
+        meal_plan: booking.meal_plan,
+        special_requests: booking.special_requests,
+        status: 'checked_in',
+      };
+
+      const response = await bookingsAPI.createBooking(bookingData);
+      if (response.success) {
+        // Update room status
+        await roomsAPI.updateRoomStatus(room.id, 'occupied');
+        toast.success(`Guest ${selectedGuest.first_name} checked into Room ${room.room_number}`);
+        onSuccess();
+        onClose();
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check in guest');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const resetModal = () => {
+    setStep('guest');
+    setSearchQuery('');
+    setGuests([]);
+    setSelectedGuest(null);
+    setIsNewGuest(false);
+    setNewGuest({ first_name: '', last_name: '', email: '', phone: '', id_number: '' });
+    setBooking({
+      check_in: new Date().toISOString().split('T')[0],
+      check_out: '',
+      adults: 1,
+      children: 0,
+      meal_plan: 'bed_breakfast',
+      special_requests: '',
+    });
+  };
+
+  useEffect(() => {
+    if (!isOpen) resetModal();
+  }, [isOpen]);
+
+  if (!room) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black">
-        <div className="relative">
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 z-10 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition"
-          >
-            <X className="h-5 w-5" />
-          </button>
-          
-          <div className="relative h-[500px]">
-            <AnimatePresence mode="wait">
-              <motion.img
-                key={currentIndex}
-                src={images[currentIndex]}
-                alt={`${roomName} - Image ${currentIndex + 1}`}
-                className="w-full h-full object-cover"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3 }}
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <LogIn className="h-5 w-5 text-[#34C759]" />
+            Quick Check-In - Room {room.room_number}
+          </DialogTitle>
+        </DialogHeader>
+
+        {step === 'guest' && (
+          <div className="space-y-4 mt-4">
+            {!isNewGuest ? (
+              <>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Search guest by name, phone, or ID..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && searchGuests()}
+                  />
+                  <IOSButton onClick={searchGuests} disabled={isLoading}>
+                    <Search className="h-4 w-4" />
+                  </IOSButton>
+                </div>
+
+                {guests.length > 0 && (
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {guests.map((guest) => (
+                      <div
+                        key={guest.id}
+                        onClick={() => {
+                          setSelectedGuest(guest);
+                          setStep('booking');
+                        }}
+                        className="p-3 border rounded-ios-lg cursor-pointer hover:bg-gray-50 transition"
+                      >
+                        <p className="font-medium">{guest.first_name} {guest.last_name}</p>
+                        <p className="text-sm text-gray-500">{guest.phone} • {guest.email}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="border-t pt-4">
+                  <IOSButton 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={() => setIsNewGuest(true)}
+                  >
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Register New Guest
+                  </IOSButton>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium">First Name *</label>
+                    <Input
+                      value={newGuest.first_name}
+                      onChange={(e) => setNewGuest({ ...newGuest, first_name: e.target.value })}
+                      placeholder="John"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Last Name *</label>
+                    <Input
+                      value={newGuest.last_name}
+                      onChange={(e) => setNewGuest({ ...newGuest, last_name: e.target.value })}
+                      placeholder="Doe"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Phone *</label>
+                  <Input
+                    value={newGuest.phone}
+                    onChange={(e) => setNewGuest({ ...newGuest, phone: e.target.value })}
+                    placeholder="+254 700 000 000"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Email</label>
+                  <Input
+                    type="email"
+                    value={newGuest.email}
+                    onChange={(e) => setNewGuest({ ...newGuest, email: e.target.value })}
+                    placeholder="john@example.com"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">ID/Passport Number</label>
+                  <Input
+                    value={newGuest.id_number}
+                    onChange={(e) => setNewGuest({ ...newGuest, id_number: e.target.value })}
+                    placeholder="12345678"
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <IOSButton variant="outline" onClick={() => setIsNewGuest(false)} className="flex-1">
+                    Back
+                  </IOSButton>
+                  <IOSButton onClick={handleCreateGuest} disabled={isSubmitting} className="flex-1">
+                    {isSubmitting ? 'Creating...' : 'Create & Continue'}
+                  </IOSButton>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === 'booking' && selectedGuest && (
+          <div className="space-y-4 mt-4">
+            <div className="p-3 bg-green-50 rounded-ios-lg border border-green-200">
+              <p className="font-medium text-green-800">
+                {selectedGuest.first_name} {selectedGuest.last_name}
+              </p>
+              <p className="text-sm text-[#34C759]">{selectedGuest.phone}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium">Check-In Date</label>
+                <Input
+                  type="date"
+                  value={booking.check_in}
+                  onChange={(e) => setBooking({ ...booking, check_in: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Check-Out Date *</label>
+                <Input
+                  type="date"
+                  value={booking.check_out}
+                  onChange={(e) => setBooking({ ...booking, check_out: e.target.value })}
+                  min={booking.check_in}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium">Adults</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={room.max_occupancy}
+                  value={booking.adults}
+                  onChange={(e) => setBooking({ ...booking, adults: parseInt(e.target.value) || 1 })}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Children</label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={booking.children}
+                  onChange={(e) => setBooking({ ...booking, children: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Meal Plan</label>
+              <select
+                value={booking.meal_plan}
+                onChange={(e) => setBooking({ ...booking, meal_plan: e.target.value as any })}
+                className="w-full p-2 border rounded-ios-lg mt-1"
+              >
+                <option value="bed_breakfast">Bed & Breakfast</option>
+                <option value="half_board">Half Board</option>
+                <option value="full_board">Full Board</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Special Requests</label>
+              <textarea
+                value={booking.special_requests}
+                onChange={(e) => setBooking({ ...booking, special_requests: e.target.value })}
+                className="w-full p-2 border rounded-ios-lg mt-1"
+                rows={2}
+                placeholder="Any special requests..."
               />
-            </AnimatePresence>
-            
-            <button
-              onClick={prevImage}
-              className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-black/50 rounded-full text-white hover:bg-black/70 transition"
-            >
-              <ChevronLeft className="h-6 w-6" />
-            </button>
-            
-            <button
-              onClick={nextImage}
-              className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-black/50 rounded-full text-white hover:bg-black/70 transition"
-            >
-              <ChevronRight className="h-6 w-6" />
-            </button>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <IOSButton variant="outline" onClick={() => setStep('guest')} className="flex-1">
+                Back
+              </IOSButton>
+              <IOSButton 
+                onClick={handleCheckIn} 
+                disabled={isSubmitting}
+                className="flex-1 bg-[#34C759] hover:bg-green-700"
+              >
+                {isSubmitting ? 'Processing...' : 'Complete Check-In'}
+              </IOSButton>
+            </div>
           </div>
-          
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-            {images.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentIndex(idx)}
-                className={`w-2 h-2 rounded-full transition ${idx === currentIndex ? 'bg-white' : 'bg-white/50'}`}
-              />
-            ))}
-          </div>
-          
-          <div className="absolute bottom-4 right-4 bg-black/50 px-3 py-1 rounded-full text-white text-sm">
-            {currentIndex + 1} / {images.length}
-          </div>
-        </div>
+        )}
       </DialogContent>
     </Dialog>
   );
 }
 
-interface BookingModalProps {
+// Room Details Modal
+function RoomDetailsModal({
+  isOpen,
+  onClose,
+  room,
+  onStatusChange,
+  onCheckOut,
+}: {
   isOpen: boolean;
   onClose: () => void;
-  room: typeof roomCategories[0] | null;
-  occupancy: typeof roomCategories[0]['occupancyTypes'][0] | null;
-}
+  room: Room | null;
+  onStatusChange: (roomId: string, status: string) => void;
+  onCheckOut: (room: Room) => void;
+}) {
+  if (!room) return null;
 
-function BookingModal({ isOpen, onClose, room, occupancy }: BookingModalProps) {
-  const [selectedPlan, setSelectedPlan] = useState<'bedAndBreakfast' | 'halfBoard' | 'fullBoard'>('bedAndBreakfast');
-  const [checkIn, setCheckIn] = useState('');
-  const [checkOut, setCheckOut] = useState('');
-  const [guestName, setGuestName] = useState('');
-  const [phone, setPhone] = useState('');
-
-  if (!room || !occupancy) return null;
-
-  const price = occupancy.pricing[selectedPlan];
-
-  const handleBook = () => {
-    if (!checkIn || !checkOut || !guestName || !phone) {
-      toast.error('Please fill in all fields');
-      return;
-    }
-    toast.success(`Booking confirmed for ${room.name} - ${occupancy.type}`);
-    onClose();
-  };
+  const statusInfo = roomStatusConfig[room.status] || roomStatusConfig.available;
+  const typeInfo = roomTypeConfig[room.room_type] || roomTypeConfig.standard;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-indigo-600" />
-            Book {room.name}
+          <DialogTitle className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Bed className="h-5 w-5" />
+              Room {room.room_number}
+            </span>
+            <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.bgColor} ${statusInfo.color}`}>
+              {statusInfo.label}
+            </span>
           </DialogTitle>
         </DialogHeader>
-        
+
         <div className="space-y-4 mt-4">
-          <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="font-medium">{occupancy.type}</p>
-            <p className="text-sm text-gray-500">Max {occupancy.maxGuests} guest(s)</p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Meal Plan</label>
-            <div className="grid grid-cols-3 gap-2">
-              {(['bedAndBreakfast', 'halfBoard', 'fullBoard'] as const).map((plan) => (
-                <button
-                  key={plan}
-                  onClick={() => setSelectedPlan(plan)}
-                  className={`p-3 rounded-lg border-2 text-center transition ${
-                    selectedPlan === plan
-                      ? 'border-indigo-500 bg-indigo-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <p className="text-xs font-medium">
-                    {plan === 'bedAndBreakfast' ? 'B&B' : plan === 'halfBoard' ? 'Half Board' : 'Full Board'}
-                  </p>
-                  <p className="text-lg font-bold text-indigo-600">
-                    KES {occupancy.pricing[plan].toLocaleString()}
-                  </p>
-                </button>
-              ))}
-            </div>
-          </div>
-
+          {/* Room Info */}
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Check-in</label>
-              <input
-                type="date"
-                value={checkIn}
-                onChange={(e) => setCheckIn(e.target.value)}
-                className="w-full p-2 border rounded-lg"
-              />
+            <div className="p-3 bg-gray-50 rounded-ios-lg">
+              <p className="text-xs text-gray-500">Type</p>
+              <p className="font-medium">{typeInfo.label}</p>
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Check-out</label>
-              <input
-                type="date"
-                value={checkOut}
-                onChange={(e) => setCheckOut(e.target.value)}
-                className="w-full p-2 border rounded-lg"
-              />
+            <div className="p-3 bg-gray-50 rounded-ios-lg">
+              <p className="text-xs text-gray-500">Floor</p>
+              <p className="font-medium">Floor {room.floor}</p>
+            </div>
+            <div className="p-3 bg-gray-50 rounded-ios-lg">
+              <p className="text-xs text-gray-500">Max Occupancy</p>
+              <p className="font-medium">{room.max_occupancy} Guests</p>
+            </div>
+            <div className="p-3 bg-gray-50 rounded-ios-lg">
+              <p className="text-xs text-gray-500">Rate/Night</p>
+              <p className="font-medium">KES {room.price_per_night?.toLocaleString()}</p>
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Guest Name</label>
-            <input
-              type="text"
-              value={guestName}
-              onChange={(e) => setGuestName(e.target.value)}
-              placeholder="Enter guest name"
-              className="w-full p-2 border rounded-lg"
-            />
+          {/* Current Guest Info */}
+          {room.current_guest && (
+            <div className="p-4 bg-blue-50 rounded-ios-lg border border-blue-200">
+              <p className="text-sm font-medium text-blue-800 mb-2">Current Guest</p>
+              <p className="font-semibold font-sf-pro-display">{room.current_guest.name}</p>
+              <div className="flex gap-4 mt-2 text-sm text-[#007AFF]">
+                <span>In: {new Date(room.current_guest.check_in).toLocaleDateString()}</span>
+                <span>Out: {new Date(room.current_guest.check_out).toLocaleDateString()}</span>
+              </div>
+              {room.current_guest.phone && (
+                <p className="text-sm text-[#007AFF] mt-1">{room.current_guest.phone}</p>
+              )}
+            </div>
+          )}
+
+          {/* Quick Actions */}
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-gray-700">Quick Actions</p>
+            <div className="grid grid-cols-2 gap-2">
+              {room.status === 'occupied' && (
+                <IOSButton
+                  variant="outline"
+                  className="text-[#FF3B30] border-red-200 hover:bg-red-50"
+                  onClick={() => onCheckOut(room)}
+                >
+                  <LogOut className="h-4 w-4 mr-1" />
+                  Check Out
+                </IOSButton>
+              )}
+              {room.status === 'available' && (
+                <IOSButton
+                  variant="outline"
+                  className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                  onClick={() => onStatusChange(room.id, 'maintenance')}
+                >
+                  <Wrench className="h-4 w-4 mr-1" />
+                  Maintenance
+                </IOSButton>
+              )}
+              {room.status === 'cleaning' && (
+                <IOSButton
+                  variant="outline"
+                  className="text-[#34C759] border-green-200 hover:bg-green-50"
+                  onClick={() => onStatusChange(room.id, 'available')}
+                >
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                  Mark Ready
+                </IOSButton>
+              )}
+              {room.status === 'maintenance' && (
+                <IOSButton
+                  variant="outline"
+                  className="text-[#34C759] border-green-200 hover:bg-green-50"
+                  onClick={() => onStatusChange(room.id, 'available')}
+                >
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                  Complete
+                </IOSButton>
+              )}
+              <IOSButton
+                variant="outline"
+                className="text-yellow-600 border-yellow-200 hover:bg-yellow-50"
+                onClick={() => onStatusChange(room.id, 'cleaning')}
+              >
+                <Sparkles className="h-4 w-4 mr-1" />
+                Request Clean
+              </IOSButton>
+            </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Phone Number</label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="0700 000 000"
-              className="w-full p-2 border rounded-lg"
-            />
-          </div>
-
-          <div className="flex gap-3 pt-4">
-            <Button variant="outline" onClick={onClose} className="flex-1">
-              Cancel
-            </Button>
-            <Button onClick={handleBook} className="flex-1 bg-indigo-600 hover:bg-indigo-700">
-              Confirm Booking
-            </Button>
-          </div>
+          {/* Amenities */}
+          {room.amenities && room.amenities.length > 0 && (
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-2">Amenities</p>
+              <div className="flex flex-wrap gap-2">
+                {room.amenities.map((amenity, idx) => (
+                  <span key={idx} className="px-2 py-1 bg-gray-100 rounded-full text-xs">
+                    {amenity}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -343,285 +565,281 @@ function BookingModal({ isOpen, onClose, room, occupancy }: BookingModalProps) {
 }
 
 export default function ReceptionRoomsPage() {
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [galleryOpen, setGalleryOpen] = useState(false);
-  const [galleryImages, setGalleryImages] = useState<string[]>([]);
-  const [galleryRoomName, setGalleryRoomName] = useState('');
-  const [bookingOpen, setBookingOpen] = useState(false);
-  const [selectedRoom, setSelectedRoom] = useState<typeof roomCategories[0] | null>(null);
-  const [selectedOccupancy, setSelectedOccupancy] = useState<typeof roomCategories[0]['occupancyTypes'][0] | null>(null);
+  const { user } = useAuth();
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [floorFilter, setFloorFilter] = useState<number | 'all'>('all');
+  
+  // Modals
+  const [checkInModalOpen, setCheckInModalOpen] = useState(false);
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
 
-  const openGallery = (images: string[], roomName: string) => {
-    setGalleryImages(images);
-    setGalleryRoomName(roomName);
-    setGalleryOpen(true);
+  // Fetch rooms
+  const fetchRooms = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const response = await roomsAPI.getRooms(user?.branch_id || undefined);
+      if (response.success) {
+        setRooms(response.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching rooms:', error);
+      toast.error('Failed to load rooms');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user?.branch_id]);
+
+  useEffect(() => {
+    fetchRooms();
+  }, [fetchRooms]);
+
+  // Filter rooms
+  const filteredRooms = rooms.filter((room) => {
+    const matchesSearch = room.room_number.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || room.status === statusFilter;
+    const matchesType = typeFilter === 'all' || room.room_type === typeFilter;
+    const matchesFloor = floorFilter === 'all' || room.floor === floorFilter;
+    return matchesSearch && matchesStatus && matchesType && matchesFloor;
+  });
+
+  // Get unique floors
+  const floors = [...new Set(rooms.map((r) => r.floor))].sort((a, b) => a - b);
+
+  // Stats
+  const stats = {
+    total: rooms.length,
+    available: rooms.filter((r) => r.status === 'available').length,
+    occupied: rooms.filter((r) => r.status === 'occupied').length,
+    reserved: rooms.filter((r) => r.status === 'reserved').length,
+    maintenance: rooms.filter((r) => r.status === 'maintenance').length,
+    cleaning: rooms.filter((r) => r.status === 'cleaning').length,
   };
 
-  const openBooking = (room: typeof roomCategories[0], occupancy: typeof roomCategories[0]['occupancyTypes'][0]) => {
+  const handleStatusChange = async (roomId: string, newStatus: string) => {
+    try {
+      await roomsAPI.updateRoomStatus(roomId, newStatus);
+      toast.success(`Room status updated to ${newStatus}`);
+      fetchRooms();
+      setDetailsModalOpen(false);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update room status');
+    }
+  };
+
+  const handleCheckOut = async (room: Room) => {
+    try {
+      // Find active booking and check out
+      const bookingsResponse = await roomsAPI.getRoomBookings(room.id);
+      const activeBooking = bookingsResponse.data?.find((b: any) => b.status === 'checked_in');
+      
+      if (activeBooking) {
+        await bookingsAPI.checkOut(activeBooking.id);
+      }
+      
+      await roomsAPI.updateRoomStatus(room.id, 'cleaning');
+      toast.success(`Guest checked out from Room ${room.room_number}`);
+      fetchRooms();
+      setDetailsModalOpen(false);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check out guest');
+    }
+  };
+
+  const openCheckIn = (room: Room) => {
     setSelectedRoom(room);
-    setSelectedOccupancy(occupancy);
-    setBookingOpen(true);
+    setCheckInModalOpen(true);
+  };
+
+  const openDetails = (room: Room) => {
+    setSelectedRoom(room);
+    setDetailsModalOpen(true);
   };
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.RECEPTIONIST, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
-        <div className="space-y-8">
-          {/* Hero Header */}
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 p-8 text-white">
-            <div className="absolute inset-0 bg-black/20" />
-            <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
-            <div className="relative z-10">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-3 bg-white/20 rounded-xl backdrop-blur">
-                  <Bed className="h-8 w-8" />
-                </div>
-                <div>
-                  <h1 className="text-3xl font-bold">Our Rooms & Suites</h1>
-                  <p className="text-white/80">Experience comfort and luxury at Famous Gate Hotel</p>
-                </div>
-              </div>
-              
-              <div className="flex flex-wrap gap-6 mt-6">
-                {[
-                  { icon: Wifi, label: 'Free Wi-Fi' },
-                  { icon: Utensils, label: 'Sumptuous Meals' },
-                  { icon: Star, label: 'Personalized Service' },
-                  { icon: Shield, label: 'Secure & Safe' }
-                ].map((item, idx) => (
-                  <div key={idx} className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full backdrop-blur">
-                    <item.icon className="h-4 w-4" />
-                    <span className="text-sm">{item.label}</span>
-                  </div>
-                ))}
-              </div>
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Room Management</h1>
+              <p className="text-gray-500">Manage rooms, check-ins, and availability</p>
+            </div>
+            <div className="flex gap-2">
+              <IOSButton variant="outline" onClick={fetchRooms}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
+              </IOSButton>
             </div>
           </div>
 
-          {/* Meal Plans Info */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {mealPlans.map((plan, idx) => (
-              <motion.div
-                key={plan.name}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.1 }}
-              >
-                <Card className="p-5 h-full hover:shadow-lg transition-shadow">
-                  <div className="flex items-start gap-4">
-                    <div className={`p-3 rounded-xl ${plan.color}`}>
-                      <plan.icon className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-lg">{plan.name}</h3>
-                      <p className="text-sm text-gray-600 mt-1">{plan.description}</p>
-                    </div>
-                  </div>
-                </Card>
-              </motion.div>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {[
+              { label: 'Total', value: stats.total, color: 'bg-gray-100 text-gray-700' },
+              { label: 'Available', value: stats.available, color: 'bg-green-100 text-green-700' },
+              { label: 'Occupied', value: stats.occupied, color: 'bg-blue-100 text-blue-700' },
+              { label: 'Reserved', value: stats.reserved, color: 'bg-purple-100 text-purple-700' },
+              { label: 'Cleaning', value: stats.cleaning, color: 'bg-yellow-100 text-yellow-700' },
+              { label: 'Maintenance', value: stats.maintenance, color: 'bg-orange-100 text-orange-700' },
+            ].map((stat) => (
+              <IOSCard key={stat.label} className="p-4">
+                <p className="text-sm text-gray-500">{stat.label}</p>
+                <p className={`text-2xl font-bold mt-1 ${stat.color.split(' ')[1]}`}>{stat.value}</p>
+              </IOSCard>
             ))}
           </div>
 
-          {/* Room Categories */}
-          {roomCategories.map((category, catIdx) => (
-            <motion.div
-              key={category.id}
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: catIdx * 0.2 }}
-              className="space-y-6"
-            >
-              {/* Category Header */}
-              <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-r ${category.color} p-6 text-white`}>
-                <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-                <div className="relative z-10 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-white/20 rounded-xl backdrop-blur">
-                      <category.icon className="h-8 w-8" />
-                    </div>
-                    <div>
-                      <h2 className="text-2xl font-bold">{category.name}</h2>
-                      <p className="text-white/80">{category.tagline}</p>
-                    </div>
-                  </div>
-                  <Button
-                    variant="outline"
-                    className="bg-white/10 border-white/30 text-white hover:bg-white/20"
-                    onClick={() => openGallery(category.images, category.name)}
-                  >
-                    <ImageIcon className="h-4 w-4 mr-2" />
-                    View Gallery
-                  </Button>
+          {/* Filters */}
+          <IOSCard className="p-4">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search by room number..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
                 </div>
               </div>
-
-              {/* Room Images Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {category.images.map((img, imgIdx) => (
-                  <motion.div
-                    key={imgIdx}
-                    whileHover={{ scale: 1.03 }}
-                    className="relative aspect-video rounded-xl overflow-hidden cursor-pointer group"
-                    onClick={() => openGallery(category.images, category.name)}
-                  >
-                    <img
-                      src={img}
-                      alt={`${category.name} - ${imgIdx + 1}`}
-                      className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                    />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                      <ImageIcon className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-
-              {/* Description & Amenities */}
-              <Card className={`p-6 ${category.bgColor} ${category.borderColor} border-2`}>
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div>
-                    <h3 className="font-semibold text-lg mb-2">About {category.name}</h3>
-                    <p className="text-gray-700">{category.description}</p>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg mb-2">Room Amenities</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {category.amenities.map((amenity, idx) => (
-                        <div key={idx} className="flex items-center gap-2 text-sm text-gray-700">
-                          <Check className="h-4 w-4 text-green-500" />
-                          {amenity}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </Card>
-
-              {/* Pricing Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {category.occupancyTypes.map((occupancy, occIdx) => (
-                  <motion.div
-                    key={occupancy.type}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: occIdx * 0.1 }}
-                  >
-                    <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 border-2 hover:border-indigo-300">
-                      {/* Card Header */}
-                      <div className={`p-5 bg-gradient-to-r ${category.color} text-white`}>
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-white/20 rounded-lg">
-                            <occupancy.icon className="h-6 w-6" />
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-lg">{occupancy.type}</h3>
-                            <p className="text-white/80 text-sm">{occupancy.description}</p>
-                          </div>
-                        </div>
-                        <div className="mt-3 flex items-center gap-2">
-                          <Users className="h-4 w-4" />
-                          <span className="text-sm">Max {occupancy.maxGuests} Guest{occupancy.maxGuests > 1 ? 's' : ''}</span>
-                        </div>
-                      </div>
-
-                      {/* Pricing Table */}
-                      <div className="p-5 space-y-3">
-                        {/* Bed & Breakfast */}
-                        <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg">
-                          <div className="flex items-center gap-2">
-                            <Coffee className="h-5 w-5 text-amber-600" />
-                            <div>
-                              <p className="font-medium text-sm">Bed & Breakfast</p>
-                              <p className="text-xs text-gray-500">Includes breakfast</p>
-                            </div>
-                          </div>
-                          <p className="font-bold text-lg text-amber-700">
-                            KES {occupancy.pricing.bedAndBreakfast.toLocaleString()}
-                          </p>
-                        </div>
-
-                        {/* Half Board */}
-                        <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                          <div className="flex items-center gap-2">
-                            <UtensilsCrossed className="h-5 w-5 text-blue-600" />
-                            <div>
-                              <p className="font-medium text-sm">Half Board</p>
-                              <p className="text-xs text-gray-500">Breakfast + Dinner</p>
-                            </div>
-                          </div>
-                          <p className="font-bold text-lg text-blue-700">
-                            KES {occupancy.pricing.halfBoard.toLocaleString()}
-                          </p>
-                        </div>
-
-                        {/* Full Board */}
-                        <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg">
-                          <div className="flex items-center gap-2">
-                            <Utensils className="h-5 w-5 text-emerald-600" />
-                            <div>
-                              <p className="font-medium text-sm">Full Board</p>
-                              <p className="text-xs text-gray-500">All meals included</p>
-                            </div>
-                          </div>
-                          <p className="font-bold text-lg text-emerald-700">
-                            KES {occupancy.pricing.fullBoard.toLocaleString()}
-                          </p>
-                        </div>
-
-                        {/* Book Button */}
-                        <Button
-                          className={`w-full mt-4 bg-gradient-to-r ${category.color} hover:opacity-90`}
-                          onClick={() => openBooking(category, occupancy)}
-                        >
-                          <Calendar className="h-4 w-4 mr-2" />
-                          Book Now
-                        </Button>
-                      </div>
-                    </Card>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-          ))}
-
-          {/* Contact Section */}
-          <Card className="p-6 bg-gradient-to-r from-gray-900 to-gray-800 text-white">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-              <div>
-                <h3 className="text-xl font-bold flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-yellow-400" />
-                  Need Help Choosing?
-                </h3>
-                <p className="text-gray-300 mt-1">Our team is here to help you find the perfect room for your stay</p>
-              </div>
-              <div className="flex gap-4">
-                <Button variant="outline" className="border-white/30 text-white hover:bg-white/10">
-                  <Phone className="h-4 w-4 mr-2" />
-                  Call Reception
-                </Button>
-                <Button className="bg-yellow-500 text-gray-900 hover:bg-yellow-400">
-                  <Mail className="h-4 w-4 mr-2" />
-                  Send Inquiry
-                </Button>
+              <div className="flex gap-2 flex-wrap">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-3 py-2 border rounded-ios-lg text-sm"
+                >
+                  <option value="all">All Status</option>
+                  {Object.entries(roomStatusConfig).map(([key, val]) => (
+                    <option key={key} value={key}>{val.label}</option>
+                  ))}
+                </select>
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                  className="px-3 py-2 border rounded-ios-lg text-sm"
+                >
+                  <option value="all">All Types</option>
+                  {Object.entries(roomTypeConfig).map(([key, val]) => (
+                    <option key={key} value={key}>{val.label}</option>
+                  ))}
+                </select>
+                <select
+                  value={floorFilter}
+                  onChange={(e) => setFloorFilter(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+                  className="px-3 py-2 border rounded-ios-lg text-sm"
+                >
+                  <option value="all">All Floors</option>
+                  {floors.map((floor) => (
+                    <option key={floor} value={floor}>Floor {floor}</option>
+                  ))}
+                </select>
               </div>
             </div>
-          </Card>
+          </IOSCard>
+
+          {/* Rooms Grid */}
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
+            </div>
+          ) : filteredRooms.length === 0 ? (
+            <IOSCard className="p-12 text-center">
+              <Bed className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+              <p className="text-gray-500">No rooms found</p>
+            </IOSCard>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {filteredRooms.map((room) => {
+                const statusInfo = roomStatusConfig[room.status] || roomStatusConfig.available;
+                const typeInfo = roomTypeConfig[room.room_type] || roomTypeConfig.standard;
+                const StatusIcon = statusInfo.icon;
+
+                return (
+                  <IOSCard
+                    key={room.id}
+                    className={`p-4 cursor-pointer hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition-all border-2 ${
+                      room.status === 'available' ? 'border-green-200 hover:border-green-400' :
+                      room.status === 'occupied' ? 'border-blue-200 hover:border-blue-400' :
+                      room.status === 'reserved' ? 'border-purple-200 hover:border-purple-400' :
+                      room.status === 'maintenance' ? 'border-orange-200 hover:border-orange-400' :
+                      room.status === 'cleaning' ? 'border-yellow-200 hover:border-yellow-400' :
+                      'border-[#E5E5EA] hover:border-gray-400'
+                    }`}
+                    onClick={() => openDetails(room)}
+                  >
+                    {/* Room Header */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-3 h-3 rounded-full ${typeInfo.color}`} />
+                        <span className="font-bold text-lg">{room.room_number}</span>
+                      </div>
+                      <StatusIcon className={`h-5 w-5 ${statusInfo.color}`} />
+                    </div>
+
+                    {/* Status Badge */}
+                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${statusInfo.bgColor} ${statusInfo.color}`}>
+                      {statusInfo.label}
+                    </div>
+
+                    {/* Room Info */}
+                    <div className="mt-3 space-y-1 text-sm text-gray-500">
+                      <p>{typeInfo.label} • Floor {room.floor}</p>
+                      <p className="flex items-center gap-1">
+                        <Users className="h-3 w-3" />
+                        Max {room.max_occupancy}
+                      </p>
+                    </div>
+
+                    {/* Current Guest Preview */}
+                    {room.current_guest && (
+                      <div className="mt-3 pt-3 border-t">
+                        <p className="text-xs text-gray-500">Guest</p>
+                        <p className="text-sm font-medium truncate">{room.current_guest.name}</p>
+                      </div>
+                    )}
+
+                    {/* Quick Action */}
+                    {room.status === 'available' && (
+                      <IOSButton
+                        size="sm"
+                        className="w-full mt-3 bg-[#34C759] hover:bg-green-700"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openCheckIn(room);
+                        }}
+                      >
+                        <LogIn className="h-3 w-3 mr-1" />
+                        Check In
+                      </IOSButton>
+                    )}
+                  </IOSCard>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Gallery Modal */}
-        <GalleryModal
-          isOpen={galleryOpen}
-          onClose={() => setGalleryOpen(false)}
-          images={galleryImages}
-          roomName={galleryRoomName}
+        {/* Modals */}
+        <QuickCheckInModal
+          isOpen={checkInModalOpen}
+          onClose={() => setCheckInModalOpen(false)}
+          room={selectedRoom}
+          onSuccess={fetchRooms}
         />
 
-        {/* Booking Modal */}
-        <BookingModal
-          isOpen={bookingOpen}
-          onClose={() => setBookingOpen(false)}
+        <RoomDetailsModal
+          isOpen={detailsModalOpen}
+          onClose={() => setDetailsModalOpen(false)}
           room={selectedRoom}
-          occupancy={selectedOccupancy}
+          onStatusChange={handleStatusChange}
+          onCheckOut={handleCheckOut}
         />
       </DashboardLayout>
     </ProtectedRoute>

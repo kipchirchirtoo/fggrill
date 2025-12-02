@@ -1,131 +1,91 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Users, Search, Filter, RefreshCw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { staffAPI, systemAPI } from '@/lib/api';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
+import { IOSBadge } from '@/components/ui/ios-badge';
+import { Input } from '@/components/ui/input';
+import { staffAPI } from '@/lib/api';
+import { Users, RefreshCw, Search, User, Building2, Mail, Phone } from 'lucide-react';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
+
+interface Staff { id: string; first_name: string; last_name: string; email: string; phone?: string; role: string; branch_name?: string; status: 'active' | 'inactive'; }
 
 export default function GMStaffPage() {
-  const [staff, setStaff] = useState<any[]>([]);
-  const [branches, setBranches] = useState<any[]>([]);
+  const { user } = useAuth();
+  const [staff, setStaff] = useState<Staff[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedBranch, setSelectedBranch] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchStaff = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [staffRes, branchRes] = await Promise.all([
-        staffAPI.getStaff(),
-        systemAPI.getBranches()
-      ]);
+      const response = await staffAPI.getStaff();
+      if (response.success) setStaff(response.data || []);
+    } catch (error) { console.error('Error:', error); }
+    finally { setIsLoading(false); }
+  }, []);
 
-      const staffData = staffRes?.staff || staffRes?.data || staffRes || [];
-      const branchData = branchRes?.branches || branchRes?.data || branchRes || [];
+  useEffect(() => { fetchStaff(); }, [fetchStaff]);
 
-      setStaff(Array.isArray(staffData) ? staffData : []);
-      setBranches(Array.isArray(branchData) ? branchData : []);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      setStaff([]);
-      setBranches([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const filteredStaff = staff.filter((s) => 
+    `${s.first_name} ${s.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    s.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    s.role?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  const filteredStaff = staff.filter((s: any) => {
-    const matchesSearch = `${s.first_name} ${s.last_name}`.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesBranch = selectedBranch === 'all' || s.branch_id?.toString() === selectedBranch;
-    return matchesSearch && matchesBranch;
-  });
+  const stats = { total: staff.length, active: staff.filter(s => s.status === 'active').length };
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">Staff Management</h1>
-              <p className="text-gray-600">Manage staff across all branches</p>
-            </div>
-            <Button onClick={fetchData} variant="outline">
-              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900">All Staff</h1><p className="text-gray-500">Manage employees across all branches</p></div>
+            <IOSButton variant="secondary" onClick={fetchStaff}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
           </div>
 
-          {/* Filters */}
-          <div className="flex gap-4">
-            <div className="relative flex-1 max-w-md">
+          <div className="grid grid-cols-2 gap-4">
+            <IOSCard className="p-4"><Users className="h-6 w-6 text-[#007AFF] mb-2" /><p className="text-sm text-gray-500">Total Staff</p><p className="text-xl font-bold">{stats.total}</p></IOSCard>
+            <IOSCard className="p-4"><User className="h-6 w-6 text-[#34C759] mb-2" /><p className="text-sm text-gray-500">Active</p><p className="text-xl font-bold text-[#34C759]">{stats.active}</p></IOSCard>
+          </div>
+
+          <IOSCard className="p-4">
+            <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search staff..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border rounded-lg"
-              />
+              <Input placeholder="Search staff..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
             </div>
-            <select
-              value={selectedBranch}
-              onChange={(e) => setSelectedBranch(e.target.value)}
-              className="px-4 py-2 border rounded-lg"
-            >
-              <option value="all">All Branches</option>
-              {branches.map((b: any) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-          </div>
+          </IOSCard>
 
-          {/* Staff Table */}
-          <Card>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Branch</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {filteredStaff.map((s: any) => (
-                    <tr key={s.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium">{s.first_name} {s.last_name}</td>
-                      <td className="px-4 py-3 text-gray-600">{s.email}</td>
-                      <td className="px-4 py-3">
-                        <Badge className="bg-indigo-100 text-indigo-800">{s.role}</Badge>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600">{s.branch_name || '-'}</td>
-                      <td className="px-4 py-3">
-                        <Badge className={s.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                          {s.status || 'active'}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
+          ) : filteredStaff.length === 0 ? (
+            <IOSCard className="p-12 text-center"><Users className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No staff found</p></IOSCard>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredStaff.map((member) => (
+                <IOSCard key={member.id} className="p-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold">
+                      {member.first_name?.[0]}{member.last_name?.[0]}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-bold">{member.first_name} {member.last_name}</p>
+                      <p className="text-sm text-gray-500">{member.role}</p>
+                      <div className="flex items-center gap-2 mt-2">
+                        {member.branch_name && <span className="text-xs text-gray-400 flex items-center gap-1"><Building2 className="h-3 w-3" /> {member.branch_name}</span>}
+                        <IOSBadge variant={member.status === 'active' ? 'success' : 'neutral'}>{member.status}</IOSBadge>
+                      </div>
+                    </div>
+                  </div>
+                </IOSCard>
+              ))}
             </div>
-            {filteredStaff.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                {isLoading ? 'Loading...' : 'No staff found'}
-              </div>
-            )}
-          </Card>
+          )}
         </div>
       </DashboardLayout>
     </ProtectedRoute>

@@ -15,7 +15,7 @@ export const getRooms = async (
       .from('rooms')
       .select(`
         *,
-        type:room_types(*)
+        type:room_types!type_id(*)
       `);
 
     if (req.query.branch_id) {
@@ -50,7 +50,7 @@ export const getRoom = async (
       .from('rooms')
       .select(`
         *,
-        type:room_types(*),
+        type:room_types!type_id(*),
         status_history:room_status_history(*)
       `)
       .eq('id', req.params.id)

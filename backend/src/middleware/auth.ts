@@ -34,7 +34,7 @@ export const protect = async (
     // In development, if there is no token at all, attach a dev super_admin user
     if (!token && isDev) {
       logger.warn('No auth token provided – using development super_admin user');
-      req.user = { id: 'dev-user', role: UserRole.SUPER_ADMIN };
+      req.user = { id: 'dev-user', role: UserRole.SUPER_ADMIN, branch_id: 1 };
       next();
       return;
     }
@@ -56,7 +56,7 @@ export const protect = async (
         // In development, fall back to dev user on Supabase auth failure
         if (isDev) {
           logger.warn('Supabase auth failed in development, falling back to dev super_admin user', authError);
-          req.user = { id: 'dev-user', role: UserRole.SUPER_ADMIN };
+          req.user = { id: 'dev-user', role: UserRole.SUPER_ADMIN, branch_id: 1 };
           next();
           return;
         }

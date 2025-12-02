@@ -1,110 +1,85 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Wrench, Plus, RefreshCw, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
-import { toast } from 'sonner';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
+import { Button } from "@/components/ui/minimal/button";
+import { IOSBadge } from '@/components/ui/ios-badge';
 import { maintenanceAPI } from '@/lib/api';
+import { Wrench, RefreshCw, Clock, CheckCircle, AlertTriangle, Plus, MapPin } from 'lucide-react';
+import { toast } from 'sonner';
+import { IOSButton } from '@/components/ui/ios-button';
+import { IOSCard } from '@/components/ui/ios-card';
 
-export default function BranchManagerMaintenancePage() {
+interface Request { id: string; title: string; location: string; priority: string; status: string; created_at: string; }
+
+const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
+  pending: { label: 'Pending', color: 'text-yellow-700', bg: 'bg-yellow-100' },
+  in_progress: { label: 'In Progress', color: 'text-blue-700', bg: 'bg-blue-100' },
+  completed: { label: 'Completed', color: 'text-green-700', bg: 'bg-green-100' },
+};
+
+export default function BranchMaintenancePage() {
+  const { user } = useAuth();
+  const [requests, setRequests] = useState<Request[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [requests, setRequests] = useState<any[]>([]);
 
-  useEffect(() => { fetchData(); }, []);
-
-  const fetchData = async () => {
+  const fetchRequests = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await maintenanceAPI.getRequests().catch(() => ({ requests: [] }));
-      setRequests(res.requests || res.data || []);
-    } catch (error) {
-      toast.error('Failed to load maintenance requests');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      const response = await maintenanceAPI.getRequests(user?.branch_id || undefined);
+      if (response.success) setRequests(response.data || []);
+    } catch (error) { console.error('Error:', error); }
+    finally { setIsLoading(false); }
+  }, [user?.branch_id]);
 
-  const getStatusColor = (status: string) => {
-    switch(status) {
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'in_progress': return 'bg-blue-100 text-blue-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+  useEffect(() => { fetchRequests(); }, [fetchRequests]);
+
+  const stats = { pending: requests.filter(r => r.status === 'pending').length, inProgress: requests.filter(r => r.status === 'in_progress').length, urgent: requests.filter(r => r.priority === 'urgent').length };
+  const priorityColors: Record<string, string> = { urgent: 'bg-[#FF3B30]', high: 'bg-orange-500', normal: 'bg-[#007AFF]', low: 'bg-[#8E8E93]' };
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER]}>
+    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Maintenance</h1>
-              <p className="text-gray-600 mt-1">Manage maintenance requests</p>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={fetchData} className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50">
-                <RefreshCw className="h-4 w-4" /> Refresh
-              </button>
-              <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-                <Plus className="h-4 w-4" /> New Request
-              </button>
-            </div>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div><h1 className="text-2xl font-bold text-gray-900">Maintenance</h1><p className="text-gray-500">Repair requests</p></div>
+            <IOSButton variant="secondary" onClick={fetchRequests}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white rounded-xl p-5 border">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-yellow-100 rounded-lg"><Clock className="h-5 w-5 text-yellow-600" /></div>
-                <div><p className="text-sm text-gray-500">Pending</p><p className="text-2xl font-bold">{requests.filter(r => r.status === 'pending').length}</p></div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl p-5 border">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-lg"><Wrench className="h-5 w-5 text-blue-600" /></div>
-                <div><p className="text-sm text-gray-500">In Progress</p><p className="text-2xl font-bold">{requests.filter(r => r.status === 'in_progress').length}</p></div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl p-5 border">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 rounded-lg"><CheckCircle className="h-5 w-5 text-green-600" /></div>
-                <div><p className="text-sm text-gray-500">Completed</p><p className="text-2xl font-bold">{requests.filter(r => r.status === 'completed').length}</p></div>
-              </div>
-            </div>
+          <div className="grid grid-cols-3 gap-4">
+            <IOSCard className="p-4"><Clock className="h-6 w-6 text-yellow-600 mb-2" /><p className="text-sm text-gray-500">Pending</p><p className="text-xl font-bold text-yellow-600">{stats.pending}</p></IOSCard>
+            <IOSCard className="p-4"><Wrench className="h-6 w-6 text-[#007AFF] mb-2" /><p className="text-sm text-gray-500">In Progress</p><p className="text-xl font-bold text-[#007AFF]">{stats.inProgress}</p></IOSCard>
+            <IOSCard className="p-4"><AlertTriangle className="h-6 w-6 text-[#FF3B30] mb-2" /><p className="text-sm text-gray-500">Urgent</p><p className="text-xl font-bold text-[#FF3B30]">{stats.urgent}</p></IOSCard>
           </div>
 
-          <div className="bg-white rounded-xl border overflow-hidden">
-            {isLoading ? (
-              <div className="text-center py-12"><div className="animate-spin h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto"></div></div>
-            ) : requests.length === 0 ? (
-              <div className="text-center py-12 text-gray-500"><Wrench className="h-12 w-12 mx-auto mb-3 text-gray-300" /><p>No maintenance requests</p></div>
-            ) : (
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {requests.map((request) => (
-                    <tr key={request.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 font-medium">{request.title}</td>
-                      <td className="px-6 py-4">{request.location || request.room_number || '-'}</td>
-                      <td className="px-6 py-4 capitalize">{request.priority || 'normal'}</td>
-                      <td className="px-6 py-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(request.status)}`}>{request.status}</span></td>
-                      <td className="px-6 py-4 text-sm">{request.created_at ? new Date(request.created_at).toLocaleDateString() : '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
+          ) : requests.length === 0 ? (
+            <IOSCard className="p-12 text-center"><Wrench className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No maintenance requests</p></IOSCard>
+          ) : (
+            <div className="space-y-3">
+              {requests.map((request) => {
+                const status = statusConfig[request.status] || statusConfig.pending;
+                return (
+                  <IOSCard key={request.id} className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-2 h-10 rounded ${priorityColors[request.priority] || priorityColors.normal}`} />
+                        <div>
+                          <p className="font-bold">{request.title}</p>
+                          <p className="text-sm text-gray-500 flex items-center gap-1"><MapPin className="h-3 w-3" /> {request.location}</p>
+                        </div>
+                      </div>
+                      <IOSBadge className={`${status.bg} ${status.color}`}>{status.label}</IOSBadge>
+                    </div>
+                  </IOSCard>
+                );
+              })}
+            </div>
+          )}
         </div>
       </DashboardLayout>
     </ProtectedRoute>

@@ -7,6 +7,7 @@ import {
   CreditCard, User, Hash, Building, Clock
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { financeAPI } from '@/lib/api';
 
 interface FinanceModalProps {
   isOpen: boolean;
@@ -34,19 +35,11 @@ export function PaymentModal({ isOpen, onClose, mode = 'create', initialData }: 
 
   const handleSubmit = async () => {
     try {
-      // TODO: Implement API call
-      const response = await fetch('/api/payments', {
-        method: mode === 'create' ? 'POST' : 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(paymentData)
-      });
-
-      if (!response.ok) throw new Error('Failed to process payment');
-
-      toast.success('Payment ' + (mode === 'create' ? 'processed' : 'updated') + ' successfully!');
+      await financeAPI.processPayment(paymentData);
+      toast.success('Payment processed successfully!');
       onClose();
-    } catch (error) {
-      toast.error('Failed to process payment');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to process payment');
     }
   };
 
@@ -71,7 +64,7 @@ export function PaymentModal({ isOpen, onClose, mode = 'create', initialData }: 
           <h2 className="text-xl font-bold text-gray-900">
             {mode === 'create' ? 'Process Payment' : 'Edit Payment'}
           </h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -86,7 +79,7 @@ export function PaymentModal({ isOpen, onClose, mode = 'create', initialData }: 
               name="bookingId"
               value={paymentData.bookingId}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
             />
           </div>
 
@@ -100,7 +93,7 @@ export function PaymentModal({ isOpen, onClose, mode = 'create', initialData }: 
               value={paymentData.amount}
               onChange={handleChange}
               min="0"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
             />
           </div>
 
@@ -112,7 +105,7 @@ export function PaymentModal({ isOpen, onClose, mode = 'create', initialData }: 
               name="paymentMethod"
               value={paymentData.paymentMethod}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
             >
               <option value="cash">Cash</option>
               <option value="card">Card</option>
@@ -130,7 +123,7 @@ export function PaymentModal({ isOpen, onClose, mode = 'create', initialData }: 
               name="reference"
               value={paymentData.reference}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
             />
           </div>
 
@@ -143,7 +136,7 @@ export function PaymentModal({ isOpen, onClose, mode = 'create', initialData }: 
               value={paymentData.notes}
               onChange={handleChange}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
             />
           </div>
         </div>
@@ -151,7 +144,7 @@ export function PaymentModal({ isOpen, onClose, mode = 'create', initialData }: 
         <div className="flex justify-end mt-6 pt-6 border-t">
           <button
             onClick={handleSubmit}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700"
           >
             <Save className="inline h-4 w-4 mr-2" />
             {mode === 'create' ? 'Process Payment' : 'Update Payment'}
@@ -181,19 +174,11 @@ export function InvoiceModal({ isOpen, onClose, mode = 'create', initialData }: 
 
   const handleSubmit = async () => {
     try {
-      // TODO: Implement API call
-      const response = await fetch('/api/invoices', {
-        method: mode === 'create' ? 'POST' : 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(invoiceData)
-      });
-
-      if (!response.ok) throw new Error('Failed to generate invoice');
-
-      toast.success('Invoice ' + (mode === 'create' ? 'generated' : 'updated') + ' successfully!');
+      await financeAPI.createInvoice(invoiceData);
+      toast.success('Invoice generated successfully!');
       onClose();
-    } catch (error) {
-      toast.error('Failed to generate invoice');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to generate invoice');
     }
   };
 
@@ -218,7 +203,7 @@ export function InvoiceModal({ isOpen, onClose, mode = 'create', initialData }: 
           <h2 className="text-xl font-bold text-gray-900">
             {mode === 'create' ? 'Generate Invoice' : 'Edit Invoice'}
           </h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -233,7 +218,7 @@ export function InvoiceModal({ isOpen, onClose, mode = 'create', initialData }: 
               name="bookingId"
               value={invoiceData.bookingId}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
             />
           </div>
 
@@ -246,7 +231,7 @@ export function InvoiceModal({ isOpen, onClose, mode = 'create', initialData }: 
               name="customerName"
               value={invoiceData.customerName}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
             />
           </div>
 
@@ -259,7 +244,7 @@ export function InvoiceModal({ isOpen, onClose, mode = 'create', initialData }: 
               name="dueDate"
               value={invoiceData.dueDate}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
             />
           </div>
 
@@ -272,7 +257,7 @@ export function InvoiceModal({ isOpen, onClose, mode = 'create', initialData }: 
               value={invoiceData.notes}
               onChange={handleChange}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
             />
           </div>
         </div>
@@ -280,7 +265,7 @@ export function InvoiceModal({ isOpen, onClose, mode = 'create', initialData }: 
         <div className="flex justify-end mt-6 pt-6 border-t">
           <button
             onClick={handleSubmit}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700"
           >
             <FileText className="inline h-4 w-4 mr-2" />
             {mode === 'create' ? 'Generate Invoice' : 'Update Invoice'}

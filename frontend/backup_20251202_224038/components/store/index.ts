@@ -1,0 +1,1 @@
+export { DepartmentStoreRequest } from './DepartmentStoreRequest';

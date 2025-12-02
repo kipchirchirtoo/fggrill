@@ -371,7 +371,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
         
         toast.success(
           <div className="space-y-1">
-            <p className="font-semibold">✓ Stock Added Successfully</p>
+            <p className="font-semibold font-sf-pro-display">✓ Stock Added Successfully</p>
             <p className="text-sm">+{formData.quantity} units to "{formData.item_name}"</p>
             {orderNum && <p className="text-xs font-mono text-green-600">Order: {orderNum}</p>}
           </div>,
@@ -407,7 +407,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
         
         toast.success(
           <div className="space-y-1">
-            <p className="font-semibold">✓ Item Created Successfully</p>
+            <p className="font-semibold font-sf-pro-display">✓ Item Created Successfully</p>
             <p className="text-sm">"{formData.item_name}" with {formData.quantity} units</p>
             {newSku && <p className="text-xs font-mono text-blue-600">SKU: {newSku}</p>}
             {orderNum && <p className="text-xs font-mono text-green-600">Order: {orderNum}</p>}
@@ -454,7 +454,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
               
               <div className="text-center mb-4">
                 <Camera className="h-8 w-8 mx-auto mb-2 text-indigo-600" />
-                <h3 className="text-lg font-semibold">Scan Barcode</h3>
+                <h3 className="text-lg font-semibold font-sf-pro-display">Scan Barcode</h3>
                 <p className="text-sm text-gray-500">Point camera at product barcode</p>
               </div>
               
@@ -508,7 +508,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
               <div className="bg-gradient-to-br from-indigo-50 to-blue-50 p-4 rounded-xl border border-indigo-100">
                 <div className="flex items-center gap-2 mb-3">
                   <Keyboard className="h-4 w-4 text-indigo-600" />
-                  <Label className="text-sm font-semibold text-indigo-900">
+                  <Label className="text-sm font-semibold font-sf-pro-display text-indigo-900">
                     Scan Barcode or Enter SKU
                   </Label>
                 </div>
@@ -573,11 +573,11 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
             <div className="space-y-4 animate-in fade-in duration-200">
               
               {/* Item Info Card - Compact */}
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+              <div className="bg-green-50 border border-green-200 rounded-ios-lg p-3">
                 <div className="flex items-center gap-3">
                   <Package className="h-6 w-6 text-green-600" />
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-green-900 truncate">
+                    <h3 className="font-semibold font-sf-pro-display text-green-900 truncate">
                       {existingItem.item_name || existingItem.description}
                     </h3>
                     <div className="flex items-center gap-4 text-xs text-gray-600 mt-1">
@@ -590,8 +590,8 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
               </div>
 
               {/* Quantity Entry - Compact */}
-              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-                <Label className="text-sm font-semibold text-indigo-900 mb-2 block">Quantity to Add</Label>
+              <div className="bg-indigo-50 border border-indigo-200 rounded-ios-lg p-4">
+                <Label className="text-sm font-semibold font-sf-pro-display text-indigo-900 mb-2 block">Quantity to Add</Label>
                 <div className="flex gap-3">
                   <Input
                     ref={quantityInputRef}
@@ -639,7 +639,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
             <div className="space-y-3 animate-in fade-in duration-200">
               
               {/* SKU Preview - Compact */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div className="bg-blue-50 border border-blue-200 rounded-ios-lg p-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Tag className="h-4 w-4 text-blue-600" />
@@ -732,8 +732,8 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
               </div>
 
               {/* Initial Stock - Compact */}
-              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
-                <Label className="text-sm font-semibold text-indigo-900 mb-2 block">Initial Stock *</Label>
+              <div className="bg-indigo-50 border border-indigo-200 rounded-ios-lg p-3">
+                <Label className="text-sm font-semibold font-sf-pro-display text-indigo-900 mb-2 block">Initial Stock *</Label>
                 <div className="flex gap-3">
                   <Input
                     ref={quantityInputRef}

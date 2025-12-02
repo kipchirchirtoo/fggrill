@@ -23,7 +23,7 @@ export const getStaff = async (
       .from('hk_staff_profiles')
       .select(`
         *,
-        user:users(id, first_name, last_name, email, phone, status)
+        user:users(id, first_name, last_name, email, phone_number, status)
       `)
       .order('staff_code');
 
@@ -58,7 +58,7 @@ export const getStaffMember = async (
       .from('hk_staff_profiles')
       .select(`
         *,
-        user:users(id, first_name, last_name, email, phone, status, avatar_url)
+        user:users(id, first_name, last_name, email, phone_number, status, avatar_url)
       `)
       .eq('id', id)
       .single();
