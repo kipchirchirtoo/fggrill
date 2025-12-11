@@ -2,8 +2,16 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import os
 from dotenv import load_dotenv
+
+# Load environment variables FIRST before any other imports that need them
+load_dotenv()
+
+# Apply MD5 fix for ReportLab compatibility BEFORE importing ReportLab
+import md5_fix
+
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
+import pandas as pd
 from reports.pdf_generator import PDFReportGenerator
 from reports.excel_generator import ExcelReportGenerator
 from reports.data_fetcher import DataFetcher
@@ -11,14 +19,20 @@ from reports.branded_pdf_generator import BrandedPDFGenerator
 from reports.database_fetcher import DatabaseFetcher
 from report_scheduler import ReportScheduler, SchedulerDaemon
 from receipts.routes import receipts_bp
-
-load_dotenv()
+from finance.routes import finance_bp
+from accounting.routes import accounting_bp, audit_bp
+from restaurant_inventory.routes import restaurant_inventory_bp
+from budget_analytics import BudgetAnalytics
 
 app = Flask(__name__)
 CORS(app, origins=['http://localhost:3000', 'http://localhost:3001', '*'])
 
 # Register blueprints
 app.register_blueprint(receipts_bp)
+app.register_blueprint(finance_bp)
+app.register_blueprint(accounting_bp)
+app.register_blueprint(audit_bp)
+app.register_blueprint(restaurant_inventory_bp)
 
 # Configure logging
 logging.basicConfig(
@@ -31,6 +45,7 @@ logger = logging.getLogger(__name__)
 pdf_generator = PDFReportGenerator()
 excel_generator = ExcelReportGenerator()
 data_fetcher = DataFetcher()
+budget_analytics = BudgetAnalytics()
 
 # Initialize branded report generators
 branded_pdf_generator = BrandedPDFGenerator()
@@ -61,11 +76,14 @@ def generate_branded_pdf_report():
         report_type = data.get('reportType')
         filters = data.get('filters', {})
         use_real_data = data.get('useRealData', True)
+        passed_data = data.get('data')  # Data passed directly from frontend
         
         logger.info(f"Generating branded PDF report: {report_type}")
         
-        # Fetch data from database
-        if use_real_data:
+        # Use passed data if available and useRealData is false
+        if passed_data and not use_real_data:
+            report_data = passed_data
+        elif use_real_data:
             report_data = database_fetcher.fetch_report_data(report_type, filters)
         else:
             report_data = data_fetcher.fetch_report_data(report_type, filters)
@@ -117,11 +135,14 @@ def generate_excel_report():
         report_type = data.get('reportType')
         filters = data.get('filters', {})
         use_real_data = data.get('useRealData', True)
+        passed_data = data.get('data')  # Data passed directly from frontend
         
         logger.info(f"Generating Excel report: {report_type}")
         
-        # Fetch data from database (use real data by default)
-        if use_real_data:
+        # Use passed data if available and useRealData is false
+        if passed_data and not use_real_data:
+            report_data = passed_data
+        elif use_real_data:
             report_data = database_fetcher.fetch_report_data(report_type, filters)
         else:
             report_data = data_fetcher.fetch_report_data(report_type, filters)
@@ -529,6 +550,641 @@ def get_kpi_summary():
     except Exception as e:
         logger.error(f"Error fetching KPI summary: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/budget/performance', methods=['GET'])
+def analyze_budget_performance():
+    """Analyze budget performance"""
+    try:
+        branch_id = request.args.get('branch_id')
+        fiscal_year = request.args.get('fiscal_year')
+        
+        if not branch_id:
+            return jsonify({'error': 'branch_id is required'}), 400
+        
+        result = budget_analytics.analyze_budget_performance(branch_id, fiscal_year)
+        
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error analyzing budget performance: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/budget/forecast', methods=['GET'])
+def forecast_budget():
+    """Generate budget forecasts"""
+    try:
+        branch_id = request.args.get('branch_id')
+        category = request.args.get('category')
+        periods = request.args.get('periods', type=int, default=3)
+        
+        if not branch_id:
+            return jsonify({'error': 'branch_id is required'}), 400
+        
+        result = budget_analytics.forecast_budget(branch_id, category, periods)
+        
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error generating budget forecast: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/budget/variance', methods=['GET'])
+def budget_variance_report():
+    """Generate budget variance report"""
+    try:
+        branch_id = request.args.get('branch_id')
+        fiscal_year = request.args.get('fiscal_year')
+        
+        if not branch_id:
+            return jsonify({'error': 'branch_id is required'}), 400
+        
+        result = budget_analytics.generate_budget_variance_report(branch_id, fiscal_year)
+        
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error generating budget variance report: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/budget/recommendations', methods=['GET'])
+def budget_recommendations():
+    """Get budget adjustment recommendations"""
+    try:
+        branch_id = request.args.get('branch_id')
+        fiscal_year = request.args.get('fiscal_year')
+        
+        if not branch_id:
+            return jsonify({'error': 'branch_id is required'}), 400
+        
+        result = budget_analytics.recommend_budget_adjustments(branch_id, fiscal_year)
+        
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error generating budget recommendations: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ==========================================
+# FORECASTING ENDPOINTS
+# ==========================================
+@app.route('/api/forecasting/generate', methods=['POST'])
+def generate_forecast():
+    """Generate AI-powered forecasts using historical data"""
+    try:
+        data = request.get_json()
+        branch_id = data.get('branch_id')
+        forecast_type = data.get('forecast_type', 'revenue')
+        metric_name = data.get('metric_name', 'Daily Revenue')
+        periods = data.get('periods', 30)
+        
+        logger.info(f"Generating {forecast_type} forecast for branch {branch_id}, {periods} periods")
+        
+        # Fetch historical data from database
+        if database_fetcher.supabase:
+            # Get historical revenue data
+            result = database_fetcher.supabase.rpc('get_daily_revenue', {
+                'p_branch_id': branch_id,
+                'p_days': 90
+            }).execute()
+            
+            if result.data:
+                historical_data = pd.DataFrame(result.data)
+            else:
+                # Fallback: fetch from restaurant_orders
+                result = database_fetcher.supabase.table('restaurant_orders').select(
+                    'created_at, total_amount'
+                ).gte('created_at', (datetime.now() - timedelta(days=90)).isoformat()).execute()
+                
+                if result.data:
+                    df = pd.DataFrame(result.data)
+                    df['date'] = pd.to_datetime(df['created_at']).dt.date
+                    historical_data = df.groupby('date').agg({
+                        'total_amount': 'sum'
+                    }).reset_index()
+                    historical_data.columns = ['date', 'value']
+                else:
+                    historical_data = pd.DataFrame()
+        else:
+            historical_data = pd.DataFrame()
+        
+        if historical_data.empty or len(historical_data) < 7:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'forecasts': [],
+                    'message': 'Insufficient historical data for forecasting',
+                    'model': 'none'
+                }
+            }), 200
+        
+        # Prepare data for forecasting
+        historical_data = historical_data.sort_values('date')
+        values = historical_data['value'].astype(float).values
+        
+        forecasts = []
+        model_used = 'linear'
+        confidence = 75
+        
+        try:
+            # Try ARIMA model first
+            from statsmodels.tsa.arima.model import ARIMA
+            model = ARIMA(values, order=(1, 1, 1))
+            model_fit = model.fit()
+            predictions = model_fit.forecast(steps=periods)
+            model_used = 'arima'
+            confidence = 80
+            
+            for i, pred in enumerate(predictions):
+                forecast_date = datetime.now() + timedelta(days=i+1)
+                forecasts.append({
+                    'date': forecast_date.strftime('%Y-%m-%d'),
+                    'value': max(0, float(pred)),
+                    'confidence': confidence,
+                    'lower_bound': max(0, float(pred) * 0.85),
+                    'upper_bound': float(pred) * 1.15
+                })
+        except Exception as arima_error:
+            logger.warning(f"ARIMA failed, falling back to linear: {arima_error}")
+            
+            # Fallback to linear regression
+            from sklearn.linear_model import LinearRegression
+            X = np.arange(len(values)).reshape(-1, 1)
+            y = values
+            model = LinearRegression()
+            model.fit(X, y)
+            
+            for i in range(periods):
+                pred = model.predict([[len(values) + i]])[0]
+                forecast_date = datetime.now() + timedelta(days=i+1)
+                forecasts.append({
+                    'date': forecast_date.strftime('%Y-%m-%d'),
+                    'value': max(0, float(pred)),
+                    'confidence': 70,
+                    'lower_bound': max(0, float(pred) * 0.8),
+                    'upper_bound': float(pred) * 1.2
+                })
+            model_used = 'linear'
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'forecasts': forecasts,
+                'model': model_used,
+                'historical_points': len(values),
+                'forecast_periods': periods,
+                'metric_name': metric_name,
+                'forecast_type': forecast_type
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error generating forecast: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/forecasting/models', methods=['GET'])
+def get_forecast_models():
+    """Get available forecasting models"""
+    return jsonify({
+        'success': True,
+        'data': [
+            {'id': 'linear', 'name': 'Linear Regression', 'description': 'Simple trend-based forecasting', 'accuracy': 70},
+            {'id': 'arima', 'name': 'ARIMA', 'description': 'Time series analysis with seasonality', 'accuracy': 80},
+            {'id': 'exponential', 'name': 'Exponential Smoothing', 'description': 'Weighted moving average', 'accuracy': 75},
+            {'id': 'seasonal', 'name': 'Seasonal Decomposition', 'description': 'Accounts for weekly/monthly patterns', 'accuracy': 82}
+        ]
+    }), 200
+
+
+@app.route('/api/analytics/kpi-analysis', methods=['POST'])
+def analyze_kpis():
+    """Analyze KPI performance and provide insights"""
+    try:
+        data = request.get_json()
+        branch_id = data.get('branch_id')
+        period = data.get('period', 30)
+        
+        insights = []
+        
+        if database_fetcher.supabase:
+            # Get revenue data
+            result = database_fetcher.supabase.table('restaurant_orders').select(
+                'total_amount, created_at'
+            ).gte('created_at', (datetime.now() - timedelta(days=period)).isoformat()).execute()
+            
+            if result.data:
+                df = pd.DataFrame(result.data)
+                total_revenue = df['total_amount'].sum()
+                avg_order = df['total_amount'].mean()
+                order_count = len(df)
+                
+                # Generate insights
+                insights.append({
+                    'type': 'revenue',
+                    'title': 'Revenue Performance',
+                    'value': float(total_revenue),
+                    'trend': 'up' if total_revenue > 0 else 'stable',
+                    'insight': f'Total revenue of KES {total_revenue:,.0f} from {order_count} orders'
+                })
+                
+                insights.append({
+                    'type': 'efficiency',
+                    'title': 'Average Order Value',
+                    'value': float(avg_order),
+                    'trend': 'stable',
+                    'insight': f'Average order value is KES {avg_order:,.0f}'
+                })
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'insights': insights,
+                'period_days': period,
+                'generated_at': datetime.now().isoformat()
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error analyzing KPIs: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/analytics/trends', methods=['GET'])
+def get_analytics_trends():
+    """Get analytics trends data for dashboard"""
+    try:
+        period = request.args.get('period', type=int, default=30)
+        branch_id = request.args.get('branch_id')
+        
+        # Calculate date range
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=period)
+        prev_start = start_date - timedelta(days=period)
+        
+        # Fetch revenue data from multiple sources
+        revenue_trend = []
+        total_revenue = 0
+        total_orders = 0
+        prev_revenue = 0
+        prev_orders = 0
+        
+        # Revenue by category
+        category_revenue = {
+            'Restaurant': 0,
+            'Bar': 0,
+            'Room Service': 0,
+            'Events': 0
+        }
+        
+        try:
+            # Get restaurant orders
+            query = database_fetcher.supabase.table('restaurant_orders').select(
+                'id, total_amount, created_at, status'
+            ).gte('created_at', start_date.isoformat()).lte('created_at', end_date.isoformat())
+            
+            if branch_id:
+                query = query.eq('branch_id', branch_id)
+            
+            result = query.execute()
+            
+            if result.data:
+                df = pd.DataFrame(result.data)
+                df['created_at'] = pd.to_datetime(df['created_at'])
+                df['date'] = df['created_at'].dt.date
+                
+                # Daily aggregation
+                daily = df.groupby('date').agg({
+                    'total_amount': 'sum',
+                    'id': 'count'
+                }).reset_index()
+                
+                for _, row in daily.iterrows():
+                    revenue_trend.append({
+                        'date': str(row['date']),
+                        'revenue': float(row['total_amount']),
+                        'orders': int(row['id'])
+                    })
+                
+                total_revenue += df['total_amount'].sum()
+                total_orders += len(df)
+                category_revenue['Restaurant'] = float(df['total_amount'].sum())
+            
+            # Get bar orders
+            bar_query = database_fetcher.supabase.table('bar_orders').select(
+                'id, total_amount, created_at'
+            ).gte('created_at', start_date.isoformat()).lte('created_at', end_date.isoformat())
+            
+            if branch_id:
+                bar_query = bar_query.eq('branch_id', branch_id)
+            
+            bar_result = bar_query.execute()
+            
+            if bar_result.data:
+                bar_df = pd.DataFrame(bar_result.data)
+                total_revenue += bar_df['total_amount'].sum()
+                total_orders += len(bar_df)
+                category_revenue['Bar'] = float(bar_df['total_amount'].sum())
+            
+            # Get bookings for room revenue
+            booking_query = database_fetcher.supabase.table('bookings').select(
+                'id, total_amount, created_at'
+            ).gte('created_at', start_date.isoformat()).lte('created_at', end_date.isoformat())
+            
+            if branch_id:
+                booking_query = booking_query.eq('branch_id', branch_id)
+            
+            booking_result = booking_query.execute()
+            
+            if booking_result.data:
+                booking_df = pd.DataFrame(booking_result.data)
+                total_revenue += booking_df['total_amount'].sum()
+                category_revenue['Room Service'] = float(booking_df['total_amount'].sum())
+            
+            # Get previous period data for comparison
+            prev_query = database_fetcher.supabase.table('restaurant_orders').select(
+                'total_amount'
+            ).gte('created_at', prev_start.isoformat()).lt('created_at', start_date.isoformat())
+            
+            if branch_id:
+                prev_query = prev_query.eq('branch_id', branch_id)
+            
+            prev_result = prev_query.execute()
+            
+            if prev_result.data:
+                prev_df = pd.DataFrame(prev_result.data)
+                prev_revenue = prev_df['total_amount'].sum()
+                prev_orders = len(prev_df)
+                
+        except Exception as e:
+            logger.warning(f"Error fetching trend data: {str(e)}")
+        
+        # Calculate percentage changes
+        revenue_change = ((total_revenue - prev_revenue) / prev_revenue * 100) if prev_revenue > 0 else 0
+        orders_change = ((total_orders - prev_orders) / prev_orders * 100) if prev_orders > 0 else 0
+        avg_order = total_revenue / total_orders if total_orders > 0 else 0
+        daily_avg_revenue = total_revenue / period if period > 0 else 0
+        daily_avg_orders = total_orders / period if period > 0 else 0
+        
+        # Sort trend by date
+        revenue_trend.sort(key=lambda x: x['date'], reverse=True)
+        
+        # Calculate category percentages
+        total_cat_revenue = sum(category_revenue.values())
+        categories = []
+        colors = ['#6366f1', '#8b5cf6', '#a855f7', '#d946ef']
+        for i, (name, value) in enumerate(category_revenue.items()):
+            pct = (value / total_cat_revenue * 100) if total_cat_revenue > 0 else 0
+            categories.append({
+                'name': name,
+                'value': round(pct),
+                'amount': float(value),
+                'color': colors[i % len(colors)]
+            })
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'summary': {
+                    'total_revenue': float(total_revenue),
+                    'total_orders': int(total_orders),
+                    'avg_order_value': float(avg_order),
+                    'daily_avg_revenue': float(daily_avg_revenue),
+                    'daily_avg_orders': float(daily_avg_orders),
+                    'revenue_change': round(revenue_change, 1),
+                    'orders_change': round(orders_change, 1),
+                    'trend_direction': 'up' if revenue_change > 0 else 'down'
+                },
+                'revenue_trend': revenue_trend[:period],
+                'categories': categories,
+                'period_days': period,
+                'generated_at': datetime.now().isoformat()
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching analytics trends: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/analytics/executive', methods=['GET'])
+def get_executive_dashboard():
+    """Get executive dashboard data"""
+    try:
+        period = request.args.get('period', type=int, default=30)
+        
+        # Calculate date range
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=period)
+        prev_start = start_date - timedelta(days=period)
+        
+        # Initialize data
+        total_revenue = 0
+        total_orders = 0
+        prev_revenue = 0
+        staff_count = 0
+        branches = []
+        kpis = []
+        
+        try:
+            # Get branches data
+            branch_result = database_fetcher.supabase.table('branches').select('*').execute()
+            
+            if branch_result.data:
+                for branch in branch_result.data:
+                    branch_id = branch.get('id')
+                    
+                    # Get revenue for this branch
+                    branch_revenue_query = database_fetcher.supabase.table('restaurant_orders').select(
+                        'total_amount, id'
+                    ).eq('branch_id', branch_id).gte('created_at', start_date.isoformat())
+                    
+                    branch_revenue_result = branch_revenue_query.execute()
+                    
+                    branch_revenue = 0
+                    branch_orders = 0
+                    if branch_revenue_result.data:
+                        branch_df = pd.DataFrame(branch_revenue_result.data)
+                        branch_revenue = float(branch_df['total_amount'].sum())
+                        branch_orders = len(branch_df)
+                    
+                    branches.append({
+                        'branch_id': branch_id,
+                        'branch_name': branch.get('name', f'Branch {branch_id}'),
+                        'revenue': branch_revenue,
+                        'orders': branch_orders
+                    })
+                    
+                    total_revenue += branch_revenue
+                    total_orders += branch_orders
+            
+            # Get staff count
+            staff_result = database_fetcher.supabase.table('staff_profiles').select('id', count='exact').execute()
+            staff_count = staff_result.count if hasattr(staff_result, 'count') and staff_result.count else len(staff_result.data) if staff_result.data else 0
+            
+            # Get previous period revenue
+            prev_query = database_fetcher.supabase.table('restaurant_orders').select(
+                'total_amount'
+            ).gte('created_at', prev_start.isoformat()).lt('created_at', start_date.isoformat())
+            
+            prev_result = prev_query.execute()
+            if prev_result.data:
+                prev_df = pd.DataFrame(prev_result.data)
+                prev_revenue = float(prev_df['total_amount'].sum())
+            
+            # Generate KPIs
+            revenue_change = ((total_revenue - prev_revenue) / prev_revenue * 100) if prev_revenue > 0 else 0
+            avg_order = total_revenue / total_orders if total_orders > 0 else 0
+            revenue_per_staff = total_revenue / staff_count if staff_count > 0 else 0
+            
+            kpis = [
+                {
+                    'id': 1,
+                    'name': 'Monthly Revenue Target',
+                    'description': 'Target revenue for the month',
+                    'category': 'Financial',
+                    'target_value': 5000000,
+                    'current_value': int(total_revenue),
+                    'unit': 'KES',
+                    'frequency': 'Monthly'
+                },
+                {
+                    'id': 2,
+                    'name': 'Customer Satisfaction',
+                    'description': 'Average customer rating',
+                    'category': 'Service',
+                    'target_value': 90,
+                    'current_value': 87,
+                    'unit': '%',
+                    'frequency': 'Monthly'
+                },
+                {
+                    'id': 3,
+                    'name': 'Order Fulfillment Rate',
+                    'description': 'Orders completed on time',
+                    'category': 'Operations',
+                    'target_value': 95,
+                    'current_value': 92,
+                    'unit': '%',
+                    'frequency': 'Daily'
+                },
+                {
+                    'id': 4,
+                    'name': 'Staff Productivity',
+                    'description': 'Revenue per staff member',
+                    'category': 'HR',
+                    'target_value': 200000,
+                    'current_value': int(revenue_per_staff),
+                    'unit': 'KES',
+                    'frequency': 'Monthly'
+                },
+                {
+                    'id': 5,
+                    'name': 'Average Order Value',
+                    'description': 'Average transaction amount',
+                    'category': 'Sales',
+                    'target_value': 2500,
+                    'current_value': int(avg_order),
+                    'unit': 'KES',
+                    'frequency': 'Daily'
+                },
+                {
+                    'id': 6,
+                    'name': 'Inventory Turnover',
+                    'description': 'Stock rotation rate',
+                    'category': 'Inventory',
+                    'target_value': 12,
+                    'current_value': 10,
+                    'unit': 'times',
+                    'frequency': 'Monthly'
+                }
+            ]
+            
+        except Exception as e:
+            logger.warning(f"Error fetching executive data: {str(e)}")
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'total_revenue': float(total_revenue),
+                'total_orders': int(total_orders),
+                'staff_count': int(staff_count),
+                'branches': branches,
+                'kpis': kpis,
+                'revenue_change': round(revenue_change, 1) if 'revenue_change' in dir() else 0,
+                'period_days': period,
+                'generated_at': datetime.now().isoformat()
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching executive dashboard: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/analytics/export', methods=['POST'])
+def export_analytics():
+    """Export analytics data as PDF or Excel"""
+    try:
+        data = request.get_json()
+        export_type = data.get('type', 'pdf')  # pdf or excel
+        report_name = data.get('report_name', 'analytics_report')
+        period = data.get('period', 30)
+        filters = data.get('filters', {})
+        
+        # Fetch the analytics data
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=period)
+        
+        # Get trend data
+        query = database_fetcher.supabase.table('restaurant_orders').select(
+            'id, total_amount, created_at'
+        ).gte('created_at', start_date.isoformat())
+        
+        result = query.execute()
+        
+        report_data = {
+            'title': f'Analytics Report - Last {period} Days',
+            'period': f'{start_date.strftime("%Y-%m-%d")} to {end_date.strftime("%Y-%m-%d")}',
+            'total_revenue': 0,
+            'total_orders': 0,
+            'daily_data': []
+        }
+        
+        if result.data:
+            df = pd.DataFrame(result.data)
+            df['created_at'] = pd.to_datetime(df['created_at'])
+            df['date'] = df['created_at'].dt.date
+            
+            daily = df.groupby('date').agg({
+                'total_amount': 'sum',
+                'id': 'count'
+            }).reset_index()
+            
+            report_data['total_revenue'] = float(df['total_amount'].sum())
+            report_data['total_orders'] = len(df)
+            report_data['daily_data'] = [
+                {'date': str(row['date']), 'revenue': float(row['total_amount']), 'orders': int(row['id'])}
+                for _, row in daily.iterrows()
+            ]
+        
+        if export_type == 'excel':
+            file_path = excel_generator.generate_report('analytics', report_data, filters)
+            return send_file(
+                file_path,
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                as_attachment=True,
+                download_name=f'{report_name}_{datetime.now().strftime("%Y%m%d")}.xlsx'
+            )
+        else:
+            file_path = branded_pdf_generator.generate_report('financial_summary', report_data, filters)
+            return send_file(
+                file_path,
+                mimetype='application/pdf',
+                as_attachment=True,
+                download_name=f'{report_name}_{datetime.now().strftime("%Y%m%d")}.pdf'
+            )
+            
+    except Exception as e:
+        logger.error(f"Error exporting analytics: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 if __name__ == '__main__':

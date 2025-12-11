@@ -13,8 +13,12 @@ export enum UserRole {
   MAINTENANCE = 'maintenance',
   ACCOUNTANT = 'accountant',
   AUDITOR = 'auditor',
+  FINANCE_MANAGER = 'finance_manager',
   CENTRAL_STOREKEEPER = 'central_storekeeper',
   BRANCH_STOREKEEPER = 'branch_storekeeper',
+  CENTRAL_OPERATIONS_MANAGER = 'central_operations_manager',
+  BRANCH_OPERATIONS_MANAGER = 'branch_operations_manager',
+  FACILITIES_MANAGER = 'facilities_manager',
   EMPLOYEE = 'employee'
 }
 

@@ -45,7 +45,7 @@ export default function BranchIncomingPage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Incoming Stock</h1><p className="text-gray-500">Receive dispatches from central</p></div>
-            <IOSButton variant="secondary" onClick={fetchDispatches}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+            <IOSButton variant="secondary" onClick={fetchDispatches} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 
           {isLoading ? (
@@ -62,13 +62,13 @@ export default function BranchIncomingPage() {
                       <div>
                         <p className="font-bold">#{dispatch.dispatch_number}</p>
                         <p className="text-sm text-gray-500">From: {dispatch.from_branch} • {dispatch.items_count} items</p>
-                        <p className="text-xs text-gray-400 flex items-center gap-1"><Calendar className="h-3 w-3" /> {new Date(dispatch.dispatched_at).toLocaleString()}</p>
+                        <p className="text-xs text-gray-400 flex items-center gap-1" suppressHydrationWarning><Calendar className="h-3 w-3" /> {new Date(dispatch.dispatched_at).toLocaleString()}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
                       <IOSBadge variant={dispatch.status === 'delivered' ? 'success' : 'info'}>{dispatch.status}</IOSBadge>
                       {dispatch.status === 'in_transit' && (
-                        <IOSButton size="sm" onClick={() => handleConfirmDelivery(dispatch.id)}><CheckCircle className="h-4 w-4 mr-1" /> Receive</IOSButton>
+                        <IOSButton size="sm" onClick={() => handleConfirmDelivery(dispatch.id)} leftIcon={<CheckCircle />}> Receive</IOSButton>
                       )}
                     </div>
                   </div>

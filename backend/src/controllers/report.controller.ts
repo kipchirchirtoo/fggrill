@@ -103,7 +103,22 @@ export const getRevenueReport = async (
         return sum + ((booking.total_amount || 0) - totalPaid);
       }, 0),
       averageRoomRate: bookings && bookings.length > 0 ? (bookings || []).reduce((sum: number, booking: any) => sum + (booking.total_amount || 0), 0) / bookings.length : 0,
-      bookingCount: bookings?.length || 0
+      bookingCount: bookings?.length || 0,
+      dailyBreakdown: (() => {
+        const daily: Record<string, number> = {};
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          daily[d.toISOString().split('T')[0]] = 0;
+        }
+        (bookings || []).forEach((b: any) => {
+          const date = b.created_at.split('T')[0];
+          if (daily[date] !== undefined) {
+            daily[date] += (b.total_amount || 0);
+          }
+        });
+        return Object.entries(daily).map(([date, revenue]) => ({ date, revenue })).sort((a, b) => a.date.localeCompare(b.date));
+      })()
     };
 
     res.status(200).json({

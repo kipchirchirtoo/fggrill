@@ -16,17 +16,13 @@ const router = express.Router();
 
 // Public routes
 router.get('/available', getAvailableRooms);
+router.post('/', createBooking);
 
 // Protected routes
 router.use(protect);
 
 router.get('/', getBookings);
 router.get('/:id', getBooking);
-
-router.post('/', 
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST]),
-  createBooking
-);
 
 router.put('/:id',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST]),

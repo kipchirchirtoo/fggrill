@@ -1,0 +1,1238 @@
+'use client';
+
+import React, { useState } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
+import { cn } from '@/lib/utils';
+import {
+  Building2, Package, Users, Bed, ChevronDown, Warehouse, BarChart3,
+  DollarSign, Settings, ClipboardList, Truck, CalendarClock, 
+  Building, Wrench, Brush, CheckCircle, FileSpreadsheet, ShieldCheck,
+  Home, ArrowDownUp, LifeBuoy, Calendar, Store, TrendingUp, LineChart, Award,
+  UserCheck, Utensils, Wine, Receipt, CreditCard, PieChart, FileText,
+  BookOpen, ChefHat, ShoppingCart, Wallet, Scale, AlertCircle
+} from 'lucide-react';
+
+interface NavItemProps {
+  href: string;
+  icon: React.ElementType;
+  label: string;
+  active?: boolean;
+  onClick?: () => void;
+}
+
+function NavItem({ href, icon: Icon, label, active, onClick }: NavItemProps) {
+  return (
+    <Link 
+      href={href} 
+      onClick={onClick}
+      className={cn(
+        "flex items-center py-2 px-3 rounded-md text-sm font-medium",
+        active 
+          ? "bg-gray-100 text-gray-900" 
+          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+      )}
+    >
+      <Icon className="mr-3 h-4 w-4 flex-shrink-0" />
+      <span>{label}</span>
+    </Link>
+  );
+}
+
+interface NavGroupProps {
+  label: string;
+  icon: React.ElementType;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}
+
+function NavGroup({ label, icon: Icon, children, defaultOpen = false }: NavGroupProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  
+  return (
+    <div className="space-y-1">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex w-full items-center justify-between py-2 px-3 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-md"
+      >
+        <div className="flex items-center">
+          <Icon className="mr-3 h-4 w-4 flex-shrink-0" />
+          <span>{label}</span>
+        </div>
+        <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      
+      {isOpen && (
+        <div className="ml-6 space-y-1 border-l border-gray-200 pl-3">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ConsolidatedNav() {
+  const { user } = useAuth();
+  const { activeBranchId } = useBranch();
+  const pathname = usePathname();
+  
+  if (!user) return null;
+  
+  // Define navigation items based on user role
+  
+  // Branch Operations Manager Navigation
+  const branchOperationsNav = (
+    <>
+      <NavItem
+        href="/dashboard/branch-operations"
+        icon={Building2}
+        label="Overview"
+        active={pathname === '/dashboard/branch-operations'}
+      />
+      
+      <NavGroup label="Inventory" icon={Package} defaultOpen>
+        <NavItem
+          href="/dashboard/branch-operations/inventory"
+          icon={Package}
+          label="Stock Levels"
+          active={pathname === '/dashboard/branch-operations/inventory'}
+        />
+        <NavItem
+          href="/dashboard/branch-operations/inventory/requests"
+          icon={ClipboardList}
+          label="Stock Requests"
+          active={pathname === '/dashboard/branch-operations/inventory/requests'}
+        />
+        <NavItem
+          href="/dashboard/branch-operations/inventory/incoming"
+          icon={Truck}
+          label="Incoming Stock"
+          active={pathname === '/dashboard/branch-operations/inventory/incoming'}
+        />
+        <NavItem
+          href="/dashboard/branch-operations/inventory/stock-takes"
+          icon={CheckCircle}
+          label="Stock Takes"
+          active={pathname === '/dashboard/branch-operations/inventory/stock-takes'}
+        />
+      </NavGroup>
+      
+      <NavGroup label="Staff" icon={Users}>
+        <NavItem
+          href="/dashboard/branch-operations/staff"
+          icon={Users}
+          label="All Staff"
+          active={pathname === '/dashboard/branch-operations/staff'}
+        />
+        <NavItem
+          href="/dashboard/branch-operations/staff/schedule"
+          icon={CalendarClock}
+          label="Scheduling"
+          active={pathname === '/dashboard/branch-operations/staff/schedule'}
+        />
+        <NavItem
+          href="/dashboard/branch-operations/staff/attendance"
+          icon={CheckCircle}
+          label="Attendance"
+          active={pathname === '/dashboard/branch-operations/staff/attendance'}
+        />
+      </NavGroup>
+      
+      <NavGroup label="Operations" icon={Building}>
+        <NavItem
+          href="/dashboard/branch-operations/operations/reservations"
+          icon={Calendar}
+          label="Reservations"
+          active={pathname === '/dashboard/branch-operations/operations/reservations'}
+        />
+        <NavItem
+          href="/dashboard/branch-operations/operations/rooms"
+          icon={Bed}
+          label="Rooms"
+          active={pathname === '/dashboard/branch-operations/operations/rooms'}
+        />
+        <NavItem
+          href="/dashboard/branch-operations/operations/requests"
+          icon={ClipboardList}
+          label="Guest Requests"
+          active={pathname === '/dashboard/branch-operations/operations/requests'}
+        />
+      </NavGroup>
+      
+      <NavGroup label="Finance" icon={DollarSign}>
+        <NavItem
+          href="/dashboard/branch-operations/financials/budget"
+          icon={DollarSign}
+          label="Budget"
+          active={pathname === '/dashboard/branch-operations/financials/budget'}
+        />
+        <NavItem
+          href="/dashboard/branch-operations/financials/expenses"
+          icon={FileSpreadsheet}
+          label="Expenses"
+          active={pathname === '/dashboard/branch-operations/financials/expenses'}
+        />
+        <NavItem
+          href="/dashboard/branch-operations/financials/reports"
+          icon={BarChart3}
+          label="Reports"
+          active={pathname === '/dashboard/branch-operations/financials/reports'}
+        />
+      </NavGroup>
+      
+      <NavItem
+        href="/dashboard/branch-operations/communications"
+        icon={LifeBuoy}
+        label="Communications"
+        active={pathname === '/dashboard/branch-operations/communications'}
+      />
+    </>
+  );
+  
+  // Central Operations Manager Navigation
+  const centralOperationsNav = (
+    <>
+      <NavItem
+        href="/dashboard/central-operations"
+        icon={Building2}
+        label="Overview"
+        active={pathname === '/dashboard/central-operations'}
+      />
+      
+      <NavGroup label="Warehouse" icon={Warehouse} defaultOpen>
+        <NavItem
+          href="/dashboard/central-operations/warehouse/inventory"
+          icon={Package}
+          label="Master Inventory"
+          active={pathname === '/dashboard/central-operations/warehouse/inventory'}
+        />
+        <NavItem
+          href="/dashboard/central-operations/warehouse/requests"
+          icon={ClipboardList}
+          label="Stock Requests"
+          active={pathname === '/dashboard/central-operations/warehouse/requests'}
+        />
+        <NavItem
+          href="/dashboard/central-operations/warehouse/dispatches"
+          icon={Truck}
+          label="Dispatches"
+          active={pathname === '/dashboard/central-operations/warehouse/dispatches'}
+        />
+        <NavItem
+          href="/dashboard/central-operations/warehouse/transfers"
+          icon={ArrowDownUp}
+          label="Transfers"
+          active={pathname === '/dashboard/central-operations/warehouse/transfers'}
+        />
+        <NavItem
+          href="/dashboard/central-operations/warehouse/suppliers"
+          icon={Store}
+          label="Suppliers"
+          active={pathname === '/dashboard/central-operations/warehouse/suppliers'}
+        />
+        <NavItem
+          href="/dashboard/central-operations/warehouse/vendor-performance"
+          icon={Award}
+          label="Vendor Performance"
+          active={pathname === '/dashboard/central-operations/warehouse/vendor-performance'}
+        />
+      </NavGroup>
+      
+      <NavGroup label="Branch Oversight" icon={Building}>
+        <NavItem
+          href="/dashboard/central-operations/branch-oversight/comparison"
+          icon={BarChart3}
+          label="Branch Comparison"
+          active={pathname === '/dashboard/central-operations/branch-oversight/comparison'}
+        />
+        <NavItem
+          href="/dashboard/central-operations/branch-oversight/performance"
+          icon={BarChart3}
+          label="Performance"
+          active={pathname === '/dashboard/central-operations/branch-oversight/performance'}
+        />
+        <NavItem
+          href="/dashboard/central-operations/branch-oversight/staff"
+          icon={Users}
+          label="Staff Overview"
+          active={pathname === '/dashboard/central-operations/branch-oversight/staff'}
+        />
+        <NavItem
+          href="/dashboard/central-operations/branch-oversight/compliance"
+          icon={ShieldCheck}
+          label="Compliance"
+          active={pathname === '/dashboard/central-operations/branch-oversight/compliance'}
+        />
+      </NavGroup>
+      
+      <NavGroup label="Strategic Planning" icon={BarChart3}>
+        <NavItem
+          href="/dashboard/central-operations/strategic-planning/budgets"
+          icon={DollarSign}
+          label="Budgets"
+          active={pathname === '/dashboard/central-operations/strategic-planning/budgets'}
+        />
+        <NavItem
+          href="/dashboard/central-operations/strategic-planning/forecasting"
+          icon={BarChart3}
+          label="Forecasting"
+          active={pathname === '/dashboard/central-operations/strategic-planning/forecasting'}
+        />
+        <NavItem
+          href="/dashboard/central-operations/strategic-planning/ml-forecasting"
+          icon={LineChart}
+          label="ML Forecasting"
+          active={pathname === '/dashboard/central-operations/strategic-planning/ml-forecasting'}
+        />
+        <NavItem
+          href="/dashboard/central-operations/strategic-planning/procurement"
+          icon={Package}
+          label="Procurement"
+          active={pathname === '/dashboard/central-operations/strategic-planning/procurement'}
+        />
+      </NavGroup>
+      
+      <NavGroup label="Analytics" icon={BarChart3}>
+        <NavItem
+          href="/dashboard/central-operations/analytics/reports"
+          icon={FileSpreadsheet}
+          label="Reports"
+          active={pathname === '/dashboard/central-operations/analytics/reports'}
+        />
+        <NavItem
+          href="/dashboard/central-operations/analytics/trends"
+          icon={BarChart3}
+          label="Trends"
+          active={pathname === '/dashboard/central-operations/analytics/trends'}
+        />
+        <NavItem
+          href="/dashboard/central-operations/analytics/executive"
+          icon={BarChart3}
+          label="Executive Dashboard"
+          active={pathname === '/dashboard/central-operations/analytics/executive'}
+        />
+      </NavGroup>
+    </>
+  );
+  
+  // Facilities Manager Navigation
+  const facilitiesNav = (
+    <>
+      <NavItem
+        href="/dashboard/facilities"
+        icon={Home}
+        label="Overview"
+        active={pathname === '/dashboard/facilities'}
+      />
+      
+      <NavGroup label="Housekeeping" icon={Brush} defaultOpen>
+        <NavItem
+          href="/dashboard/facilities/housekeeping/tasks"
+          icon={ClipboardList}
+          label="Tasks"
+          active={pathname === '/dashboard/facilities/housekeeping/tasks'}
+        />
+        <NavItem
+          href="/dashboard/facilities/housekeeping/inspections"
+          icon={CheckCircle}
+          label="Inspections"
+          active={pathname === '/dashboard/facilities/housekeeping/inspections'}
+        />
+        <NavItem
+          href="/dashboard/facilities/housekeeping/lost-found"
+          icon={LifeBuoy}
+          label="Lost & Found"
+          active={pathname === '/dashboard/facilities/housekeeping/lost-found'}
+        />
+      </NavGroup>
+      
+      <NavGroup label="Maintenance" icon={Wrench}>
+        <NavItem
+          href="/dashboard/facilities/maintenance/work-orders"
+          icon={ClipboardList}
+          label="Work Orders"
+          active={pathname === '/dashboard/facilities/maintenance/work-orders'}
+        />
+        <NavItem
+          href="/dashboard/facilities/maintenance/assets"
+          icon={Home}
+          label="Asset Management"
+          active={pathname === '/dashboard/facilities/maintenance/assets'}
+        />
+        <NavItem
+          href="/dashboard/facilities/maintenance/schedule"
+          icon={Calendar}
+          label="Schedule"
+          active={pathname === '/dashboard/facilities/maintenance/schedule'}
+        />
+      </NavGroup>
+      
+      <NavItem
+        href="/dashboard/facilities/rooms"
+        icon={Bed}
+        label="Room Status"
+        active={pathname === '/dashboard/facilities/rooms'}
+      />
+      
+      <NavItem
+        href="/dashboard/facilities/inventory"
+        icon={Package}
+        label="Supplies & Inventory"
+        active={pathname === '/dashboard/facilities/inventory'}
+      />
+      
+      <NavItem
+        href="/dashboard/facilities/staff-management"
+        icon={Users}
+        label="Staff Management"
+        active={pathname === '/dashboard/facilities/staff-management'}
+      />
+      
+      <NavItem
+        href="/dashboard/facilities/quality-compliance"
+        icon={ShieldCheck}
+        label="Quality & Compliance"
+        active={pathname === '/dashboard/facilities/quality-compliance'}
+      />
+    </>
+  );
+  
+  // Admin Navigation
+  const adminNav = (
+    <>
+      <NavItem
+        href="/dashboard/admin"
+        icon={Settings}
+        label="Admin Dashboard"
+        active={pathname === '/dashboard/admin'}
+      />
+      <NavItem
+        href="/dashboard/admin/system/roles/migration"
+        icon={ArrowDownUp}
+        label="Role Migration"
+        active={pathname === '/dashboard/admin/system/roles/migration'}
+      />
+    </>
+  );
+  
+  // Reception Navigation
+  const receptionNav = (
+    <>
+      <NavItem
+        href="/dashboard/reception"
+        icon={Home}
+        label="Overview"
+        active={pathname === '/dashboard/reception'}
+      />
+      
+      <NavGroup label="Front Desk" icon={UserCheck} defaultOpen>
+        <NavItem
+          href="/dashboard/reception/checkin"
+          icon={UserCheck}
+          label="Check-in/Check-out"
+          active={pathname === '/dashboard/reception/checkin'}
+        />
+        <NavItem
+          href="/dashboard/reception/reservations"
+          icon={Calendar}
+          label="Reservations"
+          active={pathname === '/dashboard/reception/reservations'}
+        />
+        <NavItem
+          href="/dashboard/reception/guests"
+          icon={Users}
+          label="Guests"
+          active={pathname === '/dashboard/reception/guests'}
+        />
+      </NavGroup>
+      
+      <NavItem
+        href="/dashboard/reception/rooms"
+        icon={Bed}
+        label="Rooms"
+        active={pathname === '/dashboard/reception/rooms'}
+      />
+      
+      <NavItem
+        href="/dashboard/reception/housekeeping"
+        icon={Brush}
+        label="Housekeeping"
+        active={pathname === '/dashboard/reception/housekeeping'}
+      />
+    </>
+  );
+  
+  // Restaurant Navigation
+  const restaurantNav = (
+    <>
+      <NavItem
+        href="/dashboard/restaurant"
+        icon={Utensils}
+        label="Overview"
+        active={pathname === '/dashboard/restaurant'}
+      />
+      
+      <NavGroup label="Operations" icon={ChefHat} defaultOpen>
+        <NavItem
+          href="/dashboard/restaurant/orders"
+          icon={ClipboardList}
+          label="Orders"
+          active={pathname === '/dashboard/restaurant/orders'}
+        />
+        <NavItem
+          href="/dashboard/restaurant/kitchen"
+          icon={ChefHat}
+          label="Kitchen"
+          active={pathname === '/dashboard/restaurant/kitchen'}
+        />
+        <NavItem
+          href="/dashboard/restaurant/pos"
+          icon={CreditCard}
+          label="POS"
+          active={pathname === '/dashboard/restaurant/pos'}
+        />
+      </NavGroup>
+      
+      <NavItem
+        href="/dashboard/restaurant/menu"
+        icon={BookOpen}
+        label="Menu"
+        active={pathname === '/dashboard/restaurant/menu'}
+      />
+      
+      <NavItem
+        href="/dashboard/restaurant/inventory"
+        icon={Package}
+        label="Inventory"
+        active={pathname === '/dashboard/restaurant/inventory'}
+      />
+    </>
+  );
+  
+  // Bar Navigation
+  const barNav = (
+    <>
+      <NavItem
+        href="/dashboard/bar"
+        icon={Wine}
+        label="Overview"
+        active={pathname === '/dashboard/bar'}
+      />
+      
+      <NavGroup label="Operations" icon={ShoppingCart} defaultOpen>
+        <NavItem
+          href="/dashboard/bar/orders"
+          icon={ClipboardList}
+          label="Orders"
+          active={pathname === '/dashboard/bar/orders'}
+        />
+        <NavItem
+          href="/dashboard/bar/pos"
+          icon={CreditCard}
+          label="POS"
+          active={pathname === '/dashboard/bar/pos'}
+        />
+        <NavItem
+          href="/dashboard/bar/tabs"
+          icon={Receipt}
+          label="Tabs"
+          active={pathname === '/dashboard/bar/tabs'}
+        />
+      </NavGroup>
+      
+      <NavItem
+        href="/dashboard/bar/menu"
+        icon={BookOpen}
+        label="Menu"
+        active={pathname === '/dashboard/bar/menu'}
+      />
+      
+      <NavItem
+        href="/dashboard/bar/inventory"
+        icon={Package}
+        label="Inventory"
+        active={pathname === '/dashboard/bar/inventory'}
+      />
+    </>
+  );
+  
+  // Finance/Accountant Navigation
+  const financeNav = (
+    <>
+      <NavItem
+        href="/dashboard/finance"
+        icon={DollarSign}
+        label="Overview"
+        active={pathname === '/dashboard/finance'}
+      />
+      
+      <NavGroup label="Revenue" icon={TrendingUp} defaultOpen>
+        <NavItem
+          href="/dashboard/finance/revenue-branches"
+          icon={Building2}
+          label="Revenue by Branch"
+          active={pathname === '/dashboard/finance/revenue-branches'}
+        />
+        <NavItem
+          href="/dashboard/finance/invoices"
+          icon={FileText}
+          label="Invoices"
+          active={pathname === '/dashboard/finance/invoices'}
+        />
+        <NavItem
+          href="/dashboard/finance/payments"
+          icon={CreditCard}
+          label="Payments"
+          active={pathname === '/dashboard/finance/payments'}
+        />
+      </NavGroup>
+      
+      <NavGroup label="Expenses" icon={Wallet}>
+        <NavItem
+          href="/dashboard/finance/expenses"
+          icon={Receipt}
+          label="Expenses"
+          active={pathname === '/dashboard/finance/expenses'}
+        />
+        <NavItem
+          href="/dashboard/finance/ar-ap"
+          icon={ArrowDownUp}
+          label="AR/AP"
+          active={pathname === '/dashboard/finance/ar-ap'}
+        />
+      </NavGroup>
+      
+      <NavGroup label="Analysis" icon={BarChart3}>
+        <NavItem
+          href="/dashboard/finance/cashflow"
+          icon={TrendingUp}
+          label="Cash Flow"
+          active={pathname === '/dashboard/finance/cashflow'}
+        />
+        <NavItem
+          href="/dashboard/finance/profit-loss"
+          icon={PieChart}
+          label="Profit & Loss"
+          active={pathname === '/dashboard/finance/profit-loss'}
+        />
+        <NavItem
+          href="/dashboard/finance/budget-analysis"
+          icon={BarChart3}
+          label="Budget Analysis"
+          active={pathname === '/dashboard/finance/budget-analysis'}
+        />
+        <NavItem
+          href="/dashboard/finance/forecast"
+          icon={LineChart}
+          label="Forecast"
+          active={pathname === '/dashboard/finance/forecast'}
+        />
+        <NavItem
+          href="/dashboard/finance/kpis"
+          icon={Award}
+          label="KPIs"
+          active={pathname === '/dashboard/finance/kpis'}
+        />
+      </NavGroup>
+      
+      <NavItem
+        href="/dashboard/finance/tax-summary"
+        icon={FileSpreadsheet}
+        label="Tax Summary"
+        active={pathname === '/dashboard/finance/tax-summary'}
+      />
+      
+      <NavItem
+        href="/dashboard/finance/reports"
+        icon={FileText}
+        label="Reports"
+        active={pathname === '/dashboard/finance/reports'}
+      />
+    </>
+  );
+  
+  // Auditor Navigation
+  const auditorNav = (
+    <>
+      <NavItem
+        href="/dashboard/audit"
+        icon={ShieldCheck}
+        label="Overview"
+        active={pathname === '/dashboard/audit'}
+      />
+      
+      <NavGroup label="Audits" icon={ClipboardList} defaultOpen>
+        <NavItem
+          href="/dashboard/audit/financial"
+          icon={DollarSign}
+          label="Financial Audit"
+          active={pathname === '/dashboard/audit/financial'}
+        />
+        <NavItem
+          href="/dashboard/audit/inventory"
+          icon={Package}
+          label="Inventory Audit"
+          active={pathname === '/dashboard/audit/inventory'}
+        />
+        <NavItem
+          href="/dashboard/audit/compliance"
+          icon={Scale}
+          label="Compliance"
+          active={pathname === '/dashboard/audit/compliance'}
+        />
+      </NavGroup>
+      
+      <NavItem
+        href="/dashboard/audit/logs"
+        icon={FileText}
+        label="Audit Logs"
+        active={pathname === '/dashboard/audit/logs'}
+      />
+      
+      <NavItem
+        href="/dashboard/audit/reports"
+        icon={FileSpreadsheet}
+        label="Reports"
+        active={pathname === '/dashboard/audit/reports'}
+      />
+    </>
+  );
+  
+  // Central Storekeeper Navigation (Legacy)
+  const centralStoreNav = (
+    <>
+      <NavItem
+        href="/dashboard/central-store"
+        icon={Warehouse}
+        label="Overview"
+        active={pathname === '/dashboard/central-store'}
+      />
+      
+      <NavGroup label="Inventory" icon={Package} defaultOpen>
+        <NavItem
+          href="/dashboard/central-store/inventory"
+          icon={Package}
+          label="Inventory"
+          active={pathname === '/dashboard/central-store/inventory'}
+        />
+        <NavItem
+          href="/dashboard/central-store/stock-takes"
+          icon={CheckCircle}
+          label="Stock Takes"
+          active={pathname === '/dashboard/central-store/stock-takes'}
+        />
+      </NavGroup>
+      
+      <NavGroup label="Requests" icon={ClipboardList}>
+        <NavItem
+          href="/dashboard/central-store/requests"
+          icon={ClipboardList}
+          label="All Requests"
+          active={pathname === '/dashboard/central-store/requests'}
+        />
+        <NavItem
+          href="/dashboard/central-store/dispatch"
+          icon={Truck}
+          label="Dispatch"
+          active={pathname === '/dashboard/central-store/dispatch'}
+        />
+      </NavGroup>
+      
+      <NavItem
+        href="/dashboard/central-store/suppliers"
+        icon={Store}
+        label="Suppliers"
+        active={pathname === '/dashboard/central-store/suppliers'}
+      />
+      
+      <NavGroup label="Fleet" icon={Truck}>
+        <NavItem
+          href="/dashboard/central-store/vehicles"
+          icon={Truck}
+          label="Vehicles"
+          active={pathname === '/dashboard/central-store/vehicles'}
+        />
+        <NavItem
+          href="/dashboard/central-store/drivers"
+          icon={Users}
+          label="Drivers"
+          active={pathname === '/dashboard/central-store/drivers'}
+        />
+      </NavGroup>
+      
+      <NavItem
+        href="/dashboard/central-store/reports"
+        icon={BarChart3}
+        label="Reports"
+        active={pathname === '/dashboard/central-store/reports'}
+      />
+    </>
+  );
+  
+  // Branch Storekeeper Navigation (Legacy)
+  const branchStoreNav = (
+    <>
+      <NavItem
+        href="/dashboard/branch-store"
+        icon={Package}
+        label="Overview"
+        active={pathname === '/dashboard/branch-store'}
+      />
+      
+      <NavGroup label="Stock" icon={Package} defaultOpen>
+        <NavItem
+          href="/dashboard/branch-store/stock"
+          icon={Package}
+          label="Stock Levels"
+          active={pathname === '/dashboard/branch-store/stock'}
+        />
+        <NavItem
+          href="/dashboard/branch-store/stock-takes"
+          icon={CheckCircle}
+          label="Stock Takes"
+          active={pathname === '/dashboard/branch-store/stock-takes'}
+        />
+        <NavItem
+          href="/dashboard/branch-store/stock-out"
+          icon={ArrowDownUp}
+          label="Stock Out"
+          active={pathname === '/dashboard/branch-store/stock-out'}
+        />
+      </NavGroup>
+      
+      <NavGroup label="Requests" icon={ClipboardList}>
+        <NavItem
+          href="/dashboard/branch-store/requests"
+          icon={ClipboardList}
+          label="Requests"
+          active={pathname === '/dashboard/branch-store/requests'}
+        />
+        <NavItem
+          href="/dashboard/branch-store/incoming"
+          icon={Truck}
+          label="Incoming"
+          active={pathname === '/dashboard/branch-store/incoming'}
+        />
+        <NavItem
+          href="/dashboard/branch-store/receive"
+          icon={CheckCircle}
+          label="Receive"
+          active={pathname === '/dashboard/branch-store/receive'}
+        />
+      </NavGroup>
+      
+      <NavItem
+        href="/dashboard/branch-store/kitchen-usage"
+        icon={Utensils}
+        label="Kitchen Usage"
+        active={pathname === '/dashboard/branch-store/kitchen-usage'}
+      />
+      
+      <NavItem
+        href="/dashboard/branch-store/reports"
+        icon={BarChart3}
+        label="Reports"
+        active={pathname === '/dashboard/branch-store/reports'}
+      />
+    </>
+  );
+  
+  // Housekeeping Navigation (Legacy)
+  const housekeepingNav = (
+    <>
+      <NavItem
+        href="/dashboard/housekeeping"
+        icon={Brush}
+        label="Overview"
+        active={pathname === '/dashboard/housekeeping'}
+      />
+      
+      <NavGroup label="Tasks" icon={ClipboardList} defaultOpen>
+        <NavItem
+          href="/dashboard/housekeeping/tasks"
+          icon={ClipboardList}
+          label="Tasks"
+          active={pathname === '/dashboard/housekeeping/tasks'}
+        />
+        <NavItem
+          href="/dashboard/housekeeping/rooms"
+          icon={Bed}
+          label="Rooms"
+          active={pathname === '/dashboard/housekeeping/rooms'}
+        />
+        <NavItem
+          href="/dashboard/housekeeping/inspections"
+          icon={CheckCircle}
+          label="Inspections"
+          active={pathname === '/dashboard/housekeeping/inspections'}
+        />
+      </NavGroup>
+      
+      <NavItem
+        href="/dashboard/housekeeping/scheduling"
+        icon={Calendar}
+        label="Scheduling"
+        active={pathname === '/dashboard/housekeeping/scheduling'}
+      />
+      
+      <NavItem
+        href="/dashboard/housekeeping/staff"
+        icon={Users}
+        label="Staff"
+        active={pathname === '/dashboard/housekeeping/staff'}
+      />
+      
+      <NavItem
+        href="/dashboard/housekeeping/inventory"
+        icon={Package}
+        label="Inventory"
+        active={pathname === '/dashboard/housekeeping/inventory'}
+      />
+      
+      <NavItem
+        href="/dashboard/housekeeping/lost-found"
+        icon={LifeBuoy}
+        label="Lost & Found"
+        active={pathname === '/dashboard/housekeeping/lost-found'}
+      />
+      
+      <NavItem
+        href="/dashboard/housekeeping/workflows"
+        icon={ArrowDownUp}
+        label="Workflows"
+        active={pathname === '/dashboard/housekeeping/workflows'}
+      />
+      
+      <NavItem
+        href="/dashboard/housekeeping/reports"
+        icon={BarChart3}
+        label="Reports"
+        active={pathname === '/dashboard/housekeeping/reports'}
+      />
+    </>
+  );
+  
+  // Maintenance Navigation (Legacy)
+  const maintenanceNav = (
+    <>
+      <NavItem
+        href="/dashboard/maintenance"
+        icon={Wrench}
+        label="Overview"
+        active={pathname === '/dashboard/maintenance'}
+      />
+      
+      <NavItem
+        href="/dashboard/maintenance/orders"
+        icon={ClipboardList}
+        label="Work Orders"
+        active={pathname === '/dashboard/maintenance/orders'}
+      />
+      
+      <NavItem
+        href="/dashboard/maintenance/assets"
+        icon={Home}
+        label="Assets"
+        active={pathname === '/dashboard/maintenance/assets'}
+      />
+      
+      <NavItem
+        href="/dashboard/maintenance/schedule"
+        icon={Calendar}
+        label="Schedule"
+        active={pathname === '/dashboard/maintenance/schedule'}
+      />
+    </>
+  );
+  
+  // General Manager Navigation (Legacy)
+  const gmNav = (
+    <>
+      <NavItem
+        href="/dashboard/gm"
+        icon={Building2}
+        label="Overview"
+        active={pathname === '/dashboard/gm'}
+      />
+      
+      <NavGroup label="Operations" icon={Building} defaultOpen>
+        <NavItem
+          href="/dashboard/gm/branches"
+          icon={Building2}
+          label="Branches"
+          active={pathname === '/dashboard/gm/branches'}
+        />
+        <NavItem
+          href="/dashboard/gm/compare"
+          icon={BarChart3}
+          label="Compare Branches"
+          active={pathname === '/dashboard/gm/compare'}
+        />
+        <NavItem
+          href="/dashboard/gm/reservations"
+          icon={Calendar}
+          label="Reservations"
+          active={pathname === '/dashboard/gm/reservations'}
+        />
+      </NavGroup>
+      
+      <NavGroup label="Staff" icon={Users}>
+        <NavItem
+          href="/dashboard/gm/staff"
+          icon={Users}
+          label="All Staff"
+          active={pathname === '/dashboard/gm/staff'}
+        />
+        <NavItem
+          href="/dashboard/gm/leave-requests"
+          icon={Calendar}
+          label="Leave Requests"
+          active={pathname === '/dashboard/gm/leave-requests'}
+        />
+      </NavGroup>
+      
+      <NavItem
+        href="/dashboard/gm/finance"
+        icon={DollarSign}
+        label="Finance"
+        active={pathname === '/dashboard/gm/finance'}
+      />
+      
+      <NavItem
+        href="/dashboard/gm/reports"
+        icon={BarChart3}
+        label="Reports"
+        active={pathname === '/dashboard/gm/reports'}
+      />
+    </>
+  );
+  
+  // Branch Manager Navigation (Legacy)
+  const branchManagerNav = (
+    <>
+      <NavItem
+        href="/dashboard/branch-manager"
+        icon={Building2}
+        label="Overview"
+        active={pathname === '/dashboard/branch-manager'}
+      />
+      
+      <NavGroup label="Front Desk" icon={UserCheck} defaultOpen>
+        <NavItem
+          href="/dashboard/branch-manager/reservations"
+          icon={Calendar}
+          label="Reservations"
+          active={pathname === '/dashboard/branch-manager/reservations'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/checkin"
+          icon={UserCheck}
+          label="Check-in"
+          active={pathname === '/dashboard/branch-manager/checkin'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/arrivals"
+          icon={ArrowDownUp}
+          label="Arrivals"
+          active={pathname === '/dashboard/branch-manager/arrivals'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/departures"
+          icon={ArrowDownUp}
+          label="Departures"
+          active={pathname === '/dashboard/branch-manager/departures'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/guests"
+          icon={Users}
+          label="Guests"
+          active={pathname === '/dashboard/branch-manager/guests'}
+        />
+      </NavGroup>
+      
+      <NavItem
+        href="/dashboard/branch-manager/rooms"
+        icon={Bed}
+        label="Rooms"
+        active={pathname === '/dashboard/branch-manager/rooms'}
+      />
+      
+      <NavGroup label="Operations" icon={Building}>
+        <NavItem
+          href="/dashboard/branch-manager/housekeeping"
+          icon={Brush}
+          label="Housekeeping"
+          active={pathname === '/dashboard/branch-manager/housekeeping'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/maintenance"
+          icon={Wrench}
+          label="Maintenance"
+          active={pathname === '/dashboard/branch-manager/maintenance'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/restaurant"
+          icon={Utensils}
+          label="Restaurant"
+          active={pathname === '/dashboard/branch-manager/restaurant'}
+        />
+      </NavGroup>
+      
+      <NavGroup label="Inventory" icon={Package}>
+        <NavItem
+          href="/dashboard/branch-manager/stock"
+          icon={Package}
+          label="Stock"
+          active={pathname === '/dashboard/branch-manager/stock'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/requests"
+          icon={ClipboardList}
+          label="Requests"
+          active={pathname === '/dashboard/branch-manager/requests'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/incoming"
+          icon={Truck}
+          label="Incoming"
+          active={pathname === '/dashboard/branch-manager/incoming'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/stock-out"
+          icon={ArrowDownUp}
+          label="Stock Out"
+          active={pathname === '/dashboard/branch-manager/stock-out'}
+        />
+      </NavGroup>
+      
+      <NavGroup label="Staff" icon={Users}>
+        <NavItem
+          href="/dashboard/branch-manager/staff"
+          icon={Users}
+          label="Staff"
+          active={pathname === '/dashboard/branch-manager/staff'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/attendance"
+          icon={CheckCircle}
+          label="Attendance"
+          active={pathname === '/dashboard/branch-manager/attendance'}
+        />
+      </NavGroup>
+      
+      <NavItem
+        href="/dashboard/branch-manager/reports"
+        icon={BarChart3}
+        label="Reports"
+        active={pathname === '/dashboard/branch-manager/reports'}
+      />
+    </>
+  );
+  
+  // Determine which navigation to render based on user role
+  const renderNavigation = () => {
+    if (user.role === UserRole.SUPER_ADMIN) {
+      return (
+        <>
+          {adminNav}
+          <hr className="my-4" />
+          {centralOperationsNav}
+          <hr className="my-4" />
+          {branchOperationsNav}
+          <hr className="my-4" />
+          {facilitiesNav}
+        </>
+      );
+    }
+    
+    // Central Operations Manager Navigation
+    if (user.role === UserRole.CENTRAL_OPERATIONS_MANAGER) {
+      return centralOperationsNav;
+    }
+    
+    // Central Storekeeper Navigation (Legacy - has own dashboard)
+    if (user.role === UserRole.CENTRAL_STOREKEEPER) {
+      return centralStoreNav;
+    }
+    
+    // General Manager Navigation (Legacy - has own dashboard)
+    if (user.role === UserRole.GENERAL_MANAGER) {
+      return gmNav;
+    }
+    
+    // Branch Operations Manager Navigation
+    if (user.role === UserRole.BRANCH_OPERATIONS_MANAGER) {
+      return branchOperationsNav;
+    }
+    
+    // Branch Storekeeper Navigation (Legacy - has own dashboard)
+    if (user.role === UserRole.BRANCH_STOREKEEPER) {
+      return branchStoreNav;
+    }
+    
+    // Branch Manager Navigation (Legacy - has own dashboard)
+    if (user.role === UserRole.BRANCH_MANAGER) {
+      return branchManagerNav;
+    }
+    
+    // Facilities Manager Navigation
+    if (user.role === UserRole.FACILITIES_MANAGER) {
+      return facilitiesNav;
+    }
+    
+    // Housekeeping Navigation (Legacy - has own dashboard)
+    if (user.role === UserRole.HOUSEKEEPING || user.role === UserRole.HOUSEKEEPING_SUPERVISOR) {
+      return housekeepingNav;
+    }
+    
+    // Maintenance Navigation (Legacy - has own dashboard)
+    if (user.role === UserRole.MAINTENANCE) {
+      return maintenanceNav;
+    }
+    
+    // Receptionist Navigation
+    if (user.role === UserRole.RECEPTIONIST) {
+      return receptionNav;
+    }
+    
+    // Restaurant Navigation
+    if (user.role === UserRole.RESTAURANT) {
+      return restaurantNav;
+    }
+    
+    // Bartender Navigation
+    if (user.role === UserRole.BARTENDER) {
+      return barNav;
+    }
+    
+    // Accountant Navigation
+    if (user.role === UserRole.ACCOUNTANT) {
+      return financeNav;
+    }
+    
+    // Auditor Navigation
+    if (user.role === UserRole.AUDITOR) {
+      return auditorNav;
+    }
+    
+    // Default navigation for other roles (EMPLOYEE, GUEST)
+    return (
+      <>
+        <NavItem
+          href="/dashboard"
+          icon={Home}
+          label="Dashboard"
+          active={pathname === '/dashboard'}
+        />
+      </>
+    );
+  };
+  
+  return (
+    <div className="space-y-1">
+      {renderNavigation()}
+    </div>
+  );
+}

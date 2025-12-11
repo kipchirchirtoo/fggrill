@@ -53,7 +53,7 @@ export default function AdminRequestsPage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Stock Requests</h1><p className="text-gray-500">Pending requests from branches</p></div>
-            <IOSButton variant="secondary" onClick={fetchRequests}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+            <IOSButton variant="secondary" onClick={fetchRequests} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 
           <IOSCard className="p-4"><Clock className="h-6 w-6 text-yellow-600 mb-2" /><p className="text-sm text-gray-500">Pending</p><p className="text-xl font-bold text-yellow-600">{requests.length}</p></IOSCard>
@@ -76,9 +76,9 @@ export default function AdminRequestsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      {request.priority === 'urgent' && <IOSBadge variant="error">Urgent</IOSBadge>}
-                      <IOSButton size="sm" variant="secondary" onClick={() => handleReject(request.id)}><XCircle className="h-4 w-4 mr-1" /> Reject</IOSButton>
-                      <IOSButton size="sm" onClick={() => handleApprove(request.id)}><CheckCircle className="h-4 w-4 mr-1" /> Approve</IOSButton>
+                      {request.priority === 'urgent' && <IOSBadge variant="light" color="danger">Urgent</IOSBadge>}
+                      <IOSButton size="sm" variant="secondary" onClick={() => handleReject(request.id)} leftIcon={<XCircle />}> Reject</IOSButton>
+                      <IOSButton size="sm" onClick={() => handleApprove(request.id)} leftIcon={<CheckCircle />}> Approve</IOSButton>
                     </div>
                   </div>
                 </IOSCard>

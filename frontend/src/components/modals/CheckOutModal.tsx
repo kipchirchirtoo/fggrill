@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   X, Search, CheckCircle, User, Bed, Calendar,
@@ -12,6 +12,7 @@ import { bookingsAPI, folioAPI } from '@/lib/api';
 interface CheckOutModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialData?: any;
 }
 
 interface GuestStay {
@@ -26,10 +27,50 @@ interface GuestStay {
   isPaid: boolean;
 }
 
-export function CheckOutModal({ isOpen, onClose }: CheckOutModalProps): JSX.Element | null {
+export function CheckOutModal({ isOpen, onClose, initialData }: CheckOutModalProps): JSX.Element | null {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStay, setSelectedStay] = useState<GuestStay | null>(null);
   const [additionalNotes, setAdditionalNotes] = useState('');
+
+  useEffect(() => {
+    if (initialData) {
+      const loadData = async () => {
+        const nights = Math.max(
+          1,
+          Math.ceil(
+            (new Date(initialData.check_out || initialData.check_out_date).getTime() - new Date(initialData.check_in || initialData.check_in_date).getTime()) / (1000 * 60 * 60 * 24)
+          )
+        );
+
+        let totalAmount = 0;
+        let balance = 0;
+        try {
+          const folioRes = await folioAPI.getFolio(initialData.id);
+          const folio = folioRes.data?.folio || folioRes.folio || folioRes.data || folioRes;
+          totalAmount = folio?.total_charges ?? folio?.totalCharges ?? 0;
+          balance = folio?.balance ?? 0;
+        } catch (e) {
+          console.error("Error fetching folio", e);
+        }
+
+        setSelectedStay({
+          id: initialData.id,
+          guestName: initialData.guest_name || `${initialData.guest?.first_name || ''} ${initialData.guest?.last_name || ''}`.trim() || 'Guest',
+          roomNumber: initialData.room_number || initialData.room?.room_number || '-',
+          checkIn: initialData.check_in || initialData.check_in_date,
+          checkOut: initialData.check_out || initialData.check_out_date,
+          nights,
+          totalAmount,
+          balance,
+          isPaid: balance <= 0
+        });
+      };
+      loadData();
+    } else {
+      setSelectedStay(null);
+      setSearchTerm('');
+    }
+  }, [initialData, isOpen]);
 
   const handleSearch = async () => {
     try {

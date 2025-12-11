@@ -108,9 +108,7 @@ export default function HousekeepingWorkflowsPage() {
               <h1 className="text-2xl font-bold text-gray-900">Cleaning Workflows</h1>
               <p className="text-gray-500">Standardized cleaning procedures and checklists</p>
             </div>
-            <IOSButton>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Workflow
+            <IOSButton leftIcon={<Plus />}>Create Workflow
             </IOSButton>
           </div>
 
@@ -170,9 +168,7 @@ export default function HousekeepingWorkflowsPage() {
                   <h2 className="text-xl font-bold">{selectedWorkflow.name}</h2>
                   <p className="text-gray-500">{selectedWorkflow.description}</p>
                 </div>
-                <IOSButton variant="secondary" size="sm">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Edit
+                <IOSButton variant="secondary" size="sm" leftIcon={<Settings />}>Edit
                 </IOSButton>
               </div>
 
@@ -197,9 +193,9 @@ export default function HousekeepingWorkflowsPage() {
                             <p className="text-sm text-gray-500">{step.duration} minutes</p>
                           </div>
                           {step.required ? (
-                            <IOSBadge variant="info">Required</IOSBadge>
+                            <IOSBadge variant="light" color="info">Required</IOSBadge>
                           ) : (
-                            <IOSBadge variant="neutral">Optional</IOSBadge>
+                            <IOSBadge variant="light" color="secondary">Optional</IOSBadge>
                           )}
                         </div>
                       </div>
@@ -213,9 +209,7 @@ export default function HousekeepingWorkflowsPage() {
                   <Clock className="h-5 w-5" />
                   <span>Total estimated time: <strong>{selectedWorkflow.estimatedTime} minutes</strong></span>
                 </div>
-                <IOSButton>
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Use This Workflow
+                <IOSButton leftIcon={<CheckCircle />}>Use This Workflow
                 </IOSButton>
               </div>
             </IOSCard>

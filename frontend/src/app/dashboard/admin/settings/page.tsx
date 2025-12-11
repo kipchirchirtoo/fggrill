@@ -34,7 +34,7 @@ export default function AdminSettingsPage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Settings className="h-7 w-7" /> Settings</h1><p className="text-gray-500">System configuration</p></div>
-            <IOSButton onClick={handleSave}><Save className="h-4 w-4 mr-2" /> Save Changes</IOSButton>
+            <IOSButton onClick={handleSave} leftIcon={<Save />}>Save Changes</IOSButton>
           </div>
 
           <IOSCard className="p-6">

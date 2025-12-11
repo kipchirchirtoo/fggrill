@@ -65,8 +65,8 @@ export default function AdminMenuPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Menu Management</h1><p className="text-gray-500">Manage restaurant menu items</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchData}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <IOSButton onClick={() => setAddModalOpen(true)}><Plus className="h-4 w-4 mr-2" /> Add Item</IOSButton>
+              <IOSButton variant="secondary" onClick={fetchData} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>Add Item</IOSButton>
             </div>
           </div>
 

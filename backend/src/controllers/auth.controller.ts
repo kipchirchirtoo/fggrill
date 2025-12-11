@@ -100,6 +100,63 @@ export const login = async (
       return;
     }
 
+    // Demo accounts support in development mode
+    if (process.env.NODE_ENV === 'development') {
+      // Check if this is a demo account
+      const demoAccounts = [
+        'admin@dev.com',
+        'admin@famousgate.com',
+        'central-ops@famousgate.com',
+        'branch-ops@famousgate.com',
+        'facilities@famousgate.com',
+        'central.manager@famousgate.com',
+        'warehouse@famousgate.com',
+        'logistics@famousgate.com',
+        'gm@famousgate.com',
+        'manager.bomet@famousgate.com',
+        'central@famousgate.com',
+        'reception@famousgate.com',
+        'restaurant@famousgate.com',
+        'accountant@famousgate.com'
+      ];
+      
+      if (demoAccounts.includes(email)) {
+        logger.info(`Demo account login: ${email}`);
+        
+        // Create mock user and session
+        const user = {
+          id: 'demo-' + Math.random().toString(36).substring(2, 15),
+          email,
+          first_name: email.split('@')[0].split('.')[0],
+          last_name: email.split('@')[0].split('.').length > 1 ? 
+            email.split('@')[0].split('.')[1] : 'User',
+          role: email.includes('central-ops') ? 'central_operations_manager' :
+                 email.includes('branch-ops') ? 'branch_operations_manager' :
+                 email.includes('admin') ? 'super_admin' : 'employee',
+          branch_id: email.includes('central') || email.includes('admin') ? null : 1,
+          is_central: email.includes('central') || email.includes('admin'),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        
+        const session = {
+          access_token: 'demo-token-' + Date.now(),
+          refresh_token: 'demo-refresh-' + Date.now(),
+          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
+          user: { id: user.id, email: user.email }
+        };
+        
+        res.status(200).json({
+          success: true,
+          data: {
+            user,
+            session
+          }
+        });
+        return;
+      }
+    }
+
     // Sign in with Supabase
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,

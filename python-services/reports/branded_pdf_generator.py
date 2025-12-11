@@ -7,7 +7,21 @@ import os
 import io
 from datetime import datetime
 from typing import Dict, Any, List, Optional
+import hashlib
+import warnings
+
+# Fix for ReportLab MD5 issue in newer versions
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="reportlab")
+
 from reportlab.lib import colors
+from reportlab.graphics.charts.piecharts import Pie
+from reportlab.graphics.charts.barcharts import HorizontalBarChart
+from reportlab.graphics.charts.legends import Legend
+from reportlab.graphics.charts.textlabels import Label
+from reportlab.graphics.shapes import Drawing, String
+from reportlab.graphics import renderPDF
+from reportlab.lib import colors
+from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch, mm
@@ -40,6 +54,13 @@ ROW_ALT = colors.HexColor('#F5F5F5')
 
 class BrandedPDFGenerator:
     """Professional PDF report generator with Famous Gate branding"""
+    
+    # Class-level color constants
+    HEADER_GREEN = colors.HexColor('#C6EFCE')
+    HEADER_YELLOW = colors.HexColor('#FFEB9C')
+    HEADER_BLUE = colors.HexColor('#BDD7EE')
+    HEADER_GRAY = colors.HexColor('#D9D9D9')
+    ROW_ALT = colors.HexColor('#F5F5F5')
     
     def __init__(self):
         self.logo_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'fglogo.png')
@@ -232,6 +253,10 @@ class BrandedPDFGenerator:
             'arrivals_departures': self._generate_arrivals_report,
             'expense': self._generate_expense_report,
             'stock_movement': self._generate_stock_movement_report,
+            'branch_performance': self._generate_branch_performance_report,
+            'staff_overview': self._generate_staff_overview_report,
+            'compliance': self._generate_compliance_report,
+            'branch_comparison': self._generate_branch_comparison_report,
         }
         
         generator = generators.get(report_type, self._generate_generic_report)
@@ -1234,6 +1259,744 @@ class BrandedPDFGenerator:
         
         return self._create_pdf(elements)
 
+    def _generate_branch_performance_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Branch Performance Report - Professional dashboard style matching provided templates"""
+        elements = []
+        
+        period = filters.get('period', 'This Period')
+        date_range = f"{filters.get('start_date', datetime.now().strftime('%d/%m/%Y'))} to {filters.get('end_date', datetime.now().strftime('%d/%m/%Y'))}"
+        elements.extend(self._create_header("BRANCH PERFORMANCE REPORT", date_range))
+        
+        # Executive Summary Section - Green header like in template images
+        summary_title = Table([['EXECUTIVE SUMMARY']], colWidths=[7.5*inch])
+        summary_title.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), HEADER_GREEN),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 11),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('BOX', (0, 0), (-1, -1), 1, FG_DARK),
+        ]))
+        elements.append(summary_title)
+        elements.append(Spacer(1, 0.1*inch))
+        
+        # Summary metrics in 2x2 grid
+        total_revenue = data.get('total_revenue', 0)
+        total_orders = data.get('total_orders', 0)
+        avg_satisfaction = data.get('avg_satisfaction', 0)
+        best_performer = data.get('best_performer', 'N/A')
+        worst_performer = data.get('worst_performer', 'N/A')
+        
+        summary_data = [
+            ['Total Revenue', self._format_currency(total_revenue), 'Total Orders', self._format_number(total_orders)],
+            ['Avg Satisfaction', f"{avg_satisfaction:.1f}/5.0", 'Best Performer', best_performer],
+            ['Needs Attention', worst_performer, 'Period', period.title()],
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[1.8*inch, 1.9*inch, 1.8*inch, 1.9*inch])
+        summary_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+            ('BACKGROUND', (0, 0), (-1, -1), ROW_ALT),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Branch Performance Comparison Table - Blue header like in template
+        perf_title = Table([['BRANCH PERFORMANCE COMPARISON']], colWidths=[7.5*inch])
+        perf_title.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 11),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('BOX', (0, 0), (-1, -1), 1, FG_DARK),
+        ]))
+        elements.append(perf_title)
+        elements.append(Spacer(1, 0.1*inch))
+        
+        # Performance table headers
+        perf_headers = ['Branch', 'Revenue', 'Change', 'Orders', 'AOV', 'Rating', 'Efficiency', 'Target']
+        perf_data = [perf_headers]
+        
+        branches = data.get('branches', [])
+        for branch in branches:
+            revenue_change = branch.get('revenue_change', 0)
+            change_str = f"+{revenue_change:.1f}%" if revenue_change >= 0 else f"{revenue_change:.1f}%"
+            
+            perf_data.append([
+                branch.get('branch_name', 'Unknown')[:12],
+                self._format_currency(branch.get('revenue', 0)),
+                change_str,
+                self._format_number(branch.get('orders', 0)),
+                self._format_currency(branch.get('avg_order_value', 0)),
+                f"{branch.get('customer_satisfaction', 0):.1f}",
+                f"{branch.get('staff_efficiency', 0)}%",
+                f"{branch.get('target_achievement', 0)}%"
+            ])
+        
+        if len(perf_data) == 1:
+            perf_data.append(['No branch data', '-', '-', '-', '-', '-', '-', '-'])
+        
+        perf_table = Table(perf_data, colWidths=[1.1*inch, 1.1*inch, 0.7*inch, 0.7*inch, 0.9*inch, 0.6*inch, 0.9*inch, 0.7*inch])
+        perf_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_YELLOW),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(perf_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Performance Rating Scale - Like in template images
+        rating_title = Table([['PERFORMANCE EVALUATION RATING SCALE']], colWidths=[7.5*inch])
+        rating_title.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('BOX', (0, 0), (-1, -1), 1, FG_DARK),
+        ]))
+        elements.append(rating_title)
+        
+        rating_data = [
+            ['5 - Outstanding', 'Exceeds all targets, exceptional performance'],
+            ['4 - Exceeds Expectations', 'Consistently exceeds targets'],
+            ['3 - Meets Expectations', 'Meets all required targets'],
+            ['2 - Needs Improvement', 'Below target, requires attention'],
+            ['1 - Unsatisfactory', 'Significantly below expectations'],
+        ]
+        
+        rating_table = Table(rating_data, colWidths=[2*inch, 5.5*inch])
+        rating_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('BACKGROUND', (0, 0), (0, 0), colors.HexColor('#00B050')),
+            ('BACKGROUND', (0, 1), (0, 1), colors.HexColor('#92D050')),
+            ('BACKGROUND', (0, 2), (0, 2), colors.HexColor('#FFFF00')),
+            ('BACKGROUND', (0, 3), (0, 3), colors.HexColor('#FFC000')),
+            ('BACKGROUND', (0, 4), (0, 4), colors.HexColor('#FF0000')),
+            ('TEXTCOLOR', (0, 0), (0, 0), FG_WHITE),
+            ('TEXTCOLOR', (0, 4), (0, 4), FG_WHITE),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(rating_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Individual Branch Details
+        for branch in branches[:4]:  # Limit to 4 branches per page
+            branch_title = Table([[f"{branch.get('branch_name', 'Unknown')} - DETAILED METRICS"]], colWidths=[7.5*inch])
+            branch_title.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), HEADER_GREEN),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 10),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('BOX', (0, 0), (-1, -1), 1, FG_DARK),
+            ]))
+            elements.append(branch_title)
+            
+            # KPIs for this branch
+            kpi_data = [
+                ['KPI', 'Value', 'Target', 'Status'],
+                ['Revenue', self._format_currency(branch.get('revenue', 0)), 
+                 self._format_currency(branch.get('revenue', 0) / (branch.get('target_achievement', 100) / 100) if branch.get('target_achievement', 0) > 0 else 0),
+                 'On Track' if branch.get('target_achievement', 0) >= 80 else 'Below Target'],
+                ['Orders', self._format_number(branch.get('orders', 0)), '-', 'Active'],
+                ['Customer Satisfaction', f"{branch.get('customer_satisfaction', 0):.1f}/5.0", '4.0/5.0',
+                 'Good' if branch.get('customer_satisfaction', 0) >= 4.0 else 'Needs Improvement'],
+                ['Staff Efficiency', f"{branch.get('staff_efficiency', 0)}%", '85%',
+                 'Good' if branch.get('staff_efficiency', 0) >= 85 else 'Needs Improvement'],
+                ['Inventory Turnover', f"{branch.get('inventory_turnover', 0)}x", '3x',
+                 'Good' if branch.get('inventory_turnover', 0) >= 3 else 'Low'],
+            ]
+            
+            kpi_table = Table(kpi_data, colWidths=[2*inch, 1.8*inch, 1.8*inch, 1.9*inch])
+            kpi_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), HEADER_GRAY),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+                ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ]))
+            elements.append(kpi_table)
+            
+            # Top Products
+            top_products = branch.get('top_products', [])
+            if top_products:
+                elements.append(Spacer(1, 0.1*inch))
+                prod_data = [['Top Products', 'Units Sold']]
+                for prod in top_products[:5]:
+                    prod_data.append([prod.get('name', 'Unknown')[:30], self._format_number(prod.get('sales', 0))])
+                
+                prod_table = Table(prod_data, colWidths=[5.5*inch, 2*inch])
+                prod_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), HEADER_YELLOW),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 8),
+                    ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+                    ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+                    ('TOPPADDING', (0, 0), (-1, -1), 3),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+                ]))
+                elements.append(prod_table)
+            
+            elements.append(Spacer(1, 0.2*inch))
+        
+        # Recommendations Section
+        rec_title = Table([['RECOMMENDATIONS & ACTION ITEMS']], colWidths=[7.5*inch])
+        rec_title.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), HEADER_YELLOW),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('BOX', (0, 0), (-1, -1), 1, FG_DARK),
+        ]))
+        elements.append(rec_title)
+        
+        # Generate recommendations based on data
+        recommendations = []
+        for branch in branches:
+            if branch.get('target_achievement', 0) < 80:
+                recommendations.append(f"• {branch.get('branch_name', 'Branch')}: Focus on increasing sales to meet targets")
+            if branch.get('customer_satisfaction', 0) < 4.0:
+                recommendations.append(f"• {branch.get('branch_name', 'Branch')}: Improve customer service quality")
+            if branch.get('staff_efficiency', 0) < 85:
+                recommendations.append(f"• {branch.get('branch_name', 'Branch')}: Review staff scheduling and training")
+        
+        if not recommendations:
+            recommendations = ['• All branches performing within acceptable parameters', '• Continue monitoring KPIs regularly']
+        
+        for rec in recommendations[:6]:
+            elements.append(Paragraph(rec, ParagraphStyle('Rec', parent=self.styles['Normal'], fontSize=9, leftIndent=10)))
+        
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # Approval Section - Like in template
+        approval_data = [
+            ['Prepared By:', '_________________', 'Date:', '_________________'],
+            ['Reviewed By:', '_________________', 'Date:', '_________________'],
+            ['Approved By:', '_________________', 'Date:', '_________________'],
+        ]
+        
+        approval_table = Table(approval_data, colWidths=[1.5*inch, 2.25*inch, 1*inch, 2.25*inch])
+        approval_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+        ]))
+        elements.append(approval_table)
+        
+        return self._create_pdf(elements, landscape_mode=True)
+
+    def _generate_staff_overview_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Staff Overview Report"""
+        elements = []
+        
+        # Header
+        elements.extend(self._create_header("STAFF OVERVIEW REPORT", 
+            f"Generated: {datetime.now().strftime('%d/%m/%Y %H:%M')}"))
+        
+        # Executive Summary
+        elements.append(Paragraph("EXECUTIVE SUMMARY", self.styles['SectionHeader']))
+        
+        summary_data = [
+            ['Total Staff', 'Active', 'On Leave', 'Avg Performance', 'Avg Attendance'],
+            [
+                str(data.get('total_staff', 0)),
+                str(data.get('active_staff', 0)),
+                str(data.get('on_leave', 0)),
+                f"{data.get('avg_performance', 0):.1f}%",
+                f"{data.get('avg_attendance', 0):.1f}%"
+            ]
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[1.5*inch, 1.2*inch, 1.2*inch, 1.5*inch, 1.5*inch])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), self.HEADER_GREEN),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 20))
+        
+        # Branch Staff Summary
+        branch_summaries = data.get('branch_summaries', [])
+        if branch_summaries:
+            elements.append(Paragraph("BRANCH STAFF SUMMARY", self.styles['SectionHeader']))
+            
+            branch_data = [['Branch', 'Total Staff', 'Active', 'On Leave', 'Avg Performance', 'Avg Attendance']]
+            for branch in branch_summaries:
+                branch_data.append([
+                    branch.get('branch_name', 'N/A'),
+                    str(branch.get('total_staff', 0)),
+                    str(branch.get('active', 0)),
+                    str(branch.get('on_leave', 0)),
+                    f"{branch.get('avg_performance', 0):.1f}%",
+                    f"{branch.get('avg_attendance', 0):.1f}%"
+                ])
+            
+            branch_table = Table(branch_data, colWidths=[1.8*inch, 1*inch, 0.9*inch, 0.9*inch, 1.3*inch, 1.3*inch])
+            branch_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), self.HEADER_BLUE),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, self.ROW_ALT]),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ]))
+            elements.append(branch_table)
+            elements.append(Spacer(1, 20))
+        
+        # Top Performers
+        top_performers = data.get('top_performers', [])
+        if top_performers:
+            elements.append(Paragraph("TOP PERFORMERS", self.styles['SectionHeader']))
+            
+            performer_data = [['Name', 'Branch', 'Role', 'Performance', 'Attendance', 'Rating']]
+            for staff in top_performers[:10]:
+                performer_data.append([
+                    staff.get('name', 'N/A'),
+                    staff.get('branch_name', 'N/A'),
+                    staff.get('role', 'N/A'),
+                    f"{staff.get('performance_score', 0):.1f}%",
+                    f"{staff.get('attendance_rate', 0):.1f}%",
+                    f"{staff.get('customer_rating', 0):.1f}/5"
+                ])
+            
+            performer_table = Table(performer_data, colWidths=[1.5*inch, 1.3*inch, 1.2*inch, 1.1*inch, 1.1*inch, 0.9*inch])
+            performer_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), self.HEADER_GREEN),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, self.ROW_ALT]),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ]))
+            elements.append(performer_table)
+            elements.append(Spacer(1, 20))
+        
+        # Needs Attention
+        needs_attention = data.get('needs_attention', [])
+        if needs_attention:
+            elements.append(Paragraph("STAFF NEEDING ATTENTION", self.styles['SectionHeader']))
+            
+            attention_data = [['Name', 'Branch', 'Role', 'Performance', 'Attendance', 'Issue']]
+            for staff in needs_attention[:10]:
+                issue = 'Low Performance' if staff.get('performance_score', 100) < 70 else 'Low Attendance'
+                attention_data.append([
+                    staff.get('name', 'N/A'),
+                    staff.get('branch_name', 'N/A'),
+                    staff.get('role', 'N/A'),
+                    f"{staff.get('performance_score', 0):.1f}%",
+                    f"{staff.get('attendance_rate', 0):.1f}%",
+                    issue
+                ])
+            
+            attention_table = Table(attention_data, colWidths=[1.5*inch, 1.3*inch, 1.2*inch, 1.1*inch, 1.1*inch, 1.1*inch])
+            attention_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), HexColor('#DC2626')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, HexColor('#FEE2E2')]),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ]))
+            elements.append(attention_table)
+        
+        # Footer with approval section
+        elements.append(Spacer(1, 30))
+        elements.append(Paragraph("APPROVAL", self.styles['SectionHeader']))
+        
+        approval_data = [
+            ['Prepared By:', '_' * 30, 'Date:', '_' * 20],
+            ['Reviewed By:', '_' * 30, 'Date:', '_' * 20],
+            ['Approved By:', '_' * 30, 'Date:', '_' * 20],
+        ]
+        approval_table = Table(approval_data, colWidths=[1.2*inch, 2.5*inch, 0.8*inch, 1.8*inch])
+        approval_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 15),
+        ]))
+        elements.append(approval_table)
+        
+        return self._create_pdf(elements, landscape_mode=True)
+
+    def _generate_compliance_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Compliance Report"""
+        elements = []
+        
+        # Header
+        elements.extend(self._create_header("COMPLIANCE REPORT", 
+            f"Generated: {datetime.now().strftime('%d/%m/%Y %H:%M')}"))
+        
+        # Executive Summary
+        elements.append(Paragraph("COMPLIANCE OVERVIEW", self.styles['SectionHeader']))
+        
+        compliance_rate = data.get('overall_compliance_rate', 0)
+        rate_color = self.HEADER_GREEN if compliance_rate >= 90 else (self.HEADER_YELLOW if compliance_rate >= 75 else HexColor('#DC2626'))
+        
+        summary_data = [
+            ['Total Requirements', 'Compliant', 'Non-Compliant', 'Pending', 'Expired', 'Compliance Rate'],
+            [
+                str(data.get('total_requirements', 0)),
+                str(data.get('compliant', 0)),
+                str(data.get('non_compliant', 0)),
+                str(data.get('pending', 0)),
+                str(data.get('expired', 0)),
+                f"{compliance_rate:.1f}%"
+            ]
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[1.4*inch, 1.1*inch, 1.2*inch, 1*inch, 1*inch, 1.3*inch])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), self.HEADER_BLUE),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('BACKGROUND', (-1, 1), (-1, 1), rate_color),
+            ('TEXTCOLOR', (-1, 1), (-1, 1), colors.white),
+            ('FONTNAME', (-1, 1), (-1, 1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 20))
+        
+        # Branch Compliance Summary
+        branch_summaries = data.get('branch_summaries', [])
+        if branch_summaries:
+            elements.append(Paragraph("BRANCH COMPLIANCE SUMMARY", self.styles['SectionHeader']))
+            
+            branch_data = [['Branch', 'Total', 'Compliant', 'Non-Compliant', 'Pending', 'Rate']]
+            for branch in branch_summaries:
+                rate = branch.get('compliance_rate', 0)
+                branch_data.append([
+                    branch.get('branch_name', 'N/A'),
+                    str(branch.get('total_requirements', 0)),
+                    str(branch.get('compliant', 0)),
+                    str(branch.get('non_compliant', 0)),
+                    str(branch.get('pending', 0)),
+                    f"{rate:.1f}%"
+                ])
+            
+            branch_table = Table(branch_data, colWidths=[1.8*inch, 0.9*inch, 1.1*inch, 1.2*inch, 1*inch, 1*inch])
+            branch_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), self.HEADER_GREEN),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, self.ROW_ALT]),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ]))
+            elements.append(branch_table)
+            elements.append(Spacer(1, 20))
+        
+        # Critical Issues
+        critical_issues = data.get('critical_issues', [])
+        if critical_issues:
+            elements.append(Paragraph("CRITICAL ISSUES - IMMEDIATE ACTION REQUIRED", self.styles['SectionHeader']))
+            
+            critical_data = [['Requirement', 'Branch', 'Category', 'Status', 'Due Date']]
+            for item in critical_issues[:10]:
+                critical_data.append([
+                    item.get('requirement', 'N/A')[:40],
+                    item.get('branch_name', 'N/A'),
+                    item.get('category', 'N/A'),
+                    item.get('status', 'N/A').replace('_', ' ').title(),
+                    item.get('due_date', 'N/A')[:10] if item.get('due_date') else 'N/A'
+                ])
+            
+            critical_table = Table(critical_data, colWidths=[2.5*inch, 1.3*inch, 1.2*inch, 1.1*inch, 1*inch])
+            critical_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), HexColor('#DC2626')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, HexColor('#FEE2E2')]),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ]))
+            elements.append(critical_table)
+            elements.append(Spacer(1, 20))
+        
+        # Upcoming Deadlines
+        upcoming = data.get('upcoming_deadlines', [])
+        if upcoming:
+            elements.append(Paragraph("UPCOMING DEADLINES", self.styles['SectionHeader']))
+            
+            upcoming_data = [['Requirement', 'Branch', 'Category', 'Due Date', 'Days Left']]
+            for item in upcoming[:10]:
+                due_date = item.get('due_date', '')
+                days_left = 'N/A'
+                if due_date:
+                    try:
+                        from datetime import datetime as dt
+                        due = dt.strptime(due_date[:10], '%Y-%m-%d')
+                        days_left = (due - dt.now()).days
+                        days_left = f"{days_left} days" if days_left > 0 else "Overdue"
+                    except:
+                        pass
+                
+                upcoming_data.append([
+                    item.get('requirement', 'N/A')[:40],
+                    item.get('branch_name', 'N/A'),
+                    item.get('category', 'N/A'),
+                    due_date[:10] if due_date else 'N/A',
+                    str(days_left)
+                ])
+            
+            upcoming_table = Table(upcoming_data, colWidths=[2.5*inch, 1.3*inch, 1.2*inch, 1*inch, 1*inch])
+            upcoming_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), self.HEADER_YELLOW),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, self.ROW_ALT]),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ]))
+            elements.append(upcoming_table)
+        
+        # Footer with approval section
+        elements.append(Spacer(1, 30))
+        elements.append(Paragraph("APPROVAL", self.styles['SectionHeader']))
+        
+        approval_data = [
+            ['Compliance Officer:', '_' * 30, 'Date:', '_' * 20],
+            ['Branch Manager:', '_' * 30, 'Date:', '_' * 20],
+            ['General Manager:', '_' * 30, 'Date:', '_' * 20],
+        ]
+        approval_table = Table(approval_data, colWidths=[1.4*inch, 2.5*inch, 0.8*inch, 1.8*inch])
+        approval_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 15),
+        ]))
+        elements.append(approval_table)
+        
+        return self._create_pdf(elements, landscape_mode=True)
+
+    def _create_horizontal_bar_chart(self, data, labels, title, width=500, height=300):
+        """Create a horizontal bar chart"""
+        drawing = Drawing(width, height)
+        
+        # Create chart
+        bc = HorizontalBarChart()
+        bc.x = 50
+        bc.y = 50
+        bc.height = height - 100
+        bc.width = width - 100
+        bc.data = [data]
+        bc.categoryAxis.categoryNames = labels
+        bc.categoryAxis.labels.fontName = 'Helvetica'
+        bc.categoryAxis.labels.fontSize = 8
+        bc.categoryAxis.tickLeft = 0
+        bc.categoryAxis.tickRight = 0
+        bc.valueAxis.labels.fontName = 'Helvetica'
+        bc.valueAxis.labels.fontSize = 8
+        bc.valueAxis.visibleGrid = True
+        bc.valueAxis.gridStrokeWidth = 0.25
+        bc.valueAxis.gridStrokeColor = colors.grey
+        bc.bars[0].fillColor = colors.gray
+        bc.barLabels.nudge = 10
+        bc.barLabelFormat = '%0.1f'
+        bc.barLabels.dy = -5
+        bc.barLabels.fontSize = 8
+        bc.barLabels.fontName = 'Helvetica'
+        bc.barLabels.visible = True
+        
+        # Add title
+        title_label = Label()
+        title_label.setOrigin(width/2, height-20)
+        title_label.boxAnchor = 'n'
+        title_label.setText(title)
+        title_label.fontName = 'Helvetica-Bold'
+        title_label.fontSize = 12
+        
+        drawing.add(bc)
+        drawing.add(title_label)
+        
+        return drawing
+
+    def _generate_branch_comparison_report(self, data: Dict[str, Any], filters: Dict[str, Any] = None) -> str:
+        """Generate Branch Comparison Report
+        
+        This report compares different branches based on revenue, occupancy, or staff count metrics
+        """
+        # Extract data
+        title = data.get('title', 'Branch Comparison Report')
+        period = data.get('period', 'month')
+        metric = data.get('metric', 'revenue')
+        branches = data.get('branches', [])
+        
+        # Build elements list for the PDF
+        elements = []
+        
+        # Add report header
+        self._add_report_header(elements, title)
+        
+        # Add report metadata
+        metadata = [
+            ('Report Date:', datetime.now().strftime('%d %b %Y, %H:%M')),
+            ('Period:', period.capitalize()),
+            ('Metric:', metric.replace('_', ' ').capitalize()),
+        ]
+        self._add_metadata_table(elements, metadata)
+        
+        # Prepare data for chart
+        period_label = {
+            'week': 'Weekly',
+            'month': 'Monthly',
+            'quarter': 'Quarterly',
+            'year': 'Yearly'
+        }.get(period, 'Period')
+        
+        metric_label = {
+            'revenue': 'Revenue (KES)',
+            'occupancy': 'Occupancy Rate (%)',
+            'staff_count': 'Staff Count'
+        }.get(metric, metric.replace('_', ' ').capitalize())
+        
+        # Sort branches by metric value (descending)
+        sorted_branches = sorted(branches, key=lambda x: x.get(metric, 0), reverse=True)
+        
+        # Add summary text
+        if branches:
+            best_branch = sorted_branches[0]['name']
+            best_value = sorted_branches[0].get(metric, 0)
+            formatted_value = self._format_currency(best_value) if metric == 'revenue' else (
+                f"{best_value}%" if metric == 'occupancy' else str(best_value)
+            )
+            
+            summary = f"Based on {metric_label} data for the selected {period}, {best_branch} is the top performing branch with a {metric_label} of {formatted_value}."
+            elements.append(self._create_paragraph(summary, self.styles['Normal'], 12))
+            
+            # Add spacer
+            elements.append(self._create_spacer(0.2))
+        
+        # Add comparison chart
+        if branches:
+            # Create data for chart
+            chart_data = []
+            chart_labels = []
+            max_value = max([b.get(metric, 0) for b in branches])
+            
+            for branch in sorted_branches:
+                chart_data.append(branch.get(metric, 0))
+                chart_labels.append(branch.get('name', 'Unknown'))
+            
+            # Add horizontal bar chart
+            chart_title = f"{period_label} {metric_label} by Branch"
+            elements.append(self._create_horizontal_bar_chart(chart_data, chart_labels, chart_title))
+        
+        # Add spacer
+        elements.append(self._create_spacer(0.2))
+        
+        # Add comparison table
+        if branches:
+            # Table data
+            table_data = [
+                ['Branch', metric_label, 'Rank']
+            ]
+            
+            for i, branch in enumerate(sorted_branches, 1):
+                branch_name = branch.get('name', 'Unknown')
+                value = branch.get(metric, 0)
+                
+                # Format based on metric type
+                if metric == 'revenue':
+                    formatted_value = self._format_currency(value)
+                elif metric == 'occupancy':
+                    formatted_value = f"{value}%"
+                else:
+                    formatted_value = str(value)
+                    
+                table_data.append([branch_name, formatted_value, str(i)])
+            
+            # Create and add the table
+            elements.append(self._create_table(
+                table_data, 
+                colWidths=[250, 150, 80],
+                style=[
+                    ('BACKGROUND', (0, 0), (-1, 0), self.HEADER_GRAY),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+                    ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 10),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                    ('ALIGN', (1, 1), (1, -1), 'RIGHT'),
+                    ('ALIGN', (2, 1), (2, -1), 'CENTER'),
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 1), (-1, -1), 9),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ]
+            ))
+        
+        # Add notes
+        elements.append(self._create_spacer(0.3))
+        elements.append(self._create_paragraph("Notes:", self.styles['Heading5']))
+        notes = [
+            "This report provides a comparison of branch performance based on selected metrics.",
+            f"The period shown is: {period_label}.",
+            "Rankings are based on current data and may change over time.",
+        ]
+        for note in notes:
+            elements.append(self._create_paragraph(f"• {note}", self.styles['Normal'], 9))
+        
+        # Create the PDF
+        return self._create_pdf(elements)
+    
     def _generate_generic_report(self, data: Dict, filters: Dict) -> str:
         """Generate a generic report for unknown types"""
         elements = []

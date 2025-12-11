@@ -119,8 +119,7 @@ export default function SettingsPage() {
           <IOSButton variant="outline">Change Password</IOSButton>
         </IOSCard>
 
-        <IOSButton onClick={handleSave} className="w-full">
-          <Save className="h-4 w-4 mr-2" /> Save Settings
+        <IOSButton onClick={handleSave} className="w-full" leftIcon={<Save />}>Save Settings
         </IOSButton>
       </div>
     </DashboardLayout>

@@ -4,92 +4,117 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
-import { Button } from "@/components/ui/minimal/button";
 import { financeAPI } from '@/lib/api';
-import { BarChart3, RefreshCw, TrendingUp, TrendingDown, Target, DollarSign, Percent, Users } from 'lucide-react';
-import { IOSButton } from '@/components/ui/ios-button';
-import { IOSCard } from '@/components/ui/ios-card';
+import { RefreshCw, TrendingUp, TrendingDown, Activity } from 'lucide-react';
 
-interface KPI { name: string; value: number; unit: string; target?: number; change?: number; trend: 'up' | 'down' | 'stable'; }
+interface KPI { name: string; value: number; unit: string; target?: number; change?: number; trend?: 'up' | 'down' | 'stable'; }
+interface Branch { id: number; name: string; }
 
 export default function KPIsPage() {
-  const { user } = useAuth();
   const [kpis, setKpis] = useState<KPI[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [period, setPeriod] = useState<'week' | 'month' | 'quarter'>('month');
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
+
+  const fetchBranches = useCallback(async () => {
+    try {
+      const response = await financeAPI.getBranches();
+      if (response.success && Array.isArray(response.data)) setBranches(response.data);
+    } catch (error) { console.error('Error:', error); }
+  }, []);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await financeAPI.getKPIs(period);
-      if (response.success) setKpis(response.data || []);
+      if (response.success && Array.isArray(response.data)) {
+        setKpis(response.data);
+      } else {
+        setKpis([]);
+      }
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
   }, [period]);
 
+  useEffect(() => { fetchBranches(); }, [fetchBranches]);
   useEffect(() => { fetchData(); }, [fetchData]);
-
-  const getIcon = (name: string) => {
-    if (name.toLowerCase().includes('revenue') || name.toLowerCase().includes('profit')) return DollarSign;
-    if (name.toLowerCase().includes('rate') || name.toLowerCase().includes('margin')) return Percent;
-    if (name.toLowerCase().includes('guest') || name.toLowerCase().includes('customer')) return Users;
-    return BarChart3;
-  };
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
-        <div className="space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div><h1 className="text-2xl font-bold text-gray-900">Key Performance Indicators</h1><p className="text-gray-500">Track business performance metrics</p></div>
-            <div className="flex gap-2">
+        <div className="space-y-6 max-w-6xl">
+          {/* Header */}
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900">Financial KPIs</h1>
+              <p className="text-sm text-gray-500 mt-1">Key performance indicators</p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <select
+                value={selectedBranch || ''}
+                onChange={(e) => setSelectedBranch(e.target.value ? Number(e.target.value) : null)}
+                className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"
+              >
+                <option value="">All Branches</option>
+                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
               {(['week', 'month', 'quarter'] as const).map((p) => (
-                <IOSButton key={p} variant={period === p ? 'primary' : 'secondary'} size="sm" onClick={() => setPeriod(p)}>
+                <button key={p} onClick={() => setPeriod(p)} className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${period === p ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
                   {p.charAt(0).toUpperCase() + p.slice(1)}
-                </IOSButton>
+                </button>
               ))}
-              <IOSButton variant="secondary" onClick={fetchData}><RefreshCw className="h-4 w-4" /></IOSButton>
+              <button onClick={fetchData} disabled={isLoading} className="p-2 text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
             </div>
           </div>
 
           {isLoading ? (
-            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
-          ) : kpis.length === 0 ? (
-            <IOSCard className="p-12 text-center"><BarChart3 className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No KPI data</p></IOSCard>
+            <div className="flex items-center justify-center py-12"><RefreshCw className="h-6 w-6 animate-spin text-gray-400" /></div>
+          ) : !Array.isArray(kpis) || kpis.length === 0 ? (
+            <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
+              <Activity className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+              <p className="text-gray-500">No KPI data available</p>
+            </div>
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {kpis.map((kpi, i) => {
-                const Icon = getIcon(kpi.name);
-                const isPositive = kpi.trend === 'up';
-                const targetMet = kpi.target ? kpi.value >= kpi.target : true;
+                const progress = kpi.target ? Math.min((kpi.value / kpi.target) * 100, 100) : 0;
                 return (
-                  <IOSCard key={i} className="p-4">
+                  <div key={i} className="bg-white border border-gray-200 rounded-lg p-5">
                     <div className="flex items-start justify-between mb-3">
-                      <div className="p-2 bg-blue-100 rounded-ios-lg"><Icon className="h-5 w-5 text-[#007AFF]" /></div>
-                      {kpi.change !== undefined && (
-                        <div className={`flex items-center gap-1 text-sm ${isPositive ? 'text-[#34C759]' : 'text-[#FF3B30]'}`}>
-                          {isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                          {Math.abs(kpi.change)}%
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">{kpi.name}</p>
+                        <p className="text-2xl font-semibold text-gray-900 mt-1">
+                          {kpi.unit === 'KES' ? 'KES ' : ''}{kpi.value.toLocaleString()}{kpi.unit === '%' ? '%' : ''}
+                        </p>
+                      </div>
+                      {kpi.trend && (
+                        <div className="p-2 bg-gray-100 rounded-lg">
+                          {kpi.trend === 'up' ? <TrendingUp className="h-4 w-4 text-gray-600" /> : 
+                           kpi.trend === 'down' ? <TrendingDown className="h-4 w-4 text-gray-600" /> :
+                           <Activity className="h-4 w-4 text-gray-500" />}
                         </div>
                       )}
                     </div>
-                    <p className="text-sm text-gray-500">{kpi.name}</p>
-                    <p className="text-2xl font-bold mt-1">
-                      {kpi.unit === 'KES' ? 'KES ' : ''}{kpi.value.toLocaleString()}{kpi.unit === '%' ? '%' : ''}
-                    </p>
+                    {kpi.change !== undefined && (
+                      <p className="text-sm text-gray-500">
+                        {kpi.change >= 0 ? '+' : ''}{kpi.change}% from last period
+                      </p>
+                    )}
                     {kpi.target && (
-                      <div className="mt-3">
-                        <div className="flex justify-between text-xs text-gray-500 mb-1">
-                          <span>Target: {kpi.target.toLocaleString()}</span>
-                          <span className={targetMet ? 'text-[#34C759]' : 'text-[#FF3B30]'}>{targetMet ? '✓ Met' : '✗ Below'}</span>
+                      <div className="mt-4">
+                        <div className="flex justify-between text-sm mb-2">
+                          <span className="text-gray-500">Target</span>
+                          <span className="font-medium text-gray-900">{kpi.unit === 'KES' ? 'KES ' : ''}{kpi.target.toLocaleString()}{kpi.unit === '%' ? '%' : ''}</span>
                         </div>
-                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div className={`h-full ${targetMet ? 'bg-[#34C759]' : 'bg-[#FF3B30]'}`} style={{ width: `${Math.min((kpi.value / kpi.target) * 100, 100)}%` }} />
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-gray-400" style={{ width: `${progress}%` }} />
                         </div>
                       </div>
                     )}
-                  </IOSCard>
+                  </div>
                 );
               })}
             </div>

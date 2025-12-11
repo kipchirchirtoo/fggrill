@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
@@ -10,7 +11,7 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { restaurantAPI } from '@/lib/api';
 import { 
   UtensilsCrossed, ShoppingCart, DollarSign, Clock, Users, ChefHat,
-  RefreshCw, TrendingUp, Coffee, Soup, Plus, ArrowRight
+  RefreshCw, TrendingUp, Coffee, Soup, Plus, ArrowRight, Building2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -46,6 +47,7 @@ const orderStatusColors: Record<string, { bg: string; text: string }> = {
 
 export default function RestaurantDashboard() {
   const { user } = useAuth();
+  const { activeBranchId, userBranches, setActiveBranch } = useBranch();
   const [orders, setOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
     todayOrders: 0,
@@ -58,31 +60,32 @@ export default function RestaurantDashboard() {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [ordersRes, salesRes] = await Promise.all([
-        restaurantAPI.getOrders(),
-        restaurantAPI.getDailySales(),
+      const [ordersResult, salesResult] = await Promise.allSettled([
+        restaurantAPI.getOrders(activeBranchId || undefined),
+        restaurantAPI.getDailySales(activeBranchId || undefined),
       ]);
 
-      if (ordersRes.success) {
-        const allOrders = ordersRes.data || [];
-        setOrders(allOrders.slice(0, 10));
-        
-        const pending = allOrders.filter((o: Order) => ['pending', 'preparing'].includes(o.status)).length;
-        const todayTotal = allOrders.reduce((sum: number, o: Order) => sum + (o.total || 0), 0);
-        
-        setStats({
-          todayOrders: allOrders.length,
-          todayRevenue: salesRes.success ? salesRes.data?.total || todayTotal : todayTotal,
-          pendingOrders: pending,
-          avgOrderValue: allOrders.length > 0 ? Math.round(todayTotal / allOrders.length) : 0,
-        });
-      }
+      const ordersRes = ordersResult.status === 'fulfilled' ? ordersResult.value : { success: false, data: [] };
+      const salesRes = salesResult.status === 'fulfilled' ? salesResult.value : { success: false, data: { total: 0 } };
+
+      const allOrders = ordersRes.success ? (ordersRes.data || []) : [];
+      setOrders(allOrders.slice(0, 10));
+      
+      const pending = allOrders.filter((o: Order) => ['pending', 'preparing'].includes(o.status)).length;
+      const todayTotal = allOrders.reduce((sum: number, o: Order) => sum + (o.total || 0), 0);
+      
+      setStats({
+        todayOrders: allOrders.length,
+        todayRevenue: salesRes.success ? salesRes.data?.total || todayTotal : todayTotal,
+        pendingOrders: pending,
+        avgOrderValue: allOrders.length > 0 ? Math.round(todayTotal / allOrders.length) : 0,
+      });
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [activeBranchId]);
 
   useEffect(() => {
     fetchData();
@@ -108,19 +111,28 @@ export default function RestaurantDashboard() {
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Restaurant Dashboard</h1>
-              <p className="text-gray-500">Manage orders and kitchen operations</p>
+              <h1 className="text-2xl font-semibold text-stone-900">Restaurant Dashboard</h1>
+              <p className="text-stone-500">Manage orders and kitchen operations</p>
             </div>
-            <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchData}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
-              </IOSButton>
+            <div className="flex items-center gap-3">
+              {/* Branch Selector */}
+              {userBranches.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-stone-400" />
+                  <select
+                    value={activeBranchId || ''}
+                    onChange={(e) => setActiveBranch(Number(e.target.value))}
+                    className="px-3 py-2 text-sm bg-stone-100 rounded-lg border-0 focus:ring-2 focus:ring-amber-500"
+                  >
+                    {userBranches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>{branch.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <IOSButton variant="secondary" onClick={fetchData} leftIcon={<RefreshCw />}>Refresh</IOSButton>
               <Link href="/dashboard/restaurant/pos">
-                <IOSButton>
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Order
-                </IOSButton>
+                <IOSButton leftIcon={<Plus />}>New Order</IOSButton>
               </Link>
             </div>
           </div>

@@ -37,8 +37,8 @@ export default function AdminDepartmentsPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Departments</h1><p className="text-gray-500">Manage departments</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchDepartments}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <IOSButton><Plus className="h-4 w-4 mr-2" /> Add Department</IOSButton>
+              <IOSButton variant="secondary" onClick={fetchDepartments} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton leftIcon={<Plus />}>Add Department</IOSButton>
             </div>
           </div>
 

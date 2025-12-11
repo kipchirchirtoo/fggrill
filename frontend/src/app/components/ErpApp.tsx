@@ -519,7 +519,7 @@ function POSModule() {
         </div>
         <div className="mb-6 text-center">
           <h2 className="text-xl font-bold">FG Grill</h2>
-          <p className="text-sm text-slate-600">{new Date(currentReceipt.date).toLocaleString()}</p>
+          <p className="text-sm text-slate-600" suppressHydrationWarning>{new Date(currentReceipt.date).toLocaleString()}</p>
           <p className="text-sm text-slate-600">Receipt #{currentReceipt.id}</p>
         </div>
         <div className="mb-6 divide-y divide-slate-200">

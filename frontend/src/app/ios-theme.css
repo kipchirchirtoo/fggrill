@@ -1,186 +1,213 @@
-/* iOS Theme CSS Variables - Minimal Edition */
+/* Minimal Light Theme CSS Variables */
 
 :root {
-  /* Fonts */
-  --font-sf-pro: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --font-sf-pro-display: 'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --font-sf-mono: 'SF Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* Fonts - Using Roboto as primary */
+  --font-primary: 'Roboto', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-display: 'DM Serif Text', Georgia, serif;
+  --font-mono: 'SF Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   
-  /* Minimal Color Palette - Light Theme */
-  /* Only essential colors with consistent naming */
-  --ios-primary: #007AFF; /* Blue as primary */
-  --ios-destructive: #FF3B30; /* Red for destructive actions */
-  --ios-success: #34C759; /* Green for success */
-  --ios-warning: #FF9500; /* Orange for warnings */
-  --ios-gray: #8E8E93; /* Primary gray for text */
+  /* Minimal Color Palette - Light Only */
+  --color-primary: #F59E0B; /* Amber */
+  --color-primary-hover: #D97706;
+  --color-secondary: #1C1917; /* Stone 900 */
+  --color-destructive: #EF4444; /* Red 500 */
+  --color-success: #10B981; /* Emerald 500 */
+  --color-warning: #F59E0B; /* Amber 500 */
   
-  /* Gray scale - minimal and consistent */
-  --ios-gray-100: #8E8E93; /* Text gray */
-  --ios-gray-200: #AEAEB2; /* Secondary text */
-  --ios-gray-300: #C7C7CC; /* Disabled text */
-  --ios-gray-400: #D1D1D6; /* Borders */
-  --ios-gray-500: #E5E5EA; /* Light borders */
-  --ios-gray-600: #F2F2F7; /* Backgrounds */
+  /* Stone color scale */
+  --stone-50: #FAFAF9;
+  --stone-100: #F5F5F4;
+  --stone-200: #E7E5E4;
+  --stone-300: #D6D3D1;
+  --stone-400: #A8A29E;
+  --stone-500: #78716C;
+  --stone-600: #57534E;
+  --stone-700: #44403C;
+  --stone-800: #292524;
+  --stone-900: #1C1917;
   
-  /* Light Theme UI Elements */
-  --ios-background: #FFFFFF;
-  --ios-secondary-background: #F2F2F7;
-  --ios-tertiary-background: #FFFFFF;
-  --ios-grouped-background: #F2F2F7;
-  --ios-separator: rgba(60, 60, 67, 0.29);
+  /* UI Elements */
+  --background: #FAFAF9;
+  --card-bg: #FFFFFF;
+  --text-primary: #1C1917;
+  --text-secondary: #78716C;
+  --text-muted: #A8A29E;
   
-  /* General variables for components */
-  --ios-card-bg: #FFFFFF;
-  --ios-text: #000000;
-  --ios-text-secondary: #8E8E93;
-  --ios-border: rgba(60, 60, 67, 0.29);
-  --ios-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
-  --ios-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --ios-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  /* Shadows - Subtle */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.08);
   
   /* Border radius */
-  --ios-radius-sm: 6px;
-  --ios-radius-md: 10px;
-  --ios-radius-lg: 14px;
-  --ios-radius-xl: 20px;
-  --ios-radius-2xl: 24px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
   
   /* Animation */
-  --ios-transition-fast: 0.15s;
-  --ios-transition-default: 0.3s;
-  --ios-transition-slow: 0.5s;
+  --transition-fast: 0.15s;
+  --transition-default: 0.2s;
+  --transition-slow: 0.3s;
 }
 
-/* Dark Theme - Minimal Edition */
-.dark {
-  /* Minimal Color Palette - Dark Theme */
-  /* Only essential colors with consistent naming */
-  --ios-primary: #0A84FF; /* Blue as primary */
-  --ios-destructive: #FF453A; /* Red for destructive actions */
-  --ios-success: #30D158; /* Green for success */
-  --ios-warning: #FF9F0A; /* Orange for warnings */
-  --ios-gray: #98989D; /* Primary gray for text */
-  
-  /* Gray scale - minimal and consistent */
-  --ios-gray-100: #98989D; /* Text gray */
-  --ios-gray-200: #8E8E93; /* Secondary text */
-  --ios-gray-300: #636366; /* Disabled text */
-  --ios-gray-400: #48484A; /* Borders */
-  --ios-gray-500: #38383A; /* Light borders */
-  --ios-gray-600: #2C2C2E; /* Backgrounds */
-  
-  /* Dark Theme UI Elements */
-  --ios-background: #000000;
-  --ios-secondary-background: #1C1C1E;
-  --ios-tertiary-background: #2C2C2E;
-  --ios-grouped-background: #1C1C1E;
-  --ios-separator: rgba(84, 84, 88, 0.6);
-  
-  /* General variables for components */
-  --ios-card-bg: #1C1C1E;
-  --ios-text: #FFFFFF;
-  --ios-text-secondary: #98989D;
-  --ios-border: rgba(84, 84, 88, 0.6);
-}
-
-/* Typography */
-.ios-headline {
-  font-family: var(--font-sf-pro-display);
-  font-size: 34px;
-  font-weight: 600;
-  line-height: 1.15;
-}
-
-.ios-title-1 {
-  font-family: var(--font-sf-pro-display);
-  font-size: 28px;
-  font-weight: 600;
+/* Typography - Using Roboto and DM Serif */
+.heading-1 {
+  font-family: var(--font-display);
+  font-size: 2.5rem;
+  font-weight: 400;
   line-height: 1.2;
+  color: var(--text-primary);
 }
 
-.ios-title-2 {
-  font-family: var(--font-sf-pro-display);
-  font-size: 22px;
-  font-weight: 600;
+.heading-2 {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 400;
   line-height: 1.25;
+  color: var(--text-primary);
 }
 
-.ios-title-3 {
-  font-family: var(--font-sf-pro);
-  font-size: 20px;
+.heading-3 {
+  font-family: var(--font-primary);
+  font-size: 1.25rem;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.4;
+  color: var(--text-primary);
 }
 
-.ios-body {
-  font-family: var(--font-sf-pro);
-  font-size: 17px;
+.body-text {
+  font-family: var(--font-primary);
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.caption {
+  font-family: var(--font-primary);
+  font-size: 0.875rem;
   line-height: 1.5;
+  color: var(--text-secondary);
 }
 
-.ios-body-emphasized {
-  font-family: var(--font-sf-pro);
-  font-size: 17px;
+.label {
+  font-family: var(--font-primary);
+  font-size: 0.75rem;
   font-weight: 600;
-  line-height: 1.5;
-}
-
-.ios-caption-1 {
-  font-family: var(--font-sf-pro);
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-.ios-caption-2 {
-  font-family: var(--font-sf-pro);
-  font-size: 12px;
-  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
 }
 
 /* Animation Classes */
-.ios-fade-in {
-  animation: iosFadeIn var(--ios-transition-default) ease-out;
+.fade-in {
+  animation: fadeIn var(--transition-default) ease-out;
 }
 
-.ios-slide-up {
-  animation: iosSlideUp var(--ios-transition-default) ease-out;
+.slide-up {
+  animation: slideUp var(--transition-default) ease-out;
 }
 
-.ios-scale {
-  animation: iosScale var(--ios-transition-default) ease-out;
-}
-
-@keyframes iosFadeIn {
+@keyframes fadeIn {
   0% { opacity: 0; }
   100% { opacity: 1; }
 }
 
-@keyframes iosSlideUp {
-  0% { transform: translateY(10px); opacity: 0; }
+@keyframes slideUp {
+  0% { transform: translateY(8px); opacity: 0; }
   100% { transform: translateY(0); opacity: 1; }
 }
 
-@keyframes iosScale {
-  0% { transform: scale(0.95); opacity: 0; }
-  100% { transform: scale(1); opacity: 1; }
+/* Minimal Button Styles */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  font-family: var(--font-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast) ease;
 }
 
-/* iOS Glassmorphism */
-.ios-glass {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+.btn-primary {
+  background-color: var(--color-primary);
+  color: white;
 }
 
-.dark .ios-glass {
-  background: rgba(28, 28, 30, 0.8);
+.btn-primary:hover {
+  background-color: var(--color-primary-hover);
 }
 
-/* Apply SF Pro font family to the whole app */
+.btn-secondary {
+  background-color: var(--stone-900);
+  color: white;
+}
+
+.btn-secondary:hover {
+  background-color: var(--stone-800);
+}
+
+.btn-ghost {
+  background-color: transparent;
+  color: var(--text-primary);
+}
+
+.btn-ghost:hover {
+  background-color: var(--stone-100);
+}
+
+/* Card Styles */
+.card {
+  background-color: var(--card-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.card-hover:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+/* Input Styles */
+.input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-family: var(--font-primary);
+  font-size: 0.875rem;
+  background-color: var(--stone-100);
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  transition: all var(--transition-fast) ease;
+}
+
+.input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-primary);
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Apply primary font to the whole app */
 body {
-  font-family: var(--font-sf-pro);
-  background-color: var(--ios-background);
-  color: var(--ios-text);
+  font-family: var(--font-primary);
+  background-color: var(--background);
+  color: var(--text-primary);
+}
+
+/* Remove all dark mode styles */
+.dark {
+  /* Force light mode */
+  --background: #FAFAF9;
+  --card-bg: #FFFFFF;
+  --text-primary: #1C1917;
+  --text-secondary: #78716C;
 }
 
 /* Fix for hydration issues */

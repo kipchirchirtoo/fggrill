@@ -124,9 +124,7 @@ export default function HousekeepingInventoryPage() {
               <h1 className="text-2xl font-bold text-gray-900">Housekeeping Supplies</h1>
               <p className="text-gray-500">Manage cleaning supplies and amenities</p>
             </div>
-            <IOSButton variant="outline" onClick={fetchItems}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
+            <IOSButton variant="outline" onClick={fetchItems} leftIcon={<RefreshCw />}>Refresh
             </IOSButton>
           </div>
 
@@ -253,11 +251,11 @@ export default function HousekeepingInventoryPage() {
                         <p className="text-xs text-gray-400">{item.category}</p>
                       </div>
                       {isOut ? (
-                        <IOSBadge variant="destructive">Out of Stock</IOSBadge>
+                        <IOSBadge variant="light" color="danger">Out of Stock</IOSBadge>
                       ) : isLow ? (
-                        <IOSBadge variant="warning">Low Stock</IOSBadge>
+                        <IOSBadge variant="light" color="warning">Low Stock</IOSBadge>
                       ) : (
-                        <IOSBadge variant="success">In Stock</IOSBadge>
+                        <IOSBadge variant="light" color="success">In Stock</IOSBadge>
                       )}
                     </div>
 
@@ -270,8 +268,8 @@ export default function HousekeepingInventoryPage() {
                         size="sm"
                         variant="outline"
                         onClick={() => openRequestModal(item)}
+                        leftIcon={<ShoppingCart />}
                       >
-                        <ShoppingCart className="h-4 w-4 mr-1" />
                         Request
                       </IOSButton>
                     </div>

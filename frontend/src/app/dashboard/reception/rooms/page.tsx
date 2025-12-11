@@ -262,8 +262,8 @@ function QuickCheckInModal({
                     variant="outline" 
                     className="w-full"
                     onClick={() => setIsNewGuest(true)}
+                    leftIcon={<UserPlus />}
                   >
-                    <UserPlus className="h-4 w-4 mr-2" />
                     Register New Guest
                   </IOSButton>
                 </div>
@@ -499,8 +499,8 @@ function RoomDetailsModal({
                   variant="outline"
                   className="text-[#FF3B30] border-red-200 hover:bg-red-50"
                   onClick={() => onCheckOut(room)}
+                  leftIcon={<LogOut />}
                 >
-                  <LogOut className="h-4 w-4 mr-1" />
                   Check Out
                 </IOSButton>
               )}
@@ -509,8 +509,8 @@ function RoomDetailsModal({
                   variant="outline"
                   className="text-orange-600 border-orange-200 hover:bg-orange-50"
                   onClick={() => onStatusChange(room.id, 'maintenance')}
+                  leftIcon={<Wrench />}
                 >
-                  <Wrench className="h-4 w-4 mr-1" />
                   Maintenance
                 </IOSButton>
               )}
@@ -519,8 +519,8 @@ function RoomDetailsModal({
                   variant="outline"
                   className="text-[#34C759] border-green-200 hover:bg-green-50"
                   onClick={() => onStatusChange(room.id, 'available')}
+                  leftIcon={<CheckCircle />}
                 >
-                  <CheckCircle className="h-4 w-4 mr-1" />
                   Mark Ready
                 </IOSButton>
               )}
@@ -529,8 +529,8 @@ function RoomDetailsModal({
                   variant="outline"
                   className="text-[#34C759] border-green-200 hover:bg-green-50"
                   onClick={() => onStatusChange(room.id, 'available')}
+                  leftIcon={<CheckCircle />}
                 >
-                  <CheckCircle className="h-4 w-4 mr-1" />
                   Complete
                 </IOSButton>
               )}
@@ -538,8 +538,8 @@ function RoomDetailsModal({
                 variant="outline"
                 className="text-yellow-600 border-yellow-200 hover:bg-yellow-50"
                 onClick={() => onStatusChange(room.id, 'cleaning')}
+                leftIcon={<Sparkles />}
               >
-                <Sparkles className="h-4 w-4 mr-1" />
                 Request Clean
               </IOSButton>
             </div>
@@ -671,8 +671,7 @@ export default function ReceptionRoomsPage() {
               <p className="text-gray-500">Manage rooms, check-ins, and availability</p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="outline" onClick={fetchRooms}>
-                <RefreshCw className="h-4 w-4 mr-2" />
+              <IOSButton variant="outline" onClick={fetchRooms} leftIcon={<RefreshCw />}>
                 Refresh
               </IOSButton>
             </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Layout, Users, Calendar, Coffee, Search, CreditCard, PlusCircle,
@@ -8,13 +8,13 @@ import {
   RefreshCw, Bell, Star, Key, Phone, Mail, MapPin, Sparkles,
   ChevronRight, ArrowUpRight, ArrowDownRight, Timer, UserCheck,
   Home, Utensils, Car, Wifi, Sun, Moon, CloudSun, Zap, Heart,
-  Shield, Award, TrendingUp, Eye, MessageSquare, Settings
+  Shield, Award, TrendingUp, Eye, MessageSquare, Settings, Building2
 } from 'lucide-react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
-import { Button } from "@/components/ui/minimal/button";
+import { BranchSelector } from '@/components/dashboard/BranchSelector';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
@@ -83,6 +83,7 @@ interface Notification {
 
 export default function ReceptionDashboard(): JSX.Element {
   const { user } = useAuth();
+  const { activeBranchId } = useBranch();
   
   // Modal states
   const [showCheckInModal, setShowCheckInModal] = useState(false);
@@ -126,13 +127,14 @@ export default function ReceptionDashboard(): JSX.Element {
   }, []);
 
   // Fetch data
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     setIsLoading(true);
+    const branchId = activeBranchId || undefined;
     
     try {
       const [bookingsRes, roomsRes] = await Promise.allSettled([
-        bookingsAPI.getBookings(),
-        roomsAPI.getRooms()
+        bookingsAPI.getBookings({ branch_id: branchId }),
+        roomsAPI.getRooms(branchId)
       ]);
 
       const bookingsData = bookingsRes.status === 'fulfilled' ? bookingsRes.value?.data || [] : [];
@@ -214,7 +216,7 @@ export default function ReceptionDashboard(): JSX.Element {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [activeBranchId]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -228,7 +230,7 @@ export default function ReceptionDashboard(): JSX.Element {
       clearInterval(interval);
       if (unsubscribe) unsubscribe();
     };
-  }, []);
+  }, [fetchDashboardData]);
 
   // Helper functions
   const getTimeGreeting = () => {
@@ -276,7 +278,7 @@ export default function ReceptionDashboard(): JSX.Element {
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-2xl font-bold text-gray-900">Front Desk</h1>
-                  <IOSBadge variant="neutral" className="border-[rgba(60,60,67,0.12)] text-[#3C3C43]">
+                  <IOSBadge variant="light" color="secondary" className="border-[rgba(60,60,67,0.12)] text-[#3C3C43]">
                     <Sparkles className="h-3 w-3 mr-1" /> Live
                   </IOSBadge>
                 </div>
@@ -308,8 +310,7 @@ export default function ReceptionDashboard(): JSX.Element {
               <IOSButton onClick={fetchDashboardData} variant="ghost" size="sm">
                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               </IOSButton>
-              <IOSButton onClick={() => setShowReservationModal(true)} className="bg-[#3C3C43] hover:bg-[#000000] text-white">
-                <PlusCircle className="h-4 w-4 mr-2" />
+              <IOSButton onClick={() => setShowReservationModal(true)} className="bg-[#3C3C43] hover:bg-[#000000] text-white" leftIcon={<PlusCircle />}>
                 New Booking
               </IOSButton>
             </div>
@@ -472,7 +473,7 @@ export default function ReceptionDashboard(): JSX.Element {
                   <div key={item.status} className="flex items-center gap-2">
                     <div className={`w-3 h-3 rounded-full ${getRoomStatusColor(item.status)}`} />
                     <span className="text-gray-600">{item.label}</span>
-                    <IOSBadge variant="neutral" className="text-xs">{item.count}</IOSBadge>
+                    <IOSBadge variant="light" color="secondary" className="text-xs">{item.count}</IOSBadge>
                   </div>
                 ))}
               </div>
@@ -545,7 +546,7 @@ export default function ReceptionDashboard(): JSX.Element {
                   <LogIn className="h-5 w-5 text-[#3C3C43]" />
                   Today's Arrivals
                 </h2>
-                <IOSBadge variant="neutral" className="bg-[#F2F2F7] text-[#3C3C43]">{todayArrivals.length} guests</IOSBadge>
+                <IOSBadge variant="light" color="secondary" className="bg-[#F2F2F7] text-[#3C3C43]">{todayArrivals.length} guests</IOSBadge>
               </div>
               <div className="space-y-3 max-h-72 overflow-y-auto">
                 {todayArrivals.length === 0 ? (
@@ -598,7 +599,7 @@ export default function ReceptionDashboard(): JSX.Element {
                   <LogOut className="h-5 w-5 text-[#3C3C43]" />
                   Today's Departures
                 </h2>
-                <IOSBadge variant="neutral" className="bg-[#F2F2F7] text-[#3C3C43]">{todayDepartures.length} guests</IOSBadge>
+                <IOSBadge variant="light" color="secondary" className="bg-[#F2F2F7] text-[#3C3C43]">{todayDepartures.length} guests</IOSBadge>
               </div>
               <div className="space-y-3 max-h-72 overflow-y-auto">
                 {todayDepartures.length === 0 ? (
@@ -649,23 +650,23 @@ export default function ReceptionDashboard(): JSX.Element {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Link href="/dashboard/reception/rooms">
-                  <IOSButton variant="secondary" size="sm" className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]">
-                    <Bed className="h-4 w-4 mr-1" /> All Rooms
+                  <IOSButton variant="secondary" size="sm" className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]" leftIcon={<Bed />}>
+                    All Rooms
                   </IOSButton>
                 </Link>
                 <Link href="/dashboard/reception/guests">
-                  <IOSButton variant="secondary" size="sm" className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]">
-                    <Users className="h-4 w-4 mr-1" /> Guest List
+                  <IOSButton variant="secondary" size="sm" className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]" leftIcon={<Users />}>
+                    Guest List
                   </IOSButton>
                 </Link>
                 <Link href="/dashboard/reception/reservations">
-                  <IOSButton variant="secondary" size="sm" className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]">
-                    <Calendar className="h-4 w-4 mr-1" /> Reservations
+                  <IOSButton variant="secondary" size="sm" className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]" leftIcon={<Calendar />}>
+                    Reservations
                   </IOSButton>
                 </Link>
                 <Link href="/dashboard/housekeeping">
-                  <IOSButton variant="secondary" size="sm" className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]">
-                    <Home className="h-4 w-4 mr-1" /> Housekeeping
+                  <IOSButton variant="secondary" size="sm" className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]" leftIcon={<Home />}>
+                    Housekeeping
                   </IOSButton>
                 </Link>
               </div>

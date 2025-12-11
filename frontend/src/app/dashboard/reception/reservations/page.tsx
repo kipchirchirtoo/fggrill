@@ -9,15 +9,19 @@ import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { bookingsAPI, roomsAPI, guestAPI } from '@/lib/api';
+import { bookingsAPI, roomsAPI, guestAPI, ratePlansAPI, pricingAPI } from '@/lib/api';
 import { 
   Calendar, Plus, Search, RefreshCw, Edit2, Trash2, Eye, Clock,
   User, Bed, Phone, Mail, CheckCircle, XCircle, AlertTriangle,
-  DollarSign, Users, Filter, ChevronDown, FileText, CreditCard
+  DollarSign, Users, Filter, ChevronDown, FileText, CreditCard,
+  LogIn, LogOut, Receipt
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { CheckInModal } from '@/components/modals/CheckInModal';
+import { CheckOutModal } from '@/components/modals/CheckOutModal';
+import { FolioModal } from '@/components/modals/FinanceModals';
 
 interface Booking {
   id: string;
@@ -28,16 +32,36 @@ interface Booking {
   guest_name: string;
   guest_phone: string;
   guest_email?: string;
-  check_in: string;
-  check_out: string;
+  check_in: string; // or check_in_date
+  check_out: string; // or check_out_date
   adults: number;
   children: number;
+  infants: number;
   meal_plan: string;
   status: 'pending' | 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled';
+  
+  // Financials
   total_amount: number;
-  amount_paid: number;
+  amount_paid: number; // mapped to deposit_amount or separate?
+  room_rate: number;
+  subtotal: number;
+  tax_amount: number;
+  service_charge: number;
+  discount_amount: number;
+  deposit_amount: number;
+  deposit_paid: boolean;
+  payment_method: string;
+  
+  // Details
+  booking_source: string;
   special_requests?: string;
+  internal_notes?: string;
+  
+  // Timestamps
   created_at: string;
+  checked_in_at?: string;
+  checked_out_at?: string;
+  cancelled_at?: string;
 }
 
 interface Room {
@@ -103,13 +127,26 @@ function NewReservationModal({
   const [mealPlan, setMealPlan] = useState('bed_breakfast');
   const [specialRequests, setSpecialRequests] = useState('');
   const [depositAmount, setDepositAmount] = useState(0);
+  const [ratePlans, setRatePlans] = useState<any[]>([]);
+  const [selectedRatePlan, setSelectedRatePlan] = useState<any>(null);
+  const [pricingQuote, setPricingQuote] = useState<any>(null);
 
   const nights = checkIn && checkOut 
     ? Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24))
     : 0;
 
+  const getRoomPrice = () => {
+    if (!selectedRoom) return 0;
+    if (selectedRatePlan) {
+      return selectedRatePlan.isPercentage 
+        ? selectedRoom.price_per_night * selectedRatePlan.multiplier
+        : selectedRatePlan.fixedAmount || selectedRoom.price_per_night;
+    }
+    return selectedRoom.price_per_night;
+  };
+
   const totalAmount = selectedRoom 
-    ? (selectedRoom.price_per_night + mealPlanPrices[mealPlan]) * nights
+    ? (getRoomPrice() + mealPlanPrices[mealPlan]) * nights
     : 0;
 
   const searchAvailableRooms = async () => {
@@ -181,6 +218,7 @@ function NewReservationModal({
       const bookingData = {
         room_id: selectedRoom.id,
         guest_id: selectedGuest.id,
+        rate_plan_id: selectedRatePlan?.id,
         check_in: checkIn,
         check_out: checkOut,
         adults,
@@ -222,11 +260,45 @@ function NewReservationModal({
     setMealPlan('bed_breakfast');
     setSpecialRequests('');
     setDepositAmount(0);
+    setSelectedRatePlan(null);
   };
 
   useEffect(() => {
-    if (!isOpen) resetModal();
+    if (isOpen) {
+      resetModal();
+      ratePlansAPI.getRatePlans().then(res => {
+        if (res.success) {
+          setRatePlans(res.data || []);
+          const standard = (res.data || []).find((r: any) => r.rateType === 'STANDARD');
+          if (standard) setSelectedRatePlan(standard);
+        }
+      });
+    }
   }, [isOpen]);
+
+  useEffect(() => {
+    const fetchQuote = async () => {
+      if (checkIn && checkOut && selectedRoom) {
+        try {
+          const res = await pricingAPI.getQuote({
+            checkIn,
+            checkOut,
+            roomTypeId: selectedRoom.room_type,
+            guests: adults + children
+          });
+          if (res.success) {
+            setPricingQuote(res.data);
+          }
+        } catch (error) {
+          console.error('Failed to get pricing quote');
+        }
+      } else {
+        setPricingQuote(null);
+      }
+    };
+    const debounce = setTimeout(fetchQuote, 800);
+    return () => clearTimeout(debounce);
+  }, [checkIn, checkOut, selectedRoom, adults, children]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -367,8 +439,8 @@ function NewReservationModal({
                     ))}
                   </div>
                 )}
-                <IOSButton variant="outline" onClick={() => setIsNewGuest(true)} className="w-full">
-                  <Plus className="h-4 w-4 mr-2" /> New Guest
+                <IOSButton variant="outline" onClick={() => setIsNewGuest(true)} className="w-full" leftIcon={<Plus />}>
+                  New Guest
                 </IOSButton>
               </>
             ) : (
@@ -443,6 +515,23 @@ function NewReservationModal({
               </div>
             </div>
 
+            {/* Rate Plan */}
+            <div>
+              <label className="text-sm font-medium">Rate Plan</label>
+              <select
+                value={selectedRatePlan?.id || ''}
+                onChange={(e) => setSelectedRatePlan(ratePlans.find(r => r.id === e.target.value) || null)}
+                className="w-full p-2 border rounded-ios-lg mt-1"
+              >
+                <option value="">Base Rate</option>
+                {ratePlans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.name} ({plan.isPercentage ? `${plan.multiplier}x` : `KES ${plan.fixedAmount}`})
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Meal Plan */}
             <div>
               <label className="text-sm font-medium">Meal Plan</label>
@@ -470,9 +559,23 @@ function NewReservationModal({
 
             {/* Pricing */}
             <div className="p-4 bg-gray-50 rounded-ios-lg space-y-2">
+              {pricingQuote && (
+                <div className="mb-3 p-3 bg-indigo-50 border border-indigo-100 rounded-ios-lg text-sm text-indigo-700">
+                  <div className="font-bold flex items-center gap-1">
+                    <TrendingUp className="h-4 w-4" />
+                    AI Recommendation: {pricingQuote.multiplier}x Base
+                  </div>
+                  <div className="text-xs mt-1 text-indigo-600">
+                    Factors: {pricingQuote.factors.join(', ')}
+                  </div>
+                </div>
+              )}
               <div className="flex justify-between">
-                <span>Room ({nights} nights × KES {selectedRoom.price_per_night?.toLocaleString()})</span>
-                <span>KES {(selectedRoom.price_per_night * nights).toLocaleString()}</span>
+                <span>
+                  Room ({nights} nights × KES {getRoomPrice()?.toLocaleString()})
+                  {selectedRatePlan && <span className="text-xs text-gray-500 block">{selectedRatePlan.name}</span>}
+                </span>
+                <span>KES {(getRoomPrice() * nights).toLocaleString()}</span>
               </div>
               {mealPlan !== 'bed_breakfast' && (
                 <div className="flex justify-between">
@@ -522,6 +625,10 @@ export default function ReservationsPage() {
 
   // Modals
   const [newModalOpen, setNewModalOpen] = useState(false);
+  const [checkInModalOpen, setCheckInModalOpen] = useState(false);
+  const [checkOutModalOpen, setCheckOutModalOpen] = useState(false);
+  const [folioModalOpen, setFolioModalOpen] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
   const fetchBookings = useCallback(async () => {
     setIsLoading(true);
@@ -606,12 +713,9 @@ export default function ReservationsPage() {
               <p className="text-gray-500">Manage room bookings and reservations</p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="outline" onClick={fetchBookings}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
+              <IOSButton variant="outline" onClick={fetchBookings} leftIcon={<RefreshCw />}>Refresh
               </IOSButton>
-              <IOSButton onClick={() => setNewModalOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
+              <IOSButton onClick={() => setNewModalOpen(true)} leftIcon={<Plus />}>
                 New Reservation
               </IOSButton>
             </div>
@@ -687,8 +791,8 @@ export default function ReservationsPage() {
             <IOSCard className="p-12 text-center">
               <Calendar className="h-12 w-12 mx-auto text-gray-300 mb-4" />
               <p className="text-gray-500">No reservations found</p>
-              <IOSButton onClick={() => setNewModalOpen(true)} className="mt-4">
-                <Plus className="h-4 w-4 mr-2" /> Create Reservation
+              <IOSButton onClick={() => setNewModalOpen(true)} className="mt-4" leftIcon={<Plus />}>
+                Create Reservation
               </IOSButton>
             </IOSCard>
           ) : (
@@ -737,6 +841,28 @@ export default function ReservationsPage() {
                           </td>
                           <td className="p-4">
                             <div className="flex justify-end gap-2">
+                              {booking.status === 'confirmed' && (
+                                <IOSButton size="sm" variant="outline" className="text-green-600" onClick={() => {
+                                  setSelectedBooking(booking);
+                                  setCheckInModalOpen(true);
+                                }}>
+                                  Check In
+                                </IOSButton>
+                              )}
+                              {booking.status === 'checked_in' && (
+                                <IOSButton size="sm" variant="outline" className="text-orange-600" onClick={() => {
+                                  setSelectedBooking(booking);
+                                  setCheckOutModalOpen(true);
+                                }}>
+                                  Check Out
+                                </IOSButton>
+                              )}
+                              <IOSButton size="sm" variant="ghost" onClick={() => {
+                                setSelectedBooking(booking);
+                                setFolioModalOpen(true);
+                              }}>
+                                <Receipt className="h-4 w-4" />
+                              </IOSButton>
                               {booking.status === 'pending' && (
                                 <IOSButton size="sm" variant="outline" className="text-[#FF3B30]" onClick={() => handleCancel(booking)}>
                                   <XCircle className="h-4 w-4" />
@@ -764,6 +890,21 @@ export default function ReservationsPage() {
           isOpen={newModalOpen}
           onClose={() => setNewModalOpen(false)}
           onSuccess={fetchBookings}
+        />
+        <CheckInModal
+          isOpen={checkInModalOpen}
+          onClose={() => setCheckInModalOpen(false)}
+          initialData={selectedBooking}
+        />
+        <CheckOutModal
+          isOpen={checkOutModalOpen}
+          onClose={() => setCheckOutModalOpen(false)}
+          initialData={selectedBooking}
+        />
+        <FolioModal
+          isOpen={folioModalOpen}
+          onClose={() => setFolioModalOpen(false)}
+          initialData={selectedBooking}
         />
       </DashboardLayout>
     </ProtectedRoute>

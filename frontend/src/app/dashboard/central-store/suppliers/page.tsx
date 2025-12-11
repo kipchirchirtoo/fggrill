@@ -55,8 +55,8 @@ export default function CentralSuppliersPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Suppliers</h1><p className="text-gray-500">Manage vendors</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchSuppliers}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <IOSButton onClick={() => setAddModalOpen(true)}><Plus className="h-4 w-4 mr-2" /> Add Supplier</IOSButton>
+              <IOSButton variant="secondary" onClick={fetchSuppliers} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>Add Supplier</IOSButton>
             </div>
           </div>
 
@@ -77,7 +77,7 @@ export default function CentralSuppliersPage() {
                 <IOSCard key={supplier.id} className="p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div><p className="font-bold">{supplier.name}</p>{supplier.contact_person && <p className="text-sm text-gray-500">{supplier.contact_person}</p>}</div>
-                    <IOSBadge variant={supplier.status === 'active' ? 'success' : 'neutral'}>{supplier.status}</IOSBadge>
+                    <IOSBadge variant="light" color={supplier.status === 'active' ? 'success' : 'secondary'}>{supplier.status}</IOSBadge>
                   </div>
                   <div className="space-y-1 text-sm text-gray-500">
                     {supplier.phone && <p className="flex items-center gap-2"><Phone className="h-3 w-3" /> {supplier.phone}</p>}

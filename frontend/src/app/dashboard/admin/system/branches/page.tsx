@@ -52,8 +52,8 @@ export default function AdminBranchesPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Branches</h1><p className="text-gray-500">Manage hotel locations</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchBranches}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <IOSButton onClick={() => setAddModalOpen(true)}><Plus className="h-4 w-4 mr-2" /> Add Branch</IOSButton>
+              <IOSButton variant="secondary" onClick={fetchBranches} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>Add Branch</IOSButton>
             </div>
           </div>
 
@@ -69,11 +69,11 @@ export default function AdminBranchesPage() {
                       <p className="text-sm text-gray-500 flex items-center gap-1"><MapPin className="h-3 w-3" /> {branch.location}</p>
                     </div>
                     <div className="flex gap-2">
-                      {branch.is_central && <IOSBadge variant="info">Central</IOSBadge>}
+                      {branch.is_central && <IOSBadge variant="light" color="info">Central</IOSBadge>}
                       <IOSBadge variant={branch.status === 'active' ? 'success' : 'neutral'}>{branch.status}</IOSBadge>
                     </div>
                   </div>
-                  <IOSButton variant="secondary" size="sm" className="w-full"><Edit2 className="h-4 w-4 mr-2" /> Edit</IOSButton>
+                  <IOSButton variant="secondary" size="sm" className="w-full" leftIcon={<Edit2 />}>Edit</IOSButton>
                 </IOSCard>
               ))}
             </div>

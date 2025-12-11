@@ -84,8 +84,10 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+          <div className="relative flex items-center">
+            <div className="absolute left-4 flex items-center justify-center pointer-events-none">
+              <Search className="h-5 w-5 text-gray-400" />
+            </div>
             <input
               type="text"
               value={searchTerm}
@@ -94,12 +96,16 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                 handleSearch(e.target.value);
               }}
               placeholder="Search for anything..."
-              className={'flex items-center gap-2 p-3 rounded-ios-lg border ' + (searchTerm === '' ? 'border-gray-200 hover:border-gray-300' : 'border-indigo-600 bg-indigo-50 text-indigo-600')}
+              className={`w-full h-12 pl-12 pr-12 text-base rounded-[1rem] transition-all focus:outline-none focus:ring-2 ${
+                searchTerm 
+                  ? 'bg-[#007AFF]/5 border-2 border-[#007AFF] text-[#141417] focus:ring-[#007AFF]/30' 
+                  : 'bg-[#f5f5f7] border-0 text-[#141417] placeholder:text-gray-400 focus:ring-[#007AFF] focus:bg-white'
+              }`}
               autoFocus
             />
             <button
               onClick={onClose}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-ios-lg"
+              className="absolute right-3 p-2 hover:bg-gray-200 rounded-[0.75rem] transition-colors"
             >
               <X className="h-5 w-5 text-gray-500" />
             </button>

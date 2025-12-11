@@ -156,8 +156,8 @@ export default function VehiclesPage() {
               <p className="text-gray-600">Manage delivery vehicles for dispatches</p>
             </div>
             <div className="flex gap-3">
-              <IOSButton variant="outline" onClick={fetchVehicles}><RefreshCw className="h-4 w-4 mr-2" />Refresh</IOSButton>
-              {canEdit && <IOSButton onClick={openAddModal}><Plus className="h-4 w-4 mr-2" />Add Vehicle</IOSButton>}
+              <IOSButton variant="outline" onClick={fetchVehicles} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              {canEdit && <IOSButton onClick={openAddModal} leftIcon={<Plus />}>Add Vehicle</IOSButton>}
             </div>
           </div>
 
@@ -199,7 +199,7 @@ export default function VehiclesPage() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-4"><IOSBadge variant="outline">{v.type || 'N/A'}</IOSBadge></td>
+                        <td className="px-4 py-4"><IOSBadge variant="light" color="secondary">{v.type || 'N/A'}</IOSBadge></td>
                         <td className="px-4 py-4">{v.capacity_kg ? `${v.capacity_kg} kg` : '-'}</td>
                         <td className="px-4 py-4"><IOSBadge className={getStatusColor(v.status)}>{v.status}</IOSBadge></td>
                         <td className="px-4 py-4 font-medium">{v.total_trips}</td>
@@ -239,7 +239,7 @@ export default function VehiclesPage() {
               </div>
               <div><label className="text-sm font-medium">Insurance Expiry</label><Input type="date" value={form.insurance_expiry} onChange={e => setForm({...form, insurance_expiry: e.target.value})} /></div>
               <div><label className="text-sm font-medium">Notes</label><textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} className="w-full px-3 py-2 border rounded-ios-lg" rows={2} /></div>
-              <div className="flex justify-end gap-3 pt-4"><IOSButton variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</IOSButton><IOSButton onClick={handleSave}><Save className="h-4 w-4 mr-2" />Save</IOSButton></div>
+              <div className="flex justify-end gap-3 pt-4"><IOSButton variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</IOSButton><IOSButton onClick={handleSave} leftIcon={<Save />}>Save</IOSButton></div>
             </div>
           </DialogContent>
         </Dialog>
@@ -248,7 +248,7 @@ export default function VehiclesPage() {
           <DialogContent>
             <DialogHeader><DialogTitle className="text-[#3C3C43]">Delete Vehicle</DialogTitle></DialogHeader>
             <p>Are you sure you want to delete <strong>{selectedVehicle?.registration_number}</strong>?</p>
-            <div className="flex justify-end gap-3 pt-4"><IOSButton variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</IOSButton><IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleDelete}><Trash2 className="h-4 w-4 mr-2" />Delete</IOSButton></div>
+            <div className="flex justify-end gap-3 pt-4"><IOSButton variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</IOSButton><IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleDelete} leftIcon={<Trash2 />}>Delete</IOSButton></div>
           </DialogContent>
         </Dialog>
       </DashboardLayout>

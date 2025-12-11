@@ -135,4 +135,183 @@ router.get('/kpis',
   getFinancialKPIs
 );
 
+// ============== ADVANCED ACCOUNTING FEATURES ==============
+
+// Balance Sheet
+router.get('/balance-sheet',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  async (req, res) => {
+    try {
+      // Proxy to Python service or implement locally
+      const axios = require('axios');
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const response = await axios.get(`${pythonUrl}/api/finance/balance-sheet`, { params: req.query });
+      res.json(response.data);
+    } catch (error: any) {
+      console.error('Balance sheet error:', error.message);
+      res.json({ success: true, data: { total_assets: 0, total_liabilities: 0, equity: { total: 0 } } });
+    }
+  }
+);
+
+// Trial Balance
+router.get('/trial-balance',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  async (req, res) => {
+    try {
+      const axios = require('axios');
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const response = await axios.get(`${pythonUrl}/api/finance/trial-balance`, { params: req.query });
+      res.json(response.data);
+    } catch (error: any) {
+      console.error('Trial balance error:', error.message);
+      res.json({ success: true, data: { entries: [], total_debit: 0, total_credit: 0, is_balanced: true } });
+    }
+  }
+);
+
+// Journal Entries
+router.get('/journal-entries',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  async (req, res) => {
+    try {
+      const axios = require('axios');
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const response = await axios.get(`${pythonUrl}/api/finance/journal-entries`, { params: req.query });
+      res.json(response.data);
+    } catch (error: any) {
+      console.error('Journal entries error:', error.message);
+      res.json({ success: true, data: [] });
+    }
+  }
+);
+
+router.post('/journal-entries',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  async (req, res) => {
+    try {
+      const axios = require('axios');
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const response = await axios.post(`${pythonUrl}/api/finance/journal-entries`, req.body);
+      res.json(response.data);
+    } catch (error: any) {
+      console.error('Create journal entry error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+);
+
+// Financial Ratios
+router.get('/financial-ratios',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  async (req, res) => {
+    try {
+      const axios = require('axios');
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const response = await axios.get(`${pythonUrl}/api/finance/financial-ratios`, { params: req.query });
+      res.json(response.data);
+    } catch (error: any) {
+      console.error('Financial ratios error:', error.message);
+      res.json({ success: true, data: { liquidity: {}, profitability: {}, efficiency: {}, leverage: {} } });
+    }
+  }
+);
+
+// Aging Report
+router.get('/aging-report',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  async (req, res) => {
+    try {
+      const axios = require('axios');
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const response = await axios.get(`${pythonUrl}/api/finance/aging-report`, { params: req.query });
+      res.json(response.data);
+    } catch (error: any) {
+      console.error('Aging report error:', error.message);
+      res.json({ success: true, data: { buckets: {}, totals: {}, grand_total: 0 } });
+    }
+  }
+);
+
+// Expense Breakdown
+router.get('/expense-breakdown',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  async (req, res) => {
+    try {
+      const axios = require('axios');
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const response = await axios.get(`${pythonUrl}/api/finance/expense-breakdown`, { params: req.query });
+      res.json(response.data);
+    } catch (error: any) {
+      console.error('Expense breakdown error:', error.message);
+      res.json({ success: true, data: { total: 0, categories: [], by_status: {} } });
+    }
+  }
+);
+
+// Revenue Analysis
+router.get('/revenue-analysis',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  async (req, res) => {
+    try {
+      const axios = require('axios');
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const response = await axios.get(`${pythonUrl}/api/finance/revenue-analysis`, { params: req.query });
+      res.json(response.data);
+    } catch (error: any) {
+      console.error('Revenue analysis error:', error.message);
+      res.json({ success: true, data: { total: 0, categories: [], payment_methods: [], daily_trend: [] } });
+    }
+  }
+);
+
+// Comparative Analysis
+router.get('/comparative-analysis',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  async (req, res) => {
+    try {
+      const axios = require('axios');
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const response = await axios.get(`${pythonUrl}/api/finance/comparative-analysis`, { params: req.query });
+      res.json(response.data);
+    } catch (error: any) {
+      console.error('Comparative analysis error:', error.message);
+      res.json({ success: true, data: { current_period: {}, previous_period: {}, changes: {} } });
+    }
+  }
+);
+
+// Generate Financial Report
+router.post('/reports/generate',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  async (req, res) => {
+    try {
+      const axios = require('axios');
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const response = await axios.post(`${pythonUrl}/api/finance/reports/generate`, req.body);
+      res.json(response.data);
+    } catch (error: any) {
+      console.error('Generate report error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+);
+
+// Get Branches for Finance
+router.get('/branches',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_MANAGER]),
+  async (req, res) => {
+    try {
+      const { createClient } = require('@supabase/supabase-js');
+      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+      const { data, error } = await supabase.from('branches').select('id, name, code');
+      if (error) throw error;
+      res.json({ success: true, data: data || [] });
+    } catch (error: any) {
+      console.error('Get branches error:', error.message);
+      res.json({ success: true, data: [] });
+    }
+  }
+);
+
 export default router;

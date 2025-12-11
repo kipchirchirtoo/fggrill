@@ -58,8 +58,8 @@ export default function CentralDriversPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Drivers</h1><p className="text-gray-500">Manage delivery drivers</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchDrivers}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <IOSButton onClick={() => setAddModalOpen(true)}><Plus className="h-4 w-4 mr-2" /> Add Driver</IOSButton>
+              <IOSButton variant="secondary" onClick={fetchDrivers} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>Add Driver</IOSButton>
             </div>
           </div>
 

@@ -30,6 +30,7 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className="fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%] w-full max-w-lg p-6 bg-gray-100/95 backdrop-blur-sm shadow-lg rounded-xl border border-gray-200/50"
+      aria-describedby={undefined}
       {...props}
     >
       {children}

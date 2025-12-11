@@ -108,9 +108,7 @@ export default function StockRequestsPage() {
               <h1 className="text-2xl font-bold text-gray-900">Stock Requests</h1>
               <p className="text-gray-600">View and manage stock requests from branches</p>
             </div>
-            <IOSButton variant="outline" onClick={fetchRequests}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
+            <IOSButton variant="outline" onClick={fetchRequests} leftIcon={<RefreshCw />}>Refresh
             </IOSButton>
           </div>
 
@@ -233,10 +231,7 @@ export default function StockRequestsPage() {
                           {formatDate(request.created_at)}
                         </td>
                         <td className="px-4 py-4">
-                          <IOSButton size="sm" variant="outline">
-                            <Eye className="h-4 w-4 mr-1" />
-                            View
-                          </IOSButton>
+                          <IOSButton size="sm" variant="outline" leftIcon={<Eye />}>View</IOSButton>
                         </td>
                       </tr>
                     ))}

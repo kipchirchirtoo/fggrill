@@ -44,7 +44,7 @@ export default function GMBranchesPage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">All Branches</h1><p className="text-gray-500">Manage all hotel locations</p></div>
-            <IOSButton variant="secondary" onClick={fetchBranches}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+            <IOSButton variant="secondary" onClick={fetchBranches} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -68,7 +68,7 @@ export default function GMBranchesPage() {
                       <p className="text-sm text-gray-500 flex items-center gap-1"><MapPin className="h-3 w-3" /> {branch.location}</p>
                     </div>
                     <div className="flex gap-2">
-                      {branch.is_central && <IOSBadge variant="info">Central</IOSBadge>}
+                      {branch.is_central && <IOSBadge variant="light" color="info">Central</IOSBadge>}
                       <IOSBadge variant={branch.status === 'active' ? 'success' : 'neutral'}>{branch.status}</IOSBadge>
                     </div>
                   </div>
@@ -79,7 +79,7 @@ export default function GMBranchesPage() {
                     <div className="p-2 bg-gray-50 rounded"><p className="text-xs text-gray-500">Revenue</p><p className="font-bold">KES {(branch.daily_revenue || 0).toLocaleString()}</p></div>
                   </div>
                   <Link href={`/dashboard/branch-manager?branch=${branch.id}`}>
-                    <IOSButton variant="secondary" className="w-full"><Eye className="h-4 w-4 mr-2" /> View Details</IOSButton>
+                    <IOSButton variant="secondary" className="w-full" leftIcon={<Eye />}>View Details</IOSButton>
                   </Link>
                 </IOSCard>
               ))}

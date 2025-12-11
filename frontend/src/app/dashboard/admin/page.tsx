@@ -59,7 +59,7 @@ export default function AdminDashboard() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Shield className="h-7 w-7" /> Admin Dashboard</h1><p className="text-gray-500">System administration</p></div>
-            <IOSButton variant="secondary" onClick={fetchData}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+            <IOSButton variant="secondary" onClick={fetchData} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -87,9 +87,9 @@ export default function AdminDashboard() {
             <IOSCard className="p-6">
               <h2 className="text-lg font-semibold font-sf-pro-display mb-4">System</h2>
               <div className="space-y-2">
-                <Link href="/dashboard/admin/system/branches"><IOSButton variant="secondary" className="w-full justify-start"><Building2 className="h-4 w-4 mr-2" /> Branches</IOSButton></Link>
-                <Link href="/dashboard/admin/system/departments"><IOSButton variant="secondary" className="w-full justify-start"><Users className="h-4 w-4 mr-2" /> Departments</IOSButton></Link>
-                <Link href="/dashboard/admin/audit"><IOSButton variant="secondary" className="w-full justify-start"><ClipboardList className="h-4 w-4 mr-2" /> Audit Logs</IOSButton></Link>
+                <Link href="/dashboard/admin/system/branches"><IOSButton variant="secondary" className="w-full justify-start" leftIcon={<Building2 />}>Branches</IOSButton></Link>
+                <Link href="/dashboard/admin/system/departments"><IOSButton variant="secondary" className="w-full justify-start" leftIcon={<Users />}>Departments</IOSButton></Link>
+                <Link href="/dashboard/admin/audit"><IOSButton variant="secondary" className="w-full justify-start" leftIcon={<ClipboardList />}>Audit Logs</IOSButton></Link>
               </div>
             </IOSCard>
             <IOSCard className="p-6">

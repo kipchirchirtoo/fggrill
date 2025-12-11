@@ -48,8 +48,8 @@ export default function BranchRequestsPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Stock Requests</h1><p className="text-gray-500">Request stock from central</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchRequests}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <Link href="/dashboard/branch-manager/stock"><IOSButton><Plus className="h-4 w-4 mr-2" /> New Request</IOSButton></Link>
+              <IOSButton variant="secondary" onClick={fetchRequests} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <Link href="/dashboard/branch-manager/stock"><IOSButton leftIcon={<Plus />}>New Request</IOSButton></Link>
             </div>
           </div>
 

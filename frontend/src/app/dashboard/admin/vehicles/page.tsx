@@ -58,8 +58,8 @@ export default function AdminVehiclesPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Vehicles</h1><p className="text-gray-500">Manage fleet</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchVehicles}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <IOSButton onClick={() => setAddModalOpen(true)}><Plus className="h-4 w-4 mr-2" /> Add Vehicle</IOSButton>
+              <IOSButton variant="secondary" onClick={fetchVehicles} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>Add Vehicle</IOSButton>
             </div>
           </div>
 
@@ -81,7 +81,7 @@ export default function AdminVehiclesPage() {
                       <IOSBadge className={`${status.bg} ${status.color}`}>{vehicle.status?.replace('_', ' ')}</IOSBadge>
                     </div>
                     {vehicle.capacity && <p className="text-sm text-gray-500">Capacity: {vehicle.capacity} kg</p>}
-                    <IOSButton variant="secondary" size="sm" className="w-full mt-4"><Edit2 className="h-4 w-4 mr-2" /> Edit</IOSButton>
+                    <IOSButton variant="secondary" size="sm" className="w-full mt-4" leftIcon={<Edit2 />}>Edit</IOSButton>
                   </IOSCard>
                 );
               })}

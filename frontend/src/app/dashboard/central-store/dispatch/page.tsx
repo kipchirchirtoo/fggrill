@@ -50,8 +50,8 @@ export default function CentralDispatchPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Dispatch</h1><p className="text-gray-500">Send stock to branches</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchDispatches}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <Link href="/dashboard/central-store/dispatch/new"><IOSButton><Plus className="h-4 w-4 mr-2" /> New Dispatch</IOSButton></Link>
+              <IOSButton variant="secondary" onClick={fetchDispatches} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <Link href="/dashboard/central-store/dispatch/new"><IOSButton leftIcon={<Plus />}>New Dispatch</IOSButton></Link>
             </div>
           </div>
 
@@ -85,7 +85,7 @@ export default function CentralDispatchPage() {
                         <div>
                           <p className="font-bold">#{dispatch.dispatch_number}</p>
                           <p className="text-sm text-gray-500 flex items-center gap-1"><Building2 className="h-3 w-3" /> {dispatch.to_branch} <Package className="h-3 w-3 ml-2" /> {dispatch.items_count} items</p>
-                          <p className="text-xs text-gray-400">{new Date(dispatch.dispatched_at).toLocaleString()}</p>
+                          <p className="text-xs text-gray-400" suppressHydrationWarning>{new Date(dispatch.dispatched_at).toLocaleString()}</p>
                         </div>
                       </div>
                       <IOSBadge className={`${status.bg} ${status.color}`}>{status.label}</IOSBadge>

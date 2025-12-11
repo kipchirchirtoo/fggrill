@@ -15,37 +15,105 @@ export interface ITransaction {
 
 export interface IFolio {
   id: string;
+  folioNumber: string;
   reservationId: string;
   guestId: string;
   status: 'open' | 'closed' | 'posted';
+  
+  // Billing
+  roomCharges: number;
+  foodCharges: number;
+  beverageCharges: number;
+  otherCharges: number;
   totalCharges: number;
   totalPayments: number;
   balance: number;
+  
+  // Status
+  settled: boolean;
+  settledAt?: Date;
+  notes?: string;
+  
   createdAt: Date;
   updatedAt: Date;
 }
 
 export class Folio implements IFolio {
   id: string;
+  folioNumber: string;
   reservationId: string;
   guestId: string;
   status: 'open' | 'closed' | 'posted';
+  
+  roomCharges: number;
+  foodCharges: number;
+  beverageCharges: number;
+  otherCharges: number;
   totalCharges: number;
   totalPayments: number;
   balance: number;
+  
+  settled: boolean;
+  settledAt?: Date;
+  notes?: string;
+  
   createdAt: Date;
   updatedAt: Date;
 
   constructor(data: Partial<IFolio>) {
     this.id = data.id || crypto.randomUUID();
+    this.folioNumber = data.folioNumber || this.generateFolioNumber();
     this.reservationId = data.reservationId || '';
     this.guestId = data.guestId || '';
     this.status = data.status || 'open';
+    
+    this.roomCharges = data.roomCharges || 0;
+    this.foodCharges = data.foodCharges || 0;
+    this.beverageCharges = data.beverageCharges || 0;
+    this.otherCharges = data.otherCharges || 0;
     this.totalCharges = data.totalCharges || 0;
     this.totalPayments = data.totalPayments || 0;
     this.balance = data.balance || 0;
+    
+    this.settled = data.settled || false;
+    this.settledAt = data.settledAt;
+    this.notes = data.notes;
+    
     this.createdAt = data.createdAt || new Date();
     this.updatedAt = data.updatedAt || new Date();
+  }
+
+  private generateFolioNumber(): string {
+    return 'FOL-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+  }
+
+  async save(): Promise<Folio> {
+    const { data, error } = await supabase
+      .from('folios')
+      .upsert([
+        {
+          id: this.id,
+          folio_number: this.folioNumber,
+          reservation_id: this.reservationId,
+          guest_id: this.guestId,
+          status: this.status,
+          room_charges: this.roomCharges,
+          food_charges: this.foodCharges,
+          beverage_charges: this.beverageCharges,
+          other_charges: this.otherCharges,
+          // total_charges, total_payments, balance are usually generated/calculated in DB or by triggers
+          // but we can pass them if we are authoritative
+          settled: this.settled,
+          settled_at: this.settledAt,
+          notes: this.notes,
+          updated_at: new Date()
+        }
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return Folio.fromDatabase(data);
   }
 
   static async findByReservationId(reservationId: string): Promise<Folio | null> {

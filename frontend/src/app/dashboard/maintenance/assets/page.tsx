@@ -58,7 +58,7 @@ export default function MaintenanceAssetsPage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Assets</h1><p className="text-gray-500">Manage equipment and assets</p></div>
-            <IOSButton><Plus className="h-4 w-4 mr-2" /> Add Asset</IOSButton>
+            <IOSButton leftIcon={<Plus />}>Add Asset</IOSButton>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

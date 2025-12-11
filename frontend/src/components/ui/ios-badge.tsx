@@ -3,13 +3,13 @@ import { cn } from '@/lib/utils';
 import { cva, type VariantProps } from 'class-variance-authority';
 
 const badgeVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap font-sf-pro font-medium rounded-ios-full", 
+  "inline-flex items-center justify-center whitespace-nowrap font-medium rounded-full", 
   {
     variants: {
       variant: {
         filled: "",
         light: "",
-        outline: "border",
+        outline: "",
         pill: "px-3"
       },
       size: {
@@ -19,76 +19,66 @@ const badgeVariants = cva(
         lg: "h-8 text-sm px-3"
       },
       color: {
-        // Primary colors (Blue)
         primary: "",
-        // Secondary (Gray)
         secondary: "",
-        // Success (Green)
         success: "",
-        // Warning (Orange/Yellow)
         warning: "",
-        // Danger (Red)
         danger: "",
-        // Info (Teal)
         info: "",
-        // Purple
         purple: "",
-        // Pink
         pink: "",
-        // Indigo
         indigo: "",
-        // Custom
         custom: "",
       },
     },
     compoundVariants: [
-      // Filled variant colors - minimalistic
-      { variant: "filled", color: "primary", className: "bg-[#007AFF] text-white dark:bg-[#0A84FF]" },
-      { variant: "filled", color: "secondary", className: "bg-[#8E8E93] text-white dark:bg-[#98989D]" },
-      { variant: "filled", color: "success", className: "bg-[#34C759] text-white dark:bg-[#30D158]" },
-      { variant: "filled", color: "warning", className: "bg-[#FF9500] text-white dark:bg-[#FF9F0A]" },
-      { variant: "filled", color: "danger", className: "bg-[#FF3B30] text-white dark:bg-[#FF453A]" },
-      { variant: "filled", color: "info", className: "bg-[#5AC8FA] text-white dark:bg-[#64D2FF]" },
-      { variant: "filled", color: "purple", className: "bg-[#AF52DE] text-white dark:bg-[#BF5AF2]" },
-      { variant: "filled", color: "pink", className: "bg-[#FF2D55] text-white dark:bg-[#FF375F]" },
-      { variant: "filled", color: "indigo", className: "bg-[#5856D6] text-white dark:bg-[#5E5CE6]" },
+      // Filled variant - minimal solid colors
+      { variant: "filled", color: "primary", className: "bg-amber-500 text-white" },
+      { variant: "filled", color: "secondary", className: "bg-stone-500 text-white" },
+      { variant: "filled", color: "success", className: "bg-emerald-500 text-white" },
+      { variant: "filled", color: "warning", className: "bg-amber-500 text-white" },
+      { variant: "filled", color: "danger", className: "bg-red-500 text-white" },
+      { variant: "filled", color: "info", className: "bg-sky-500 text-white" },
+      { variant: "filled", color: "purple", className: "bg-purple-500 text-white" },
+      { variant: "filled", color: "pink", className: "bg-pink-500 text-white" },
+      { variant: "filled", color: "indigo", className: "bg-indigo-500 text-white" },
       
-      // Light variant colors - minimalistic with reduced opacity
-      { variant: "light", color: "primary", className: "bg-[#007AFF]/10 text-[#007AFF] dark:bg-[#0A84FF]/10 dark:text-[#0A84FF]" },
-      { variant: "light", color: "secondary", className: "bg-[#8E8E93]/10 text-[#8E8E93] dark:bg-[#98989D]/10 dark:text-[#98989D]" },
-      { variant: "light", color: "success", className: "bg-[#34C759]/10 text-[#34C759] dark:bg-[#30D158]/10 dark:text-[#30D158]" },
-      { variant: "light", color: "warning", className: "bg-[#FF9500]/10 text-[#FF9500] dark:bg-[#FF9F0A]/10 dark:text-[#FF9F0A]" },
-      { variant: "light", color: "danger", className: "bg-[#FF3B30]/10 text-[#FF3B30] dark:bg-[#FF453A]/10 dark:text-[#FF453A]" },
-      { variant: "light", color: "info", className: "bg-[#5AC8FA]/10 text-[#5AC8FA] dark:bg-[#64D2FF]/10 dark:text-[#64D2FF]" },
-      { variant: "light", color: "purple", className: "bg-[#AF52DE]/10 text-[#AF52DE] dark:bg-[#BF5AF2]/10 dark:text-[#BF5AF2]" },
-      { variant: "light", color: "pink", className: "bg-[#FF2D55]/10 text-[#FF2D55] dark:bg-[#FF375F]/10 dark:text-[#FF375F]" },
-      { variant: "light", color: "indigo", className: "bg-[#5856D6]/10 text-[#5856D6] dark:bg-[#5E5CE6]/10 dark:text-[#5E5CE6]" },
+      // Light variant - subtle backgrounds
+      { variant: "light", color: "primary", className: "bg-amber-50 text-amber-700" },
+      { variant: "light", color: "secondary", className: "bg-stone-100 text-stone-600" },
+      { variant: "light", color: "success", className: "bg-emerald-50 text-emerald-700" },
+      { variant: "light", color: "warning", className: "bg-amber-50 text-amber-700" },
+      { variant: "light", color: "danger", className: "bg-red-50 text-red-700" },
+      { variant: "light", color: "info", className: "bg-sky-50 text-sky-700" },
+      { variant: "light", color: "purple", className: "bg-purple-50 text-purple-700" },
+      { variant: "light", color: "pink", className: "bg-pink-50 text-pink-700" },
+      { variant: "light", color: "indigo", className: "bg-indigo-50 text-indigo-700" },
       
-      // Outline variant colors - minimalistic with thin borders
-      { variant: "outline", color: "primary", className: "border-[#007AFF] text-[#007AFF] dark:border-[#0A84FF] dark:text-[#0A84FF]" },
-      { variant: "outline", color: "secondary", className: "border-[#8E8E93] text-[#8E8E93] dark:border-[#98989D] dark:text-[#98989D]" },
-      { variant: "outline", color: "success", className: "border-[#34C759] text-[#34C759] dark:border-[#30D158] dark:text-[#30D158]" },
-      { variant: "outline", color: "warning", className: "border-[#FF9500] text-[#FF9500] dark:border-[#FF9F0A] dark:text-[#FF9F0A]" },
-      { variant: "outline", color: "danger", className: "border-[#FF3B30] text-[#FF3B30] dark:border-[#FF453A] dark:text-[#FF453A]" },
-      { variant: "outline", color: "info", className: "border-[#5AC8FA] text-[#5AC8FA] dark:border-[#64D2FF] dark:text-[#64D2FF]" },
-      { variant: "outline", color: "purple", className: "border-[#AF52DE] text-[#AF52DE] dark:border-[#BF5AF2] dark:text-[#BF5AF2]" },
-      { variant: "outline", color: "pink", className: "border-[#FF2D55] text-[#FF2D55] dark:border-[#FF375F] dark:text-[#FF375F]" },
-      { variant: "outline", color: "indigo", className: "border-[#5856D6] text-[#5856D6] dark:border-[#5E5CE6] dark:text-[#5E5CE6]" },
+      // Outline variant - no borders, just text
+      { variant: "outline", color: "primary", className: "bg-transparent text-amber-600" },
+      { variant: "outline", color: "secondary", className: "bg-transparent text-stone-600" },
+      { variant: "outline", color: "success", className: "bg-transparent text-emerald-600" },
+      { variant: "outline", color: "warning", className: "bg-transparent text-amber-600" },
+      { variant: "outline", color: "danger", className: "bg-transparent text-red-600" },
+      { variant: "outline", color: "info", className: "bg-transparent text-sky-600" },
+      { variant: "outline", color: "purple", className: "bg-transparent text-purple-600" },
+      { variant: "outline", color: "pink", className: "bg-transparent text-pink-600" },
+      { variant: "outline", color: "indigo", className: "bg-transparent text-indigo-600" },
 
-      // Pill variant - minimalistic
-      { variant: "pill", color: "primary", className: "bg-[#007AFF] text-white dark:bg-[#0A84FF]" },
-      { variant: "pill", color: "secondary", className: "bg-[#8E8E93] text-white dark:bg-[#98989D]" },
-      { variant: "pill", color: "success", className: "bg-[#34C759] text-white dark:bg-[#30D158]" },
-      { variant: "pill", color: "warning", className: "bg-[#FF9500] text-white dark:bg-[#FF9F0A]" },
-      { variant: "pill", color: "danger", className: "bg-[#FF3B30] text-white dark:bg-[#FF453A]" },
-      { variant: "pill", color: "info", className: "bg-[#5AC8FA] text-white dark:bg-[#64D2FF]" },
-      { variant: "pill", color: "purple", className: "bg-[#AF52DE] text-white dark:bg-[#BF5AF2]" },
-      { variant: "pill", color: "pink", className: "bg-[#FF2D55] text-white dark:bg-[#FF375F]" },
-      { variant: "pill", color: "indigo", className: "bg-[#5856D6] text-white dark:bg-[#5E5CE6]" },
+      // Pill variant - same as filled
+      { variant: "pill", color: "primary", className: "bg-amber-500 text-white" },
+      { variant: "pill", color: "secondary", className: "bg-stone-500 text-white" },
+      { variant: "pill", color: "success", className: "bg-emerald-500 text-white" },
+      { variant: "pill", color: "warning", className: "bg-amber-500 text-white" },
+      { variant: "pill", color: "danger", className: "bg-red-500 text-white" },
+      { variant: "pill", color: "info", className: "bg-sky-500 text-white" },
+      { variant: "pill", color: "purple", className: "bg-purple-500 text-white" },
+      { variant: "pill", color: "pink", className: "bg-pink-500 text-white" },
+      { variant: "pill", color: "indigo", className: "bg-indigo-500 text-white" },
     ],
     defaultVariants: {
-      variant: "filled",
-      size: "md",
+      variant: "light",
+      size: "sm",
       color: "primary",
     }
   }

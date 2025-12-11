@@ -2,16 +2,16 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
-import { Button } from "@/components/ui/minimal/button";
+import { BranchSelector } from '@/components/dashboard/BranchSelector';
 import { IOSBadge } from '@/components/ui/ios-badge';
-import { housekeepingAPI, roomsAPI } from '@/lib/api';
+import { housekeepingAPI } from '@/lib/api';
 import { 
   Sparkles, Bed, CheckCircle, Clock, AlertTriangle, Users,
-  RefreshCw, ClipboardList, Eye, Play, Pause, Check, X,
-  Building2, Layers, UserCheck, Timer, TrendingUp
+  RefreshCw, ClipboardList, Eye, Play, Check,
+  Building2, Layers, Timer, TrendingUp
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -62,6 +62,7 @@ const priorityColors: Record<string, string> = {
 
 export default function HousekeepingDashboard() {
   const { user } = useAuth();
+  const { activeBranchId } = useBranch();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [rooms, setRooms] = useState<RoomStatus[]>([]);
   const [stats, setStats] = useState({
@@ -78,10 +79,11 @@ export default function HousekeepingDashboard() {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
+      const branchIdStr = activeBranchId ? String(activeBranchId) : undefined;
       const [tasksRes, roomsRes, statsRes] = await Promise.allSettled([
         housekeepingAPI.getTasks({ status: 'pending' }),
         housekeepingAPI.getRooms(),
-        housekeepingAPI.getStats(),
+        housekeepingAPI.getStats(branchIdStr),
       ]);
 
       if (tasksRes.status === 'fulfilled' && tasksRes.value?.success) setTasks(tasksRes.value.data || []);
@@ -101,7 +103,7 @@ export default function HousekeepingDashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [activeBranchId]);
 
   useEffect(() => {
     fetchData();
@@ -143,14 +145,10 @@ export default function HousekeepingDashboard() {
               <p className="text-gray-500">Manage room cleaning and maintenance tasks</p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="outline" onClick={fetchData}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
+              <IOSButton variant="outline" onClick={fetchData} leftIcon={<RefreshCw />}>Refresh
               </IOSButton>
               <Link href="/dashboard/housekeeping/tasks">
-                <IOSButton>
-                  <ClipboardList className="h-4 w-4 mr-2" />
-                  All Tasks
+                <IOSButton leftIcon={<ClipboardList />}>All Tasks
                 </IOSButton>
               </Link>
             </div>

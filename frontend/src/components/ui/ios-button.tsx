@@ -3,38 +3,40 @@ import { cn } from '@/lib/utils';
 import { cva, type VariantProps } from 'class-variance-authority';
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-lg font-sf-pro font-medium transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed", 
+  "inline-flex items-center justify-center whitespace-nowrap rounded-xl font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#007AFF]/30 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] select-none", 
   {
     variants: {
       variant: {
-        // Primary button - minimal blue with subtle shadow
-        primary: "bg-[#007AFF] text-white hover:bg-[#007AFF]/90 dark:bg-[#0A84FF] dark:hover:bg-[#0A84FF]/90",
-        // Secondary button - minimal light gray
-        secondary: "bg-[#F2F2F7] text-[#007AFF] hover:bg-[#E5E5EA] dark:bg-[#2C2C2E] dark:text-[#0A84FF] dark:hover:bg-[#3A3A3C]",
-        // Destructive button - minimal red
-        destructive: "bg-[#FF3B30] text-white hover:bg-[#FF3B30]/90 dark:bg-[#FF453A] dark:hover:bg-[#FF453A]/90",
-        // Success button - minimal green
-        success: "bg-[#34C759] text-white hover:bg-[#34C759]/90 dark:bg-[#30D158] dark:hover:bg-[#30D158]/90",
-        // Outline button - minimal border
-        outline: "border border-[#D1D1D6] bg-white text-[#007AFF] hover:bg-[#F2F2F7] dark:border-[#3A3A3C] dark:bg-black dark:text-[#0A84FF] dark:hover:bg-[#1C1C1E]",
+        // Primary button - iOS blue with subtle shadow
+        primary: "bg-[#007AFF] text-white hover:bg-[#0056CC] shadow-sm hover:shadow-md",
+        // Secondary button - light gray with blue text
+        secondary: "bg-[#F2F2F7] text-[#007AFF] hover:bg-[#E5E5EA] border border-[#E5E5EA]",
+        // Destructive button - iOS red
+        destructive: "bg-[#FF3B30] text-white hover:bg-[#E6352B] shadow-sm",
+        // Success button - iOS green
+        success: "bg-[#34C759] text-white hover:bg-[#2DB24E] shadow-sm",
+        // Outline button - bordered style
+        outline: "border-2 border-[#007AFF] bg-white text-[#007AFF] hover:bg-[#007AFF]/5",
         // Ghost button - minimal hover effect
-        ghost: "text-[#007AFF] hover:bg-[#F2F2F7]/50 dark:text-[#0A84FF] dark:hover:bg-[#2C2C2E]/50",
+        ghost: "text-[#007AFF] hover:bg-[#007AFF]/10",
         // Link style - minimal
-        link: "text-[#007AFF] hover:underline dark:text-[#0A84FF]",
+        link: "text-[#007AFF] hover:underline underline-offset-2",
       },
       size: {
-        xs: "h-7 px-2.5 text-xs rounded-ios-md",
-        sm: "h-9 px-3 py-2 text-sm rounded-ios-md",
-        md: "h-11 px-4 py-2.5 text-base rounded-ios-lg",
-        lg: "h-12 px-5 py-2.5 text-lg rounded-ios-xl",
-        xl: "h-14 px-6 py-3 text-xl rounded-ios-xl",
-        icon: "h-10 w-10 rounded-full p-0",
+        xs: "h-7 px-2.5 text-xs gap-1.5 rounded-lg",
+        sm: "h-8 px-3 text-sm gap-1.5 rounded-lg",
+        md: "h-10 px-4 text-sm gap-2 rounded-xl",
+        lg: "h-11 px-5 text-base gap-2 rounded-xl",
+        xl: "h-12 px-6 text-base gap-2.5 rounded-xl",
+        icon: "h-9 w-9 rounded-xl p-0",
+        "icon-sm": "h-8 w-8 rounded-lg p-0",
+        "icon-lg": "h-11 w-11 rounded-xl p-0",
       },
       pill: {
-        true: "rounded-ios-full"
+        true: "rounded-full"
       },
       glass: {
-        true: "backdrop-blur-ios bg-white/80 dark:bg-black/80"
+        true: "backdrop-blur-md bg-white/80 border border-white/20 shadow-lg"
       }
     },
     defaultVariants: {
@@ -53,15 +55,23 @@ export interface IOSButtonProps
   rightIcon?: React.ReactNode;
   pill?: boolean;
   glass?: boolean;
+  iconOnly?: boolean;
 }
 
 export const IOSButton = React.forwardRef<HTMLButtonElement, IOSButtonProps>(
-  ({ className, variant, size, fullWidth, loading, leftIcon, rightIcon, pill, glass, children, disabled, ...props }, ref) => {
+  ({ className, variant, size, fullWidth, loading, leftIcon, rightIcon, pill, glass, iconOnly, children, disabled, ...props }, ref) => {
+    // Detect if children contains only an icon (SVG element)
+    const hasOnlyIcon = iconOnly || (
+      React.Children.count(children) === 1 && 
+      React.isValidElement(children) && 
+      (children.type === 'svg' || (typeof children.type === 'function' && children.type.name?.includes('Icon')))
+    );
+
     return (
       <button
         ref={ref}
         className={cn(
-          buttonVariants({ variant, size, pill, glass }),
+          buttonVariants({ variant, size: hasOnlyIcon && size === 'md' ? 'icon' : size, pill, glass }),
           fullWidth && 'w-full',
           className
         )}
@@ -69,15 +79,17 @@ export const IOSButton = React.forwardRef<HTMLButtonElement, IOSButtonProps>(
         {...props}
       >
         {loading ? (
-          <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
-        ) : leftIcon ? (
-          <span className="mr-2">{leftIcon}</span>
-        ) : null}
-        <span className="flex-1 text-center">{children}</span>
-        {rightIcon && <span className="ml-2">{rightIcon}</span>}
+        ) : (
+          <>
+            {leftIcon && <span className="flex-shrink-0 [&>svg]:h-4 [&>svg]:w-4">{leftIcon}</span>}
+            {children && <span className={cn(hasOnlyIcon ? "[&>svg]:h-4 [&>svg]:w-4" : "truncate")}>{children}</span>}
+            {rightIcon && <span className="flex-shrink-0 [&>svg]:h-4 [&>svg]:w-4">{rightIcon}</span>}
+          </>
+        )}
       </button>
     );
   }

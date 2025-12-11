@@ -152,9 +152,7 @@ export default function HousekeepingRoomsPage() {
               >
                 List
               </IOSButton>
-              <IOSButton variant="outline" onClick={fetchRooms}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
+              <IOSButton variant="outline" onClick={fetchRooms} leftIcon={<RefreshCw />}>Refresh
               </IOSButton>
             </div>
           </div>

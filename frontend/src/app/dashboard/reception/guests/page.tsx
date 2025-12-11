@@ -322,7 +322,7 @@ function GuestDetailsModal({
             <User className="h-5 w-5" />
             Guest Profile
             {guest.vip_status && (
-              <IOSBadge variant="warning" className="ml-2">
+              <IOSBadge variant="light" color="warning" className="ml-2">
                 <Star className="h-3 w-3 mr-1" /> VIP
               </IOSBadge>
             )}
@@ -492,13 +492,9 @@ export default function GuestsPage() {
               <p className="text-gray-500">Manage guest profiles and history</p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="outline" onClick={fetchGuests}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
+              <IOSButton variant="outline" onClick={fetchGuests} leftIcon={<RefreshCw />}>Refresh
               </IOSButton>
-              <IOSButton onClick={openNew}>
-                <Plus className="h-4 w-4 mr-2" />
-                New Guest
+              <IOSButton onClick={openNew} leftIcon={<Plus />}>New Guest
               </IOSButton>
             </div>
           </div>
@@ -584,8 +580,7 @@ export default function GuestsPage() {
             <IOSCard className="p-12 text-center">
               <Users className="h-12 w-12 mx-auto text-gray-300 mb-4" />
               <p className="text-gray-500">No guests found</p>
-              <IOSButton onClick={openNew} className="mt-4">
-                <Plus className="h-4 w-4 mr-2" /> Register New Guest
+              <IOSButton onClick={openNew} className="mt-4" leftIcon={<Plus />}>Register New Guest
               </IOSButton>
             </IOSCard>
           ) : (
@@ -629,7 +624,7 @@ export default function GuestsPage() {
                         </td>
                         <td className="p-4">
                           {guest.vip_status && (
-                            <IOSBadge variant="warning">
+                            <IOSBadge variant="light" color="warning">
                               <Star className="h-3 w-3 mr-1" /> VIP
                             </IOSBadge>
                           )}

@@ -91,8 +91,8 @@ export default function BarMenuPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Bar Menu</h1><p className="text-gray-500">Manage drinks and beverages</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchData}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <IOSButton onClick={openNewModal}><Plus className="h-4 w-4 mr-2" /> Add Item</IOSButton>
+              <IOSButton variant="secondary" onClick={fetchData} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton onClick={openNewModal} leftIcon={<Plus />}>Add Item</IOSButton>
             </div>
           </div>
 
@@ -121,7 +121,7 @@ export default function BarMenuPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <h3 className="font-bold">{item.name}</h3>
-                        {!item.is_available && <IOSBadge variant="error">Hidden</IOSBadge>}
+                        {!item.is_available && <IOSBadge variant="light" color="danger">Hidden</IOSBadge>}
                       </div>
                       <p className="text-sm text-gray-500">{item.category_name}</p>
                     </div>

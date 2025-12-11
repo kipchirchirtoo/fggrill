@@ -47,7 +47,7 @@ export default function BranchIncomingPage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Incoming Stock</h1><p className="text-gray-500">Stock in transit to your branch</p></div>
-            <IOSButton variant="secondary" onClick={fetchShipments}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+            <IOSButton variant="secondary" onClick={fetchShipments} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 
           {isLoading ? (
@@ -69,7 +69,7 @@ export default function BranchIncomingPage() {
                     </div>
                     <div className="flex items-center gap-3">
                       <IOSBadge variant={shipment.status === 'received' ? 'success' : 'info'}>{shipment.status}</IOSBadge>
-                      {shipment.status === 'in_transit' && <IOSButton size="sm" onClick={() => handleReceive(shipment.id)}><CheckCircle className="h-4 w-4 mr-1" /> Receive</IOSButton>}
+                      {shipment.status === 'in_transit' && <IOSButton size="sm" onClick={() => handleReceive(shipment.id)} leftIcon={<CheckCircle />}> Receive</IOSButton>}
                     </div>
                   </div>
                 </IOSCard>

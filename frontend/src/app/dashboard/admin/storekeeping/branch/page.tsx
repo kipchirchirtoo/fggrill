@@ -35,7 +35,7 @@ export default function AdminBranchStorePage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Branch Stores</h1><p className="text-gray-500">Stock levels by branch</p></div>
-            <IOSButton variant="secondary" onClick={fetchBranches}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+            <IOSButton variant="secondary" onClick={fetchBranches} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 
           {isLoading ? (

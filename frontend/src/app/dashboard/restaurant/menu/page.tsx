@@ -170,7 +170,8 @@ export default function RestaurantMenuPage() {
           const reader = new FileReader();
           reader.onloadend = async () => {
             const base64 = reader.result as string;
-            await restaurantAPI.uploadMenuItemImage(itemId!, base64, imageFile.type);
+            // Ensure base64 string is properly formatted (it should be with readAsDataURL)
+            await restaurantAPI.uploadMenuItemImage(itemId!, base64, imageFile.type, imageFile.name);
             toast.success('Image uploaded');
             fetchData();
           };
@@ -234,13 +235,9 @@ export default function RestaurantMenuPage() {
               <p className="text-gray-500">Manage menu items and categories</p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchData}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
+              <IOSButton variant="secondary" onClick={fetchData} leftIcon={<RefreshCw />}>Refresh
               </IOSButton>
-              <IOSButton onClick={openNewModal}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Item
+              <IOSButton onClick={openNewModal} leftIcon={<Plus />}>Add Item
               </IOSButton>
             </div>
           </div>
@@ -309,72 +306,106 @@ export default function RestaurantMenuPage() {
             <IOSCard className="p-12 text-center">
               <Soup className="h-12 w-12 mx-auto text-gray-300 mb-4" />
               <p className="text-gray-500">No menu items found</p>
-              <IOSButton onClick={openNewModal} className="mt-4">
-                <Plus className="h-4 w-4 mr-2" /> Add First Item
+              <IOSButton onClick={openNewModal} className="mt-4" leftIcon={<Plus />}>
+                Add First Item
               </IOSButton>
             </IOSCard>
           ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
               {filteredItems.map((item) => (
-                <IOSCard key={item.id} className={`overflow-hidden ${!item.is_available ? 'opacity-60' : ''}`}>
-                  {/* Item Image */}
-                  <div className="h-40 bg-gradient-to-br from-orange-100 to-yellow-100 relative">
-                    {item.image_url ? (
-                      <Image
-                        src={item.image_url}
-                        alt={item.name}
-                        fill
-                        className="object-cover"
-                        sizes="(max-width: 768px) 100vw, 33vw"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Soup className="h-16 w-16 text-orange-300" />
-                      </div>
-                    )}
-                    {!item.is_available && (
-                      <div className="absolute top-2 right-2">
-                        <IOSBadge variant="error">Unavailable</IOSBadge>
-                      </div>
-                    )}
+                <div 
+                  key={item.id} 
+                  className={`bg-[#fefefe] rounded-[1rem] p-2 text-[#141417] shadow-md hover:shadow-lg transition-all duration-200 ${!item.is_available ? 'opacity-60' : ''}`}
+                >
+                  {/* Card Hero Section */}
+                  <div className="bg-[#fef4e2] rounded-t-[0.5rem] p-4 text-sm">
+                    {/* Header with category and availability */}
+                    <div className="flex justify-between items-center gap-4 font-bold">
+                      <span className="text-xs uppercase tracking-wide text-amber-700">
+                        {item.category_name || 'Menu Item'}
+                      </span>
+                      {item.is_available ? (
+                        <span className="text-xs text-green-600 flex items-center gap-1">
+                          <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                          Available
+                        </span>
+                      ) : (
+                        <IOSBadge variant="light" color="danger">Unavailable</IOSBadge>
+                      )}
+                    </div>
+                    
+                    {/* Item Name - Main Title */}
+                    <h3 className="my-4 text-xl font-semibold pr-4 leading-tight line-clamp-2">
+                      {item.name}
+                    </h3>
+                    
+                    {/* Image */}
+                    <div className="relative h-32 w-full overflow-hidden rounded-lg bg-white/50">
+                      {item.image_url ? (
+                        <Image
+                          src={item.image_url}
+                          alt={item.name}
+                          fill
+                          className="object-cover"
+                          sizes="(max-width: 768px) 100vw, 33vw"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Soup className="h-12 w-12 text-amber-600/60" />
+                        </div>
+                      )}
+                    </div>
                   </div>
                   
-                  <div className="p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <h3 className="font-bold">{item.name}</h3>
-                        <p className="text-sm text-gray-500">{item.category_name}</p>
-                      </div>
-                      <p className="font-bold text-lg text-[#34C759]">KES {item.price?.toLocaleString()}</p>
+                  {/* Card Footer */}
+                  <div className="p-3">
+                    {/* Price Row */}
+                    <div className="flex justify-between items-center mb-3 font-bold text-sm">
+                      <span className="text-lg font-bold text-[#141417]">
+                        KES {item.price?.toLocaleString()}
+                      </span>
+                      {item.preparation_time && (
+                        <span className="text-xs text-gray-500">{item.preparation_time} min</span>
+                      )}
                     </div>
 
                     {item.description && (
                       <p className="text-sm text-gray-600 mb-3 line-clamp-2">{item.description}</p>
                     )}
 
-                    <div className="flex items-center justify-between pt-3 border-t">
-                      <IOSButton
-                        size="sm"
-                        variant={item.is_available ? 'secondary' : 'primary'}
+                    {/* Action Buttons */}
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                      <button
+                        className={`font-normal border-none cursor-pointer text-center py-2 px-4 rounded-[1rem] text-sm transition-colors ${
+                          item.is_available 
+                            ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' 
+                            : 'bg-[#141417] text-white hover:bg-[#2a2a2f]'
+                        }`}
                         onClick={() => handleToggleAvailability(item)}
                       >
                         {item.is_available ? (
-                          <><EyeOff className="h-3 w-3 mr-1" /> Hide</>
+                          <span className="flex items-center gap-1"><EyeOff className="h-3 w-3" /> Hide</span>
                         ) : (
-                          <><Eye className="h-3 w-3 mr-1" /> Show</>
+                          <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> Show</span>
                         )}
-                      </IOSButton>
+                      </button>
                       <div className="flex gap-2">
-                        <IOSButton size="sm" variant="secondary" onClick={() => openEditModal(item)}>
-                          <Edit2 className="h-3 w-3" />
-                        </IOSButton>
-                        <IOSButton size="sm" variant="destructive" onClick={() => handleDeleteItem(item)}>
-                          <Trash2 className="h-3 w-3" />
-                        </IOSButton>
+                        <button 
+                          className="p-2 bg-gray-100 text-gray-700 rounded-[0.75rem] hover:bg-gray-200 transition-colors"
+                          onClick={() => openEditModal(item)}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button 
+                          className="p-2 bg-red-50 text-red-600 rounded-[0.75rem] hover:bg-red-100 transition-colors"
+                          onClick={() => handleDeleteItem(item)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
                   </div>
-                </IOSCard>
+                </div>
               ))}
             </div>
           )}

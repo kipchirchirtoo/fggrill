@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { auditAPI } from '@/lib/api';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
@@ -22,11 +23,27 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
 
 export default function AuditReportsPage() {
   const { user } = useAuth();
-  const [reports] = useState<AuditReport[]>([
-    { id: '1', title: 'Q4 2024 Financial Audit', type: 'Financial', period: 'Oct-Dec 2024', status: 'completed', findings: 3, created_at: '2024-12-01' },
-    { id: '2', title: 'Inventory Audit - November', type: 'Inventory', period: 'Nov 2024', status: 'reviewed', findings: 5, created_at: '2024-11-30' },
-    { id: '3', title: 'Compliance Review', type: 'Compliance', period: 'Q4 2024', status: 'draft', findings: 0, created_at: '2024-12-02' },
-  ]);
+  const [reports, setReports] = useState<AuditReport[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchReports();
+  }, []);
+
+  const fetchReports = async () => {
+    setIsLoading(true);
+    try {
+      const response = await auditAPI.getReports();
+      if (response.success) {
+        setReports(response.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching reports:', error);
+      toast.error('Failed to load reports');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleExport = (id: string, format: 'pdf' | 'excel') => {
     toast.success(`Exporting report as ${format.toUpperCase()}...`);
@@ -38,7 +55,7 @@ export default function AuditReportsPage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Audit Reports</h1><p className="text-gray-500">Generate and manage reports</p></div>
-            <IOSButton><Plus className="h-4 w-4 mr-2" /> New Report</IOSButton>
+            <IOSButton leftIcon={<Plus />}>New Report</IOSButton>
           </div>
 
           <div className="grid grid-cols-3 gap-4">
@@ -48,7 +65,17 @@ export default function AuditReportsPage() {
           </div>
 
           <div className="space-y-4">
-            {reports.map((report) => {
+            {isLoading ? (
+              <div className="flex justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
+              </div>
+            ) : reports.length === 0 ? (
+              <IOSCard className="p-12 text-center">
+                <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900">No reports found</h3>
+                <p className="text-gray-500">Create a new report to get started</p>
+              </IOSCard>
+            ) : reports.map((report) => {
               const status = statusConfig[report.status];
               return (
                 <IOSCard key={report.id} className="p-4">

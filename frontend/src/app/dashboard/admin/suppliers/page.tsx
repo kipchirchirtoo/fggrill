@@ -52,8 +52,8 @@ export default function AdminSuppliersPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Suppliers</h1><p className="text-gray-500">Manage vendors</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchSuppliers}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <IOSButton onClick={() => setAddModalOpen(true)}><Plus className="h-4 w-4 mr-2" /> Add Supplier</IOSButton>
+              <IOSButton variant="secondary" onClick={fetchSuppliers} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>Add Supplier</IOSButton>
             </div>
           </div>
 
@@ -74,7 +74,7 @@ export default function AdminSuppliersPage() {
                     {supplier.email && <p className="flex items-center gap-2"><Mail className="h-3 w-3" /> {supplier.email}</p>}
                     {supplier.address && <p className="flex items-center gap-2"><MapPin className="h-3 w-3" /> {supplier.address}</p>}
                   </div>
-                  <IOSButton variant="secondary" size="sm" className="w-full mt-4"><Edit2 className="h-4 w-4 mr-2" /> Edit</IOSButton>
+                  <IOSButton variant="secondary" size="sm" className="w-full mt-4" leftIcon={<Edit2 />}>Edit</IOSButton>
                 </IOSCard>
               ))}
             </div>

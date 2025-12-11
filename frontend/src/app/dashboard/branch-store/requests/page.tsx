@@ -138,8 +138,8 @@ export default function BranchRequestsPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Stock Requests</h1><p className="text-gray-500">Request stock from central</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchRequests}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <IOSButton onClick={openNewRequestModal}><Plus className="h-4 w-4 mr-2" /> New Request</IOSButton>
+              <IOSButton variant="secondary" onClick={fetchRequests} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton onClick={openNewRequestModal} leftIcon={<Plus />}>New Request</IOSButton>
             </div>
           </div>
 
@@ -175,7 +175,7 @@ export default function BranchRequestsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        {request.priority === 'urgent' && <IOSBadge variant="error">Urgent</IOSBadge>}
+                        {request.priority === 'urgent' && <IOSBadge variant="light" color="danger">Urgent</IOSBadge>}
                         <IOSBadge className={`${status.bg} ${status.color}`}>{status.label}</IOSBadge>
                       </div>
                     </div>
@@ -242,8 +242,9 @@ export default function BranchRequestsPage() {
                       variant={priority === 'urgent' ? 'destructive' : 'secondary'}
                       onClick={() => setPriority('urgent')}
                       className="flex-1"
+                      leftIcon={<AlertTriangle />}
                     >
-                      <AlertTriangle className="h-4 w-4 mr-1" /> Urgent
+                      Urgent
                     </IOSButton>
                   </div>
                 </div>
@@ -295,7 +296,7 @@ export default function BranchRequestsPage() {
                                 <p className="text-xs text-gray-500">Min: {item.min_quantity}</p>
                               </div>
                               {isSelected ? (
-                                <IOSBadge variant="success">Added</IOSBadge>
+                                <IOSBadge variant="light" color="success">Added</IOSBadge>
                               ) : (
                                 <IOSButton size="sm" variant="secondary">
                                   <Plus className="h-4 w-4" />

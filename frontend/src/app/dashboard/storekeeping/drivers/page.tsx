@@ -153,8 +153,8 @@ export default function DriversPage() {
               <p className="text-gray-600">Manage delivery drivers for dispatches</p>
             </div>
             <div className="flex gap-3">
-              <IOSButton variant="outline" onClick={fetchDrivers}><RefreshCw className="h-4 w-4 mr-2" />Refresh</IOSButton>
-              {canEdit && <IOSButton onClick={openAddModal}><Plus className="h-4 w-4 mr-2" />Add Driver</IOSButton>}
+              <IOSButton variant="outline" onClick={fetchDrivers} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              {canEdit && <IOSButton onClick={openAddModal} leftIcon={<Plus />}>Add Driver</IOSButton>}
             </div>
           </div>
 
@@ -247,7 +247,7 @@ export default function DriversPage() {
                 <div><label className="text-sm font-medium">License Expiry</label><Input type="date" value={form.license_expiry} onChange={e => setForm({...form, license_expiry: e.target.value})} /></div>
               </div>
               <div><label className="text-sm font-medium">Status</label><select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full px-3 py-2 border rounded-ios-lg">{STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-              <div className="flex justify-end gap-3 pt-4"><IOSButton variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</IOSButton><IOSButton onClick={handleSave}><Save className="h-4 w-4 mr-2" />Save</IOSButton></div>
+              <div className="flex justify-end gap-3 pt-4"><IOSButton variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</IOSButton><IOSButton onClick={handleSave} leftIcon={<Save />}>Save</IOSButton></div>
             </div>
           </DialogContent>
         </Dialog>
@@ -256,7 +256,7 @@ export default function DriversPage() {
           <DialogContent>
             <DialogHeader><DialogTitle className="text-[#3C3C43]">Delete Driver</DialogTitle></DialogHeader>
             <p>Are you sure you want to delete <strong>{selectedDriver?.name}</strong>?</p>
-            <div className="flex justify-end gap-3 pt-4"><IOSButton variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</IOSButton><IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleDelete}><Trash2 className="h-4 w-4 mr-2" />Delete</IOSButton></div>
+            <div className="flex justify-end gap-3 pt-4"><IOSButton variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</IOSButton><IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleDelete} leftIcon={<Trash2 />}>Delete</IOSButton></div>
           </DialogContent>
         </Dialog>
       </DashboardLayout>

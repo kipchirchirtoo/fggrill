@@ -361,8 +361,7 @@ export default function WastagePage() {
                 Refresh
               </IOSButton>
               {canManage && (
-                <IOSButton onClick={() => setIsCreateModalOpen(true)} className="bg-[#3C3C43] hover:bg-[#3C3C43]">
-                  <Plus className="h-4 w-4 mr-2" />
+                <IOSButton onClick={() => setIsCreateModalOpen(true)} className="bg-[#3C3C43] hover:bg-[#3C3C43]" leftIcon={<Plus />}>
                   Record Wastage
                 </IOSButton>
               )}
@@ -557,9 +556,7 @@ export default function WastagePage() {
                   className="w-36 text-sm"
                 />
               </div>
-              <IOSButton variant="outline" onClick={exportToCSV} className="ml-auto">
-                <Download className="h-4 w-4 mr-2" />
-                Export CSV
+              <IOSButton variant="outline" onClick={exportToCSV} className="ml-auto" leftIcon={<Download />}>Export CSV
               </IOSButton>
             </div>
           </IOSCard>
@@ -770,9 +767,7 @@ export default function WastagePage() {
                   onClick={handleCreateWastage} 
                   disabled={!formData.item_id || !formData.reason}
                   className="bg-[#3C3C43] hover:bg-[#3C3C43]"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Record Wastage
+                 leftIcon={<Trash2 />}>Record Wastage
                 </IOSButton>
               </div>
             </div>
@@ -857,7 +852,7 @@ export default function WastagePage() {
                     {selectedRecord.disposal_method && (
                       <>
                         <label className="text-xs text-gray-500 uppercase ml-4">Disposal:</label>
-                        <IOSBadge variant="outline">{selectedRecord.disposal_method}</IOSBadge>
+                        <IOSBadge variant="light" color="secondary">{selectedRecord.disposal_method}</IOSBadge>
                       </>
                     )}
                   </div>
@@ -880,15 +875,15 @@ export default function WastagePage() {
                         variant="outline" 
                         className="text-[#3C3C43] border-[rgba(60,60,67,0.12)] hover:bg-[#F2F2F7]"
                         onClick={() => handleApproval(selectedRecord.id, 'reject')}
+                        leftIcon={<X />}
                       >
-                        <X className="h-4 w-4 mr-2" />
                         Reject
                       </IOSButton>
                       <IOSButton 
                         className="bg-[#3C3C43] hover:bg-[#3C3C43]"
                         onClick={() => handleApproval(selectedRecord.id, 'approve')}
+                        leftIcon={<CheckCircle />}
                       >
-                        <CheckCircle className="h-4 w-4 mr-2" />
                         Approve
                       </IOSButton>
                     </>

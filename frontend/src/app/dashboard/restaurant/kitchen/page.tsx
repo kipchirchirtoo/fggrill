@@ -130,9 +130,7 @@ export default function KitchenDisplayPage() {
               <p className="text-gray-500">Real-time order management</p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchOrders}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
+              <IOSButton variant="secondary" onClick={fetchOrders} leftIcon={<RefreshCw />}>Refresh
               </IOSButton>
             </div>
           </div>
@@ -257,8 +255,8 @@ export default function KitchenDisplayPage() {
                         <IOSButton
                           className="flex-1"
                           onClick={() => handleStartOrder(order.id)}
+                          leftIcon={<Play />}
                         >
-                          <Play className="h-4 w-4 mr-1" />
                           Start
                         </IOSButton>
                       )}
@@ -266,8 +264,8 @@ export default function KitchenDisplayPage() {
                         <IOSButton
                           className="flex-1 bg-[#34C759] hover:bg-green-700"
                           onClick={() => handleCompleteOrder(order.id)}
+                          leftIcon={<Bell />}
                         >
-                          <Bell className="h-4 w-4 mr-1" />
                           Ready
                         </IOSButton>
                       )}

@@ -27,6 +27,7 @@ import { formatDate } from '@/lib/date-utils';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { storeAPI } from '@/lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -141,6 +142,7 @@ export default function CentralWarehousePage() {
   
   // Dispatch states
   const [dispatchHistory, setDispatchHistory] = useState<any[]>([]);
+  const [dispatchLoading, setDispatchLoading] = useState<{[key: string]: boolean}>({});
   const [isCreateDispatchOpen, setIsCreateDispatchOpen] = useState(false);
   const [dispatchForm, setDispatchForm] = useState({
     request_id: '',
@@ -181,51 +183,23 @@ export default function CentralWarehousePage() {
   const fetchDashboardData = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      };
-
-      const [dashboardRes, requestsRes, branchesRes, itemsRes, dispatchesRes, transfersRes] = await Promise.all([
-        fetch(`${API_URL}/api/store/dashboard/central`, { headers }),
-        fetch(`${API_URL}/api/store/stock-requests/pending`, { headers }),
-        fetch(`${API_URL}/api/store/branches-stock`, { headers }),
-        fetch(`${API_URL}/api/store/items`, { headers }),
-        fetch(`${API_URL}/api/store/dispatch-notes`, { headers }),
-        fetch(`${API_URL}/api/store/transfer_items`, { headers })
+      // Use the storeAPI to fetch data
+      const [dashboardData, pendingRequests, branchesData, itemsData, dispatchData, transfersData] = await Promise.all([
+        storeAPI.getCentralDashboard(),
+        storeAPI.getPendingRequests(),
+        storeAPI.getBranchesWithStock(),
+        storeAPI.getItems(),
+        storeAPI.getDispatchHistory(),
+        storeAPI.getTransferItems()
       ]);
 
-      if (dashboardRes.ok) {
-        const data = await dashboardRes.json();
-        setStats(data.data?.stats || stats);
-      }
-
-      if (requestsRes.ok) {
-        const data = await requestsRes.json();
-        setPendingRequests(data.data || []);
-      }
-
-      if (branchesRes.ok) {
-        const data = await branchesRes.json();
-        setBranches(data.data || []);
-      }
-
-      if (itemsRes.ok) {
-        const data = await itemsRes.json();
-        setMasterItems(data.data || []);
-      }
-
-      if (dispatchesRes.ok) {
-        const data = await dispatchesRes.json();
-        setDispatchHistory(data.data || []);
-      }
-
-      if (transfersRes.ok) {
-        const data = await transfersRes.json();
-        setTransfers(data.data || []);
-      }
-
+      // Update state with the data
+      setStats(dashboardData?.data?.stats || stats);
+      setPendingRequests(pendingRequests?.data || []);
+      setBranches(branchesData?.data || []);
+      setMasterItems(itemsData?.data || []);
+      setDispatchHistory(dispatchData?.data || []);
+      setTransfers(transfersData?.data || []);
     } catch (error) {
       console.error('Error fetching dashboard:', error);
       toast.error('Failed to load dashboard data');
@@ -252,14 +226,12 @@ export default function CentralWarehousePage() {
     if (!selectedRequest) return;
 
     try {
-      const token = localStorage.getItem('token');
-      
       // Prepare items from request
       const items = selectedRequest.items
         .filter(i => i.status === 'APPROVED' || i.status === 'PARTIALLY_APPROVED')
         .map(i => ({
           item_sku: i.item_sku,
-          dispatched_quantity: i.approved_quantity || i.requested_quantity
+          quantity: i.approved_quantity || i.requested_quantity
         }));
 
       if (items.length === 0) {
@@ -267,29 +239,23 @@ export default function CentralWarehousePage() {
         return;
       }
 
-      const response = await fetch(`${API_URL}/api/store/dispatch-notes`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          ...dispatchForm,
-          items
-        })
+      const response = await storeAPI.createDispatch({
+        request_id: dispatchForm.request_id,
+        to_branch_id: dispatchForm.to_branch_id,
+        items,
+        notes: dispatchForm.notes
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        toast.success(`Dispatch ${data.data.dispatch_number} created`);
+      if (response.success) {
+        toast.success(`Dispatch ${response.data?.dispatch_number || ''} created`);
         setIsCreateDispatchOpen(false);
         fetchDashboardData();
         setActiveTab('dispatches');
       } else {
-        throw new Error('Failed to create dispatch');
+        throw new Error(response.message || 'Failed to create dispatch');
       }
-    } catch (error) {
-      toast.error('Failed to create dispatch');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to create dispatch');
     }
   };
 
@@ -332,29 +298,29 @@ export default function CentralWarehousePage() {
     }
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/transfer`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from_branch_id: transferForm.from_branch_id,
-          to_branch_id: transferForm.to_branch_id,
-          items: validItems,
-          notes: transferForm.notes
-        })
-      });
+      // We need to prepare the data for transfer (use the transferItem function iteratively)
+      // Since storeAPI.transferItem takes a single item at a time
+      for (const item of validItems) {
+        const response = await storeAPI.transferItem({
+          sku: item.item_sku,
+          transfer_quantity: item.quantity
+        });
+        
+        if (!response.success) {
+          throw new Error(`Failed to add ${item.item_sku} to transfer cart: ${response.message}`);
+        }
+      }
 
-      if (response.ok) {
+      // Now submit the entire transfer request
+      const submitResponse = await storeAPI.submitTransferRequest();
+      
+      if (submitResponse.success) {
         toast.success('Transfer created successfully');
         setIsCreateTransferOpen(false);
         fetchDashboardData();
         setActiveTab('transfers');
       } else {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to create transfer');
+        throw new Error(submitResponse.message || 'Failed to create transfer');
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to create transfer');
@@ -363,23 +329,29 @@ export default function CentralWarehousePage() {
 
   const handleDispatchItem = async (dispatchId: string) => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/dispatch-notes/${dispatchId}/dispatch`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      // Set loading state for this specific dispatch
+      setDispatchLoading(prev => ({ ...prev, [dispatchId]: true }));
+      
+      // Validate the dispatchId
+      if (!dispatchId) {
+        toast.error('Invalid dispatch ID');
+        return;
+      }
+      
+      const response = await storeAPI.dispatchItems(dispatchId);
 
-      if (response.ok) {
-        toast.success('Items dispatched successfully');
+      if (response.success) {
+        toast.success(`Items dispatched successfully. ${response.data?.dispatch_number || 'Dispatch'} is now in transit.`);
         fetchDashboardData();
       } else {
-        throw new Error('Failed to dispatch items');
+        throw new Error(response.message || 'Failed to dispatch items');
       }
-    } catch (error) {
-      toast.error('Failed to dispatch items');
+    } catch (error: any) {
+      console.error('Dispatch error:', error);
+      toast.error(`Failed to dispatch items: ${error.message || 'Unknown error'}`);
+    } finally {
+      // Clear loading state
+      setDispatchLoading(prev => ({ ...prev, [dispatchId]: false }));
     }
   };
 
@@ -446,16 +418,10 @@ export default function CentralWarehousePage() {
     
     const cleanCode = code.trim();
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/items/${encodeURIComponent(cleanCode)}`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await storeAPI.getItem(cleanCode);
 
-      if (response.ok) {
-        const { data } = await response.json();
+      if (response.success && response.data) {
+        const data = response.data;
         // Item found - pre-fill form
         setItemForm(prev => ({
           ...prev,
@@ -476,7 +442,7 @@ export default function CentralWarehousePage() {
         setItemForm(prev => ({ ...prev, barcode: cleanCode }));
         toast.info('New item - enter details');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Lookup error:', error);
     }
   };
@@ -532,23 +498,14 @@ export default function CentralWarehousePage() {
 
   const handleAddItem = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/items`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(itemForm)
-      });
+      const response = await storeAPI.createItem(itemForm);
 
-      if (response.ok) {
+      if (response.success) {
         toast.success('Item added successfully');
         setIsAddItemModalOpen(false);
         fetchDashboardData();
       } else {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to add item');
+        throw new Error(response.message || 'Failed to add item');
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to add item');
@@ -559,23 +516,14 @@ export default function CentralWarehousePage() {
     if (!selectedItem) return;
     
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/items/${selectedItem.sku}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(itemForm)
-      });
+      const response = await storeAPI.updateItem(selectedItem.sku, itemForm);
 
-      if (response.ok) {
+      if (response.success) {
         toast.success('Item updated successfully');
         setIsEditItemModalOpen(false);
         fetchDashboardData();
       } else {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to update item');
+        throw new Error(response.message || 'Failed to update item');
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to update item');
@@ -586,23 +534,15 @@ export default function CentralWarehousePage() {
     if (!selectedItem) return;
     
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/items/${selectedItem.sku}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await storeAPI.deleteItem(selectedItem.sku);
 
-      if (response.ok) {
+      if (response.success) {
         toast.success('Item deleted successfully');
         setIsDeleteConfirmOpen(false);
         setSelectedItem(null);
         fetchDashboardData();
       } else {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to delete item');
+        throw new Error(response.message || 'Failed to delete item');
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete item');
@@ -611,24 +551,16 @@ export default function CentralWarehousePage() {
 
   const handleAddStock = async (sku: string, quantity: number) => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/items/${sku}/add-stock`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ quantity, reason: 'Manual stock addition' })
-      });
+      const response = await storeAPI.addStock(sku, { quantity, notes: 'Manual stock addition' });
 
-      if (response.ok) {
+      if (response.success) {
         toast.success('Stock added successfully');
         fetchDashboardData();
       } else {
-        throw new Error('Failed to add stock');
+        throw new Error(response.message || 'Failed to add stock');
       }
-    } catch (error) {
-      toast.error('Failed to add stock');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to add stock');
     }
   };
 
@@ -657,33 +589,26 @@ export default function CentralWarehousePage() {
     if (!selectedRequest) return;
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/stock-requests/${selectedRequest.id}/review`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          approved_items: reviewItems.map(item => ({
-            id: item.id,
-            approved_quantity: item.approved_quantity,
-            status: item.status,
-            rejection_reason: item.rejection_reason
-          })),
-          review_notes: ''
-        })
+      const response = await storeAPI.reviewStockRequest(selectedRequest.id, {
+        action: 'APPROVE',
+        notes: '',
+        approved_items: reviewItems.map(item => ({
+          id: item.id,
+          approved_quantity: item.approved_quantity,
+          status: item.status,
+          rejection_reason: item.rejection_reason
+        }))
       });
 
-      if (response.ok) {
+      if (response.success) {
         toast.success('Request reviewed successfully');
         setIsReviewModalOpen(false);
         fetchDashboardData();
       } else {
-        throw new Error('Failed to review request');
+        throw new Error(response.message || 'Failed to review request');
       }
-    } catch (error) {
-      toast.error('Failed to review request');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to review request');
     }
   };
 
@@ -740,13 +665,9 @@ export default function CentralWarehousePage() {
               </div>
             </div>
             <div className="flex gap-3">
-              <IOSButton variant="outline" onClick={fetchDashboardData}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
+              <IOSButton variant="outline" onClick={fetchDashboardData} leftIcon={<RefreshCw />}>Refresh
               </IOSButton>
-              <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={openAddItemModal}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add to Master Catalog
+              <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={openAddItemModal} leftIcon={<Plus />}>Add to Master Catalog
               </IOSButton>
             </div>
           </div>
@@ -922,9 +843,7 @@ export default function CentralWarehousePage() {
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
-                  <IOSButton onClick={openAddItemModal}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Item
+                  <IOSButton onClick={openAddItemModal} leftIcon={<Plus />}>Add Item
                   </IOSButton>
                 </div>
 
@@ -953,7 +872,7 @@ export default function CentralWarehousePage() {
                           </td>
                           <td className="px-4 py-4 font-mono text-sm">{item.sku}</td>
                           <td className="px-4 py-4">
-                            <IOSBadge variant="outline">{item.category}</IOSBadge>
+                            <IOSBadge variant="light" color="secondary">{item.category}</IOSBadge>
                           </td>
                           <td className="px-4 py-4">
                             <span className={`font-bold ${
@@ -1036,12 +955,12 @@ export default function CentralWarehousePage() {
                           <td className="px-4 py-4">
                             <div className="flex gap-2">
                               {(request.status === 'APPROVED' || request.status === 'PARTIALLY_APPROVED') ? (
-                                <IOSButton size="sm" className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={() => openCreateDispatchModal(request)}>
-                                  <Truck className="h-4 w-4 mr-1" /> Dispatch
+                                <IOSButton size="sm" className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={() => openCreateDispatchModal(request)} leftIcon={<Truck />}>
+                                  Dispatch
                                 </IOSButton>
                               ) : (
-                                <IOSButton size="sm" onClick={() => openReviewModal(request)}>
-                                  <Eye className="h-4 w-4 mr-1" /> Review
+                                <IOSButton size="sm" onClick={() => openReviewModal(request)} leftIcon={<Eye />}>
+                                  Review
                                 </IOSButton>
                               )}
                             </div>
@@ -1109,8 +1028,14 @@ export default function CentralWarehousePage() {
                           </td>
                           <td className="px-4 py-4">
                             {dispatch.status === 'PENDING' && (
-                              <IOSButton size="sm" className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={() => handleDispatchItem(dispatch.id)}>
-                                <Send className="h-4 w-4 mr-1" /> Send
+                              <IOSButton 
+                                size="sm" 
+                                className="bg-[#3C3C43] hover:bg-[#3C3C43]" 
+                                onClick={() => handleDispatchItem(dispatch.id)} 
+                                leftIcon={<Send />}
+                                disabled={dispatchLoading[dispatch.id]}
+                              >
+                                {dispatchLoading[dispatch.id] ? 'Sending...' : 'Send'}
                               </IOSButton>
                             )}
                             {dispatch.status === 'IN_TRANSIT' && (
@@ -1140,9 +1065,7 @@ export default function CentralWarehousePage() {
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold font-sf-pro-display text-gray-900">Branch-to-Branch Transfers</h3>
-                  <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={openCreateTransferModal}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Transfer
+                  <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={openCreateTransferModal} leftIcon={<Plus />}>New Transfer
                   </IOSButton>
                 </div>
                 <div className="overflow-x-auto">
@@ -1271,9 +1194,7 @@ export default function CentralWarehousePage() {
                 <IOSButton variant="outline" onClick={() => setIsCreateDispatchOpen(false)}>
                   Cancel
                 </IOSButton>
-                <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleCreateDispatch}>
-                  <Send className="h-4 w-4 mr-2" />
-                  Create Dispatch
+                <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleCreateDispatch} leftIcon={<Send />}>Create Dispatch
                 </IOSButton>
               </div>
             </div>
@@ -1393,9 +1314,7 @@ export default function CentralWarehousePage() {
                   <IOSButton variant="outline" onClick={() => setIsReviewModalOpen(false)}>
                     Cancel
                   </IOSButton>
-                  <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleApproveRequest}>
-                    <Check className="h-4 w-4 mr-2" />
-                    Submit Review
+                  <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleApproveRequest} leftIcon={<Check />}>Submit Review
                   </IOSButton>
                 </div>
               </div>
@@ -1571,9 +1490,7 @@ export default function CentralWarehousePage() {
                 <IOSButton variant="outline" onClick={() => setIsAddItemModalOpen(false)}>
                   Cancel
                 </IOSButton>
-                <IOSButton onClick={handleAddItem}>
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Item
+                <IOSButton onClick={handleAddItem} leftIcon={<Save />}>Save Item
                 </IOSButton>
               </div>
             </div>
@@ -1677,9 +1594,7 @@ export default function CentralWarehousePage() {
                 <IOSButton variant="outline" onClick={() => setIsEditItemModalOpen(false)}>
                   Cancel
                 </IOSButton>
-                <IOSButton onClick={handleUpdateItem}>
-                  <Save className="h-4 w-4 mr-2" />
-                  Update Item
+                <IOSButton onClick={handleUpdateItem} leftIcon={<Save />}>Update Item
                 </IOSButton>
               </div>
             </div>
@@ -1701,9 +1616,7 @@ export default function CentralWarehousePage() {
               <IOSButton variant="outline" onClick={() => setIsDeleteConfirmOpen(false)}>
                 Cancel
               </IOSButton>
-              <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleDeleteItem}>
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
+              <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleDeleteItem} leftIcon={<Trash2 />}>Delete
               </IOSButton>
             </div>
           </DialogContent>
@@ -1752,9 +1665,7 @@ export default function CentralWarehousePage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-sm font-medium">Items to Transfer</label>
-                  <IOSButton size="sm" variant="outline" onClick={addTransferItem}>
-                    <Plus className="h-4 w-4 mr-1" /> Add Item
-                  </IOSButton>
+                  <IOSButton size="sm" variant="outline" onClick={addTransferItem} leftIcon={<Plus />}>Add Item</IOSButton>
                 </div>
                 <div className="space-y-2 max-h-60 overflow-y-auto">
                   {transferItems.map((item, index) => (
@@ -1800,9 +1711,7 @@ export default function CentralWarehousePage() {
                 <IOSButton variant="outline" onClick={() => setIsCreateTransferOpen(false)}>
                   Cancel
                 </IOSButton>
-                <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleCreateTransfer}>
-                  <Send className="h-4 w-4 mr-2" />
-                  Create Transfer
+                <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleCreateTransfer} leftIcon={<Send />}>Create Transfer
                 </IOSButton>
               </div>
             </div>

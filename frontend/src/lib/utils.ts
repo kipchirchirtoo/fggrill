@@ -30,6 +30,12 @@ export const formatDateTime = (date: Date | string) => {
   }).format(new Date(date))
 }
 
+// Stable number formatter to prevent SSR/CSR locale mismatches
+export const formatNumber = (value: number) => {
+  const n = Number.isFinite(value) ? value : 0
+  return new Intl.NumberFormat('en-KE').format(n)
+}
+
 export const generateBookingNumber = () => {
   const prefix = 'FGH'
   const date = new Date().toISOString().slice(0,10).replace(/-/g,'')

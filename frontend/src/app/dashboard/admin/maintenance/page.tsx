@@ -40,7 +40,7 @@ export default function AdminMaintenancePage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Maintenance</h1><p className="text-gray-500">Repair and maintenance</p></div>
-            <IOSButton variant="secondary" onClick={fetchData}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+            <IOSButton variant="secondary" onClick={fetchData} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

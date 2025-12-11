@@ -3,6 +3,9 @@ import { supabase } from '../config/database';
 import { User, UserRole } from '../models/User';
 import { logger } from '../utils/logger';
 
+// Re-export UserRole for convenience
+export { UserRole };
+
 // Extend Express Request type to include user
 declare global {
   namespace Express {
@@ -34,7 +37,7 @@ export const protect = async (
     // In development, if there is no token at all, attach a dev super_admin user
     if (!token && isDev) {
       logger.warn('No auth token provided – using development super_admin user');
-      req.user = { id: 'dev-user', role: UserRole.SUPER_ADMIN, branch_id: 1 };
+      req.user = { id: 'dev-user', role: UserRole.SUPER_ADMIN, branch_id: 1, branchId: 1 };
       next();
       return;
     }
@@ -56,7 +59,7 @@ export const protect = async (
         // In development, fall back to dev user on Supabase auth failure
         if (isDev) {
           logger.warn('Supabase auth failed in development, falling back to dev super_admin user', authError);
-          req.user = { id: 'dev-user', role: UserRole.SUPER_ADMIN, branch_id: 1 };
+          req.user = { id: 'dev-user', role: UserRole.SUPER_ADMIN, branch_id: 1, branchId: 1 };
           next();
           return;
         }
@@ -85,7 +88,7 @@ export const protect = async (
       // If Supabase is unreachable in development, fall back to dev user
       if (isDev) {
         logger.warn('Supabase auth threw an error in development, falling back to dev super_admin user', error);
-        req.user = { id: 'dev-user', role: UserRole.SUPER_ADMIN };
+        req.user = { id: 'dev-user', role: UserRole.SUPER_ADMIN, branch_id: 1, branchId: 1 };
         next();
         return;
       }

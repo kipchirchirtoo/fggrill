@@ -262,21 +262,30 @@ class DatabaseFetcher:
         
         try:
             # Revenue from bookings
-            bookings = self.client.table('bookings').select('total_amount')\
+            bookings_query = self.client.table('bookings').select('total_amount')\
                 .gte('created_at', f'{start_date}T00:00:00')\
-                .lte('created_at', f'{end_date}T23:59:59').execute()
+                .lte('created_at', f'{end_date}T23:59:59')
+            if branch_id:
+                bookings_query = bookings_query.eq('branch_id', branch_id)
+            bookings = bookings_query.execute()
             data['room_revenue'] = sum(b.get('total_amount', 0) or 0 for b in (bookings.data or []))
             
             # Revenue from restaurant
-            restaurant = self.client.table('restaurant_orders').select('total')\
+            restaurant_query = self.client.table('restaurant_orders').select('total')\
                 .gte('created_at', f'{start_date}T00:00:00')\
-                .lte('created_at', f'{end_date}T23:59:59').execute()
+                .lte('created_at', f'{end_date}T23:59:59')
+            if branch_id:
+                restaurant_query = restaurant_query.eq('branch_id', branch_id)
+            restaurant = restaurant_query.execute()
             data['restaurant_revenue'] = sum(o.get('total', 0) or 0 for o in (restaurant.data or []))
             
             # Revenue from bar
-            bar = self.client.table('bar_orders').select('total')\
+            bar_query = self.client.table('bar_orders').select('total')\
                 .gte('created_at', f'{start_date}T00:00:00')\
-                .lte('created_at', f'{end_date}T23:59:59').execute()
+                .lte('created_at', f'{end_date}T23:59:59')
+            if branch_id:
+                bar_query = bar_query.eq('branch_id', branch_id)
+            bar = bar_query.execute()
             data['bar_revenue'] = sum(o.get('total', 0) or 0 for o in (bar.data or []))
             
             # Calculate total revenue
@@ -288,9 +297,12 @@ class DatabaseFetcher:
                 data['bar_pct'] = (data['bar_revenue'] / data['total_revenue']) * 100
             
             # Fetch expenses
-            expenses = self.client.table('expenses').select('*')\
+            expenses_query = self.client.table('expenses').select('*')\
                 .gte('date', start_date)\
-                .lte('date', end_date).execute()
+                .lte('date', end_date)
+            if branch_id:
+                expenses_query = expenses_query.eq('branch_id', branch_id)
+            expenses = expenses_query.execute()
             
             for exp in (expenses.data or []):
                 category = (exp.get('category', '') or '').lower()

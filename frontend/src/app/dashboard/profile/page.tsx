@@ -141,8 +141,7 @@ export default function ProfilePage() {
             <div className="flex gap-4 pt-4">
               {isEditing ? (
                 <>
-                  <IOSButton onClick={handleSave} disabled={isLoading}>
-                    {isLoading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                  <IOSButton onClick={handleSave} disabled={isLoading} leftIcon={isLoading ? <RefreshCw className="animate-spin" /> : <Save />}>
                     Save Changes
                   </IOSButton>
                   <IOSButton variant="outline" onClick={() => setIsEditing(false)} disabled={isLoading}>Cancel</IOSButton>

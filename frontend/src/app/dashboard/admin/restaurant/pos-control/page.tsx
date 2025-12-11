@@ -39,7 +39,7 @@ export default function AdminPOSControlPage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">POS Control</h1><p className="text-gray-500">Manage POS terminals</p></div>
-            <IOSButton variant="secondary" onClick={fetchTerminals}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+            <IOSButton variant="secondary" onClick={fetchTerminals} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -69,8 +69,8 @@ export default function AdminPOSControlPage() {
                   </div>
                   {terminal.last_activity && <p className="text-xs text-gray-400">Last activity: {new Date(terminal.last_activity).toLocaleString()}</p>}
                   <div className="flex gap-2 mt-4">
-                    <IOSButton size="sm" variant="secondary" className="flex-1"><Settings className="h-4 w-4 mr-1" /> Configure</IOSButton>
-                    <IOSButton size="sm" variant="secondary" className="flex-1"><Power className="h-4 w-4 mr-1" /> Restart</IOSButton>
+                    <IOSButton size="sm" variant="secondary" className="flex-1" leftIcon={<Settings />}>Configure</IOSButton>
+                    <IOSButton size="sm" variant="secondary" className="flex-1" leftIcon={<Power />}>Restart</IOSButton>
                   </div>
                 </IOSCard>
               ))}

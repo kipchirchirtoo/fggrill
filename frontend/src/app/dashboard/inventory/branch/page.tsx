@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
+import { BranchPageWrapper } from '@/components/branch/branch-page-wrapper';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import {
   Package,
@@ -15,12 +17,12 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { StockItem, BranchStock, StockRequest } from '@/types/inventory.types';
+import { branchOperationsAPI } from '@/lib/branch-api';
+import { IOSButton } from '@/components/ui/ios-button';
 
-// API base URL
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
-export default function BranchInventoryPage() {
+function BranchInventoryPageContent() {
   const { user } = useAuth();
+  const { activeBranch, activeBranchId } = useBranch();
   const [activeTab, setActiveTab] = useState<'stock' | 'requests'>('stock');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
@@ -34,29 +36,35 @@ export default function BranchInventoryPage() {
   // Fetch stock data
   useEffect(() => {
     const fetchData = async () => {
+      if (!activeBranchId) return;
+      
       try {
-        const token = localStorage.getItem('token');
-        const headers = {
-          'Authorization': `Bearer ${token}`
-        };
-
-        // Fetch branch stock
-        const stockResponse = await fetch(`${API_URL}/api/inventory/branch-stock`, { headers });
-        if (!stockResponse.ok) throw new Error('Failed to fetch branch stock');
-        const stockData = await stockResponse.json();
-        setBranchStock(stockData.data);
-
-        // Fetch items
-        const itemsResponse = await fetch(`${API_URL}/api/inventory/items`, { headers });
-        if (!itemsResponse.ok) throw new Error('Failed to fetch items');
-        const itemsData = await itemsResponse.json();
-        setItems(itemsData.data);
-
-        // Fetch requests
-        const requestsResponse = await fetch(`${API_URL}/api/inventory/requests`, { headers });
-        if (!requestsResponse.ok) throw new Error('Failed to fetch requests');
-        const requestsData = await requestsResponse.json();
-        setRequests(requestsData.data);
+        // Fetch branch inventory
+        const inventoryResponse = await branchOperationsAPI.getInventory({}, activeBranchId);
+        if (inventoryResponse.success) {
+          setItems(inventoryResponse.data || []);
+        } else {
+          throw new Error(inventoryResponse.message || 'Failed to fetch inventory');
+        }
+        
+        // Fetch branch stock requests
+        const requestsResponse = await branchOperationsAPI.getStockRequests(undefined, activeBranchId);
+        if (requestsResponse.success) {
+          setRequests(requestsResponse.data || []);
+        } else {
+          throw new Error(requestsResponse.message || 'Failed to fetch stock requests');
+        }
+        
+        // Set branch stock from inventory data
+        // This is simulating the branch stock from inventory items until we have a separate endpoint
+        if (inventoryResponse.data) {
+          const stockData = inventoryResponse.data.map((item: any) => ({
+            id: item.id,
+            itemId: item.id,
+            currentStock: item.quantity || 0
+          }));
+          setBranchStock(stockData);
+        }
 
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred');
@@ -67,7 +75,7 @@ export default function BranchInventoryPage() {
     };
 
     fetchData();
-  }, []);
+  }, [activeBranchId]);
 
   // Calculate statistics
   const stats = {
@@ -84,19 +92,19 @@ export default function BranchInventoryPage() {
   };
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.STOREKEEPER]}>
+    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_STOREKEEPER]}>
       <DashboardLayout>
         <div className="space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-900">Branch Inventory Management</h1>
-            <button
+            <IOSButton
               onClick={() => setShowRequestModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#3C3C43] text-white rounded-ios-lg hover:bg-[#3C3C43]"
+              leftIcon={<Send className="h-4 w-4" />}
+              variant="primary"
             >
-              <Send className="h-4 w-4" />
               New Stock Request
-            </button>
+            </IOSButton>
           </div>
 
           {/* Stats */}
@@ -327,5 +335,14 @@ export default function BranchInventoryPage() {
         {/* TODO: Add modals for stock requests and request details */}
       </DashboardLayout>
     </ProtectedRoute>
+  );
+}
+
+// Wrap with BranchPageWrapper to prevent hydration errors
+export default function BranchInventoryPage() {
+  return (
+    <BranchPageWrapper>
+      <BranchInventoryPageContent />
+    </BranchPageWrapper>
   );
 }

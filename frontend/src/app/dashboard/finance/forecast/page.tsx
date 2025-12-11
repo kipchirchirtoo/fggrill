@@ -1,95 +1,124 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth, UserRole } from '@/lib/auth-context';
+import { UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
-import { Button } from "@/components/ui/minimal/button";
 import { financeAPI } from '@/lib/api';
-import { TrendingUp, RefreshCw, Calendar, ArrowUpRight, ArrowDownRight } from 'lucide-react';
-import { IOSButton } from '@/components/ui/ios-button';
-import { IOSCard } from '@/components/ui/ios-card';
+import { TrendingUp, RefreshCw, Calendar, Target } from 'lucide-react';
 
-interface ForecastData { month: string; projectedRevenue: number; projectedExpenses: number; projectedProfit: number; confidence: number; }
+interface ForecastItem { month: string; projectedRevenue: number; projectedExpenses: number; projectedProfit: number; confidence: number; }
 
 export default function ForecastPage() {
-  const { user } = useAuth();
-  const [forecasts, setForecasts] = useState<ForecastData[]>([]);
+  const [forecast, setForecast] = useState<ForecastItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [months, setMonths] = useState(6);
+  const [months, setMonths] = useState<number>(6);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await financeAPI.getForecast(months);
-      if (response.success) setForecasts(response.data || []);
+      if (response?.success && Array.isArray(response.data)) {
+        setForecast(response.data);
+      } else if (Array.isArray(response)) {
+        setForecast(response);
+      }
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
   }, [months]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const totalProjectedRevenue = forecasts.reduce((sum, f) => sum + f.projectedRevenue, 0);
-  const totalProjectedProfit = forecasts.reduce((sum, f) => sum + f.projectedProfit, 0);
+  const forecastArray = Array.isArray(forecast) ? forecast : [];
+  const totalProjectedRevenue = forecastArray.reduce((sum, f) => sum + (f.projectedRevenue || 0), 0);
+  const totalProjectedProfit = forecastArray.reduce((sum, f) => sum + (f.projectedProfit || 0), 0);
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
-        <div className="space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div><h1 className="text-2xl font-bold text-gray-900">Financial Forecast</h1><p className="text-gray-500">Projected financial performance</p></div>
+        <div className="space-y-6 max-w-6xl">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900">Financial Forecast</h1>
+              <p className="text-sm text-gray-500 mt-1">Projected financial performance</p>
+            </div>
             <div className="flex gap-2">
               {[3, 6, 12].map((m) => (
-                <IOSButton key={m} variant={months === m ? 'primary' : 'secondary'} size="sm" onClick={() => setMonths(m)}>
+                <button key={m} onClick={() => setMonths(m)} className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${months === m ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
                   {m} Months
-                </IOSButton>
+                </button>
               ))}
-              <IOSButton variant="secondary" onClick={fetchData}><RefreshCw className="h-4 w-4" /></IOSButton>
+              <button onClick={fetchData} disabled={isLoading} className="p-2 text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
             </div>
           </div>
 
+          {/* Stats */}
           <div className="grid grid-cols-2 gap-4">
-            <IOSCard className="p-4">
+            <div className="bg-white border border-gray-200 rounded-lg p-5">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 rounded-ios-lg"><ArrowUpRight className="h-5 w-5 text-[#34C759]" /></div>
-                <div><p className="text-sm text-gray-500">Projected Revenue ({months}mo)</p><p className="text-xl font-bold">KES {totalProjectedRevenue.toLocaleString()}</p></div>
+                <div className="p-2 bg-gray-100 rounded-lg"><TrendingUp className="h-5 w-5 text-gray-600" /></div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">Projected Revenue ({months}mo)</p>
+                  <p className="text-xl font-semibold text-gray-900">KES {totalProjectedRevenue.toLocaleString()}</p>
+                </div>
               </div>
-            </IOSCard>
-            <IOSCard className="p-4">
+            </div>
+            <div className="bg-white border border-gray-200 rounded-lg p-5">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-ios-lg"><TrendingUp className="h-5 w-5 text-[#007AFF]" /></div>
-                <div><p className="text-sm text-gray-500">Projected Profit ({months}mo)</p><p className="text-xl font-bold text-[#007AFF]">KES {totalProjectedProfit.toLocaleString()}</p></div>
+                <div className="p-2 bg-gray-100 rounded-lg"><Target className="h-5 w-5 text-gray-600" /></div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">Projected Profit ({months}mo)</p>
+                  <p className="text-xl font-semibold text-gray-900">KES {totalProjectedProfit.toLocaleString()}</p>
+                </div>
               </div>
-            </IOSCard>
+            </div>
           </div>
 
+          {/* List */}
           {isLoading ? (
-            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
-          ) : forecasts.length === 0 ? (
-            <IOSCard className="p-12 text-center"><TrendingUp className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No forecast data</p></IOSCard>
+            <div className="flex items-center justify-center py-12"><RefreshCw className="h-6 w-6 animate-spin text-gray-400" /></div>
+          ) : forecastArray.length === 0 ? (
+            <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
+              <Calendar className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+              <p className="text-gray-500">No forecast data</p>
+            </div>
           ) : (
-            <IOSCard className="p-6">
-              <h2 className="text-lg font-semibold font-sf-pro-display mb-4">Monthly Projections</h2>
-              <div className="space-y-4">
-                {forecasts.map((f, i) => (
-                  <div key={i} className="p-4 bg-gray-50 rounded-ios-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-gray-500" />
-                        <span className="font-medium">{f.month}</span>
-                      </div>
-                      <span className="text-sm text-gray-500">{f.confidence}% confidence</span>
+            <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
+              {forecastArray.map((item, i) => (
+                <div key={i} className="p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-gray-100 rounded-lg"><Calendar className="h-5 w-5 text-gray-600" /></div>
+                      <p className="font-medium text-gray-900">{item.month || 'Unknown'}</p>
                     </div>
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div><p className="text-gray-500">Revenue</p><p className="font-bold text-[#34C759]">KES {f.projectedRevenue.toLocaleString()}</p></div>
-                      <div><p className="text-gray-500">Expenses</p><p className="font-bold text-[#FF3B30]">KES {f.projectedExpenses.toLocaleString()}</p></div>
-                      <div><p className="text-gray-500">Profit</p><p className={`font-bold ${f.projectedProfit >= 0 ? 'text-[#007AFF]' : 'text-[#FF3B30]'}`}>KES {f.projectedProfit.toLocaleString()}</p></div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-500">Confidence:</span>
+                      <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-gray-400" style={{ width: `${item.confidence || 0}%` }} />
+                      </div>
+                      <span className="text-sm font-medium text-gray-900">{item.confidence || 0}%</span>
                     </div>
                   </div>
-                ))}
-              </div>
-            </IOSCard>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-gray-500 uppercase">Revenue</p>
+                      <p className="font-semibold text-gray-900">KES {(item.projectedRevenue || 0).toLocaleString()}</p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-gray-500 uppercase">Expenses</p>
+                      <p className="font-semibold text-gray-900">KES {(item.projectedExpenses || 0).toLocaleString()}</p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-gray-500 uppercase">Profit</p>
+                      <p className="font-semibold text-gray-900">KES {(item.projectedProfit || 0).toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </DashboardLayout>

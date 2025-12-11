@@ -48,7 +48,7 @@ export default function BranchDeparturesPage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Today's Departures</h1><p className="text-gray-500">{departures.length} guests leaving</p></div>
-            <IOSButton variant="secondary" onClick={fetchDepartures}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+            <IOSButton variant="secondary" onClick={fetchDepartures} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -74,9 +74,9 @@ export default function BranchDeparturesPage() {
                     </div>
                     <div className="flex items-center gap-3">
                       {departure.status === 'checked_out' ? (
-                        <IOSBadge variant="success">Checked Out</IOSBadge>
+                        <IOSBadge variant="light" color="success">Checked Out</IOSBadge>
                       ) : (
-                        <IOSButton size="sm" onClick={() => handleCheckOut(departure.id)}><LogOut className="h-4 w-4 mr-1" /> Check Out</IOSButton>
+                        <IOSButton size="sm" onClick={() => handleCheckOut(departure.id)} leftIcon={<LogOut />}> Check Out</IOSButton>
                       )}
                     </div>
                   </div>

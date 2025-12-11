@@ -525,7 +525,7 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
                             <Check className="h-5 w-5 text-green-600" />
                           )}
                         </div>
-                        <p className="text-sm text-gray-600">{room.type}</p>
+                        <p className="text-sm text-gray-600">{typeof room.type === 'string' ? room.type : room.type?.name || 'Standard'}</p>
                         <p className="text-xs text-gray-400">Floor {room.floor}</p>
                       </motion.div>
                     ))}

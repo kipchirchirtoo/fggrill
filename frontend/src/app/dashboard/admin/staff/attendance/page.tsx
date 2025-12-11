@@ -41,7 +41,7 @@ export default function AdminAttendancePage() {
             <div><h1 className="text-2xl font-bold text-gray-900">Staff Attendance</h1><p className="text-gray-500">Daily attendance records</p></div>
             <div className="flex gap-2">
               <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="px-3 py-2 border rounded-ios-lg" />
-              <IOSButton variant="secondary" onClick={fetchRecords}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+              <IOSButton variant="secondary" onClick={fetchRecords} leftIcon={<RefreshCw />}>Refresh</IOSButton>
             </div>
           </div>
 

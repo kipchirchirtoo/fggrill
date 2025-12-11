@@ -74,8 +74,8 @@ export default function MaintenanceOrdersPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Work Orders</h1><p className="text-gray-500">Manage maintenance requests</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchOrders}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <IOSButton onClick={() => setAddModalOpen(true)}><Plus className="h-4 w-4 mr-2" /> New Order</IOSButton>
+              <IOSButton variant="secondary" onClick={fetchOrders} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>New Order</IOSButton>
             </div>
           </div>
 
@@ -116,8 +116,8 @@ export default function MaintenanceOrdersPage() {
                       </div>
                       <div className="flex items-center gap-3">
                         <IOSBadge className={`${status.bg} ${status.color}`}>{status.label}</IOSBadge>
-                        {order.status === 'pending' && <IOSButton size="sm" onClick={() => handleUpdateStatus(order.id, 'in_progress')}><Play className="h-4 w-4 mr-1" /> Start</IOSButton>}
-                        {order.status === 'in_progress' && <IOSButton size="sm" onClick={() => handleUpdateStatus(order.id, 'completed')}><CheckCircle className="h-4 w-4 mr-1" /> Done</IOSButton>}
+                        {order.status === 'pending' && <IOSButton size="sm" onClick={() => handleUpdateStatus(order.id, 'in_progress')} leftIcon={<Play />}> Start</IOSButton>}
+                        {order.status === 'in_progress' && <IOSButton size="sm" onClick={() => handleUpdateStatus(order.id, 'completed')} leftIcon={<CheckCircle />}> Done</IOSButton>}
                       </div>
                     </div>
                   </IOSCard>

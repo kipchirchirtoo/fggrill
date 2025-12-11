@@ -14,6 +14,7 @@ import { Package, RefreshCw, Search, Plus, Edit2, AlertTriangle, CheckCircle } f
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { formatNumber } from '@/lib/utils';
 
 interface Item { id: string; sku: string; name: string; category: string; quantity: number; min_quantity: number; unit: string; unit_price: number; }
 
@@ -58,8 +59,8 @@ export default function CentralInventoryPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Inventory</h1><p className="text-gray-500">Central store items</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchItems}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <IOSButton onClick={() => setAddModalOpen(true)}><Plus className="h-4 w-4 mr-2" /> Add Item</IOSButton>
+              <IOSButton variant="secondary" onClick={fetchItems} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>Add Item</IOSButton>
             </div>
           </div>
 
@@ -109,7 +110,7 @@ export default function CentralInventoryPage() {
                         <td className="p-3 text-center font-bold">{item.quantity} {item.unit}</td>
                         <td className="p-3 text-center text-gray-500">{item.min_quantity}</td>
                         <td className="p-3 text-center"><IOSBadge variant={isLow ? 'warning' : 'success'}>{isLow ? 'Low' : 'OK'}</IOSBadge></td>
-                        <td className="p-3 text-right">KES {item.unit_price?.toLocaleString()}</td>
+                        <td className="p-3 text-right">KES {formatNumber(item.unit_price || 0)}</td>
                       </tr>
                     );
                   })}

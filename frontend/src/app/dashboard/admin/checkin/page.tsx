@@ -45,7 +45,7 @@ export default function AdminCheckinPage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Check-In</h1><p className="text-gray-500">Today's arrivals</p></div>
-            <IOSButton variant="secondary" onClick={fetchArrivals}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+            <IOSButton variant="secondary" onClick={fetchArrivals} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 
           <IOSCard className="p-4"><UserCheck className="h-6 w-6 text-[#34C759] mb-2" /><p className="text-sm text-gray-500">Pending Check-ins</p><p className="text-xl font-bold">{arrivals.length}</p></IOSCard>
@@ -67,7 +67,7 @@ export default function AdminCheckinPage() {
                         <p className="text-xs text-gray-400 flex items-center gap-1"><Clock className="h-3 w-3" /> Expected: {new Date(arrival.check_in).toLocaleTimeString()}</p>
                       </div>
                     </div>
-                    <IOSButton onClick={() => handleCheckIn(arrival.id)}><CheckCircle className="h-4 w-4 mr-2" /> Check In</IOSButton>
+                    <IOSButton onClick={() => handleCheckIn(arrival.id)} leftIcon={<CheckCircle />}>Check In</IOSButton>
                   </div>
                 </IOSCard>
               ))}

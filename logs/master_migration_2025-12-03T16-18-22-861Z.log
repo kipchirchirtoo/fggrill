@@ -1,0 +1,34 @@
+[2025-12-03T16:18:22.864Z] ====== Starting Migration to Multi-Branch Architecture ======
+[2025-12-03T16:18:22.864Z] Date: 2025-12-03T16:18:22.864Z
+[2025-12-03T16:18:22.864Z] 
+====== Step 1: Run Schema Enhancements ======
+[2025-12-03T16:18:22.864Z] Description: Apply SQL migrations for multi-branch architecture
+[2025-12-03T16:19:32.132Z] Starting step 1...
+[2025-12-03T16:19:32.135Z] Running SQL schema enhancement migration...
+[2025-12-03T16:19:32.376Z] Step 1 failed
+[2025-12-03T16:19:40.707Z] 
+====== Step 2: Add Branch ID to Tables ======
+[2025-12-03T16:19:40.708Z] Description: Add branch_id column to all relevant tables and set up foreign key constraints
+[2025-12-03T16:19:46.211Z] Starting step 2...
+[2025-12-03T16:19:46.280Z] Step 2 failed with error: database "fggrill_db" does not exist
+[2025-12-03T16:19:50.238Z] 
+====== Step 3: Migrate User Roles ======
+[2025-12-03T16:19:50.238Z] Description: Update users to the new consolidated roles and set up branch access permissions
+[2025-12-03T16:19:52.221Z] Aborted step 3...
+[2025-12-03T16:19:52.221Z] 
+====== Step 4: Update Frontend Configuration ======
+[2025-12-03T16:19:52.221Z] Description: Update frontend environment variables for multi-branch support
+[2025-12-03T16:19:59.784Z] Starting step 4...
+[2025-12-03T16:19:59.785Z] Updating frontend environment variables...
+[2025-12-03T16:19:59.788Z] Frontend environment updated successfully.
+[2025-12-03T16:19:59.788Z] Step 4 succeeded
+[2025-12-03T16:19:59.789Z] 
+====== Migration Summary ======
+[2025-12-03T16:19:59.789Z] Step 1: Run Schema Enhancements - FAILED
+[2025-12-03T16:19:59.789Z] Step 2: Add Branch ID to Tables - FAILED
+[2025-12-03T16:19:59.789Z] Step 3: Migrate User Roles - ABORTED
+[2025-12-03T16:19:59.789Z] Step 4: Update Frontend Configuration - SUCCESS
+[2025-12-03T16:19:59.789Z] 
+Overall migration COMPLETED WITH ERRORS
+[2025-12-03T16:19:59.789Z] Check the log file for details: /home/john/fggrill/logs/master_migration_2025-12-03T16-18-22-861Z.log
+[2025-12-03T16:19:59.790Z] Migration process completed with errors. Check logs for details.

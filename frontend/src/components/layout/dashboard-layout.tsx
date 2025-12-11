@@ -8,6 +8,7 @@ import { useAuth, UserRole } from '@/lib/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter, usePathname } from 'next/navigation';
 import { notificationsAPI } from '@/lib/api';
+import { ConsolidatedNav } from '@/components/layout/consolidated-nav';
 import {
   Hotel,
   LayoutDashboard,
@@ -71,9 +72,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         const response = await notificationsAPI.getUnreadCount();
         if (response.success && response.data) {
           setUnreadCount(response.data.count);
+        } else {
+          // If API returns error, reset count to 0
+          setUnreadCount(0);
         }
       } catch (error) {
         console.error('Error fetching unread count:', error);
+        setUnreadCount(0);
       }
     };
 
@@ -82,6 +87,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       // Poll for updates every 30 seconds
       const interval = setInterval(fetchUnreadCount, 30000);
       return () => clearInterval(interval);
+    } else {
+      // Clear notifications if no user
+      setUnreadCount(0);
     }
   }, [user]);
 
@@ -92,8 +100,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     notificationsAPI.getUnreadCount().then(response => {
       if (response.success && response.data) {
         setUnreadCount(response.data.count);
+      } else {
+        // Reset count on error
+        setUnreadCount(0);
       }
-    }).catch(console.error);
+    }).catch(error => {
+      console.error('Error updating notification count:', error);
+      setUnreadCount(0);
+    });
   };
 
   const toggleMenu = (menuName: string) => {
@@ -104,285 +118,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     );
   };
 
-  // Define navigation items based on user role
-  const getNavigationItems = () => {
-    const baseItems = [
-      { 
-        name: 'Dashboard', 
-        href: `/dashboard/${getRolePath(user?.role)}`, 
-        icon: LayoutDashboard 
-      }
-    ];
-
-    const roleSpecificItems: Record<string, any[]> = {
-      [UserRole.SUPER_ADMIN]: [
-        { 
-          name: 'Front Desk', 
-          icon: Calendar,
-          submenu: [
-            { name: 'Reservations', href: '/dashboard/admin/reservations', icon: Calendar },
-            { name: 'Check In/Out', href: '/dashboard/admin/checkin', icon: ClipboardList },
-            { name: 'Rooms', href: '/dashboard/admin/rooms', icon: Bed },
-            { name: 'Guests', href: '/dashboard/admin/guests', icon: Users }
-          ]
-        },
-        { 
-          name: 'Operations', 
-          icon: Home,
-          submenu: [
-            { name: 'Housekeeping', href: '/dashboard/admin/housekeeping', icon: Home },
-            { name: 'Restaurant', href: '/dashboard/admin/restaurant', icon: UtensilsCrossed },
-            { name: 'Maintenance', href: '/dashboard/admin/maintenance', icon: Wrench }
-          ]
-        },
-        { 
-          name: 'Storekeeping', 
-          icon: Warehouse,
-          submenu: [
-            { name: 'Overview', href: '/dashboard/storekeeping', icon: LayoutDashboard },
-            { name: 'Central Warehouse', href: '/dashboard/storekeeping/central', icon: Warehouse },
-            { name: 'Branch Stock', href: '/dashboard/storekeeping/branch', icon: Package },
-            { name: 'Inventory', href: '/dashboard/storekeeping/inventory', icon: ClipboardList },
-            { name: 'Transfers', href: '/dashboard/storekeeping/transfers', icon: Truck },
-            { name: 'Requests', href: '/dashboard/storekeeping/requests', icon: Send },
-            { name: 'Stock Takes', href: '/dashboard/storekeeping/stock-takes', icon: ClipboardCheck },
-            { name: 'Purchase Orders', href: '/dashboard/storekeeping/purchase-orders', icon: ShoppingCart },
-            { name: 'GRN', href: '/dashboard/storekeeping/grn', icon: ClipboardCheck },
-            { name: 'Wastage', href: '/dashboard/storekeeping/wastage', icon: AlertTriangle }
-          ]
-        },
-        { 
-          name: 'Logistics', 
-          icon: Truck,
-          submenu: [
-            { name: 'Vehicles', href: '/dashboard/storekeeping/vehicles', icon: Car },
-            { name: 'Drivers', href: '/dashboard/storekeeping/drivers', icon: User },
-            { name: 'Suppliers', href: '/dashboard/storekeeping/suppliers', icon: Building2 }
-          ]
-        },
-        { name: 'Finance', href: '/dashboard/finance', icon: DollarSign },
-        { name: 'Reports', href: '/dashboard/admin/reports', icon: BarChart3 },
-        { name: 'Users', href: '/dashboard/admin/users', icon: User },
-        { name: 'Staff', href: '/dashboard/admin/staff', icon: Users },
-        { name: 'Settings', href: '/dashboard/admin/settings', icon: Settings }
-      ],
-      [UserRole.GENERAL_MANAGER]: [
-        { 
-          name: 'Front Desk', 
-          icon: Calendar,
-          submenu: [
-            { name: 'Reservations', href: '/dashboard/admin/reservations', icon: Calendar },
-            { name: 'Check In/Out', href: '/dashboard/admin/checkin', icon: ClipboardList },
-            { name: 'Rooms', href: '/dashboard/admin/rooms', icon: Bed },
-            { name: 'Guests', href: '/dashboard/admin/guests', icon: Users }
-          ]
-        },
-        { 
-          name: 'Operations', 
-          icon: Home,
-          submenu: [
-            { name: 'Housekeeping', href: '/dashboard/admin/housekeeping', icon: Home },
-            { name: 'Restaurant', href: '/dashboard/admin/restaurant', icon: UtensilsCrossed },
-            { name: 'Maintenance', href: '/dashboard/admin/maintenance', icon: Wrench }
-          ]
-        },
-        { 
-          name: 'Storekeeping', 
-          icon: Warehouse,
-          submenu: [
-            { name: 'Overview', href: '/dashboard/storekeeping', icon: LayoutDashboard },
-            { name: 'Central Warehouse', href: '/dashboard/storekeeping/central', icon: Warehouse },
-            { name: 'Branch Stock', href: '/dashboard/storekeeping/branch', icon: Package },
-            { name: 'Inventory', href: '/dashboard/storekeeping/inventory', icon: ClipboardList },
-            { name: 'Transfers', href: '/dashboard/storekeeping/transfers', icon: Truck },
-            { name: 'Requests', href: '/dashboard/storekeeping/requests', icon: Send },
-            { name: 'Stock Takes', href: '/dashboard/storekeeping/stock-takes', icon: ClipboardCheck },
-            { name: 'Purchase Orders', href: '/dashboard/storekeeping/purchase-orders', icon: ShoppingCart },
-            { name: 'GRN', href: '/dashboard/storekeeping/grn', icon: ClipboardCheck },
-            { name: 'Wastage', href: '/dashboard/storekeeping/wastage', icon: AlertTriangle }
-          ]
-        },
-        { 
-          name: 'Logistics', 
-          icon: Truck,
-          submenu: [
-            { name: 'Vehicles', href: '/dashboard/storekeeping/vehicles', icon: Car },
-            { name: 'Drivers', href: '/dashboard/storekeeping/drivers', icon: User },
-            { name: 'Suppliers', href: '/dashboard/storekeeping/suppliers', icon: Building2 }
-          ]
-        },
-        { name: 'Finance', href: '/dashboard/finance', icon: DollarSign },
-        { name: 'Reports', href: '/dashboard/admin/reports', icon: BarChart3 },
-        { name: 'Branches', href: '/dashboard/admin/system/branches', icon: Building2 },
-        { name: 'Users', href: '/dashboard/admin/users', icon: User },
-        { name: 'Staff', href: '/dashboard/admin/staff', icon: Users }
-      ],
-      [UserRole.BRANCH_MANAGER]: [
-        { 
-          name: 'Front Desk', 
-          icon: Calendar,
-          submenu: [
-            { name: 'Reservations', href: '/dashboard/branch-manager/reservations', icon: Calendar },
-            { name: 'Check In/Out', href: '/dashboard/branch-manager/checkin', icon: ClipboardList },
-            { name: 'Rooms', href: '/dashboard/branch-manager/rooms', icon: Bed },
-            { name: 'Guests', href: '/dashboard/branch-manager/guests', icon: Users }
-          ]
-        },
-        { 
-          name: 'Operations', 
-          icon: Home,
-          submenu: [
-            { name: 'Housekeeping', href: '/dashboard/branch-manager/housekeeping', icon: Home },
-            { name: 'Restaurant', href: '/dashboard/branch-manager/restaurant', icon: UtensilsCrossed },
-            { name: 'Maintenance', href: '/dashboard/branch-manager/maintenance', icon: Wrench }
-          ]
-        },
-        { 
-          name: 'Branch Stock', 
-          icon: Package,
-          submenu: [
-            { name: 'Current Stock', href: '/dashboard/branch-manager/stock', icon: Package },
-            { name: 'Stock Requests', href: '/dashboard/branch-manager/requests', icon: Send },
-            { name: 'Incoming', href: '/dashboard/branch-manager/incoming', icon: Truck },
-            { name: 'Stock Out', href: '/dashboard/branch-manager/stock-out', icon: ArrowRightLeft }
-          ]
-        },
-        { name: 'Reports', href: '/dashboard/branch-manager/reports', icon: BarChart3 },
-        { name: 'Staff', href: '/dashboard/branch-manager/staff', icon: Users }
-      ],
-      [UserRole.RECEPTIONIST]: [
-        { name: 'Reservations', href: '/dashboard/reception/reservations', icon: Calendar },
-        { name: 'Check In/Out', href: '/dashboard/reception/checkin', icon: ClipboardList },
-        { name: 'Rooms', href: '/dashboard/reception/rooms', icon: Bed },
-        { name: 'Guests', href: '/dashboard/reception/guests', icon: Users }
-      ],
-      [UserRole.HOUSEKEEPING]: [
-        { name: 'Tasks', href: '/dashboard/housekeeping/tasks', icon: ClipboardList },
-        { name: 'Rooms', href: '/dashboard/housekeeping/rooms', icon: Bed },
-        { name: 'Inventory', href: '/dashboard/housekeeping/inventory', icon: Package }
-      ],
-      [UserRole.RESTAURANT]: [
-        { name: 'POS', href: '/dashboard/restaurant/pos', icon: DollarSign },
-        { name: 'Orders', href: '/dashboard/restaurant/orders', icon: ClipboardList },
-        { name: 'Kitchen', href: '/dashboard/restaurant/kitchen', icon: ChefHat },
-        { name: 'Menu', href: '/dashboard/restaurant/menu', icon: UtensilsCrossed },
-        { name: 'Inventory', href: '/dashboard/restaurant/inventory', icon: Package }
-      ],
-      [UserRole.BARTENDER]: [
-        { name: 'Bar POS', href: '/dashboard/bar/pos', icon: DollarSign },
-        { name: 'Orders', href: '/dashboard/bar/orders', icon: ClipboardList },
-        { name: 'Tabs', href: '/dashboard/bar/tabs', icon: Users },
-        { name: 'Drinks Menu', href: '/dashboard/bar/menu', icon: UtensilsCrossed },
-        { name: 'Inventory', href: '/dashboard/bar/inventory', icon: Package }
-      ],
-      [UserRole.ACCOUNTANT]: [
-        { name: 'Invoices', href: '/dashboard/finance/invoices', icon: DollarSign },
-        { name: 'Payments', href: '/dashboard/finance/payments', icon: DollarSign },
-        { name: 'Reports', href: '/dashboard/finance/reports', icon: BarChart3 },
-        { name: 'Expenses', href: '/dashboard/finance/expenses', icon: ClipboardList }
-      ],
-      [UserRole.MAINTENANCE]: [
-        { name: 'Work Orders', href: '/dashboard/maintenance/orders', icon: Wrench },
-        { name: 'Assets', href: '/dashboard/maintenance/assets', icon: Package },
-        { name: 'Schedule', href: '/dashboard/maintenance/schedule', icon: Calendar }
-      ],
-      [UserRole.CENTRAL_STOREKEEPER]: [
-        { 
-          name: 'Warehouse', 
-          icon: Warehouse,
-          submenu: [
-            { name: 'Inventory', href: '/dashboard/central-store/inventory', icon: Package },
-            { name: 'Stock Levels', href: '/dashboard/central-store/stock', icon: ClipboardList },
-            { name: 'Stock Takes', href: '/dashboard/central-store/stock-takes', icon: ClipboardCheck }
-          ]
-        },
-        { 
-          name: 'Requests', 
-          icon: Send,
-          submenu: [
-            { name: 'Pending Requests', href: '/dashboard/central-store/requests', icon: Clock },
-            { name: 'Approved', href: '/dashboard/central-store/requests/approved', icon: CheckCircle },
-            { name: 'All Requests', href: '/dashboard/central-store/requests/all', icon: ClipboardList }
-          ]
-        },
-        { 
-          name: 'Dispatches', 
-          icon: Truck,
-          submenu: [
-            { name: 'Create Dispatch', href: '/dashboard/central-store/dispatch/new', icon: Send },
-            { name: 'Pending', href: '/dashboard/central-store/dispatch/pending', icon: Clock },
-            { name: 'In Transit', href: '/dashboard/central-store/dispatch/transit', icon: Truck },
-            { name: 'Delivered', href: '/dashboard/central-store/dispatch/delivered', icon: CheckCircle },
-            { name: 'All Dispatches', href: '/dashboard/central-store/dispatch', icon: ClipboardList }
-          ]
-        },
-        { 
-          name: 'Logistics', 
-          icon: Car,
-          submenu: [
-            { name: 'Vehicles', href: '/dashboard/central-store/vehicles', icon: Car },
-            { name: 'Drivers', href: '/dashboard/central-store/drivers', icon: User },
-            { name: 'Suppliers', href: '/dashboard/central-store/suppliers', icon: Building2 }
-          ]
-        },
-        { name: 'Reports', href: '/dashboard/central-store/reports', icon: BarChart3 }
-      ],
-      [UserRole.BRANCH_STOREKEEPER]: [
-        { 
-          name: 'My Branch Stock', 
-          icon: Package,
-          submenu: [
-            { name: 'Current Stock', href: '/dashboard/branch-store/stock', icon: Package },
-            { name: 'Stock Out', href: '/dashboard/branch-store/stock-out', icon: ArrowRightLeft },
-            { name: 'Stock Takes', href: '/dashboard/branch-store/stock-takes', icon: ClipboardCheck }
-          ]
-        },
-        { 
-          name: 'Stock Requests', 
-          icon: Send,
-          submenu: [
-            { name: 'New Request', href: '/dashboard/branch-store/request/new', icon: Send },
-            { name: 'My Requests', href: '/dashboard/branch-store/requests', icon: ClipboardList },
-            { name: 'Pending', href: '/dashboard/branch-store/requests/pending', icon: Clock }
-          ]
-        },
-        { 
-          name: 'Incoming', 
-          icon: Truck,
-          submenu: [
-            { name: 'Expected Deliveries', href: '/dashboard/branch-store/incoming', icon: Truck },
-            { name: 'Receive Stock', href: '/dashboard/branch-store/receive', icon: CheckCircle }
-          ]
-        },
-        { name: 'Reports', href: '/dashboard/branch-store/reports', icon: BarChart3 }
-      ]
-    };
-
-    return [...baseItems, ...(roleSpecificItems[user?.role || ''] || [])];
-  };
-
-  const getRolePath = (role?: UserRole) => {
-    const paths: Record<UserRole, string> = {
-      [UserRole.SUPER_ADMIN]: 'admin',
-      [UserRole.GENERAL_MANAGER]: 'gm',
-      [UserRole.BRANCH_MANAGER]: 'branch-manager',
-      [UserRole.RECEPTIONIST]: 'reception',
-      [UserRole.HOUSEKEEPING]: 'housekeeping',
-      [UserRole.HOUSEKEEPING_SUPERVISOR]: 'housekeeping',
-      [UserRole.RESTAURANT]: 'restaurant',
-      [UserRole.BARTENDER]: 'bar',
-      [UserRole.ACCOUNTANT]: 'finance',
-      [UserRole.MAINTENANCE]: 'maintenance',
-      [UserRole.CENTRAL_STOREKEEPER]: 'central-store',
-      [UserRole.BRANCH_STOREKEEPER]: 'branch-store',
-      [UserRole.AUDITOR]: 'audit',
-      [UserRole.EMPLOYEE]: 'employee',
-      [UserRole.GUEST]: 'guest'
-    };
-    return paths[role || UserRole.GUEST];
-  };
-
-  const navigationItems = getNavigationItems();
+  // Use ConsolidatedNav for navigation
 
   return (
     <div className="min-h-screen">
@@ -422,69 +158,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
                     {/* Navigation */}
                     <nav className="mt-8 flex-1 space-y-1 px-2 overflow-y-auto">
-                      {navigationItems.map((item: any) => {
-                        // Check if item has submenu
-                        if (item.submenu) {
-                          const isExpanded = expandedMenus.includes(item.name);
-                          const isSubmenuActive = item.submenu.some((sub: any) => pathname === sub.href || pathname?.startsWith(sub.href + '/'));
-                          return (
-                            <div key={item.name}>
-                              <button
-                                onClick={() => toggleMenu(item.name)}
-                                className={`w-full group flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
-                                  isSubmenuActive
-                                    ? 'bg-[#F2F2F7] text-[#000000]'
-                                    : 'text-[#3C3C43] hover:bg-[#F2F2F7]'
-                                }`}
-                              >
-                                <span className="flex items-center">
-                                  <item.icon className="mr-3 h-5 w-5 flex-shrink-0" />
-                                  {item.name}
-                                </span>
-                                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                              </button>
-                              {isExpanded && (
-                                <div className="mt-1 ml-4 space-y-1 border-l border-[rgba(60,60,67,0.12)] pl-2">
-                                  {item.submenu.map((sub: any) => {
-                                    const isSubActive = pathname === sub.href || pathname?.startsWith(sub.href + '/');
-                                    return (
-                                      <a
-                                        key={sub.name}
-                                        href={sub.href}
-                                        className={`group flex items-center px-3 py-2 text-xs font-medium rounded-ios-lg transition-colors ${
-                                          isSubActive
-                                            ? 'bg-[#3C3C43] text-white'
-                                            : 'text-[#8E8E93] hover:bg-[#F2F2F7] hover:text-[#000000]'
-                                        }`}
-                                      >
-                                        <sub.icon className="mr-2 h-4 w-4 flex-shrink-0" />
-                                        {sub.name}
-                                      </a>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        }
-                        
-                        // Regular menu item
-                        const isActive = pathname === item.href;
-                        return (
-                          <a
-                            key={item.name}
-                            href={item.href}
-                            className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
-                              isActive
-                                ? 'bg-[#3C3C43] text-white'
-                                : 'text-[#3C3C43] hover:bg-[#F2F2F7]'
-                            }`}
-                          >
-                            <item.icon className="mr-3 h-5 w-5 flex-shrink-0" />
-                            {item.name}
-                          </a>
-                        );
-                      })}
+                      <ConsolidatedNav />
                     </nav>
                   </div>
 
@@ -560,70 +234,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   </div>
 
                   <nav className="mt-5 flex-1 space-y-1 px-2 overflow-y-auto">
-                    {navigationItems.map((item: any) => {
-                      // Check if item has submenu
-                      if (item.submenu) {
-                        const isExpanded = expandedMenus.includes(item.name);
-                        const isSubmenuActive = item.submenu.some((sub: any) => pathname === sub.href || pathname?.startsWith(sub.href + '/'));
-                        return (
-                          <div key={item.name}>
-                            <button
-                              onClick={() => toggleMenu(item.name)}
-                              className={`w-full group flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
-                                isSubmenuActive
-                                  ? 'bg-[#F2F2F7] text-[#000000]'
-                                  : 'text-[#3C3C43] hover:bg-[#F2F2F7]'
-                              }`}
-                            >
-                              <span className="flex items-center">
-                                <item.icon className="mr-3 h-5 w-5 flex-shrink-0" />
-                                {item.name}
-                              </span>
-                              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                            </button>
-                            {isExpanded && (
-                              <div className="mt-1 ml-4 space-y-1 border-l border-[rgba(60,60,67,0.12)] pl-2">
-                                {item.submenu.map((sub: any) => {
-                                  const isSubActive = pathname === sub.href || pathname?.startsWith(sub.href + '/');
-                                  return (
-                                    <a
-                                      key={sub.name}
-                                      href={sub.href}
-                                      onClick={() => setMobileMenuOpen(false)}
-                                      className={`group flex items-center px-3 py-2 text-xs font-medium rounded-ios-lg transition-colors ${
-                                        isSubActive
-                                          ? 'bg-[#3C3C43] text-white'
-                                          : 'text-[#8E8E93] hover:bg-[#F2F2F7] hover:text-[#000000]'
-                                      }`}
-                                    >
-                                      <sub.icon className="mr-2 h-4 w-4 flex-shrink-0" />
-                                      {sub.name}
-                                    </a>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      }
-                      
-                      const isActive = pathname === item.href;
-                      return (
-                        <a
-                          key={item.name}
-                          href={item.href}
-                          onClick={() => setMobileMenuOpen(false)}
-                          className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
-                            isActive
-                              ? 'bg-[#3C3C43] text-white'
-                              : 'text-[#3C3C43] hover:bg-[#F2F2F7]'
-                          }`}
-                        >
-                          <item.icon className="mr-3 h-5 w-5" />
-                          {item.name}
-                        </a>
-                      );
-                    })}
+                    <ConsolidatedNav />
                   </nav>
                 </div>
               </motion.aside>

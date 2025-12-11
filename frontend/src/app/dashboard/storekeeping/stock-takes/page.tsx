@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ClipboardList, Plus, Eye, RefreshCw, Play, CheckCircle, Clock, XCircle, AlertTriangle, Package, Save } from 'lucide-react';
+import { ClipboardList, Plus, Eye, RefreshCw, Play, CheckCircle, Clock, XCircle, AlertTriangle, Package, Save, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/date-utils';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -61,8 +61,31 @@ export default function StockTakesPage() {
   const [selectedTake, setSelectedTake] = useState<StockTake | null>(null);
   const [takeItems, setTakeItems] = useState<StockTakeItem[]>([]);
   const [newForm, setNewForm] = useState({ branch_id: 0, take_type: 'FULL', notes: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formErrors, setFormErrors] = useState<{[key: string]: string}>({});
+  const [filteredTakes, setFilteredTakes] = useState<StockTake[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => { fetchData(); }, []);
+
+  // Filter stock takes based on current filters
+  const getFilteredTakes = () => {
+    return stockTakes.filter(take => {
+      const matchesStatus = statusFilter === 'all' || take.status === statusFilter;
+      const matchesSearch = !searchQuery || 
+        take.take_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (take.branch?.name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+        take.take_type.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      return matchesStatus && matchesSearch;
+    });
+  };
+  
+  // Update filtered takes when dependencies change
+  useEffect(() => {
+    setFilteredTakes(getFilteredTakes());
+  }, [stockTakes, statusFilter, searchQuery]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -73,14 +96,56 @@ export default function StockTakesPage() {
         fetch(`${API_URL}/api/store/stock-takes`, { headers }),
         fetch(`${API_URL}/api/store/branches`, { headers })
       ]);
-      if (takesRes.ok) { const data = await takesRes.json(); setStockTakes(data.data || []); }
-      if (branchesRes.ok) { const data = await branchesRes.json(); setBranches(data.data || []); }
-    } catch (error) { console.error('Error:', error); }
+      
+      if (takesRes.ok) { 
+        const data = await takesRes.json(); 
+        if (Array.isArray(data.data)) {
+          setStockTakes(data.data); 
+        } else {
+          console.error('Invalid stock takes data format: expected array');
+          setStockTakes([]);
+        }
+      } else {
+        const error = await takesRes.json().catch(() => ({ message: 'Failed to fetch stock takes' }));
+        toast.error(error.message || 'Error loading stock takes');
+        setStockTakes([]);
+      }
+      
+      if (branchesRes.ok) { 
+        const data = await branchesRes.json(); 
+        if (Array.isArray(data.data)) {
+          setBranches(data.data); 
+        } else {
+          console.error('Invalid branches data format: expected array');
+          setBranches([]);
+        }
+      } else {
+        const error = await branchesRes.json().catch(() => ({ message: 'Failed to fetch branches' }));
+        toast.error(error.message || 'Error loading branches');
+        setBranches([]);
+      }
+    } catch (error: any) { 
+      console.error('Error:', error);
+      toast.error(error.message || 'Failed to load data');
+    }
     finally { setIsLoading(false); }
   };
 
+  const validateNewForm = () => {
+    const errors: {[key: string]: string} = {};
+    
+    if (!newForm.branch_id) {
+      errors.branch_id = 'Branch is required';
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleStartStockTake = async () => {
-    if (!newForm.branch_id) { toast.error('Please select a branch'); return; }
+    if (!validateNewForm()) return;
+    
+    setIsSubmitting(true);
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/api/store/stock-takes`, {
@@ -89,18 +154,27 @@ export default function StockTakesPage() {
         body: JSON.stringify(newForm)
       });
       if (res.ok) {
-        toast.success('Stock take started');
+        toast.success('Stock take started successfully');
         setIsNewModalOpen(false);
+        setNewForm({ branch_id: 0, take_type: 'FULL', notes: '' });
         fetchData();
       } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({ message: 'Failed to start stock take' }));
         toast.error(err.message || 'Failed to start stock take');
       }
-    } catch { toast.error('Error starting stock take'); }
+    } catch (error: any) { 
+      console.error('Error starting stock take:', error);
+      toast.error(error.message || 'Error starting stock take'); 
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleViewTake = async (take: StockTake) => {
     setSelectedTake(take);
+    setTakeItems([]); // Clear previous items
+    setIsViewModalOpen(true);
+    
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/api/store/stock-takes/${take.id}/items`, {
@@ -108,38 +182,84 @@ export default function StockTakesPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setTakeItems(data.data || []);
+        if (Array.isArray(data.data)) {
+          setTakeItems(data.data);
+        } else {
+          console.error('Invalid stock take items format: expected array');
+          setTakeItems([]);
+          toast.error('Error loading stock take items');
+        }
+      } else {
+        const error = await res.json().catch(() => ({ message: 'Failed to fetch stock take items' }));
+        toast.error(error.message || 'Error loading stock take items');
       }
-    } catch { console.error('Error fetching items'); }
-    setIsViewModalOpen(true);
+    } catch (error: any) { 
+      console.error('Error fetching items:', error);
+      toast.error('Failed to load stock take items'); 
+    }
   };
 
   const handleUpdateCount = async (itemId: string, countedQty: number) => {
+    // Skip if value is negative
+    if (countedQty < 0) {
+      toast.error('Quantity cannot be negative');
+      return;
+    }
+    
     try {
       const token = localStorage.getItem('token');
-      await fetch(`${API_URL}/api/store/stock-take-items/${itemId}`, {
+      const res = await fetch(`${API_URL}/api/store/stock-take-items/${itemId}`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ counted_quantity: countedQty })
       });
-      setTakeItems(items => items.map(i => i.id === itemId ? { ...i, counted_quantity: countedQty, status: 'COUNTED' } : i));
-    } catch { toast.error('Error updating count'); }
+      
+      if (res.ok) {
+        // Update local state only if successful
+        setTakeItems(items => items.map(i => i.id === itemId ? { ...i, counted_quantity: countedQty, status: 'COUNTED' } : i));
+      } else {
+        const error = await res.json().catch(() => ({ message: 'Failed to update count' }));
+        toast.error(error.message || 'Error updating count');
+      }
+    } catch (error: any) { 
+      console.error('Error updating count:', error);
+      toast.error(error.message || 'Error updating count'); 
+    }
   };
 
   const handleCompleteTake = async () => {
     if (!selectedTake) return;
+    
+    // Check if any items haven't been counted
+    const uncountedItems = takeItems.filter(item => item.status !== 'COUNTED');
+    if (uncountedItems.length > 0) {
+      if (!confirm(`${uncountedItems.length} items have not been counted. Do you want to proceed anyway?`)) {
+        return;
+      }
+    }
+    
+    setIsSubmitting(true);
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/api/store/stock-takes/${selectedTake.id}/complete`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      
       if (res.ok) {
-        toast.success('Stock take completed');
+        toast.success('Stock take completed successfully');
         setIsViewModalOpen(false);
         fetchData();
+      } else {
+        const error = await res.json().catch(() => ({ message: 'Failed to complete stock take' }));
+        toast.error(error.message || 'Error completing stock take');
       }
-    } catch { toast.error('Error completing stock take'); }
+    } catch (error: any) { 
+      console.error('Error completing stock take:', error);
+      toast.error(error.message || 'Error completing stock take'); 
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const getStatusColor = (s: string) => ({
@@ -168,8 +288,8 @@ export default function StockTakesPage() {
               <p className="text-gray-600">Physical inventory counts and variance tracking</p>
             </div>
             <div className="flex gap-3">
-              <IOSButton variant="outline" onClick={fetchData}><RefreshCw className="h-4 w-4 mr-2" />Refresh</IOSButton>
-              {canEdit && <IOSButton onClick={() => setIsNewModalOpen(true)}><Plus className="h-4 w-4 mr-2" />New Stock Take</IOSButton>}
+              <IOSButton variant="outline" onClick={fetchData} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              {canEdit && <IOSButton onClick={() => setIsNewModalOpen(true)} leftIcon={<Plus />}>New Stock Take</IOSButton>}
             </div>
           </div>
 
@@ -180,11 +300,38 @@ export default function StockTakesPage() {
             <IOSCard className="p-4"><div className="flex items-center gap-3"><AlertTriangle className="h-8 w-8 text-[#8E8E93]0" /><div><p className="text-sm text-gray-500">With Variances</p><p className="text-2xl font-bold text-[#3C3C43]">{stockTakes.filter(t => t.items_with_variance > 0).length}</p></div></div></IOSCard>
           </div>
 
+          {/* Search and filter */}
+          <IOSCard className="p-4 mb-4">
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="md:col-span-2 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input 
+                  placeholder="Search by take number, branch, or type..." 
+                  value={searchQuery} 
+                  onChange={(e) => setSearchQuery(e.target.value)} 
+                  className="pl-10" 
+                />
+              </div>
+              <div>
+                <select 
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full p-2 border rounded-ios-lg"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="IN_PROGRESS">In Progress</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
+              </div>
+            </div>
+          </IOSCard>
+
           <IOSCard>
             {isLoading ? (
               <div className="p-12 text-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[rgba(60,60,67,0.12)] mx-auto"></div></div>
             ) : stockTakes.length === 0 ? (
-              <div className="p-12 text-center text-gray-500"><ClipboardList className="h-12 w-12 mx-auto mb-3 opacity-30" /><p>No stock takes yet</p>{canEdit && <IOSButton className="mt-4" onClick={() => setIsNewModalOpen(true)}><Plus className="h-4 w-4 mr-2" />Start First Stock Take</IOSButton>}</div>
+              <div className="p-12 text-center text-gray-500"><ClipboardList className="h-12 w-12 mx-auto mb-3 opacity-30" /><p>No stock takes yet</p>{canEdit && <IOSButton className="mt-4" onClick={() => setIsNewModalOpen(true)} leftIcon={<Plus />}>Start First Stock Take</IOSButton>}</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -201,11 +348,17 @@ export default function StockTakesPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {stockTakes.map(take => (
+                    {filteredTakes.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
+                          No stock takes found matching your filters
+                        </td>
+                      </tr>
+                    ) : filteredTakes.map(take => (
                       <tr key={take.id} className="hover:bg-gray-50">
                         <td className="px-4 py-4 font-mono text-sm">{take.take_number}</td>
                         <td className="px-4 py-4">{take.branch?.name || 'Unknown'}</td>
-                        <td className="px-4 py-4"><IOSBadge variant="outline">{take.take_type}</IOSBadge></td>
+                        <td className="px-4 py-4"><IOSBadge variant="light" color="secondary">{take.take_type}</IOSBadge></td>
                         <td className="px-4 py-4"><IOSBadge className={getStatusColor(take.status)}><span className="flex items-center gap-1">{getStatusIcon(take.status)} {take.status}</span></IOSBadge></td>
                         <td className="px-4 py-4">{take.total_items_counted}</td>
                         <td className="px-4 py-4">
@@ -215,8 +368,8 @@ export default function StockTakesPage() {
                         </td>
                         <td className="px-4 py-4 text-sm text-gray-500">{formatDate(take.started_at)}</td>
                         <td className="px-4 py-4">
-                          <IOSButton size="sm" variant="outline" onClick={() => handleViewTake(take)}>
-                            {take.status === 'IN_PROGRESS' ? <><Play className="h-4 w-4 mr-1" />Continue</> : <><Eye className="h-4 w-4 mr-1" />View</>}
+                          <IOSButton size="sm" variant="outline" onClick={() => handleViewTake(take)} leftIcon={take.status === 'IN_PROGRESS' ? <Play /> : <Eye />}>
+                            {take.status === 'IN_PROGRESS' ? 'Continue' : 'View'}
                           </IOSButton>
                         </td>
                       </tr>
@@ -235,10 +388,15 @@ export default function StockTakesPage() {
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium">Branch *</label>
-                <select value={newForm.branch_id} onChange={e => setNewForm({...newForm, branch_id: parseInt(e.target.value)})} className="w-full px-3 py-2 border rounded-ios-lg">
+                <select 
+                  value={newForm.branch_id} 
+                  onChange={e => setNewForm({...newForm, branch_id: parseInt(e.target.value)})} 
+                  className={`w-full px-3 py-2 border rounded-ios-lg ${formErrors.branch_id ? 'border-red-500' : ''}`}
+                >
                   <option value={0}>Select branch...</option>
                   {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
+                {formErrors.branch_id && <p className="text-red-500 text-xs mt-1">{formErrors.branch_id}</p>}
               </div>
               <div>
                 <label className="text-sm font-medium">Type</label>
@@ -251,8 +409,10 @@ export default function StockTakesPage() {
                 <textarea value={newForm.notes} onChange={e => setNewForm({...newForm, notes: e.target.value})} className="w-full px-3 py-2 border rounded-ios-lg" rows={2} placeholder="Optional notes..." />
               </div>
               <div className="flex justify-end gap-3 pt-4">
-                <IOSButton variant="outline" onClick={() => setIsNewModalOpen(false)}>Cancel</IOSButton>
-                <IOSButton onClick={handleStartStockTake}><Play className="h-4 w-4 mr-2" />Start</IOSButton>
+                <IOSButton variant="outline" onClick={() => setIsNewModalOpen(false)} disabled={isSubmitting}>Cancel</IOSButton>
+                <IOSButton onClick={handleStartStockTake} leftIcon={<Play />} disabled={isSubmitting}>
+                  {isSubmitting ? 'Starting...' : 'Start'}
+                </IOSButton>
               </div>
             </div>
           </DialogContent>
@@ -286,7 +446,17 @@ export default function StockTakesPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {takeItems.map(item => {
+                    {takeItems.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
+                          {isLoading ? (
+                            <div className="flex justify-center"><RefreshCw className="h-5 w-5 animate-spin" /></div>
+                          ) : (
+                            'No items found for this stock take'
+                          )}
+                        </td>
+                      </tr>
+                    ) : takeItems.map(item => {
                       const variance = (item.counted_quantity ?? 0) - item.system_quantity;
                       return (
                         <tr key={item.id} className="hover:bg-gray-50">
@@ -326,8 +496,10 @@ export default function StockTakesPage() {
 
               {selectedTake?.status === 'IN_PROGRESS' && (
                 <div className="flex justify-end gap-3 pt-4 border-t">
-                  <IOSButton variant="outline" onClick={() => setIsViewModalOpen(false)}>Save & Close</IOSButton>
-                  <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleCompleteTake}><CheckCircle className="h-4 w-4 mr-2" />Complete Stock Take</IOSButton>
+                  <IOSButton variant="outline" onClick={() => setIsViewModalOpen(false)} disabled={isSubmitting}>Save & Close</IOSButton>
+                  <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleCompleteTake} leftIcon={<CheckCircle />} disabled={isSubmitting}>
+                    {isSubmitting ? 'Completing...' : 'Complete Stock Take'}
+                  </IOSButton>
                 </div>
               )}
             </div>

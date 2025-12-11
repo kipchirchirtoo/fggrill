@@ -13,7 +13,6 @@ import {
 } from './ios-card';
 import { IOSInput } from './ios-input';
 import { IOSModal, IOSModalHeader, IOSModalTitle, IOSModalContent, IOSModalFooter } from './ios-modal';
-import { IOSThemeSwitch } from './ios-theme-provider';
 import { 
   HomeIcon, 
   BellIcon, 
@@ -39,9 +38,6 @@ export function IOSDesignDemo() {
         <p className="ios-body text-ios-text-secondary">
           A comprehensive design system inspired by iOS for FG Grill application
         </p>
-        <div className="mt-4 flex justify-center">
-          <IOSThemeSwitch />
-        </div>
       </div>
       
       {/* Typography */}

@@ -162,9 +162,7 @@ export default function HousekeepingInspectionsPage() {
               <h1 className="text-2xl font-bold text-gray-900">Room Inspections</h1>
               <p className="text-gray-500">Quality control for cleaned rooms</p>
             </div>
-            <IOSButton variant="outline" onClick={fetchInspections}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
+            <IOSButton variant="outline" onClick={fetchInspections} leftIcon={<RefreshCw />}>Refresh
             </IOSButton>
           </div>
 

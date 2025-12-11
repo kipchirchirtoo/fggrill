@@ -150,8 +150,7 @@ export default function LostFoundPage() {
               <h1 className="text-2xl font-bold text-gray-900">Lost & Found</h1>
               <p className="text-gray-500">Track and manage found items</p>
             </div>
-            <IOSButton onClick={() => setAddModalOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
+            <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>
               Log Found Item
             </IOSButton>
           </div>

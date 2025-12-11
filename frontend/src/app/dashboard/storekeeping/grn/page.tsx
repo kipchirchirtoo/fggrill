@@ -262,8 +262,7 @@ export default function GRNPage() {
                 Refresh
               </IOSButton>
               {canManage && (
-                <IOSButton onClick={() => setIsCreateModalOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
+                <IOSButton onClick={() => setIsCreateModalOpen(true)} leftIcon={<Plus />}>
                   New GRN
                 </IOSButton>
               )}
@@ -532,9 +531,7 @@ export default function GRNPage() {
                   ))}
                   
                   <div className="flex items-center justify-between pt-3 border-t border-[#E5E5EA]">
-                    <IOSButton size="sm" variant="outline" onClick={addItemRow} className="text-sm">
-                      <Plus className="h-4 w-4 mr-1" /> Add Another Item
-                    </IOSButton>
+                    <IOSButton size="sm" variant="outline" onClick={addItemRow} className="text-sm" leftIcon={<Plus />}>Add Another Item</IOSButton>
                     <div className="text-right">
                       <p className="text-sm text-gray-500">Total Value</p>
                       <p className="text-xl font-bold text-[#3C3C43]">KES {totalReceivedValue.toLocaleString()}</p>
@@ -556,8 +553,7 @@ export default function GRNPage() {
 
               <div className="flex justify-end gap-3 pt-4 border-t">
                 <IOSButton variant="outline" onClick={() => setIsCreateModalOpen(false)}>Cancel</IOSButton>
-                <IOSButton onClick={handleCreateGRN} disabled={!formData.supplier_id || !formData.items.some(i => i.item_id)}>
-                  <CheckCircle className="h-4 w-4 mr-2" />
+                <IOSButton onClick={handleCreateGRN} disabled={!formData.supplier_id || !formData.items.some(i => i.item_id)} leftIcon={<CheckCircle />}>
                   Record Receipt
                 </IOSButton>
               </div>

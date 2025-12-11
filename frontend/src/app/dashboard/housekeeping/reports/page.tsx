@@ -67,12 +67,10 @@ export default function HousekeepingReportsPage() {
               <p className="text-gray-500">Performance analytics and insights</p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={() => handleExport('pdf')}>
-                <Download className="h-4 w-4 mr-2" />
+              <IOSButton variant="secondary" onClick={() => handleExport('pdf')} leftIcon={<Download />}>
                 PDF
               </IOSButton>
-              <IOSButton variant="secondary" onClick={() => handleExport('excel')}>
-                <Download className="h-4 w-4 mr-2" />
+              <IOSButton variant="secondary" onClick={() => handleExport('excel')} leftIcon={<Download />}>
                 Excel
               </IOSButton>
             </div>

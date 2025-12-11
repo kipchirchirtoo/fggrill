@@ -16,11 +16,12 @@ import {
   Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatNumber } from '@/lib/utils';
 
 function BookingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -51,7 +52,14 @@ function BookingContent() {
       const response = await fetch(`${API_URL}/api/rooms/${bookingDetails.roomId}`);
       const data = await response.json();
       if (data.success) {
-        setRoomDetails(data.data);
+        const room = data.data;
+        // Map snake_case to camelCase
+        setRoomDetails({
+          ...room,
+          roomNumber: room.room_number,
+          pricePerNight: room.price_override || room.type?.base_price || 0,
+          type: room.type?.name || 'Standard'
+        });
       }
     } catch (error) {
       console.error('Error fetching room details:', error);
@@ -80,7 +88,7 @@ function BookingContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.firstName || !formData.lastName || !formData.email || !formData.phone) {
       toast.error('Please fill in all required fields');
       return;
@@ -90,7 +98,7 @@ function BookingContent() {
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      
+
       // Create booking
       const bookingResponse = await fetch(`${API_URL}/api/bookings`, {
         method: 'POST',
@@ -124,6 +132,7 @@ function BookingContent() {
         body: JSON.stringify({
           bookingId: bookingData.data.id,
           phoneNumber: formData.phone,
+          email: formData.email,
           amount: calculateTotal(),
           paymentMethod
         })
@@ -133,7 +142,7 @@ function BookingContent() {
 
       if (paymentData.success) {
         toast.success('Booking created! Please complete payment.');
-        
+
         if (paymentMethod === 'mpesa') {
           toast.info('Please check your phone for the M-Pesa payment prompt');
         } else if (paymentMethod === 'paystack') {
@@ -200,7 +209,7 @@ function BookingContent() {
               className="bg-white rounded-xl shadow-sm border border-gray-200 p-8"
             >
               <h2 className="text-2xl font-bold text-gray-900 mb-6">Guest Information</h2>
-              
+
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
@@ -300,11 +309,10 @@ function BookingContent() {
                     <button
                       type="button"
                       onClick={() => setPaymentMethod('mpesa')}
-                      className={`p-4 border-2 rounded-ios-lg transition-colors ${
-                        paymentMethod === 'mpesa'
+                      className={`p-4 border-2 rounded-ios-lg transition-colors ${paymentMethod === 'mpesa'
                           ? 'border-gray-900 bg-gray-50'
                           : 'border-gray-300 hover:border-gray-400'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-medium">M-Pesa</span>
@@ -315,11 +323,10 @@ function BookingContent() {
                     <button
                       type="button"
                       onClick={() => setPaymentMethod('paystack')}
-                      className={`p-4 border-2 rounded-ios-lg transition-colors ${
-                        paymentMethod === 'paystack'
+                      className={`p-4 border-2 rounded-ios-lg transition-colors ${paymentMethod === 'paystack'
                           ? 'border-gray-900 bg-gray-50'
                           : 'border-gray-300 hover:border-gray-400'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-medium">Paystack</span>
@@ -330,11 +337,10 @@ function BookingContent() {
                     <button
                       type="button"
                       onClick={() => setPaymentMethod('card')}
-                      className={`p-4 border-2 rounded-ios-lg transition-colors ${
-                        paymentMethod === 'card'
+                      className={`p-4 border-2 rounded-ios-lg transition-colors ${paymentMethod === 'card'
                           ? 'border-gray-900 bg-gray-50'
                           : 'border-gray-300 hover:border-gray-400'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-medium">Card</span>
@@ -357,7 +363,7 @@ function BookingContent() {
                   ) : (
                     <>
                       <CreditCard className="w-5 h-5" />
-                      Confirm & Pay KES {total.toLocaleString()}
+                      Confirm & Pay KES {formatNumber(total)}
                     </>
                   )}
                 </button>
@@ -374,11 +380,11 @@ function BookingContent() {
               className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sticky top-4"
             >
               <h3 className="text-xl font-bold text-gray-900 mb-6">Booking Summary</h3>
-              
+
               {roomDetails && (
                 <div className="space-y-4">
                   <div className="pb-4 border-b border-gray-200">
-                    <h4 className="font-bold text-gray-900">{roomDetails.type}</h4>
+                    <h4 className="font-bold text-gray-900">{typeof roomDetails.type === 'string' ? roomDetails.type : roomDetails.type?.name || 'Standard'}</h4>
                     <p className="text-sm text-gray-600">Room {roomDetails.roomNumber}</p>
                   </div>
 
@@ -411,10 +417,10 @@ function BookingContent() {
                   <div className="pt-4 border-t border-gray-200 space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">
-                        KES {roomDetails.pricePerNight.toLocaleString()} × {nights} nights
+                        KES {formatNumber(roomDetails.pricePerNight)} × {nights} nights
                       </span>
                       <span className="font-medium text-gray-900">
-                        KES {(roomDetails.pricePerNight * nights).toLocaleString()}
+                        KES {formatNumber(roomDetails.pricePerNight * nights)}
                       </span>
                     </div>
                   </div>
@@ -423,7 +429,7 @@ function BookingContent() {
                     <div className="flex justify-between items-center">
                       <span className="text-lg font-bold text-gray-900">Total</span>
                       <span className="text-2xl font-bold text-gray-900">
-                        KES {total.toLocaleString()}
+                        KES {formatNumber(total)}
                       </span>
                     </div>
                   </div>

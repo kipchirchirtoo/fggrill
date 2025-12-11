@@ -7,19 +7,29 @@ import { api } from '@/lib/api';
 
 // User roles for Famous Gate Hotel
 export enum UserRole {
+  // Admin roles
   SUPER_ADMIN = 'super_admin',
+  
+  // Legacy roles - to be migrated
   GENERAL_MANAGER = 'general_manager',
   BRANCH_MANAGER = 'branch_manager',
-  RECEPTIONIST = 'receptionist',
-  HOUSEKEEPING = 'housekeeping',
-  HOUSEKEEPING_SUPERVISOR = 'housekeeping_supervisor',
-  RESTAURANT = 'restaurant',
-  BARTENDER = 'bartender',
-  MAINTENANCE = 'maintenance',
-  ACCOUNTANT = 'accountant',
-  AUDITOR = 'auditor',
   CENTRAL_STOREKEEPER = 'central_storekeeper',
   BRANCH_STOREKEEPER = 'branch_storekeeper',
+  HOUSEKEEPING = 'housekeeping',
+  HOUSEKEEPING_SUPERVISOR = 'housekeeping_supervisor',
+  MAINTENANCE = 'maintenance',
+  
+  // New consolidated roles
+  BRANCH_OPERATIONS_MANAGER = 'branch_operations_manager',
+  CENTRAL_OPERATIONS_MANAGER = 'central_operations_manager',
+  FACILITIES_MANAGER = 'facilities_manager',
+  
+  // Other roles
+  RECEPTIONIST = 'receptionist',
+  RESTAURANT = 'restaurant',
+  BARTENDER = 'bartender',
+  ACCOUNTANT = 'accountant',
+  AUDITOR = 'auditor',
   EMPLOYEE = 'employee',
   GUEST = 'guest'
 }
@@ -144,26 +154,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<void> => {
+    if (isLoading) return;
+    setIsLoading(true);
+
     try {
-      setIsLoading(true);
-      
-      // Demo accounts mapping for development
+      // Demo users for development
       const demoUsers: Record<string, User> = {
-        // Development
+        // Admins
         'admin@dev.com': {
-          id: 'dev-admin-001',
+          id: 'admin-dev-001',
           email: 'admin@dev.com',
           firstName: 'Dev',
           lastName: 'Admin',
           role: UserRole.SUPER_ADMIN,
           branch_id: null,
           branch_name: 'All Branches',
-          is_central: true,
-          department: 'Administration'
+          is_central: true
         },
-        
-        // Management
         'admin@famousgate.com': {
           id: 'admin-001',
           email: 'admin@famousgate.com',
@@ -172,9 +180,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role: UserRole.SUPER_ADMIN,
           branch_id: null,
           branch_name: 'All Branches',
-          is_central: true,
-          department: 'Administration'
+          is_central: true
         },
+        
+        // Central Operations roles
+        'central-ops@famousgate.com': {
+          id: 'central-ops-001',
+          email: 'central-ops@famousgate.com',
+          firstName: 'Central',
+          lastName: 'Operations',
+          role: UserRole.CENTRAL_OPERATIONS_MANAGER,
+          branch_id: null,
+          branch_name: 'All Branches',
+          is_central: true,
+          department: 'Central Operations'
+        },
+        'central.manager@famousgate.com': {
+          id: 'central-manager-001',
+          email: 'central.manager@famousgate.com',
+          firstName: 'Central',
+          lastName: 'Manager',
+          role: UserRole.CENTRAL_OPERATIONS_MANAGER,
+          branch_id: null,
+          branch_name: 'All Branches',
+          is_central: true,
+          department: 'Central Operations'
+        },
+        'warehouse@famousgate.com': {
+          id: 'warehouse-001',
+          email: 'warehouse@famousgate.com',
+          firstName: 'Warehouse',
+          lastName: 'Manager',
+          role: UserRole.CENTRAL_STOREKEEPER,
+          branch_id: null,
+          branch_name: 'All Branches',
+          is_central: true,
+          department: 'Warehouse'
+        },
+        'logistics@famousgate.com': {
+          id: 'logistics-001',
+          email: 'logistics@famousgate.com',
+          firstName: 'Logistics',
+          lastName: 'Coordinator',
+          role: UserRole.CENTRAL_STOREKEEPER,
+          branch_id: null,
+          branch_name: 'All Branches',
+          is_central: true,
+          department: 'Logistics'
+        },
+        
+        // Branch Operations roles
+        'branch-ops@famousgate.com': {
+          id: 'branch-ops-001',
+          email: 'branch-ops@famousgate.com',
+          firstName: 'Branch',
+          lastName: 'Operations',
+          role: UserRole.BRANCH_OPERATIONS_MANAGER,
+          branch_id: 1,
+          branch_name: 'Famous Gate Bomet',
+          is_central: false,
+          department: 'Branch Operations'
+        },
+        'facilities@famousgate.com': {
+          id: 'facilities-001',
+          email: 'facilities@famousgate.com',
+          firstName: 'Facilities',
+          lastName: 'Manager',
+          role: UserRole.FACILITIES_MANAGER,
+          branch_id: 1,
+          branch_name: 'Famous Gate Bomet',
+          is_central: false,
+          department: 'Facilities Management'
+        },
+        
+        // Management
         'gm@famousgate.com': {
           id: 'gm-001',
           email: 'gm@famousgate.com',
@@ -369,6 +448,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('user', JSON.stringify(demoUser));
         localStorage.setItem('token', 'demo-token-' + Date.now());
         
+        // Set branch context for demo users
+        if (demoUser.branch_id) {
+          localStorage.setItem('activeBranchId', demoUser.branch_id.toString());
+        }
+        
         setUser(demoUser);
         toast.success(`Welcome, ${demoUser.firstName}! (Demo Mode)`);
         
@@ -436,19 +520,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const redirectToDashboard = (role: UserRole, isCentral?: boolean) => {
     // Dynamic routing logic
     const roleRedirects: Record<UserRole, string> = {
+      // Admin roles
       [UserRole.SUPER_ADMIN]: '/dashboard/admin',
+      
+      // Legacy roles - to be migrated
       [UserRole.GENERAL_MANAGER]: '/dashboard/gm',
       [UserRole.BRANCH_MANAGER]: '/dashboard/branch-manager',
-      [UserRole.RECEPTIONIST]: '/dashboard/reception',
-      [UserRole.HOUSEKEEPING]: '/dashboard/housekeeping',
-      [UserRole.HOUSEKEEPING_SUPERVISOR]: '/dashboard/housekeeping',
-      [UserRole.RESTAURANT]: '/dashboard/restaurant',
-      [UserRole.BARTENDER]: '/dashboard/bar',
-      [UserRole.MAINTENANCE]: '/dashboard/maintenance',
-      [UserRole.ACCOUNTANT]: '/dashboard/finance',
-      [UserRole.AUDITOR]: '/dashboard/audit',
       [UserRole.CENTRAL_STOREKEEPER]: '/dashboard/central-store',
       [UserRole.BRANCH_STOREKEEPER]: '/dashboard/branch-store',
+      [UserRole.HOUSEKEEPING]: '/dashboard/housekeeping',
+      [UserRole.HOUSEKEEPING_SUPERVISOR]: '/dashboard/housekeeping',
+      [UserRole.MAINTENANCE]: '/dashboard/maintenance',
+      
+      // New consolidated roles
+      [UserRole.BRANCH_OPERATIONS_MANAGER]: '/dashboard/branch-operations',
+      [UserRole.CENTRAL_OPERATIONS_MANAGER]: '/dashboard/central-operations',
+      [UserRole.FACILITIES_MANAGER]: '/dashboard/facilities',
+      
+      // Other roles
+      [UserRole.RECEPTIONIST]: '/dashboard/reception',
+      [UserRole.RESTAURANT]: '/dashboard/restaurant',
+      [UserRole.BARTENDER]: '/dashboard/bar',
+      [UserRole.ACCOUNTANT]: '/dashboard/accounting',
+      [UserRole.AUDITOR]: '/dashboard/accounting',
       [UserRole.EMPLOYEE]: '/dashboard',
       [UserRole.GUEST]: '/dashboard/guest'
     };

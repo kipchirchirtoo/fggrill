@@ -45,16 +45,33 @@ export default function LoginPage() {
 
   // Quick login buttons for demo
   const demoAccounts = [
-    { email: 'admin@dev.com', password: 'any', role: 'Dev Admin', category: 'dev' },
-    { email: 'admin@famousgate.com', password: 'admin123', role: 'Super Admin', category: 'mgmt' },
-    { email: 'gm@famousgate.com', password: 'gm123', role: 'General Manager', category: 'mgmt' },
-    { email: 'manager.bomet@famousgate.com', password: 'bomet123', role: 'Bomet Manager', category: 'branch' },
-    { email: 'central@famousgate.com', password: 'central123', role: 'Central Store', category: 'store' },
-    { email: 'store.bomet@famousgate.com', password: 'store123', role: 'Branch Store', category: 'store' },
-    { email: 'reception@famousgate.com', password: 'reception123', role: 'Reception', category: 'ops' },
-    { email: 'restaurant@famousgate.com', password: 'rest123', role: 'Restaurant', category: 'ops' },
-    { email: 'housekeeping@famousgate.com', password: 'house123', role: 'Housekeeping', category: 'ops' },
-    { email: 'accountant@famousgate.com', password: 'account123', role: 'Accountant', category: 'finance' },
+    // Admin roles
+    { email: 'admin@dev.com', password: 'any', role: 'Dev Admin', category: 'dev', description: 'Full Access (All Branches)' },
+    { email: 'admin@famousgate.com', password: 'admin123', role: 'Super Admin', category: 'mgmt', description: 'Full Access (All Branches)' },
+    
+    // New consolidated roles (highlighted)
+    { email: 'central-ops@famousgate.com', password: 'central123', role: 'Central Ops', category: 'new', description: 'Multi-Branch Management' },
+    { email: 'branch-ops@famousgate.com', password: 'branch123', role: 'Branch Ops', category: 'new', description: 'Single Branch Management' },
+    { email: 'facilities@famousgate.com', password: 'facil123', role: 'Facilities', category: 'new', description: 'Maintenance & Housekeeping' },
+    
+    // Central operations specific roles
+    { email: 'central.manager@famousgate.com', password: 'central123', role: 'Central Ops Manager', category: 'central', description: 'All Branches Access' },
+    { email: 'warehouse@famousgate.com', password: 'warehouse123', role: 'Warehouse Manager', category: 'central', description: 'Central Warehouse Access' },
+    { email: 'logistics@famousgate.com', password: 'logistics123', role: 'Logistics', category: 'central', description: 'Dispatch Management' },
+    
+    // Legacy roles (will be phased out)
+    { email: 'gm@famousgate.com', password: 'gm123', role: 'General Manager', category: 'mgmt', description: 'All Branches Access' },
+    { email: 'manager.bomet@famousgate.com', password: 'bomet123', role: 'Bomet Manager', category: 'branch', description: 'Bomet Branch Access' },
+    { email: 'central@famousgate.com', password: 'central123', role: 'Central Store', category: 'store', description: 'All Branches Access' },
+    
+    // Other operational roles
+    { email: 'reception@famousgate.com', password: 'reception123', role: 'Reception', category: 'ops', description: 'Bomet Branch Access' },
+    { email: 'restaurant@famousgate.com', password: 'rest123', role: 'Restaurant', category: 'ops', description: 'Bomet Branch Access' },
+    { email: 'bar.bomet@famousgate.com', password: 'bar123', role: 'Bar Bomet', category: 'ops', description: 'Bomet Branch Access' },
+    { email: 'bar.kericho@famousgate.com', password: 'bar123', role: 'Bar Kericho', category: 'ops', description: 'Kericho Branch Access' },
+    { email: 'bar.litein@famousgate.com', password: 'bar123', role: 'Bar Litein', category: 'ops', description: 'Litein Branch Access' },
+    { email: 'auditor@famousgate.com', password: 'audit123', role: 'Auditor', category: 'finance', description: 'All Branches Access' },
+    { email: 'accountant@famousgate.com', password: 'account123', role: 'Accountant', category: 'finance', description: 'All Branches Access' },
   ];
 
   return (
@@ -181,23 +198,88 @@ export default function LoginPage() {
           {/* Demo Quick Login */}
           <div className="mt-6 pt-6 border-t border-[rgba(60,60,67,0.12)]">
             <p className="text-xs text-[#8E8E93] mb-3 text-center">Quick Demo Login</p>
-            <div className="grid grid-cols-5 gap-1.5">
-              {demoAccounts.map((acc) => (
-                <button
-                  key={acc.role}
-                  onClick={() => login(acc.email, acc.password)}
-                  className="text-[10px] px-1.5 py-2 rounded-ios-lg bg-[#F2F2F7] text-[#3C3C43] hover:bg-[#E5E5EA] transition-colors font-medium truncate"
-                  title={acc.role}
-                >
-                  {acc.role.split(' ')[0]}
-                </button>
-              ))}
+            
+            {/* New Consolidated Roles (Highlighted) */}
+            <div className="mb-3">
+              <p className="text-[10px] text-[#8E8E93] mb-1.5 font-medium">New Consolidated Roles:</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {demoAccounts
+                  .filter(acc => acc.category === 'new')
+                  .map((acc) => (
+                    <button
+                      key={acc.role}
+                      onClick={() => login(acc.email, acc.password)}
+                      className="text-[10px] px-1.5 py-2 rounded-ios-lg bg-[#007AFF] text-white hover:bg-[#0051FF] transition-colors font-medium truncate flex items-center justify-center gap-1"
+                      title={`${acc.role} - ${acc.description}`}
+                    >
+                      <Building2 className="h-3 w-3" />
+                      <div className="flex flex-col items-start">
+                        <span>{acc.role}</span>
+                        <span className="text-[7px] opacity-80">{acc.description}</span>
+                      </div>
+                    </button>
+                  ))
+                }
+              </div>
+            </div>
+            
+            {/* Central Operations Roles */}
+            <div className="mb-3">
+              <p className="text-[10px] text-[#8E8E93] mb-1.5 font-medium">Central Operations Team:</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {demoAccounts
+                  .filter(acc => acc.category === 'central')
+                  .map((acc) => (
+                    <button
+                      key={acc.role}
+                      onClick={() => login(acc.email, acc.password)}
+                      className="text-[10px] px-1.5 py-2 rounded-ios-lg bg-[#FF9500] text-white hover:bg-[#FF8000] transition-colors font-medium truncate flex items-center justify-center gap-1"
+                      title={`${acc.role} - ${acc.description}`}
+                    >
+                      <div className="flex flex-col items-start">
+                        <span>{acc.role}</span>
+                        <span className="text-[7px] opacity-80">{acc.description}</span>
+                      </div>
+                    </button>
+                  ))
+                }
+              </div>
+            </div>
+            
+            {/* Other Roles */}
+            <div>
+              <p className="text-[10px] text-[#8E8E93] mb-1.5 font-medium">Other Roles:</p>
+              <div className="grid grid-cols-4 gap-1.5">
+                {demoAccounts
+                  .filter(acc => !['new', 'central'].includes(acc.category))
+                  .map((acc) => (
+                    <button
+                      key={acc.role}
+                      onClick={() => login(acc.email, acc.password)}
+                      className="text-[10px] px-1.5 py-2 rounded-ios-lg bg-[#F2F2F7] text-[#3C3C43] hover:bg-[#E5E5EA] transition-colors font-medium truncate flex flex-col items-center justify-center"
+                      title={`${acc.role} - ${acc.description}`}
+                    >
+                      <span>{acc.role.split(' ')[0]}</span>
+                      <span className="text-[7px] opacity-60">{acc.description.includes('All') ? 'All Branches' : 'Single Branch'}</span>
+                    </button>
+                  ))
+                }
+              </div>
             </div>
           </div>
         </div>
 
         {/* Footer */}
         <div className="mt-6 text-center">
+          <div className="mb-4 text-center">
+            <p className="text-xs text-[#8E8E93]">
+              Dev Mode: Backend connection required for proper functionality. 
+              Click any button to login with a demo account.
+            </p>
+            <p className="text-xs text-[#FF3B30] mt-1">
+              Warning: No mock data - you must have backend server running
+            </p>
+          </div>
           <p className="text-sm text-[#8E8E93]">
             Need help? Call{' '}
             <a href="tel:0790900777" className="text-[#3C3C43] font-medium hover:underline">
@@ -205,7 +287,7 @@ export default function LoginPage() {
             </a>
           </p>
           <p className="text-xs text-[#8E8E93] mt-2">
-            © 2024 Famous Gate Hotel & Lounge
+            &copy; 2024 Famous Gate Hotel & Lounge
           </p>
         </div>
       </motion.div>

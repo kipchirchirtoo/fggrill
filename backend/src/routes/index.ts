@@ -27,6 +27,18 @@ import maintenanceEnhancedRoutes from './maintenance.enhanced.routes';
 import auditorRoutes from './auditor.routes';
 import accountingRoutes from './accounting.routes';
 import receiptsRoutes from './receipts.routes';
+import branchOperationsRoutes from './branch-operations.routes';
+import centralOperationsRoutes from './central-operations.routes';
+import automationRoutes from './automation.routes';
+import mlForecastingRoutes from './ml-forecasting.routes';
+import vendorPerformanceRoutes from './vendor-performance.routes';
+import facilitiesRoutes from './facilities.routes';
+import adminRoutes from './admin.routes';
+import ratePlanRoutes from './ratePlan.routes';
+import pricingRoutes from './pricing.routes';
+import documentRoutes from './document.routes';
+import communicationRoutes from './communication.routes';
+import channelManagerRoutes from './channelManager.routes';
 
 const router = express.Router();
 
@@ -44,6 +56,9 @@ router.get('/health', (req, res) => {
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/bookings', bookingRoutes);
+router.use('/rate-plans', ratePlanRoutes);
+router.use('/pricing', pricingRoutes);
+router.use('/documents', documentRoutes);
 router.use('/rooms', roomRoutes);
 router.use('/guests', guestRoutes);
 router.use('/inventory', inventoryRoutes);
@@ -69,5 +84,14 @@ router.use('/maintenance-enhanced', maintenanceEnhancedRoutes);
 router.use('/auditor', auditorRoutes);
 router.use('/accounting', accountingRoutes);
 router.use('/receipts', receiptsRoutes);
+router.use('/branch-operations', branchOperationsRoutes);
+router.use('/central-operations', centralOperationsRoutes);
+router.use('/automation', automationRoutes);
+router.use('/forecasting', mlForecastingRoutes);
+router.use('/vendors', vendorPerformanceRoutes);
+router.use('/facilities', facilitiesRoutes);
+router.use('/admin', adminRoutes);
+router.use('/communications', communicationRoutes);
+router.use('/channel-manager', channelManagerRoutes);
 
 export default router;

@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { auditAPI } from '@/lib/api';
+import { toast } from 'sonner';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
@@ -21,19 +23,33 @@ const statusConfig: Record<string, { label: string; color: string; bg: string; i
 
 export default function CompliancePage() {
   const { user } = useAuth();
-  const [items] = useState<ComplianceItem[]>([
-    { id: '1', category: 'Health & Safety', requirement: 'Fire safety equipment inspection', status: 'compliant', lastChecked: '2024-11-15' },
-    { id: '2', category: 'Health & Safety', requirement: 'Food handling certification', status: 'compliant', lastChecked: '2024-10-01' },
-    { id: '3', category: 'Financial', requirement: 'Tax compliance documentation', status: 'partial', lastChecked: '2024-11-20', notes: 'Missing Q3 receipts' },
-    { id: '4', category: 'HR', requirement: 'Employee contracts updated', status: 'compliant', lastChecked: '2024-11-01' },
-    { id: '5', category: 'Data Protection', requirement: 'Guest data privacy policy', status: 'non_compliant', lastChecked: '2024-10-15', notes: 'Policy needs update' },
-  ]);
+  const [items, setItems] = useState<ComplianceItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchItems();
+  }, []);
+
+  const fetchItems = async () => {
+    setIsLoading(true);
+    try {
+      const response = await auditAPI.getComplianceItems();
+      if (response.success) {
+        setItems(response.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching compliance items:', error);
+      toast.error('Failed to load compliance items');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const stats = {
     compliant: items.filter(i => i.status === 'compliant').length,
     partial: items.filter(i => i.status === 'partial').length,
     nonCompliant: items.filter(i => i.status === 'non_compliant').length,
-    score: Math.round((items.filter(i => i.status === 'compliant').length / items.length) * 100),
+    score: items.length > 0 ? Math.round((items.filter(i => i.status === 'compliant').length / items.length) * 100) : 0,
   };
 
   const categories = [...new Set(items.map(i => i.category))];
@@ -44,7 +60,7 @@ export default function CompliancePage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Compliance Status</h1><p className="text-gray-500">Regulatory and policy compliance</p></div>
-            <IOSButton variant="secondary"><RefreshCw className="h-4 w-4 mr-2" /> Run Check</IOSButton>
+            <IOSButton variant="secondary" onClick={fetchItems} leftIcon={<RefreshCw />}>Run Check</IOSButton>
           </div>
 
           <IOSCard className="p-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
@@ -61,7 +77,17 @@ export default function CompliancePage() {
             <IOSCard className="p-4 border-l-4 border-red-500"><XCircle className="h-6 w-6 text-[#FF3B30] mb-2" /><p className="text-sm text-gray-500">Non-Compliant</p><p className="text-xl font-bold text-[#FF3B30]">{stats.nonCompliant}</p></IOSCard>
           </div>
 
-          {categories.map((category) => (
+          {isLoading ? (
+            <div className="flex justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
+            </div>
+          ) : items.length === 0 ? (
+            <IOSCard className="p-12 text-center">
+              <Shield className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900">No compliance items found</h3>
+              <p className="text-gray-500">Run a compliance check to get started</p>
+            </IOSCard>
+          ) : categories.map((category) => (
             <IOSCard key={category} className="p-6">
               <h2 className="text-lg font-semibold font-sf-pro-display mb-4">{category}</h2>
               <div className="space-y-3">

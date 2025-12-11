@@ -168,8 +168,8 @@ export default function SuppliersPage() {
               <p className="text-gray-600">Manage vendors and suppliers</p>
             </div>
             <div className="flex gap-3">
-              <IOSButton variant="outline" onClick={fetchSuppliers}><RefreshCw className="h-4 w-4 mr-2" />Refresh</IOSButton>
-              {canEdit && <IOSButton onClick={openAddModal}><Plus className="h-4 w-4 mr-2" />Add Supplier</IOSButton>}
+              <IOSButton variant="outline" onClick={fetchSuppliers} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              {canEdit && <IOSButton onClick={openAddModal} leftIcon={<Plus />}>Add Supplier</IOSButton>}
             </div>
           </div>
 
@@ -225,7 +225,7 @@ export default function SuppliersPage() {
                             </div>
                           ) : <span className="text-gray-400">-</span>}
                         </td>
-                        <td className="px-4 py-4"><IOSBadge variant="outline">{s.payment_terms || 'NET30'}</IOSBadge></td>
+                        <td className="px-4 py-4"><IOSBadge variant="light" color="secondary">{s.payment_terms || 'NET30'}</IOSBadge></td>
                         <td className="px-4 py-4">
                           <IOSBadge className={getStatusColor(s.status)}>
                             <span className="flex items-center gap-1">{getStatusIcon(s.status)} {s.status}</span>
@@ -269,7 +269,7 @@ export default function SuppliersPage() {
                 <div><label className="text-sm font-medium">Payment Terms</label><select value={form.payment_terms} onChange={e => setForm({...form, payment_terms: e.target.value})} className="w-full px-3 py-2 border rounded-ios-lg">{PAYMENT_TERMS.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
                 <div><label className="text-sm font-medium">Status</label><select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full px-3 py-2 border rounded-ios-lg">{STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
               </div>
-              <div className="flex justify-end gap-3 pt-4"><IOSButton variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</IOSButton><IOSButton onClick={handleSave}><Save className="h-4 w-4 mr-2" />Save</IOSButton></div>
+              <div className="flex justify-end gap-3 pt-4"><IOSButton variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</IOSButton><IOSButton onClick={handleSave} leftIcon={<Save />}>Save</IOSButton></div>
             </div>
           </DialogContent>
         </Dialog>
@@ -278,7 +278,7 @@ export default function SuppliersPage() {
           <DialogContent>
             <DialogHeader><DialogTitle className="text-[#3C3C43]">Delete Supplier</DialogTitle></DialogHeader>
             <p>Are you sure you want to delete <strong>{selectedSupplier?.name}</strong>?</p>
-            <div className="flex justify-end gap-3 pt-4"><IOSButton variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</IOSButton><IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleDelete}><Trash2 className="h-4 w-4 mr-2" />Delete</IOSButton></div>
+            <div className="flex justify-end gap-3 pt-4"><IOSButton variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</IOSButton><IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleDelete} leftIcon={<Trash2 />}>Delete</IOSButton></div>
           </DialogContent>
         </Dialog>
       </DashboardLayout>

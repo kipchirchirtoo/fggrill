@@ -93,9 +93,7 @@ export default function HousekeepingStaffPage() {
               <h1 className="text-2xl font-bold text-gray-900">Housekeeping Staff</h1>
               <p className="text-gray-500">Manage housekeeping team and assignments</p>
             </div>
-            <IOSButton variant="secondary" onClick={fetchStaff}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
+            <IOSButton variant="secondary" onClick={fetchStaff} leftIcon={<RefreshCw />}>Refresh
             </IOSButton>
           </div>
 

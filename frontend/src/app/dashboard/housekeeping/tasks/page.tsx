@@ -180,12 +180,9 @@ export default function HousekeepingTasksPage() {
               <p className="text-gray-500">Manage cleaning and maintenance tasks</p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="outline" onClick={fetchTasks}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
+              <IOSButton variant="outline" onClick={fetchTasks} leftIcon={<RefreshCw />}>Refresh
               </IOSButton>
-              <IOSButton onClick={() => setCreateModalOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
+              <IOSButton onClick={() => setCreateModalOpen(true)} leftIcon={<Plus />}>
                 New Task
               </IOSButton>
             </div>
@@ -308,13 +305,13 @@ export default function HousekeepingTasksPage() {
 
                         <div className="flex gap-2">
                           {task.status === 'pending' && (
-                            <IOSButton size="sm" onClick={() => handleUpdateStatus(task.id, 'in_progress')}>
-                              <Play className="h-4 w-4 mr-1" /> Start
+                            <IOSButton size="sm" onClick={() => handleUpdateStatus(task.id, 'in_progress')} leftIcon={<Play />}>
+                              Start
                             </IOSButton>
                           )}
                           {task.status === 'in_progress' && (
-                            <IOSButton size="sm" className="bg-[#34C759]" onClick={() => handleUpdateStatus(task.id, 'completed')}>
-                              <Check className="h-4 w-4 mr-1" /> Complete
+                            <IOSButton size="sm" className="bg-[#34C759]" onClick={() => handleUpdateStatus(task.id, 'completed')} leftIcon={<Check />}>
+                              Complete
                             </IOSButton>
                           )}
                           <IOSButton 
@@ -448,17 +445,17 @@ export default function HousekeepingTasksPage() {
                 )}
                 <div className="flex gap-2 pt-4">
                   {selectedTask.status === 'pending' && (
-                    <IOSButton className="flex-1" onClick={() => handleUpdateStatus(selectedTask.id, 'in_progress')}>
-                      <Play className="h-4 w-4 mr-2" /> Start Task
+                    <IOSButton className="flex-1" onClick={() => handleUpdateStatus(selectedTask.id, 'in_progress')} leftIcon={<Play />}>
+                      Start Task
                     </IOSButton>
                   )}
                   {selectedTask.status === 'in_progress' && (
-                    <IOSButton className="flex-1 bg-[#34C759]" onClick={() => handleUpdateStatus(selectedTask.id, 'completed')}>
-                      <Check className="h-4 w-4 mr-2" /> Complete
+                    <IOSButton className="flex-1 bg-[#34C759]" onClick={() => handleUpdateStatus(selectedTask.id, 'completed')} leftIcon={<Check />}>
+                      Complete
                     </IOSButton>
                   )}
-                  <IOSButton variant="outline" className="flex-1 text-[#FF3B30]" onClick={() => handleUpdateStatus(selectedTask.id, 'cancelled')}>
-                    <X className="h-4 w-4 mr-2" /> Cancel
+                  <IOSButton variant="outline" className="flex-1 text-[#FF3B30]" onClick={() => handleUpdateStatus(selectedTask.id, 'cancelled')} leftIcon={<X />}>
+                    Cancel
                   </IOSButton>
                 </div>
               </div>

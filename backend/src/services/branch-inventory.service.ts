@@ -432,7 +432,7 @@ export async function createDispatchFromRequest(
       from_branch_id: fromBranchId,
       to_branch_id: toBranchId,
       created_by: userId,
-      status: 'DRAFT',
+      status: 'PENDING', // Changed from DRAFT to PENDING to match status check in frontend
       vehicle_number: vehicleNumber,
       driver_name: driverName,
       driver_phone: driverPhone,
@@ -479,55 +479,98 @@ export async function dispatchItems(
   dispatchId: string,
   dispatcherId: string
 ) {
-  // Get dispatch details
-  const { data: dispatch, error: fetchError } = await supabase
-    .from('dispatch_notes')
-    .select(`
-      *,
-      items:dispatch_items(*)
-    `)
-    .eq('id', dispatchId)
-    .single();
+  try {
+    // Validate dispatch ID
+    if (!dispatchId) {
+      throw new Error('Dispatch ID is required');
+    }
 
-  if (fetchError) throw fetchError;
+    // Get dispatch details
+    const { data: dispatch, error: fetchError } = await supabase
+      .from('dispatch_notes')
+      .select(`
+        *,
+        items:dispatch_items(*)
+      `)
+      .eq('id', dispatchId)
+      .single();
 
-  // Deduct from central warehouse stock
-  for (const item of dispatch.items) {
-    await updateBranchStock(
-      dispatch.from_branch_id,
-      item.item_sku,
-      -item.dispatched_quantity,
-      'DISPATCH_OUT',
-      dispatcherId,
-      'DISPATCH',
-      dispatchId,
-      dispatch.dispatch_number
-    );
+    if (fetchError) {
+      logger.error(`Error fetching dispatch ${dispatchId}:`, fetchError);
+      throw new Error(`Dispatch not found or couldn't be accessed: ${fetchError.message}`);
+    }
+    
+    if (!dispatch) {
+      throw new Error('Dispatch note not found');
+    }
 
-    // Add to in-transit
-    await supabase.from('in_transit_stock').insert({
-      dispatch_id: dispatchId,
-      item_sku: item.item_sku,
-      quantity: item.dispatched_quantity
-    });
+    // Check if dispatch has already been processed
+    if (dispatch.status !== 'PENDING') {
+      throw new Error(`Dispatch is already ${dispatch.status.toLowerCase()}`);
+    }
+
+    // Check if dispatch has items
+    if (!dispatch.items || dispatch.items.length === 0) {
+      throw new Error('No items found in dispatch note');
+    }
+
+    // Deduct from central warehouse stock
+    for (const item of dispatch.items) {
+      try {
+        await updateBranchStock(
+          dispatch.from_branch_id,
+          item.item_sku,
+          -item.dispatched_quantity,
+          'DISPATCH_OUT',
+          dispatcherId,
+          'DISPATCH',
+          dispatchId,
+          dispatch.dispatch_number
+        );
+
+        // Add to in-transit
+        const { error: transitError } = await supabase.from('in_transit_stock').insert({
+          dispatch_id: dispatchId,
+          item_sku: item.item_sku,
+          quantity: item.dispatched_quantity
+        });
+
+        if (transitError) {
+          logger.error(`Error adding item ${item.item_sku} to in-transit:`, transitError);
+          throw transitError;
+        }
+      } catch (itemError: any) {
+        logger.error(`Error processing item ${item.item_sku}:`, itemError);
+        throw new Error(`Error processing item ${item.item_sku}: ${itemError.message}`);
+      }
+    }
+
+    // Update dispatch status
+    const { data: updatedDispatch, error: updateError } = await supabase
+      .from('dispatch_notes')
+      .update({
+        status: 'IN_TRANSIT',
+        dispatcher_id: dispatcherId,
+        dispatched_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', dispatchId)
+      .select()
+      .single();
+
+    if (updateError) {
+      logger.error(`Error updating dispatch status:`, updateError);
+      throw updateError;
+    }
+
+    logger.info(`Dispatch ${dispatch.dispatch_number} sent to transit`);
+
+    return updatedDispatch || dispatch;
+  } catch (error) {
+    // Rollback logic could be implemented here for transactional integrity
+    logger.error(`Failed to dispatch items:`, error);
+    throw error;
   }
-
-  // Update dispatch status
-  const { error: updateError } = await supabase
-    .from('dispatch_notes')
-    .update({
-      status: 'IN_TRANSIT',
-      dispatcher_id: dispatcherId,
-      dispatched_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', dispatchId);
-
-  if (updateError) throw updateError;
-
-  logger.info(`Dispatch ${dispatch.dispatch_number} sent to transit`);
-
-  return dispatch;
 }
 
 /**

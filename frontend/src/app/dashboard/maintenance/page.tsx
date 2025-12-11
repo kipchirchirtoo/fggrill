@@ -64,8 +64,8 @@ export default function MaintenanceDashboard() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Wrench className="h-7 w-7" /> Maintenance</h1><p className="text-gray-500">Manage work orders and assets</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchData}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <Link href="/dashboard/maintenance/orders"><IOSButton><Plus className="h-4 w-4 mr-2" /> New Order</IOSButton></Link>
+              <IOSButton variant="secondary" onClick={fetchData} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <Link href="/dashboard/maintenance/orders"><IOSButton leftIcon={<Plus />}>New Order</IOSButton></Link>
             </div>
           </div>
 

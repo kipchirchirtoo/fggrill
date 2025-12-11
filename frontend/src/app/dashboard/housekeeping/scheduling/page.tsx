@@ -96,13 +96,9 @@ export default function HousekeepingSchedulingPage() {
               <p className="text-gray-500">Manage housekeeping shifts and assignments</p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchData}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
+              <IOSButton variant="secondary" onClick={fetchData} leftIcon={<RefreshCw />}>Refresh
               </IOSButton>
-              <IOSButton>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Schedule
+              <IOSButton leftIcon={<Plus />}>Add Schedule
               </IOSButton>
             </div>
           </div>

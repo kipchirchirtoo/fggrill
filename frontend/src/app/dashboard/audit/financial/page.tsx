@@ -73,7 +73,7 @@ export default function FinancialAuditPage() {
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <Link href="/dashboard/audit"><IOSButton variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" /> Back</IOSButton></Link>
+              <Link href="/dashboard/audit"><IOSButton variant="ghost" size="sm" leftIcon={<ArrowLeft />}>Back</IOSButton></Link>
               <div>
                 <h1 className="text-2xl font-bold flex items-center gap-2">
                   <div className="p-2 bg-[#F2F2F7] rounded-ios-lg"><BarChart3 className="h-6 w-6 text-[#3C3C43]" /></div>
@@ -83,8 +83,8 @@ export default function FinancialAuditPage() {
               </div>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="outline" size="sm"><Download className="h-4 w-4 mr-2" /> Export</IOSButton>
-              <IOSButton size="sm" className="bg-[#F2F2F7] hover:bg-[#F2F2F7]"><RefreshCw className="h-4 w-4 mr-2" /> Sync</IOSButton>
+              <IOSButton variant="outline" size="sm"leftIcon={<Download />}>Export</IOSButton>
+              <IOSButton size="sm" className="bg-[#F2F2F7] hover:bg-[#F2F2F7]" leftIcon={<RefreshCw />}>Sync</IOSButton>
             </div>
           </div>
 

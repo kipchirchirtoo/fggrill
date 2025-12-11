@@ -266,8 +266,7 @@ export default function PurchaseOrdersPage() {
                 Refresh
               </IOSButton>
               {canManage && (
-                <IOSButton onClick={() => setIsCreateModalOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
+                <IOSButton onClick={() => setIsCreateModalOpen(true)} leftIcon={<Plus />}>
                   New Order
                 </IOSButton>
               )}
@@ -389,8 +388,8 @@ export default function PurchaseOrdersPage() {
                               </IOSButton>
                             )}
                             {order.status === 'APPROVED' && canManage && (
-                              <IOSButton size="sm" className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={() => handleReceive(order.id)}>
-                                <Package className="h-4 w-4 mr-1" /> Receive
+                              <IOSButton size="sm" className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={() => handleReceive(order.id)} leftIcon={<Package />}>
+                                Receive
                               </IOSButton>
                             )}
                           </div>
@@ -423,8 +422,13 @@ export default function PurchaseOrdersPage() {
                     className="w-full border rounded-ios-lg px-3 py-2"
                   >
                     <option value="">Select Supplier</option>
-                    {suppliers.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
+                    {suppliers.map((supplier, idx) => (
+                      <option 
+                        key={`supplier-${supplier.id ?? idx}`} 
+                        value={supplier.id}
+                      >
+                        {supplier.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -441,21 +445,24 @@ export default function PurchaseOrdersPage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium">Order Items *</label>
-                  <IOSButton size="sm" variant="outline" onClick={addItemRow}>
-                    <Plus className="h-4 w-4 mr-1" /> Add Item
-                  </IOSButton>
+                  <IOSButton size="sm" variant="outline" onClick={addItemRow} leftIcon={<Plus />}>Add Item</IOSButton>
                 </div>
                 <div className="space-y-2 border rounded-ios-lg p-3 bg-gray-50">
                   {formData.items.map((item, index) => (
-                    <div key={index} className="flex items-center gap-2">
+                    <div key={`po-item-${item.item_id || 'new'}-${index}`} className="flex items-center gap-2">
                       <select
                         value={item.item_id}
                         onChange={(e) => updateItemRow(index, 'item_id', e.target.value)}
                         className="flex-1 border rounded-ios-lg px-3 py-2 text-sm"
                       >
                         <option value="">Select Item</option>
-                        {items.map(i => (
-                          <option key={i.id} value={i.id}>{i.name} ({i.sku})</option>
+                        {items.map((storeItem, itemIndex) => (
+                          <option 
+                            key={`store-item-${storeItem.id ?? itemIndex}`} 
+                            value={storeItem.id}
+                          >
+                            {storeItem.name} ({storeItem.sku})
+                          </option>
                         ))}
                       </select>
                       <Input
@@ -553,7 +560,7 @@ export default function PurchaseOrdersPage() {
                       </thead>
                       <tbody className="divide-y">
                         {(selectedOrder.items || []).map((item, idx) => (
-                          <tr key={idx}>
+                          <tr key={`selected-item-${item.id ?? item.item_id ?? idx}`}>
                             <td className="px-3 py-2">{item.item?.name || `Item #${item.item_id}`}</td>
                             <td className="px-3 py-2 text-right">{item.quantity}</td>
                             <td className="px-3 py-2 text-right">KES {item.unit_price?.toLocaleString()}</td>

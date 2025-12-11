@@ -1,24 +1,49 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   X, Search, CheckCircle, User, Bed, Calendar,
-  Clock, DollarSign, FileText, Key
+  Clock, DollarSign, FileText, Key, Upload
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { bookingsAPI } from '@/lib/api';
+import DocumentUploadModal from './DocumentUploadModal';
 
 interface CheckInModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialData?: any;
 }
 
-export function CheckInModal({ isOpen, onClose }: CheckInModalProps): JSX.Element | null {
+export function CheckInModal({ isOpen, onClose, initialData }: CheckInModalProps): JSX.Element | null {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [amount, setAmount] = useState(0);
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+
+  useEffect(() => {
+    if (initialData) {
+      const nights = Math.max(
+        1,
+        Math.ceil(
+          (new Date(initialData.check_out || initialData.check_out_date).getTime() - new Date(initialData.check_in || initialData.check_in_date).getTime()) / (1000 * 60 * 60 * 24)
+        )
+      );
+      setSelectedBooking({
+        id: initialData.id,
+        guestName: initialData.guest_name || `${initialData.guest?.first_name || ''} ${initialData.guest?.last_name || ''}`.trim() || 'Guest',
+        roomNumber: initialData.room_number || initialData.room?.room_number || 'Unassigned',
+        checkIn: initialData.check_in || initialData.check_in_date,
+        checkOut: initialData.check_out || initialData.check_out_date,
+        nights
+      });
+    } else {
+      setSelectedBooking(null);
+      setSearchTerm('');
+    }
+  }, [initialData, isOpen]);
 
   const handleSearch = async () => {
     try {
@@ -69,6 +94,7 @@ export function CheckInModal({ isOpen, onClose }: CheckInModalProps): JSX.Elemen
   if (!isOpen) return null;
 
   return (
+    <>
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -91,25 +117,27 @@ export function CheckInModal({ isOpen, onClose }: CheckInModalProps): JSX.Elemen
         </div>
 
         <div className="space-y-4">
-          {/* Search */}
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search by booking number or guest name"
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-ios-lg"
-              />
+          {/* Search - Only show if no initial data */}
+          {!initialData && (
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search by booking number or guest name"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-ios-lg"
+                />
+              </div>
+              <button
+                onClick={handleSearch}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700"
+              >
+                Search
+              </button>
             </div>
-            <button
-              onClick={handleSearch}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700"
-            >
-              Search
-            </button>
-          </div>
+          )}
 
           {/* Booking Details */}
           {selectedBooking && (
@@ -122,7 +150,7 @@ export function CheckInModal({ isOpen, onClose }: CheckInModalProps): JSX.Elemen
                   </div>
                   <div className="flex items-center gap-2">
                     <Calendar className="h-5 w-5 text-gray-500" />
-                    <span>{selectedBooking.checkIn} - {selectedBooking.checkOut}</span>
+                    <span>{new Date(selectedBooking.checkIn).toLocaleDateString()} - {new Date(selectedBooking.checkOut).toLocaleDateString()}</span>
                   </div>
                 </div>
                 <div className="flex justify-between items-center">
@@ -169,6 +197,18 @@ export function CheckInModal({ isOpen, onClose }: CheckInModalProps): JSX.Elemen
                 </div>
               </div>
 
+              {/* Documents Section */}
+              <div className="space-y-2">
+                <h3 className="font-medium text-gray-900">Guest Documents</h3>
+                <button
+                  onClick={() => setShowDocumentModal(true)}
+                  className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-400 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-gray-600 hover:text-indigo-600"
+                >
+                  <Upload className="h-5 w-5" />
+                  <span>Upload ID / Passport</span>
+                </button>
+              </div>
+
               {/* Actions */}
               <div className="flex justify-end pt-4 border-t">
                 <button
@@ -192,5 +232,18 @@ export function CheckInModal({ isOpen, onClose }: CheckInModalProps): JSX.Elemen
         </div>
       </motion.div>
     </motion.div>
+
+    {/* Document Upload Modal */}
+    {selectedBooking && (
+      <DocumentUploadModal
+        isOpen={showDocumentModal}
+        onClose={() => setShowDocumentModal(false)}
+        guestId={initialData?.guest_id || initialData?.guest?.id || ''}
+        guestName={selectedBooking.guestName}
+        reservationId={selectedBooking.id}
+        onDocumentUploaded={() => toast.success('Document saved')}
+      />
+    )}
+  </>
   );
 }

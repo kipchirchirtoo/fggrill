@@ -1,3 +1,9 @@
+import warnings
+import hashlib
+
+# Fix for ReportLab MD5 issue in newer versions
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="reportlab")
+
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle

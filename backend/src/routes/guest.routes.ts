@@ -5,7 +5,11 @@ import {
   createGuest,
   updateGuest,
   deleteGuest,
-  updateGuestPreferences
+  updateGuestPreferences,
+  getGuestHistory,
+  getGuestLoyalty,
+  updateLoyaltyPoints,
+  getVIPGuests
 } from '../controllers/guest.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -43,6 +47,29 @@ router.put('/:id/preferences',
 router.delete('/:id',
   authorize([UserRole.SUPER_ADMIN]),
   deleteGuest
+);
+
+// VIP Guests
+router.get('/vip/list',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST]),
+  getVIPGuests
+);
+
+// Guest History
+router.get('/:id/history',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST]),
+  getGuestHistory
+);
+
+// Guest Loyalty
+router.get('/:id/loyalty',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST]),
+  getGuestLoyalty
+);
+
+router.post('/:id/loyalty/points',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
+  updateLoyaltyPoints
 );
 
 export default router;

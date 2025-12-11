@@ -48,7 +48,7 @@ export default function BranchArrivalsPage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Today's Arrivals</h1><p className="text-gray-500">{arrivals.length} guests expected</p></div>
-            <IOSButton variant="secondary" onClick={fetchArrivals}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+            <IOSButton variant="secondary" onClick={fetchArrivals} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -74,9 +74,9 @@ export default function BranchArrivalsPage() {
                     </div>
                     <div className="flex items-center gap-3">
                       {arrival.status === 'checked_in' ? (
-                        <IOSBadge variant="success">Checked In</IOSBadge>
+                        <IOSBadge variant="light" color="success">Checked In</IOSBadge>
                       ) : (
-                        <IOSButton size="sm" onClick={() => handleCheckIn(arrival.id)}><CheckCircle className="h-4 w-4 mr-1" /> Check In</IOSButton>
+                        <IOSButton size="sm" onClick={() => handleCheckIn(arrival.id)} leftIcon={<CheckCircle />}> Check In</IOSButton>
                       )}
                     </div>
                   </div>

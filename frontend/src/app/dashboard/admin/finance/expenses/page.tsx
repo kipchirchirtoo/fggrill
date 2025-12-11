@@ -63,8 +63,8 @@ export default function AdminExpensesPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Expenses</h1><p className="text-gray-500">Manage expenses</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchExpenses}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <IOSButton onClick={() => setAddModalOpen(true)}><Plus className="h-4 w-4 mr-2" /> Add Expense</IOSButton>
+              <IOSButton variant="secondary" onClick={fetchExpenses} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>Add Expense</IOSButton>
             </div>
           </div>
 

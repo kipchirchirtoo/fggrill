@@ -15,7 +15,7 @@ const nextConfig = {
   },
   env: {
     NEXT_PUBLIC_BASE_URL: 'http://localhost:3000',
-    PORT: 3000,
+    PORT: '3000',
   },
   devIndicators: {
     buildActivity: true,

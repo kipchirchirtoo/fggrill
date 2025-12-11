@@ -297,6 +297,39 @@ export const createDispatch = async (
       notes 
     } = req.body;
 
+    // Validate required fields
+    if (!request_id) {
+      res.status(400).json({ success: false, message: 'Stock request ID is required' });
+      return;
+    }
+
+    if (!to_branch_id) {
+      res.status(400).json({ success: false, message: 'Destination branch ID is required' });
+      return;
+    }
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      res.status(400).json({ success: false, message: 'At least one item is required for dispatch' });
+      return;
+    }
+
+    // Validate items
+    const invalidItems = items.filter(item => !item.item_sku || !item.dispatched_quantity || item.dispatched_quantity <= 0);
+    if (invalidItems.length > 0) {
+      res.status(400).json({ 
+        success: false, 
+        message: 'All items must have a valid SKU and positive quantity',
+        invalidItems
+      });
+      return;
+    }
+
+    // Validate user
+    if (!req.user?.id) {
+      res.status(401).json({ success: false, message: 'User authentication required' });
+      return;
+    }
+
     // Get central warehouse
     const central = await BranchInventoryService.getCentralWarehouse();
     if (!central) {
@@ -304,38 +337,87 @@ export const createDispatch = async (
       return;
     }
 
+    // Check if user has permission to create dispatch from central warehouse
+    if (req.user.branch_id !== central.id && !['SUPER_ADMIN', 'GENERAL_MANAGER', 'CENTRAL_STOREKEEPER'].includes(req.user.role)) {
+      res.status(403).json({
+        success: false,
+        message: 'You do not have permission to create dispatches from central warehouse'
+      });
+      return;
+    }
+
     // Get destination branch code
-    const { data: toBranch } = await supabase
+    const { data: toBranch, error: branchError } = await supabase
       .from('branches')
-      .select('code')
+      .select('code, name')
       .eq('id', to_branch_id)
       .single();
 
-    if (!toBranch?.code) {
+    if (branchError || !toBranch?.code) {
       res.status(400).json({ success: false, message: 'Destination branch not found' });
       return;
     }
 
-    const dispatch = await BranchInventoryService.createDispatchFromRequest(
-      request_id,
-      central.id,
-      to_branch_id,
-      toBranch.code,
-      req.user?.id,
-      items,
-      vehicle_number,
-      driver_name,
-      driver_phone,
-      estimated_delivery,
-      notes
-    );
+    // Verify the request exists and is in a valid status
+    const { data: request, error: requestError } = await supabase
+      .from('stock_requests')
+      .select('status, requesting_branch_id')
+      .eq('id', request_id)
+      .single();
 
-    res.status(201).json({
-      success: true,
-      message: `Dispatch note ${dispatch.dispatch_number} created`,
-      data: dispatch
-    });
-  } catch (error) {
+    if (requestError || !request) {
+      res.status(404).json({ success: false, message: 'Stock request not found' });
+      return;
+    }
+
+    if (!['APPROVED', 'PARTIALLY_APPROVED'].includes(request.status)) {
+      res.status(400).json({
+        success: false, 
+        message: `Cannot create dispatch for request with status: ${request.status}. Request must be approved first.`
+      });
+      return;
+    }
+
+    // Verify the request is for the correct destination branch
+    if (request.requesting_branch_id !== to_branch_id) {
+      res.status(400).json({
+        success: false, 
+        message: 'Destination branch does not match the branch that made the request'
+      });
+      return;
+    }
+
+    try {
+      const dispatch = await BranchInventoryService.createDispatchFromRequest(
+        request_id,
+        central.id,
+        to_branch_id,
+        toBranch.code,
+        req.user.id,
+        items,
+        vehicle_number,
+        driver_name,
+        driver_phone,
+        estimated_delivery,
+        notes
+      );
+
+      logger.info(`Dispatch note ${dispatch.dispatch_number} created by ${req.user.email} for branch ${toBranch.name}`);
+
+      res.status(201).json({
+        success: true,
+        message: `Dispatch note ${dispatch.dispatch_number} created for ${toBranch.name}`,
+        data: dispatch
+      });
+    } catch (serviceError: any) {
+      logger.error(`Error creating dispatch for request ${request_id}:`, serviceError);
+      res.status(500).json({
+        success: false,
+        message: `Failed to create dispatch: ${serviceError.message}`
+      });
+    }
+  } catch (error: any) {
+    logger.error('Unexpected error in createDispatch controller:', error);
     next(error);
   }
 };
@@ -350,15 +432,73 @@ export const dispatchItems = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
+    
+    if (!id) {
+      res.status(400).json({
+        success: false,
+        message: 'Dispatch ID is required'
+      });
+      return;
+    }
+    
+    // Validate user
+    if (!req.user?.id) {
+      res.status(401).json({
+        success: false,
+        message: 'User authentication required'
+      });
+      return;
+    }
 
-    const dispatch = await BranchInventoryService.dispatchItems(id, req.user?.id);
+    // Get central warehouse
+    const central = await BranchInventoryService.getCentralWarehouse();
+    if (!central) {
+      res.status(400).json({ success: false, message: 'Central warehouse not configured' });
+      return;
+    }
 
-    res.status(200).json({
-      success: true,
-      message: `Dispatch ${dispatch.dispatch_number} sent`,
-      data: dispatch
-    });
-  } catch (error) {
+    // Check if user has permission to dispatch from this branch
+    if (req.user.branch_id !== central.id && !['SUPER_ADMIN', 'GENERAL_MANAGER', 'CENTRAL_STOREKEEPER'].includes(req.user.role)) {
+      res.status(403).json({
+        success: false,
+        message: 'You do not have permission to dispatch from central warehouse'
+      });
+      return;
+    }
+
+    try {
+      const dispatch = await BranchInventoryService.dispatchItems(id, req.user.id);
+      
+      logger.info(`Dispatch ${dispatch.dispatch_number} successfully sent by ${req.user.email}`);
+      
+      res.status(200).json({
+        success: true,
+        message: `Dispatch ${dispatch.dispatch_number} sent`,
+        data: dispatch
+      });
+    } catch (serviceError: any) {
+      logger.error(`Dispatch error for ID ${id}:`, serviceError);
+      
+      // Return appropriate status code based on error type
+      if (serviceError.message.includes('not found') || serviceError.message.includes('couldn\'t be accessed')) {
+        res.status(404).json({
+          success: false,
+          message: serviceError.message
+        });
+      } else if (serviceError.message.includes('already')) {
+        res.status(409).json({
+          success: false,
+          message: serviceError.message
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          message: `Failed to dispatch items: ${serviceError.message}`
+        });
+      }
+    }
+  } catch (error: any) {
+    logger.error('Unexpected error in dispatchItems controller:', error);
     next(error);
   }
 };

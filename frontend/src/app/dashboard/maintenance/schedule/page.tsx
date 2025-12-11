@@ -82,7 +82,7 @@ export default function MaintenanceSchedulePage() {
                     </div>
                     <div className="flex items-center gap-3">
                       <IOSBadge className={typeColors[task.type]}>{task.type}</IOSBadge>
-                      {task.status === 'scheduled' && <IOSButton size="sm"><CheckCircle className="h-4 w-4 mr-1" /> Complete</IOSButton>}
+                      {task.status === 'scheduled' && <IOSButton size="sm" leftIcon={<CheckCircle />}>Complete</IOSButton>}
                     </div>
                   </div>
                 </IOSCard>

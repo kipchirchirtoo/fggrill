@@ -19,16 +19,16 @@ import base64
 
 
 class ReceiptGenerator:
-    """Generates thermal-style receipts (like first image template)"""
+    """Generates thermal-style receipts (Fish & Chips Restaurant style)"""
     
     def __init__(self, logo_path: str = None):
         self.logo_path = logo_path or os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'public', 'fglogo.png')
-        self.company_name = "Famous Gate Hotel"
+        self.company_name = "FAMOUS GATE HOTEL"
         self.company_address = "Kericho, Kenya"
         self.company_phone = "+254 700 000 000"
         self.company_email = "info@famousgate.co.ke"
         
-    def generate_receipt(self, receipt_data: Dict[str, Any]) -> bytes:
+    def generate_receipt(self, receipt_data: Dict[str, Any], vat_inclusive: bool = True) -> bytes:
         """Generate a thermal-style receipt PDF"""
         buffer = io.BytesIO()
         
@@ -139,20 +139,39 @@ class ReceiptGenerator:
         y -= 6 * mm
         
         # === TOTALS ===
+        # VAT is INCLUDED in menu prices (16%)
+        # Calculate breakdown: Total = Base + VAT, where VAT = Base * 0.16
+        # So: Total = Base * 1.16, Base = Total / 1.16
         c.setFont("Helvetica", 9)
-        subtotal = receipt_data.get('subtotal', 0)
-        tax = receipt_data.get('tax_amount', receipt_data.get('tax', 0))
-        discount = receipt_data.get('discount_amount', 0)
-        total = receipt_data.get('total_amount', receipt_data.get('total', 0))
         
-        c.drawString(5*mm, y, "Subtotal")
+        # Get total from items (prices already include VAT)
+        items_total = sum(
+            item.get('total', item.get('unit_price', 0) * item.get('quantity', 1)) 
+            for item in receipt_data.get('items', [])
+        )
+        total = receipt_data.get('total_amount', receipt_data.get('total', items_total))
+        
+        # Calculate VAT breakdown (VAT is already included in prices)
+        vat_rate = 0.16
+        if vat_inclusive:
+            # VAT inclusive: calculate base and VAT from total
+            base_amount = round(total / (1 + vat_rate), 2)
+            tax = round(total - base_amount, 2)
+            subtotal = base_amount
+        else:
+            # VAT exclusive (legacy): use provided values
+            subtotal = receipt_data.get('subtotal', total)
+            tax = receipt_data.get('tax_amount', receipt_data.get('tax', 0))
+        
+        discount = receipt_data.get('discount_amount', 0)
+        
+        c.drawString(5*mm, y, "SUBTOTAL")
         c.drawRightString(width - 5*mm, y, f"KES {subtotal:,.0f}")
         y -= 4 * mm
         
-        if tax > 0:
-            c.drawString(5*mm, y, "Tax (16%)")
-            c.drawRightString(width - 5*mm, y, f"KES {tax:,.0f}")
-            y -= 4 * mm
+        c.drawString(5*mm, y, "TAX (16% incl.)")
+        c.drawRightString(width - 5*mm, y, f"KES {tax:,.0f}")
+        y -= 4 * mm
         
         if discount > 0:
             c.drawString(5*mm, y, "Discount")
@@ -161,7 +180,7 @@ class ReceiptGenerator:
         
         y -= 2 * mm
         c.setFont("Helvetica-Bold", 11)
-        c.drawString(5*mm, y, "Total")
+        c.drawString(5*mm, y, "TOTAL:")
         c.drawRightString(width - 5*mm, y, f"KES {total:,.0f}")
         y -= 8 * mm
         

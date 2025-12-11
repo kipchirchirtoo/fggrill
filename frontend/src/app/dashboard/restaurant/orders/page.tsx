@@ -118,9 +118,7 @@ export default function RestaurantOrdersPage() {
               <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
               <p className="text-gray-500">View and manage restaurant orders</p>
             </div>
-            <IOSButton variant="secondary" onClick={fetchOrders}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
+            <IOSButton variant="secondary" onClick={fetchOrders} leftIcon={<RefreshCw />}>Refresh
             </IOSButton>
           </div>
 
@@ -318,9 +316,7 @@ export default function RestaurantOrdersPage() {
                       Mark Served
                     </IOSButton>
                   )}
-                  <IOSButton variant="secondary">
-                    <Printer className="h-4 w-4 mr-2" />
-                    Print
+                  <IOSButton variant="secondary" leftIcon={<Printer />}>Print
                   </IOSButton>
                 </div>
               </div>

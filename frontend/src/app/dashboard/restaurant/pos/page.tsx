@@ -24,6 +24,7 @@ interface MenuItem {
   category_id: string;
   category_name?: string;
   is_available: boolean;
+  image_url?: string;
 }
 
 interface CartItem extends MenuItem {
@@ -110,9 +111,14 @@ export default function RestaurantPOSPage() {
     setCustomerName('');
   };
 
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax = Math.round(subtotal * 0.16);
-  const total = subtotal + tax;
+  // VAT is ALREADY INCLUDED in menu prices (16%)
+  // Total from cart IS the final price - no additional tax to add
+  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  // Calculate VAT breakdown for display (VAT is included, not added)
+  // If total = base + VAT and VAT = base * 0.16, then total = base * 1.16
+  // So base = total / 1.16 and VAT = total - base
+  const subtotal = Math.round(total / 1.16);
+  const tax = total - subtotal;
 
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'mpesa' | 'card'>('cash');
   const [showReceipt, setShowReceipt] = useState(false);
@@ -181,7 +187,7 @@ export default function RestaurantPOSPage() {
           amount_paid: total,
           payment_status: 'paid',
           branch_id: user?.branch_id,
-          cashier_name: user?.first_name || 'Staff',
+          cashier_name: user?.firstName || 'Staff',
           items: orderItems,
         });
       } catch (receiptError) {
@@ -214,13 +220,16 @@ export default function RestaurantPOSPage() {
           <div className="flex-1 flex flex-col">
             {/* Search & Categories */}
             <div className="mb-4 space-y-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
+              <div className="relative flex items-center">
+                <div className="absolute left-4 flex items-center justify-center pointer-events-none">
+                  <Search className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="text"
                   placeholder="Search menu..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
+                  className="w-full h-12 pl-12 pr-4 text-base bg-[#f5f5f7] border-0 rounded-[1rem] text-[#141417] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#007AFF] focus:bg-white transition-all"
                 />
               </div>
               <div className="flex gap-2 overflow-x-auto pb-2">
@@ -251,19 +260,69 @@ export default function RestaurantPOSPage() {
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#007AFF]" />
                 </div>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                   {filteredItems.map((item) => (
-                    <IOSCard
+                    <div
                       key={item.id}
-                      className="p-3 cursor-pointer hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition active:scale-95"
+                      className="group cursor-pointer bg-[#fefefe] rounded-[1rem] p-2 text-[#141417] shadow-md hover:shadow-lg transition-all duration-200 hover:-translate-y-1 active:scale-[0.98]"
                       onClick={() => addToCart(item)}
                     >
-                      <div className="h-16 bg-gradient-to-br from-orange-100 to-yellow-100 rounded-ios-lg mb-2 flex items-center justify-center">
-                        <Soup className="h-8 w-8 text-orange-500" />
+                      {/* Card Hero Section */}
+                      <div className="bg-[#fef4e2] rounded-t-[0.5rem] p-4 text-sm">
+                        {/* Header with category and availability */}
+                        <div className="flex justify-between items-center gap-4 font-bold">
+                          <span className="text-xs uppercase tracking-wide text-amber-700">
+                            {item.category_name || 'Menu Item'}
+                          </span>
+                          {item.is_available ? (
+                            <span className="text-xs text-green-600 flex items-center gap-1">
+                              <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                              Available
+                            </span>
+                          ) : (
+                            <span className="text-xs text-red-500">Sold Out</span>
+                          )}
+                        </div>
+                        
+                        {/* Item Name - Main Title */}
+                        <h3 className="my-4 text-xl font-semibold pr-4 leading-tight line-clamp-2">
+                          {item.name}
+                        </h3>
+                        
+                        {/* Image */}
+                        <div className="relative h-24 w-full overflow-hidden rounded-lg bg-white/50">
+                          {item.image_url ? (
+                            <img
+                              src={item.image_url}
+                              alt={item.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center">
+                              <Soup className="h-10 w-10 text-amber-600/60" />
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <p className="font-medium text-sm truncate">{item.name}</p>
-                      <p className="text-[#007AFF] font-bold">KES {item.price?.toLocaleString()}</p>
-                    </IOSCard>
+                      
+                      {/* Card Footer */}
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-3 font-bold text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-bold text-[#141417]">
+                            KES {item.price?.toLocaleString()}
+                          </span>
+                        </div>
+                        <button 
+                          className="w-full sm:w-auto font-normal border-none cursor-pointer text-center py-2 px-5 rounded-[1rem] bg-[#141417] text-white text-sm hover:bg-[#2a2a2f] transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addToCart(item);
+                          }}
+                        >
+                          Add to Cart
+                        </button>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
@@ -277,42 +336,62 @@ export default function RestaurantPOSPage() {
                 <ShoppingCart className="h-5 w-5" />
                 Current Order
               </h2>
-              {/* Order Type */}
-              <div className="flex gap-2 mt-3">
-                {(['dine_in', 'takeaway', 'room_service'] as const).map((type) => (
-                  <IOSButton
-                    key={type}
-                    size="sm"
-                    variant={orderType === type ? 'primary' : 'secondary'}
-                    onClick={() => setOrderType(type)}
-                    className="flex-1"
-                  >
-                    {type === 'dine_in' ? 'Dine In' : type === 'takeaway' ? 'Takeaway' : 'Room'}
-                  </IOSButton>
-                ))}
+              {/* Order Type - Modern Segmented Control */}
+              <div className="mt-3">
+                <div className="bg-gray-100 p-1 rounded-[1rem] flex gap-1">
+                  {(['dine_in', 'takeaway', 'room_service'] as const).map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => setOrderType(type)}
+                      className={`flex-1 py-2 px-3 rounded-[0.75rem] text-sm font-medium transition-all ${
+                        orderType === type 
+                          ? 'bg-white text-[#141417] shadow-sm' 
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      {type === 'dine_in' ? '🍽️ Dine In' : type === 'takeaway' ? '🥡 Takeaway' : '🛎️ Room'}
+                    </button>
+                  ))}
+                </div>
               </div>
-              {/* Table/Room Number */}
+              
+              {/* Table/Room/Customer Input */}
               <div className="mt-3">
                 {orderType === 'dine_in' && (
-                  <Input
-                    placeholder="Table Number"
-                    value={tableNumber}
-                    onChange={(e) => setTableNumber(e.target.value)}
-                  />
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">🪑</span>
+                    <input
+                      type="text"
+                      placeholder="Table Number"
+                      value={tableNumber}
+                      onChange={(e) => setTableNumber(e.target.value)}
+                      className="w-full h-11 pl-10 pr-4 text-sm bg-[#f5f5f7] border-0 rounded-[0.75rem] text-[#141417] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                    />
+                  </div>
                 )}
                 {orderType === 'room_service' && (
-                  <Input
-                    placeholder="Room Number"
-                    value={roomNumber}
-                    onChange={(e) => setRoomNumber(e.target.value)}
-                  />
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">🚪</span>
+                    <input
+                      type="text"
+                      placeholder="Room Number"
+                      value={roomNumber}
+                      onChange={(e) => setRoomNumber(e.target.value)}
+                      className="w-full h-11 pl-10 pr-4 text-sm bg-[#f5f5f7] border-0 rounded-[0.75rem] text-[#141417] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                    />
+                  </div>
                 )}
                 {orderType === 'takeaway' && (
-                  <Input
-                    placeholder="Customer Name (optional)"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                  />
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">👤</span>
+                    <input
+                      type="text"
+                      placeholder="Customer Name (optional)"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      className="w-full h-11 pl-10 pr-4 text-sm bg-[#f5f5f7] border-0 rounded-[0.75rem] text-[#141417] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                    />
+                  </div>
                 )}
               </div>
             </div>
@@ -351,51 +430,66 @@ export default function RestaurantPOSPage() {
               )}
             </div>
 
-            {/* Totals & Actions */}
+            {/* Totals & Actions - VAT is INCLUDED in prices */}
             <div className="p-4 border-t space-y-3">
               <div className="space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span>Subtotal</span>
+                <div className="flex justify-between text-gray-600">
+                  <span>Subtotal (excl. VAT)</span>
                   <span>KES {subtotal.toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Tax (16%)</span>
+                <div className="flex justify-between text-gray-600">
+                  <span>VAT (16% incl.)</span>
                   <span>KES {tax.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between font-bold text-lg pt-2 border-t">
-                  <span>Total</span>
+                  <span>TOTAL</span>
                   <span>KES {total.toLocaleString()}</span>
                 </div>
               </div>
 
-              {/* Payment Method */}
-              <div className="flex gap-2 mb-3">
-                {(['cash', 'mpesa', 'card'] as const).map((method) => (
-                  <IOSButton
-                    key={method}
-                    size="sm"
-                    variant={paymentMethod === method ? 'primary' : 'secondary'}
-                    onClick={() => setPaymentMethod(method)}
-                    className="flex-1"
-                  >
-                    {method === 'cash' ? <Banknote className="h-3 w-3 mr-1" /> : method === 'mpesa' ? '📱' : <CreditCard className="h-3 w-3 mr-1" />}
-                    {method.charAt(0).toUpperCase() + method.slice(1)}
-                  </IOSButton>
-                ))}
+              {/* Payment Method - Modern Card Style */}
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Payment Method</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['cash', 'mpesa', 'card'] as const).map((method) => (
+                    <button
+                      key={method}
+                      onClick={() => setPaymentMethod(method)}
+                      className={`flex flex-col items-center justify-center p-3 rounded-[1rem] border-2 transition-all ${
+                        paymentMethod === method 
+                          ? 'border-[#007AFF] bg-[#007AFF]/10 text-[#007AFF]' 
+                          : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      <span className="text-2xl mb-1">
+                        {method === 'cash' ? '💵' : method === 'mpesa' ? '📱' : '💳'}
+                      </span>
+                      <span className="text-xs font-semibold">
+                        {method === 'mpesa' ? 'M-Pesa' : method.charAt(0).toUpperCase() + method.slice(1)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="flex gap-2">
-                <IOSButton variant="secondary" onClick={clearCart} className="flex-1" disabled={cart.length === 0}>
-                  Clear
-                </IOSButton>
-                <IOSButton
+              {/* Action Buttons - Modern Style */}
+              <div className="space-y-2">
+                <button
                   onClick={handleGenerateReceipt}
-                  className="flex-1 bg-[#34C759] hover:bg-green-700"
                   disabled={cart.length === 0 || isSubmitting}
+                  className="w-full flex items-center justify-center gap-2 py-4 px-6 rounded-[1rem] bg-[#34C759] hover:bg-[#2DB84D] text-white font-semibold text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-green-500/30"
                 >
-                  <Printer className="h-4 w-4 mr-2" />
-                  {isSubmitting ? 'Processing...' : 'Generate Receipt'}
-                </IOSButton>
+                  <Printer className="h-5 w-5" />
+                  {isSubmitting ? 'Processing...' : '🖨️ Generate Receipt'}
+                </button>
+                
+                <button
+                  onClick={clearCart}
+                  disabled={cart.length === 0}
+                  className="w-full py-3 px-6 rounded-[1rem] bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Clear Cart
+                </button>
               </div>
             </div>
           </IOSCard>
@@ -429,7 +523,7 @@ export default function RestaurantPOSPage() {
                   {lastOrder.order_type === 'dine_in' && <div className="flex justify-between"><span className="text-gray-500">Table:</span><span>{lastOrder.table_number}</span></div>}
                   {lastOrder.order_type === 'room_service' && <div className="flex justify-between"><span className="text-gray-500">Room:</span><span>{lastOrder.room_number}</span></div>}
                   {lastOrder.customer_name && <div className="flex justify-between"><span className="text-gray-500">Customer:</span><span>{lastOrder.customer_name}</span></div>}
-                  <div className="flex justify-between"><span className="text-gray-500">Cashier:</span><span>{user?.first_name || 'Staff'}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Cashier:</span><span>{user?.firstName || 'Staff'}</span></div>
                 </div>
                 
                 {/* Items Header */}
@@ -450,11 +544,11 @@ export default function RestaurantPOSPage() {
                   </div>
                 </div>
                 
-                {/* Totals */}
+                {/* Totals - VAT is INCLUDED in prices */}
                 <div className="border-t border-dashed pt-3 space-y-1">
-                  <div className="flex justify-between text-sm"><span>Subtotal</span><span>KES {lastOrder.subtotal?.toLocaleString()}</span></div>
-                  <div className="flex justify-between text-sm"><span>Tax (16%)</span><span>KES {lastOrder.tax?.toLocaleString()}</span></div>
-                  <div className="flex justify-between font-bold text-lg pt-2 border-t border-double"><span>Total</span><span>KES {lastOrder.total?.toLocaleString()}</span></div>
+                  <div className="flex justify-between text-sm"><span>SUBTOTAL</span><span>KES {lastOrder.subtotal?.toLocaleString()}</span></div>
+                  <div className="flex justify-between text-sm"><span>TAX (16% incl.)</span><span>KES {lastOrder.tax?.toLocaleString()}</span></div>
+                  <div className="flex justify-between font-bold text-lg pt-2 border-t border-double"><span>TOTAL:</span><span>KES {lastOrder.total?.toLocaleString()}</span></div>
                 </div>
                 
                 {/* Payment Info */}
@@ -473,6 +567,60 @@ export default function RestaurantPOSPage() {
                 
                 {/* Action Buttons - Hidden on print */}
                 <div className="mt-6 space-y-2 print:hidden">
+                  {/* Instant Print to Thermal Printer */}
+                  <IOSButton 
+                    onClick={async () => {
+                      try {
+                        toast.loading('Printing receipt...', { id: 'print' });
+                        const receiptData = {
+                          receipt_type: 'sale',
+                          receipt_number: lastOrder.receipt_number || lastOrder.order_number,
+                          date: lastOrder.created_at,
+                          table_number: lastOrder.table_number,
+                          room_number: lastOrder.room_number,
+                          customer_name: lastOrder.customer_name,
+                          cashier_name: user?.firstName,
+                          items: lastOrder.items?.map((item: any) => ({
+                            name: item.name || item.item_name,
+                            quantity: item.quantity,
+                            unit_price: item.unit_price,
+                            total: item.unit_price * item.quantity
+                          })),
+                          subtotal: lastOrder.subtotal,
+                          tax_amount: lastOrder.tax,
+                          total_amount: lastOrder.total,
+                          payment_method: lastOrder.payment_method,
+                          amount_paid: lastOrder.total,
+                          change_amount: lastOrder.change_amount || 0
+                        };
+                        // Call Python microservice to print instantly
+                        const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://localhost:5001'}/api/receipts/printer/print`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(receiptData)
+                        });
+                        const result = await response.json();
+                        if (result.success) {
+                          toast.success('Receipt printed to thermal printer!', { id: 'print' });
+                        } else {
+                          // Fallback to browser print
+                          toast.dismiss('print');
+                          window.print();
+                          toast.success('Printed via browser');
+                        }
+                      } catch (error) {
+                        toast.dismiss('print');
+                        // Fallback to browser print
+                        window.print();
+                        toast.success('Printed via browser');
+                      }
+                    }} 
+                    className="w-full bg-[#34C759] hover:bg-green-600"
+                    leftIcon={<Printer />}
+                  >
+                    🖨️ Print Receipt Instantly
+                  </IOSButton>
+                  
                   <div className="flex gap-2">
                     <IOSButton 
                       variant="secondary" 
@@ -485,7 +633,7 @@ export default function RestaurantPOSPage() {
                             table_number: lastOrder.table_number,
                             room_number: lastOrder.room_number,
                             customer_name: lastOrder.customer_name,
-                            cashier_name: user?.first_name,
+                            cashier_name: user?.firstName,
                             items: lastOrder.items?.map((item: any) => ({
                               name: item.name || item.item_name,
                               quantity: item.quantity,
@@ -513,15 +661,16 @@ export default function RestaurantPOSPage() {
                         }
                       }} 
                       className="flex-1"
+                      leftIcon={<Download />}
                     >
-                      <Download className="h-4 w-4 mr-2" /> Download PDF
+                      Download PDF
                     </IOSButton>
-                    <IOSButton variant="secondary" onClick={() => window.print()} className="flex-1">
-                      <Printer className="h-4 w-4 mr-2" /> Print
+                    <IOSButton variant="secondary" onClick={() => window.print()} className="flex-1" leftIcon={<Printer />}>
+                      Browser Print
                     </IOSButton>
                   </div>
-                  <IOSButton onClick={() => setShowReceipt(false)} className="w-full">
-                    <Check className="h-4 w-4 mr-2" /> Done
+                  <IOSButton onClick={() => setShowReceipt(false)} className="w-full" leftIcon={<Check />}>
+                    Done
                   </IOSButton>
                 </div>
               </div>

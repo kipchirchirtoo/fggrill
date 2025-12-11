@@ -62,8 +62,8 @@ export default function BranchStockOutPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Stock Out</h1><p className="text-gray-500">Issue items from stock</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchRecords}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <IOSButton onClick={() => setAddModalOpen(true)}><Plus className="h-4 w-4 mr-2" /> Issue Stock</IOSButton>
+              <IOSButton variant="secondary" onClick={fetchRecords} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>Issue Stock</IOSButton>
             </div>
           </div>
 

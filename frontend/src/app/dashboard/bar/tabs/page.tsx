@@ -10,7 +10,6 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { restaurantAPI } from '@/lib/api';
-import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -100,8 +99,8 @@ export default function BarTabsPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Bar Tabs</h1><p className="text-gray-500">Manage open tabs</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchTabs}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <IOSButton onClick={() => setNewTabModalOpen(true)}><Plus className="h-4 w-4 mr-2" /> Open Tab</IOSButton>
+              <IOSButton variant="secondary" onClick={fetchTabs} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton onClick={() => setNewTabModalOpen(true)} leftIcon={<Plus />}>Open Tab</IOSButton>
             </div>
           </div>
 
@@ -190,7 +189,7 @@ export default function BarTabsPage() {
                 </div>
                 <div className="flex gap-3">
                   <IOSButton variant="secondary" onClick={() => setCloseTabModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                  <IOSButton onClick={handleCloseTab} className="flex-1"><Check className="h-4 w-4 mr-2" /> Close & Pay</IOSButton>
+                  <IOSButton onClick={handleCloseTab} className="flex-1" leftIcon={<Check />}>Close & Pay</IOSButton>
                 </div>
               </div>
             )}

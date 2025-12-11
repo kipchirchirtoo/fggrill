@@ -34,7 +34,7 @@ export default function GMFinancePage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Financial Overview</h1><p className="text-gray-500">All branches financial summary</p></div>
-            <IOSButton variant="secondary" onClick={fetchData}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+            <IOSButton variant="secondary" onClick={fetchData} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -67,9 +67,9 @@ export default function GMFinancePage() {
             <IOSCard className="p-6">
               <h2 className="text-lg font-semibold font-sf-pro-display mb-4">Quick Links</h2>
               <div className="space-y-3">
-                <Link href="/dashboard/finance/profit-loss"><IOSButton variant="secondary" className="w-full justify-start"><BarChart3 className="h-4 w-4 mr-2" /> Profit & Loss</IOSButton></Link>
-                <Link href="/dashboard/finance/revenue-branches"><IOSButton variant="secondary" className="w-full justify-start"><PieChart className="h-4 w-4 mr-2" /> Revenue by Branch</IOSButton></Link>
-                <Link href="/dashboard/finance/expenses"><IOSButton variant="secondary" className="w-full justify-start"><TrendingDown className="h-4 w-4 mr-2" /> Expenses</IOSButton></Link>
+                <Link href="/dashboard/finance/profit-loss"><IOSButton variant="secondary" className="w-full justify-start" leftIcon={<BarChart3 />}>Profit & Loss</IOSButton></Link>
+                <Link href="/dashboard/finance/revenue-branches"><IOSButton variant="secondary" className="w-full justify-start" leftIcon={<PieChart />}>Revenue by Branch</IOSButton></Link>
+                <Link href="/dashboard/finance/expenses"><IOSButton variant="secondary" className="w-full justify-start" leftIcon={<TrendingDown />}>Expenses</IOSButton></Link>
               </div>
             </IOSCard>
             <IOSCard className="p-6">

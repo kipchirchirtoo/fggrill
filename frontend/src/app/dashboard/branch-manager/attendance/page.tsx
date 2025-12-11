@@ -38,7 +38,7 @@ export default function BranchAttendancePage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Attendance</h1><p className="text-gray-500">Today's staff attendance</p></div>
-            <IOSButton variant="secondary" onClick={fetchAttendance}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+            <IOSButton variant="secondary" onClick={fetchAttendance} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 
           <div className="grid grid-cols-3 gap-4">

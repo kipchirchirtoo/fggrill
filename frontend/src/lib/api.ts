@@ -4,32 +4,113 @@
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const PYTHON_API_URL = process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL || 'http://localhost:5001';
 
-// Helper to get auth headers
+// Helper to get auth headers - safe for SSR
 const getHeaders = () => {
-  const token = localStorage.getItem('token');
+  let token = null;
+  if (typeof window !== 'undefined') {
+    token = localStorage.getItem('token');
+  }
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {})
   };
 };
 
-// Generic fetch wrapper with error handling
-async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}/api${endpoint}`, {
-    ...options,
-    headers: {
-      ...getHeaders(),
-      ...options?.headers
-    }
-  });
+// Generic fetch wrapper with error handling and SSR safety
+// Maximum number of retries for API calls
+const MAX_RETRIES = 2;
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(error.message || error.detail || 'Request failed');
+// Exponential backoff for retries (ms)
+const getBackoffDelay = (retryCount: number) => Math.min(1000 * 2 ** retryCount, 5000);
+
+async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  let retries = 0;
+  let lastError: Error | null = null;
+  
+  while (retries <= MAX_RETRIES) {
+    try {
+      // If this is a retry, wait with exponential backoff
+      if (retries > 0) {
+        const delay = getBackoffDelay(retries - 1);
+        console.log(`Retry attempt ${retries} for ${endpoint} after ${delay}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+      
+      // Make the API request
+      const response = await fetch(`${API_URL}/api${endpoint}`, {
+        ...options,
+        headers: {
+          ...getHeaders(),
+          ...options?.headers
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Request failed' }));
+        throw new Error(error.message || error.detail || 'Request failed');
+      }
+
+      return response.json();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Unknown error');
+      
+      // Only retry on network errors or 500-level server errors
+      const isNetworkError = lastError.message.includes('fetch');
+      const isServerError = lastError.message.includes('500');
+      
+      if (!isNetworkError && !isServerError) {
+        console.error(`API request error (not retrying):`, error);
+        break; // Don't retry client errors or other issues
+      }
+      
+      console.warn(`API request failed (attempt ${retries+1}/${MAX_RETRIES+1}):`, error);
+      retries++;
+    }
   }
 
-  return response.json();
+  console.error('API request error after retries:', lastError);
+  
+  // If mock data is available for this endpoint in development, return it
+  if (process.env.NODE_ENV === 'development') {
+    const mockData = getMockData(endpoint);
+    if (mockData) {
+      console.info(`Using mock data for ${endpoint}`);
+      return mockData as unknown as T;
+    }
+  }
+  
+  // Return a standardized error response structure
+  return { 
+    success: false, 
+    message: lastError?.message || 'API request failed after retries',
+    data: null 
+  } as unknown as T;
+}
+
+// Helper to provide mock data for common endpoints in development
+function getMockData(endpoint: string): any {
+  // Remove leading slash and query params
+  const cleanEndpoint = endpoint.replace(/^\//, '').split('?')[0];
+  
+  // Simple mock data store
+  const mockDataStore: Record<string, any> = {
+    'notifications/unread-count': { count: 0 },
+    'staff': { data: [
+      { id: '1', name: 'John Doe', email: 'john@example.com', role: 'manager', department: 'Management' },
+      { id: '2', name: 'Jane Smith', email: 'jane@example.com', role: 'reception', department: 'Front Desk' }
+    ]},
+    'branch-operations/staff': { 
+      success: true, 
+      data: [
+        { id: '1', name: 'John Doe', email: 'john@example.com', role: 'manager', department: 'Management' },
+        { id: '2', name: 'Jane Smith', email: 'jane@example.com', role: 'reception', department: 'Front Desk' }
+      ]
+    }
+  };
+  
+  return mockDataStore[cleanEndpoint] || null;
 }
 
 // =====================================================
@@ -427,7 +508,16 @@ export const folioAPI = {
 export const reportAPI = {
   getReports: () => fetchAPI<any>('/reports'),
   createReport: (data: any) => fetchAPI<any>('/reports', { method: 'POST', body: JSON.stringify(data) }),
-  generateReport: (id: string) => fetchAPI<any>(`/reports/${id}/generate`, { method: 'POST' })
+  generateReport: (id: string) => fetchAPI<any>(`/reports/${id}/generate`, { method: 'POST' }),
+  getDashboard: () => fetchAPI<any>('/reports/dashboard'),
+  getRevenueReport: (params?: { startDate?: string; endDate?: string }) => {
+    const query = new URLSearchParams(params);
+    return fetchAPI<any>(`/reports/revenue?${query}`);
+  },
+  getOccupancyReport: (params?: { startDate?: string; endDate?: string }) => {
+    const query = new URLSearchParams(params);
+    return fetchAPI<any>(`/reports/occupancy?${query}`);
+  }
 };
 
 // =====================================================
@@ -435,12 +525,13 @@ export const reportAPI = {
 // =====================================================
 
 export const bookingsAPI = {
-  getBookings: (params?: { status?: string; checkIn?: string; checkOut?: string; roomType?: string }) => {
+  getBookings: (params?: { status?: string; checkIn?: string; checkOut?: string; roomType?: string; branch_id?: number }) => {
     const query = new URLSearchParams();
     if (params?.status) query.append('status', params.status);
     if (params?.checkIn) query.append('checkIn', params.checkIn);
     if (params?.checkOut) query.append('checkOut', params.checkOut);
     if (params?.roomType) query.append('roomType', params.roomType);
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
     return fetchAPI<any>(`/bookings?${query}`);
   },
   getBooking: (id: string) => fetchAPI<any>(`/bookings/${id}`),
@@ -455,6 +546,175 @@ export const bookingsAPI = {
     if (guests) query.append('guests', String(guests));
     return fetchAPI<any>(`/bookings/available?${query}`);
   }
+};
+
+// =====================================================
+// RATE PLANS API
+// =====================================================
+
+export const ratePlansAPI = {
+  getRatePlans: () => fetchAPI<any>('/rate-plans'),
+  getRatePlan: (id: string) => fetchAPI<any>(`/rate-plans/${id}`),
+  createRatePlan: (data: any) => fetchAPI<any>('/rate-plans', { method: 'POST', body: JSON.stringify(data) }),
+  updateRatePlan: (id: string, data: any) => fetchAPI<any>(`/rate-plans/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRatePlan: (id: string) => fetchAPI<any>(`/rate-plans/${id}`, { method: 'DELETE' })
+};
+
+// =====================================================
+// PRICING API (AI Engine)
+// =====================================================
+
+export const pricingAPI = {
+  getQuote: (data: { checkIn: string; checkOut: string; roomTypeId: string; guests: number }) => 
+    fetchAPI<any>('/pricing/quote', { method: 'POST', body: JSON.stringify(data) })
+};
+
+// =====================================================
+// DOCUMENTS API
+// =====================================================
+
+export const documentsAPI = {
+  uploadDocument: async (file: File, guestId: string, documentType: string, reservationId?: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('guestId', guestId);
+    formData.append('documentType', documentType);
+    if (reservationId) formData.append('reservationId', reservationId);
+    
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const response = await fetch(`${API_URL}/api/documents/upload`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData
+    });
+    return response.json();
+  },
+  getGuestDocuments: (guestId: string) => fetchAPI<any>(`/documents/guest/${guestId}`),
+  deleteDocument: (id: string) => fetchAPI<any>(`/documents/${id}`, { method: 'DELETE' })
+};
+
+// =====================================================
+// GUEST LOYALTY API
+// =====================================================
+
+export const guestLoyaltyAPI = {
+  getHistory: (guestId: string) => fetchAPI<any>(`/guests/${guestId}/history`),
+  
+  getLoyalty: (guestId: string) => fetchAPI<any>(`/guests/${guestId}/loyalty`),
+  
+  updatePoints: (guestId: string, data: { points: number; reason: string; type: 'earn' | 'redeem' }) =>
+    fetchAPI<any>(`/guests/${guestId}/loyalty/points`, { method: 'POST', body: JSON.stringify(data) }),
+  
+  getVIPGuests: () => fetchAPI<any>('/guests/vip/list'),
+};
+
+// =====================================================
+// CHANNEL MANAGER API
+// =====================================================
+
+export const channelManagerAPI = {
+  getChannels: () => fetchAPI<any>('/channel-manager'),
+  
+  getSyncStatus: () => fetchAPI<any>('/channel-manager/status'),
+  
+  configureChannel: (channelId: string, config: Record<string, any>) =>
+    fetchAPI<any>(`/channel-manager/${channelId}/configure`, { 
+      method: 'PUT', 
+      body: JSON.stringify(config) 
+    }),
+  
+  toggleChannel: (channelId: string, enabled: boolean) =>
+    fetchAPI<any>(`/channel-manager/${channelId}/toggle`, { 
+      method: 'PATCH', 
+      body: JSON.stringify({ enabled }) 
+    }),
+  
+  pushAvailability: (channelId: string, availability: any[]) =>
+    fetchAPI<any>(`/channel-manager/${channelId}/push-availability`, { 
+      method: 'POST', 
+      body: JSON.stringify({ availability }) 
+    }),
+  
+  pushRates: (channelId: string, rates: any[]) =>
+    fetchAPI<any>(`/channel-manager/${channelId}/push-rates`, { 
+      method: 'POST', 
+      body: JSON.stringify({ rates }) 
+    }),
+  
+  pullBookings: (channelId: string) =>
+    fetchAPI<any>(`/channel-manager/${channelId}/pull-bookings`, { method: 'POST' }),
+  
+  syncAllChannels: () =>
+    fetchAPI<any>('/channel-manager/sync-all', { method: 'POST' }),
+  
+  importBooking: (booking: any) =>
+    fetchAPI<any>('/channel-manager/import-booking', { 
+      method: 'POST', 
+      body: JSON.stringify(booking) 
+    }),
+};
+
+// =====================================================
+// COMMUNICATIONS API
+// =====================================================
+
+export const communicationsAPI = {
+  sendBookingConfirmation: (bookingId: string, sendSms: boolean = false) =>
+    fetchAPI<any>('/communications/booking-confirmation', { 
+      method: 'POST', 
+      body: JSON.stringify({ bookingId, sendSms }) 
+    }),
+  
+  sendCheckInReminder: (bookingId: string, sendSms: boolean = false) =>
+    fetchAPI<any>('/communications/check-in-reminder', { 
+      method: 'POST', 
+      body: JSON.stringify({ bookingId, sendSms }) 
+    }),
+  
+  sendInvoice: (folioId: string) =>
+    fetchAPI<any>('/communications/invoice', { 
+      method: 'POST', 
+      body: JSON.stringify({ folioId }) 
+    }),
+  
+  sendEmail: (data: { to: string; subject: string; body: string }) =>
+    fetchAPI<any>('/communications/email', { method: 'POST', body: JSON.stringify(data) }),
+  
+  sendSMS: (data: { phoneNumber: string; message: string }) =>
+    fetchAPI<any>('/communications/sms', { method: 'POST', body: JSON.stringify(data) }),
+  
+  sendBulkSMS: (data: { recipients: string[]; message: string }) =>
+    fetchAPI<any>('/communications/sms/bulk', { method: 'POST', body: JSON.stringify(data) }),
+  
+  getMessageLog: (limit: number = 50) =>
+    fetchAPI<any>(`/communications/log?limit=${limit}`),
+  
+  healthCheck: () =>
+    fetchAPI<any>('/communications/health'),
+};
+
+// =====================================================
+// PAYMENTS API
+// =====================================================
+
+export const paymentsAPI = {
+  createFolioIntent: (data: { folioId: string; amount: number; paymentMethod: string; guestId?: string }) =>
+    fetchAPI<any>('/payments/folio/intent', { method: 'POST', body: JSON.stringify(data) }),
+  
+  confirmPayment: (paymentIntentId: string) =>
+    fetchAPI<any>(`/payments/folio/confirm/${paymentIntentId}`, { method: 'POST' }),
+  
+  getPaymentStatus: (reference: string) =>
+    fetchAPI<any>(`/payments/status/${reference}`),
+  
+  getFolioPayments: (folioId: string) =>
+    fetchAPI<any>(`/payments/folio/${folioId}/history`),
+  
+  initiateBookingPayment: (data: { bookingId: string; phoneNumber?: string; amount: number; paymentMethod: string }) =>
+    fetchAPI<any>('/payments/booking/initiate', { method: 'POST', body: JSON.stringify(data) }),
+  
+  initiateMpesa: (data: { phoneNumber: string; amount: number; folioId?: string; reservationId?: string }) =>
+    fetchAPI<any>('/payments/mpesa/stk-push', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 // =====================================================
@@ -933,10 +1193,10 @@ export const restaurantAPI = {
   toggleItemAvailability: (id: string) => fetchAPI<any>(`/restaurant/menu/items/${id}/toggle`, { method: 'PUT' }),
   
   // Menu Item Images
-  uploadMenuItemImage: (id: string, imageBase64: string, contentType: string) => 
+  uploadMenuItemImage: (id: string, imageBase64: string, contentType: string, fileName?: string) => 
     fetchAPI<any>(`/restaurant/menu/items/${id}/image`, { 
       method: 'POST', 
-      body: JSON.stringify({ imageBase64, contentType }) 
+      body: JSON.stringify({ imageBase64, contentType, fileName }) 
     }),
   deleteMenuItemImage: (id: string) => 
     fetchAPI<any>(`/restaurant/menu/items/${id}/image`, { method: 'DELETE' }),
@@ -957,9 +1217,12 @@ export const restaurantAPI = {
   processPayment: (orderId: string, data: any) => fetchAPI<any>(`/restaurant/orders/${orderId}/payment`, { method: 'POST', body: JSON.stringify(data) }),
   
   // Reports
-  getDailySales: (date?: string) => {
-    const query = date ? `?date=${date}` : '';
-    return fetchAPI<any>(`/restaurant/reports/daily-sales${query}`);
+  getDailySales: (branchId?: number, date?: string) => {
+    const query = new URLSearchParams();
+    if (branchId) query.append('branch_id', String(branchId));
+    if (date) query.append('date', date);
+    const qs = query.toString();
+    return fetchAPI<any>(`/restaurant/reports/daily-sales${qs ? `?${qs}` : ''}`);
   },
   getPopularItems: (days?: number) => {
     const query = days ? `?days=${days}` : '';
@@ -1065,7 +1328,7 @@ export const barAPI = {
 };
 
 // =====================================================
-// FINANCE API
+// FINANCE API - Uses Node.js backend
 // =====================================================
 
 export const financeAPI = {
@@ -1144,6 +1407,54 @@ export const financeAPI = {
   approveExpense: (id: string) => fetchAPI<any>(`/finance/expenses/${id}/approve`, { method: 'PUT' }),
   getBudgets: () => fetchAPI<any>('/finance/budgets'),
   createBudget: (data: any) => fetchAPI<any>('/finance/budgets', { method: 'POST', body: JSON.stringify(data) }),
+  
+  // Advanced Accounting Features
+  getBalanceSheet: (params?: { branch_id?: number; as_of_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.as_of_date) query.append('as_of_date', params.as_of_date);
+    return fetchAPI<any>(`/finance/balance-sheet?${query}`);
+  },
+  getTrialBalance: (params?: { branch_id?: number; start_date?: string; end_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/finance/trial-balance?${query}`);
+  },
+  getJournalEntries: (params?: { branch_id?: number; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.limit) query.append('limit', String(params.limit));
+    return fetchAPI<any>(`/finance/journal-entries?${query}`);
+  },
+  createJournalEntry: (data: any) => fetchAPI<any>('/finance/journal-entries', { method: 'POST', body: JSON.stringify(data) }),
+  getFinancialRatios: (params?: { branch_id?: number }) => {
+    const query = params?.branch_id ? `?branch_id=${params.branch_id}` : '';
+    return fetchAPI<any>(`/finance/financial-ratios${query}`);
+  },
+  getAgingReport: (type: 'receivable' | 'payable' = 'receivable') => fetchAPI<any>(`/finance/aging-report?type=${type}`),
+  getExpenseBreakdown: (params?: { branch_id?: number; start_date?: string; end_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/finance/expense-breakdown?${query}`);
+  },
+  getRevenueAnalysis: (params?: { branch_id?: number }) => {
+    const query = params?.branch_id ? `?branch_id=${params.branch_id}` : '';
+    return fetchAPI<any>(`/finance/revenue-analysis${query}`);
+  },
+  getComparativeAnalysis: (params?: { type?: 'period' | 'branch'; branch_id?: number; days?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.type) query.append('type', params.type);
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.days) query.append('days', String(params.days));
+    return fetchAPI<any>(`/finance/comparative-analysis?${query}`);
+  },
+  generateReport: (data: { report_type: string; branch_id?: number }) => 
+    fetchAPI<any>('/finance/reports/generate', { method: 'POST', body: JSON.stringify(data) }),
+  getBranches: () => fetchAPI<any>('/finance/branches'),
 };
 
 // =====================================================
@@ -1256,6 +1567,11 @@ export const auditAPI = {
     return fetchAPI<any>(`/audit/logs?${query}`);
   },
   getInventoryAudit: () => fetchAPI<any>('/audit/inventory'),
+  getReports: () => fetchAPI<any>('/audit/reports'),
+  getComplianceItems: () => fetchAPI<any>('/audit/compliance'),
+  getRoleMigrations: () => fetchAPI<any>('/admin/role-migrations'),
+  executeRoleMigration: (id: number) => fetchAPI<any>(`/admin/role-migrations/${id}/execute`, { method: 'POST' }),
+  revertRoleMigration: (id: number) => fetchAPI<any>(`/admin/role-migrations/${id}/revert`, { method: 'POST' }),
 };
 
 // =====================================================
@@ -1533,6 +1849,196 @@ export const reportsService = {
 };
 
 // Export all APIs as a single object
+// Accounting API
+export const accountingAPI = {
+  // Journal Entries
+  getJournalEntries: async (filters?: any) => {
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.department) params.append('department', filters.department);
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
+    
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/journal-entries?${params}`);
+    return response.json();
+  },
+
+  createJournalEntry: async (entry: any) => {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/journal-entries`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entry)
+    });
+    return response.json();
+  },
+
+  updateJournalEntry: async (id: string, entry: any) => {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/journal-entries/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entry)
+    });
+    return response.json();
+  },
+
+  submitJournalEntry: async (id: string, user?: string) => {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/journal-entries/${id}/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user })
+    });
+    return response.json();
+  },
+
+  getReviewQueue: async () => {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/review-queue`);
+    return response.json();
+  },
+
+  reviewJournalEntry: async (id: string, review: { action: string; notes?: string; reviewer?: string }) => {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/journal-entries/${id}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(review)
+    });
+    return response.json();
+  },
+
+  postJournalEntry: async (id: string, user?: string) => {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/journal-entries/${id}/post`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user })
+    });
+    return response.json();
+  },
+
+  getReconciliations: async () => {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/reconciliations`);
+    return response.json();
+  },
+
+  getTrialBalance: async (filters?: any) => {
+    const params = new URLSearchParams();
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
+    
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/reports/trial-balance?${params}`);
+    return response.json();
+  },
+
+  getFinancialStatements: async (type: string, filters?: any) => {
+    const params = new URLSearchParams();
+    params.append('type', type);
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
+    
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/reports/financial-statements?${params}`);
+    return response.json();
+  }
+};
+
+// ==================== ROOM SERVICE API (Python Microservice) ====================
+const ROOM_SERVICE_URL = process.env.NEXT_PUBLIC_ROOM_SERVICE_URL || 'http://localhost:8003';
+
+export const roomServiceAPI = {
+  // Check room availability
+  checkAvailability: async (checkIn: string, checkOut: string, guests: number = 1, branchId?: string) => {
+    const params = new URLSearchParams({
+      check_in: checkIn,
+      check_out: checkOut,
+      guests: String(guests)
+    });
+    if (branchId) params.append('branch_id', branchId);
+    
+    const response = await fetch(`${ROOM_SERVICE_URL}/api/rooms/availability?${params}`);
+    return response.json();
+  },
+
+  // Get current occupancy stats
+  getCurrentOccupancy: async (branchId?: string) => {
+    const params = branchId ? `?branch_id=${branchId}` : '';
+    const response = await fetch(`${ROOM_SERVICE_URL}/api/rooms/occupancy${params}`);
+    return response.json();
+  },
+
+  // Get occupied rooms list
+  getOccupiedRooms: async (branchId?: string) => {
+    const params = branchId ? `?branch_id=${branchId}` : '';
+    const response = await fetch(`${ROOM_SERVICE_URL}/api/rooms/occupied${params}`);
+    return response.json();
+  },
+
+  // Get occupancy history
+  getOccupancyHistory: async (startDate: string, endDate: string, branchId?: string) => {
+    const params = new URLSearchParams({
+      start_date: startDate,
+      end_date: endDate
+    });
+    if (branchId) params.append('branch_id', branchId);
+    
+    const response = await fetch(`${ROOM_SERVICE_URL}/api/rooms/occupancy/history?${params}`);
+    return response.json();
+  },
+
+  // Get vacancy forecast
+  getVacancyForecast: async (daysAhead: number = 30, branchId?: string) => {
+    const params = new URLSearchParams({ days_ahead: String(daysAhead) });
+    if (branchId) params.append('branch_id', branchId);
+    
+    const response = await fetch(`${ROOM_SERVICE_URL}/api/rooms/vacancy/forecast?${params}`);
+    return response.json();
+  },
+
+  // Get all rooms
+  getAllRooms: async (branchId?: string, status?: string) => {
+    const params = new URLSearchParams();
+    if (branchId) params.append('branch_id', branchId);
+    if (status) params.append('status', status);
+    
+    const response = await fetch(`${ROOM_SERVICE_URL}/api/rooms?${params}`);
+    return response.json();
+  },
+
+  // Update room status
+  updateRoomStatus: async (roomId: string, status: string, notes?: string) => {
+    const response = await fetch(`${ROOM_SERVICE_URL}/api/rooms/${roomId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ room_id: roomId, status, notes })
+    });
+    return response.json();
+  },
+
+  // Get room types
+  getRoomTypes: async () => {
+    const response = await fetch(`${ROOM_SERVICE_URL}/api/room-types`);
+    return response.json();
+  },
+
+  // Get branch stats
+  getBranchStats: async () => {
+    const response = await fetch(`${ROOM_SERVICE_URL}/api/rooms/branches/stats`);
+    return response.json();
+  },
+
+  // Get today's quick stats
+  getTodayStats: async (branchId?: string) => {
+    const params = branchId ? `?branch_id=${branchId}` : '';
+    const response = await fetch(`${ROOM_SERVICE_URL}/api/rooms/stats/today${params}`);
+    return response.json();
+  },
+
+  // Health check
+  healthCheck: async () => {
+    const response = await fetch(`${ROOM_SERVICE_URL}/health`);
+    return response.json();
+  }
+};
+
 export const api = {
   store: storeAPI,
   system: systemAPI,
@@ -1543,6 +2049,7 @@ export const api = {
   maintenance: maintenanceAPI,
   restaurant: restaurantAPI,
   finance: financeAPI,
+  accounting: accountingAPI,
   reports: reportsAPI,
   audit: auditAPI,
   users: userAPI,
@@ -1551,6 +2058,7 @@ export const api = {
   bar: barAPI,
   notifications: notificationsAPI,
   reportsService: reportsService,
+  roomService: roomServiceAPI,
 };
 
 export default api;

@@ -51,8 +51,8 @@ export default function BranchStockTakesPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Stock Takes</h1><p className="text-gray-500">Inventory audits</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchStockTakes}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <IOSButton onClick={handleStartStockTake}><Plus className="h-4 w-4 mr-2" /> Start Stock Take</IOSButton>
+              <IOSButton variant="secondary" onClick={fetchStockTakes} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton onClick={handleStartStockTake} leftIcon={<Plus />}>Start Stock Take</IOSButton>
             </div>
           </div>
 

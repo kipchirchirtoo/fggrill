@@ -23,14 +23,25 @@ export default function GMComparePage() {
     setIsLoading(true);
     try {
       const response = await financeAPI.getRevenueByBranch();
-      if (response.success) setBranches(response.data || []);
+      // Ensure data is an array before setting state
+      if (response.success) {
+        if (Array.isArray(response.data)) {
+          setBranches(response.data);
+        } else {
+          console.error('Invalid branches data format: expected array');
+          setBranches([]);
+        }
+      }
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const maxValue = Math.max(...branches.map(b => b[metric] || 0));
+  // Safe access to ensure branches is an array before using map
+  const maxValue = Array.isArray(branches) && branches.length > 0 
+    ? Math.max(...branches.map(b => b[metric] || 0)) 
+    : 0;
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
@@ -38,7 +49,7 @@ export default function GMComparePage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Branch Comparison</h1><p className="text-gray-500">Compare performance across branches</p></div>
-            <IOSButton variant="secondary" onClick={fetchData}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+            <IOSButton variant="secondary" onClick={fetchData} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 
           <div className="flex gap-2">
@@ -57,7 +68,7 @@ export default function GMComparePage() {
             <IOSCard className="p-6">
               <h2 className="text-lg font-semibold font-sf-pro-display mb-6">{metric.charAt(0).toUpperCase() + metric.slice(1)} Comparison</h2>
               <div className="space-y-4">
-                {branches.sort((a, b) => (b[metric] || 0) - (a[metric] || 0)).map((branch, i) => {
+                {Array.isArray(branches) && branches.sort((a, b) => (b[metric] || 0) - (a[metric] || 0)).map((branch, i) => {
                   const value = branch[metric] || 0;
                   const percentage = maxValue > 0 ? (value / maxValue) * 100 : 0;
                   return (
@@ -85,7 +96,7 @@ export default function GMComparePage() {
           )}
 
           <div className="grid md:grid-cols-3 gap-4">
-            {branches.map((branch) => (
+            {Array.isArray(branches) && branches.map((branch) => (
               <IOSCard key={branch.branch_id} className="p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <Building2 className="h-5 w-5 text-[#007AFF]" />

@@ -155,12 +155,9 @@ export default function StorekeepingDashboard() {
               </p>
             </div>
             <div className="flex gap-3">
-              <IOSButton variant="outline" onClick={fetchDashboardData}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
+              <IOSButton variant="outline" onClick={fetchDashboardData} leftIcon={<RefreshCw />}>Refresh
               </IOSButton>
-              <IOSButton onClick={() => router.push('/dashboard/storekeeping/inventory')}>
-                <Plus className="h-4 w-4 mr-2" />
+              <IOSButton onClick={() => router.push('/dashboard/storekeeping/inventory')} leftIcon={<Plus />}>
                 Add Item
               </IOSButton>
             </div>
@@ -391,7 +388,7 @@ export default function StorekeepingDashboard() {
                     <div className="text-right">
                       <p className="font-semibold font-sf-pro-display">{branch.totalItems || 0} items</p>
                       {(branch.lowStockItems || 0) > 0 && (
-                        <IOSBadge variant="outline" className="text-[#3C3C43] border-[rgba(60,60,67,0.12)]">
+                        <IOSBadge variant="light" color="secondary" className="text-[#3C3C43] border-[rgba(60,60,67,0.12)]">
                           {branch.lowStockItems} low
                         </IOSBadge>
                       )}

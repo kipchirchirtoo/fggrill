@@ -13,7 +13,13 @@ import {
   updateReportTemplate,
   deleteReportTemplate,
   getReportHistory,
-  getReportStats
+  getReportStats,
+  getRevenueReport,
+  getOccupancyReport,
+  getHousekeepingReport,
+  getMaintenanceReport,
+  getInventoryReport,
+  getDashboardReport
 } from '../controllers/report.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -25,6 +31,14 @@ router.use(protect);
 
 // Admin and Manager routes
 router.use(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]));
+
+// Dashboard & Analytics
+router.get('/dashboard', getDashboardReport);
+router.get('/revenue', getRevenueReport);
+router.get('/occupancy', getOccupancyReport);
+router.get('/inventory', getInventoryReport);
+router.get('/housekeeping', getHousekeepingReport);
+router.get('/maintenance', getMaintenanceReport);
 
 router.route('/')
   .get(getReports)

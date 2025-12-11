@@ -169,8 +169,8 @@ export default function TransfersPage() {
               <p className="text-gray-600">Manage stock transfers and dispatch requests</p>
             </div>
             <div className="flex gap-3">
-              <IOSButton variant="outline" onClick={fetchAllData}><RefreshCw className="h-4 w-4 mr-2" />Refresh</IOSButton>
-              <IOSButton onClick={() => setIsAddToCartOpen(true)}><Plus className="h-4 w-4 mr-2" />Request Transfer</IOSButton>
+              <IOSButton variant="outline" onClick={fetchAllData} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton onClick={() => setIsAddToCartOpen(true)} leftIcon={<Plus />}>Request Transfer</IOSButton>
             </div>
           </div>
 
@@ -235,8 +235,8 @@ export default function TransfersPage() {
                   <td className="px-4 py-4"><User className="h-4 w-4 inline text-gray-400 mr-1" />{i.shop_user?.first_name} {i.shop_user?.last_name}</td>
                   <td className="px-4 py-4 font-bold">{i.quantity}</td>
                   {isManager && <td className="px-4 py-4"><div className="flex gap-2">
-                    <IOSButton size="sm" className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={() => handleCompleteTransfer(i)}><Check className="h-4 w-4 mr-1" />Approve</IOSButton>
-                    <IOSButton size="sm" variant="outline" className="text-[#3C3C43]" onClick={() => handleCompleteTransfer(i, true)}><X className="h-4 w-4 mr-1" />Reject</IOSButton>
+                    <IOSButton size="sm" className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={() => handleCompleteTransfer(i)} leftIcon={<Check />}>Approve</IOSButton>
+                    <IOSButton size="sm" variant="outline" className="text-[#3C3C43]" onClick={() => handleCompleteTransfer(i, true)} leftIcon={<X />}>Reject</IOSButton>
                   </div></td>}
                 </tr>)}
               </tbody></table></div>}
@@ -247,9 +247,9 @@ export default function TransfersPage() {
             <IOSCard>
               <div className="p-4 border-b bg-[#F2F2F7] flex items-center justify-between">
                 <h3 className="font-semibold font-sf-pro-display flex items-center gap-2"><ShoppingCart className="h-5 w-5 text-[#3C3C43]" />My Cart</h3>
-                {myCart.length > 0 && <IOSButton onClick={handleSubmitRequest} className="bg-[#3C3C43] hover:bg-[#3C3C43]"><Send className="h-4 w-4 mr-2" />Submit ({myCart.length})</IOSButton>}
+                {myCart.length > 0 && <IOSButton onClick={handleSubmitRequest} className="bg-[#3C3C43] hover:bg-[#3C3C43]" leftIcon={<Send />}>Submit ({myCart.length})</IOSButton>}
               </div>
-              {myCart.length === 0 ? <div className="p-12 text-center text-gray-500"><ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-30" /><p>Empty</p><IOSButton className="mt-4" onClick={() => setIsAddToCartOpen(true)}><Plus className="h-4 w-4 mr-2" />Add</IOSButton></div>
+              {myCart.length === 0 ? <div className="p-12 text-center text-gray-500"><ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-30" /><p>Empty</p><IOSButton className="mt-4" onClick={() => setIsAddToCartOpen(true)} leftIcon={<Plus />}>Add</IOSButton></div>
               : <div className="overflow-x-auto"><table className="w-full"><thead className="bg-gray-50"><tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
@@ -280,7 +280,7 @@ export default function TransfersPage() {
                 ))}
               </div>
               {selectedItem && <div className="bg-[#F2F2F7] p-4 rounded-ios-lg"><p className="font-medium mb-2">Selected: {selectedItem.item_name}</p><div className="flex items-center gap-4"><label>Qty:</label><Input type="number" min="1" max={selectedItem.quantity} value={transferQty} onChange={e => setTransferQty(parseInt(e.target.value) || 1)} className="w-24" /><span className="text-sm text-gray-500">Max: {selectedItem.quantity}</span></div></div>}
-              <div className="flex justify-end gap-3 pt-4 border-t"><IOSButton variant="outline" onClick={() => setIsAddToCartOpen(false)}>Cancel</IOSButton><IOSButton onClick={handleAddToCart} disabled={!selectedItem || transferQty <= 0}><Plus className="h-4 w-4 mr-2" />Add</IOSButton></div>
+              <div className="flex justify-end gap-3 pt-4 border-t"><IOSButton variant="outline" onClick={() => setIsAddToCartOpen(false)}>Cancel</IOSButton><IOSButton onClick={handleAddToCart} disabled={!selectedItem || transferQty <= 0} leftIcon={<Plus />}>Add</IOSButton></div>
             </div>
           </DialogContent>
         </Dialog>

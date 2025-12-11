@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { Booking, BookingStatus } from '../models/Booking';
 import { Folio } from '../models/Folio';
 import { Room, RoomStatus } from '../models/Room';
+import { RatePlan } from '../models/RatePlan';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { supabase } from '../config/database';
@@ -86,7 +87,51 @@ export const createBooking = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { roomId, roomTypeId, checkInDate, checkOutDate, guestId, adults, children, specialRequests, totalAmount } = req.body;
+    const { roomId, roomTypeId, checkInDate, checkOutDate, adults, children, specialRequests, totalAmount, guestInfo } = req.body;
+    let { guestId } = req.body;
+
+    // 0. Handle Guest Creation (if public booking)
+    if (!guestId && guestInfo) {
+      const { firstName, lastName, email, phone, idNumber } = guestInfo;
+
+      // Check if guest exists
+      const { data: existingGuest, error: findError } = await supabase
+        .from('guests')
+        .select('id')
+        .or(`email.eq.${email},phone.eq.${phone}`)
+        .maybeSingle();
+
+      if (existingGuest) {
+        guestId = existingGuest.id;
+      } else {
+        const newGuestPayload = {
+          first_name: firstName,
+          last_name: lastName,
+          email,
+          phone: phone
+          // id_number: idNumber
+        };
+
+        // Create new guest
+        const { data: newGuest, error: guestError } = await supabase
+          .from('guests')
+          .insert(newGuestPayload)
+          .select()
+          .single();
+
+        if (guestError) {
+          console.error('Guest creation failed:', guestError);
+          logger.error('Guest creation failed:', guestError);
+          throw new AppError('Failed to create guest record: ' + guestError.message, 500);
+        }
+        guestId = newGuest.id;
+        console.log('Created new guest:', guestId);
+      }
+    }
+
+    if (!guestId) {
+      throw new AppError('Guest information required', 400);
+    }
 
     // 1. Check Availability
     const { data: conflicts } = await supabase
@@ -100,7 +145,40 @@ export const createBooking = async (
       throw new AppError('Room is not available for selected dates', 400);
     }
 
-    // 2. Create Booking
+    // 2. Calculate Pricing
+    const room = await Room.findById(roomId);
+    if (!room) throw new AppError('Room not found', 404);
+
+    let basePrice = room.basePrice || room.currentPrice || 0;
+
+    // Check Rate Plan
+    let finalPrice = basePrice;
+    let selectedRatePlanId: string | undefined;
+
+    if (req.body.rate_plan_id) {
+      const ratePlan = await RatePlan.findById(req.body.rate_plan_id);
+      if (ratePlan) {
+        selectedRatePlanId = ratePlan.id;
+        if (ratePlan.isPercentage) {
+          finalPrice = basePrice * ratePlan.multiplier;
+        } else if (ratePlan.fixedAmount) {
+          finalPrice = ratePlan.fixedAmount;
+        }
+      }
+    }
+
+    // Meal Plan Calculation
+    const mealPlanPrices: Record<string, number> = {
+      bed_breakfast: 0,
+      half_board: 1500,
+      full_board: 3000,
+    };
+    const mealPrice = mealPlanPrices[req.body.mealPlan] || 0;
+
+    const nights = Math.max(1, Math.ceil((new Date(checkOutDate).getTime() - new Date(checkInDate).getTime()) / (1000 * 60 * 60 * 24)));
+    const calculatedTotal = (finalPrice + mealPrice) * nights;
+
+    // 3. Create Booking
     const booking = new Booking({
       roomId,
       roomTypeId,
@@ -110,9 +188,17 @@ export const createBooking = async (
       adults,
       children,
       specialRequests,
-      totalAmount, // Should be calculated securely on backend in real app
+      totalAmount: calculatedTotal,
       status: BookingStatus.CONFIRMED,
-      createdBy: req.user?.id
+      createdBy: req.user?.id || null,
+      // Optional new fields if passed
+      roomRate: finalPrice,
+      ratePlanId: selectedRatePlanId,
+      mealPlan: req.body.mealPlan,
+      depositAmount: req.body.depositAmount,
+      paymentMethod: req.body.paymentMethod,
+      notes: req.body.notes,
+      branchId: req.body.branchId
     });
 
     const savedBooking = await booking.save();
@@ -189,6 +275,8 @@ export const checkInBooking = async (
 
     // Update booking status
     booking.status = BookingStatus.CHECKED_IN;
+    booking.checkedInAt = new Date();
+    booking.checkedInBy = req.user?.id;
     await booking.save();
 
     // Update room status
@@ -225,6 +313,8 @@ export const checkOutBooking = async (
 
     // Update booking status
     booking.status = BookingStatus.CHECKED_OUT;
+    booking.checkedOutAt = new Date();
+    booking.checkedOutBy = req.user?.id;
     await booking.save();
 
     // Update room status
@@ -256,14 +346,17 @@ export const cancelBooking = async (
     if (!booking) throw new AppError('Booking not found', 404);
 
     booking.status = BookingStatus.CANCELLED;
+    booking.cancelledAt = new Date();
+    booking.cancelledBy = req.user?.id;
+    booking.cancellationReason = req.body.reason || 'User cancelled';
     await booking.save();
 
     if (booking.roomId) {
-       const room = await Room.findById(booking.roomId);
-       if (room && room.status === RoomStatus.RESERVED) {
-           room.status = RoomStatus.AVAILABLE;
-           await room.save();
-       }
+      const room = await Room.findById(booking.roomId);
+      if (room && room.status === RoomStatus.RESERVED) {
+        room.status = RoomStatus.AVAILABLE;
+        await room.save();
+      }
     }
 
     res.status(200).json({ success: true, data: booking });
@@ -295,7 +388,7 @@ export const getAvailableRooms = async (
 
     // Find available rooms
     let query = supabase.from('rooms').select('*, type:room_types!type_id(*)');
-    
+
     if (bookedIds.length > 0) {
       query = query.not('id', 'in', `(${bookedIds.join(',')})`);
     }
@@ -311,5 +404,5 @@ export const getAvailableRooms = async (
 
 // Placeholder for payment processing - implementation moved to Folio/Payment controller
 export const processPayment = async (req: Request, res: Response, next: NextFunction) => {
-    res.status(501).json({ message: "Use Folio API for payments" });
+  res.status(501).json({ message: "Use Folio API for payments" });
 };

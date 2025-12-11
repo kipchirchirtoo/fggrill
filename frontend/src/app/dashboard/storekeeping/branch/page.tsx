@@ -339,12 +339,10 @@ export default function BranchStorekeeperPage() {
               </div>
             </div>
             <div className="flex gap-3">
-              <IOSButton variant="outline" onClick={() => setIsStockOutModalOpen(true)}>
-                <Minus className="h-4 w-4 mr-2" />
+              <IOSButton variant="outline" onClick={() => setIsStockOutModalOpen(true)} leftIcon={<Minus />}>
                 Stock Out
               </IOSButton>
-              <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={() => setIsRequestModalOpen(true)}>
-                <Send className="h-4 w-4 mr-2" />
+              <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={() => setIsRequestModalOpen(true)} leftIcon={<Send />}>
                 Request Stock
               </IOSButton>
             </div>
@@ -562,8 +560,9 @@ export default function BranchStorekeeperPage() {
                                 setSelectedDispatch(dispatch);
                                 setIsReceiveModalOpen(true);
                               }}
+                              leftIcon={<Check />}
                             >
-                              <Check className="h-4 w-4 mr-1" /> Receive
+                              Receive
                             </IOSButton>
                           )}
                         </div>
@@ -759,9 +758,7 @@ export default function BranchStorekeeperPage() {
                   className="bg-[#3C3C43] hover:bg-[#3C3C43]" 
                   onClick={handleCreateRequest}
                   disabled={requestItems.length === 0}
-                >
-                  <Send className="h-4 w-4 mr-2" />
-                  Submit Request
+                 leftIcon={<Send />}>Submit Request
                 </IOSButton>
               </div>
             </div>
@@ -831,9 +828,7 @@ export default function BranchStorekeeperPage() {
                 <IOSButton variant="outline" onClick={() => setIsStockOutModalOpen(false)}>
                   Cancel
                 </IOSButton>
-                <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleStockOut}>
-                  <Minus className="h-4 w-4 mr-2" />
-                  Record Stock Out
+                <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleStockOut} leftIcon={<Minus />}>Record Stock Out
                 </IOSButton>
               </div>
             </div>
@@ -873,9 +868,7 @@ export default function BranchStorekeeperPage() {
                   <IOSButton variant="outline" onClick={() => setIsReceiveModalOpen(false)}>
                     Cancel
                   </IOSButton>
-                  <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleConfirmDelivery}>
-                    <Check className="h-4 w-4 mr-2" />
-                    Confirm All Received
+                  <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleConfirmDelivery} leftIcon={<Check />}>Confirm All Received
                   </IOSButton>
                 </div>
               </div>

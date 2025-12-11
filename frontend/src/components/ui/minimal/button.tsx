@@ -10,12 +10,12 @@ export interface MinimalButtonProps extends React.ButtonHTMLAttributes<HTMLButto
 export const MinimalButton = React.forwardRef<HTMLButtonElement, MinimalButtonProps>(
   ({ className, variant = 'primary', size = 'md', fullWidth = false, children, ...props }, ref) => {
     const variantStyles = {
-      primary: "bg-[#007AFF] text-white hover:bg-[#007AFF]/90",
-      secondary: "bg-[#F2F2F7] text-[#007AFF] hover:bg-[#E5E5EA]",
-      outline: "bg-white border border-[#D1D1D6] text-[#007AFF] hover:bg-[#F2F2F7]",
-      destructive: "bg-[#FF3B30] text-white hover:bg-[#FF3B30]/90",
-      success: "bg-[#34C759] text-white hover:bg-[#34C759]/90",
-      ghost: "text-[#007AFF] hover:bg-[#F2F2F7]",
+      primary: "bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700",
+      secondary: "bg-stone-900 text-white hover:bg-stone-800 active:bg-stone-950",
+      outline: "bg-stone-100 text-stone-900 hover:bg-stone-200 active:bg-stone-300",
+      destructive: "bg-red-500 text-white hover:bg-red-600 active:bg-red-700",
+      success: "bg-emerald-500 text-white hover:bg-emerald-600 active:bg-emerald-700",
+      ghost: "text-stone-700 hover:bg-stone-100 active:bg-stone-200",
     };
     
     const sizeStyles = {

@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
 import { bookingsAPI } from '@/lib/api';
-import { Calendar, RefreshCw, Search, User, Bed, Clock, Plus } from 'lucide-react';
+import { Calendar, RefreshCw, Search, User, Bed, Clock, Plus, CheckSquare, LogOut } from 'lucide-react';
+import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
@@ -34,10 +35,54 @@ export default function BranchReservationsPage() {
     setIsLoading(true);
     try {
       const response = await bookingsAPI.getBookings();
-      if (response.success) setBookings(response.data || []);
+      
+      if (response.success) {
+        // Ensure data is an array before setting state
+        if (Array.isArray(response.data)) {
+          setBookings(response.data);
+        } else {
+          console.error('Invalid booking data format: expected array');
+          setBookings([]);
+        }
+      }
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
   }, []);
+  
+  const handleCreateBooking = () => {
+    // Redirect to booking creation form
+    window.location.href = '/dashboard/branch-manager/reservations/new';
+  };
+
+  const handleCancelBooking = async (bookingId: string) => {
+    try {
+      await bookingsAPI.cancelBooking(bookingId);
+      toast.success('Booking cancelled successfully');
+      fetchBookings();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to cancel booking');
+    }
+  };
+
+  const handleCheckIn = async (bookingId: string) => {
+    try {
+      await bookingsAPI.checkIn(bookingId);
+      toast.success('Check-in successful');
+      fetchBookings();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check in');
+    }
+  };
+
+  const handleCheckOut = async (bookingId: string) => {
+    try {
+      await bookingsAPI.checkOut(bookingId);
+      toast.success('Check-out successful');
+      fetchBookings();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check out');
+    }
+  };
 
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
 
@@ -54,8 +99,8 @@ export default function BranchReservationsPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Reservations</h1><p className="text-gray-500">Manage bookings</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchBookings}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <IOSButton><Plus className="h-4 w-4 mr-2" /> New Booking</IOSButton>
+              <IOSButton variant="secondary" onClick={fetchBookings} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton leftIcon={<Plus />} onClick={handleCreateBooking}>New Booking</IOSButton>
             </div>
           </div>
 
@@ -95,9 +140,59 @@ export default function BranchReservationsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
-                        <p className="font-bold">KES {booking.total?.toLocaleString()}</p>
-                        <IOSBadge className={`${status.bg} ${status.color}`}>{status.label}</IOSBadge>
+                        <div className="text-right">
+                          <p className="font-bold mb-2">KES {(booking.total || 0).toLocaleString()}</p>
+                          <IOSBadge className={`${status.bg} ${status.color}`}>{status.label}</IOSBadge>
+                        </div>
                       </div>
+                    </div>
+                    
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 mt-3">
+                      {booking.status === 'confirmed' && (
+                        <>
+                          <IOSButton 
+                            variant="secondary" 
+                            size="sm" 
+                            className="flex-1" 
+                            leftIcon={<CheckSquare />}
+                            onClick={() => handleCheckIn(booking.id)}
+                          >
+                            Check In
+                          </IOSButton>
+                          <IOSButton 
+                            variant="secondary" 
+                            size="sm" 
+                            className="flex-none bg-red-50 hover:bg-red-100 text-red-600" 
+                            onClick={() => handleCancelBooking(booking.id)}
+                          >
+                            Cancel
+                          </IOSButton>
+                        </>
+                      )}
+                      
+                      {booking.status === 'checked_in' && (
+                        <IOSButton 
+                          variant="secondary" 
+                          size="sm" 
+                          className="flex-1" 
+                          leftIcon={<LogOut />}
+                          onClick={() => handleCheckOut(booking.id)}
+                        >
+                          Check Out
+                        </IOSButton>
+                      )}
+                      
+                      {(booking.status === 'checked_out' || booking.status === 'cancelled') && (
+                        <IOSButton 
+                          variant="secondary" 
+                          size="sm" 
+                          className="flex-1" 
+                          disabled
+                        >
+                          No Actions Available
+                        </IOSButton>
+                      )}
                     </div>
                   </IOSCard>
                 );

@@ -314,7 +314,7 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Room {room.roomNumber}</h2>
-            <p className="text-sm text-gray-500">{room.type} • Floor {room.floor}</p>
+            <p className="text-sm text-gray-500">{typeof room.type === 'string' ? room.type : room.type?.name || 'Standard'} • Floor {room.floor}</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
@@ -474,7 +474,7 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
                   <div key={record.id} className="border rounded-ios-lg p-4">
                     <div className="flex justify-between mb-2">
                       <div>
-                        <p className="font-medium">{record.type}</p>
+                        <p className="font-medium">{typeof record.type === 'string' ? record.type : record.type?.name || 'Maintenance'}</p>
                         <p className="text-sm text-gray-600">{new Date(record.date).toLocaleDateString()}</p>
                       </div>
                       <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${record.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>

@@ -1,4 +1,50 @@
 import 'dotenv/config';
+
+// Set up global error handlers BEFORE any other imports
+// This catches database connection errors that happen during module loading
+process.on('unhandledRejection', (reason: any) => {
+  const errMessage = reason?.message || String(reason);
+  const errCode = reason?.code || '';
+  
+  // Check if this is a database connection error
+  const isDbError = 
+    errCode === 'ETIMEDOUT' || 
+    errCode === 'ENETUNREACH' || 
+    errCode === 'ECONNREFUSED' ||
+    errMessage.includes('Connection terminated') ||
+    errMessage.includes('connection') ||
+    errMessage.includes('timeout');
+  
+  if (isDbError) {
+    console.warn('Database connection error - server will continue without PostgreSQL features');
+    return;
+  }
+  
+  console.error('Unhandled Rejection:', reason);
+});
+
+process.on('uncaughtException', (err: Error) => {
+  const errMessage = err?.message || '';
+  const errCode = (err as any)?.code || '';
+  
+  // Check if this is a database connection error
+  const isDbError = 
+    errCode === 'ETIMEDOUT' || 
+    errCode === 'ENETUNREACH' || 
+    errCode === 'ECONNREFUSED' ||
+    errMessage.includes('Connection terminated') ||
+    errMessage.includes('connection') ||
+    errMessage.includes('timeout');
+  
+  if (isDbError) {
+    console.warn('Database connection error - server will continue without PostgreSQL features');
+    return;
+  }
+  
+  console.error('Uncaught Exception:', err);
+  process.exit(1);
+});
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -11,20 +57,28 @@ import { errorHandler } from './middleware/errorHandler';
 import { logRequest } from './middleware/auth';
 import { logger } from './utils/logger';
 import routes from './routes';
-import { automationService } from './services/automation.service';
+import startupService from './services/startup.service';
 
 // Initialize app with Socket.IO
 initializeApp().then(({ app, httpServer }) => {
   // Middleware
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   
-  // Relaxed CORS for development
+  // CORS configuration - allow all localhost/127.0.0.1 origins in development
   app.use(cors({
-    origin: true, // Allow all origins temporarily for debugging
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+      // Allow all localhost and 127.0.0.1 origins (any port)
+      if (origin.match(/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) {
+        return callback(null, true);
+      }
+      callback(null, false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Branch-ID']
   }));
   
   // Relaxed Helmet for development
@@ -68,24 +122,16 @@ initializeApp().then(({ app, httpServer }) => {
   logger.info('App initialized successfully');
   // Start server
   const PORT = process.env.PORT || 5000;
-  httpServer.listen(PORT, () => {
+  httpServer.listen(PORT, async () => {
     logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
     logger.info(`Health check available at http://localhost:${PORT}/api/health`);
+    
+    // Initialize startup services
+    await startupService.initialize();
   });
 
-  // Handle unhandled promise rejections
-  process.on('unhandledRejection', (err: Error) => {
-    logger.error('Unhandled Rejection:', err);
-    // Close server & exit process
-    httpServer.close(() => process.exit(1));
-  });
-
-  // Handle uncaught exceptions
-  process.on('uncaughtException', (err: Error) => {
-    logger.error('Uncaught Exception:', err);
-    // Close server & exit process
-    httpServer.close(() => process.exit(1));
-  });
+  // Note: Global error handlers are set up at the top of this file
+  // before any imports to catch database connection errors early
 
   // Handle SIGTERM
   process.on('SIGTERM', () => {

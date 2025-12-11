@@ -41,7 +41,7 @@ export default function AdminCentralStorePage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Central Store</h1><p className="text-gray-500">Central warehouse inventory</p></div>
-            <IOSButton variant="secondary" onClick={fetchItems}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+            <IOSButton variant="secondary" onClick={fetchItems} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -66,7 +66,7 @@ export default function AdminCentralStorePage() {
                   <IOSCard key={item.id} className={`p-4 ${isLow ? 'border-yellow-200 bg-yellow-50' : ''}`}>
                     <div className="flex items-start justify-between mb-2">
                       <div><p className="font-bold">{item.name}</p><p className="text-sm text-gray-500">{item.sku}</p></div>
-                      {isLow && <IOSBadge variant="warning">Low</IOSBadge>}
+                      {isLow && <IOSBadge variant="light" color="warning">Low</IOSBadge>}
                     </div>
                     <div className="flex items-end justify-between mt-4">
                       <div><p className="text-2xl font-bold">{item.quantity}</p><p className="text-xs text-gray-500">{item.unit}</p></div>

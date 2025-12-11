@@ -2,6 +2,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from datetime import datetime
+from typing import Dict
 import tempfile
 
 class ExcelReportGenerator:
@@ -45,6 +46,10 @@ class ExcelReportGenerator:
             'manager_duty': self._create_manager_duty_report,
             'reservation': self._create_reservation_report,
             'expense': self._create_expense_report,
+            'branch_performance': self._create_branch_performance_report,
+            'staff_overview': self._create_staff_overview_report,
+            'compliance': self._create_compliance_report,
+            'branch_comparison': self._create_branch_comparison_report,
         }
         
         generator = generators.get(report_type, self._create_generic_report)
@@ -825,6 +830,639 @@ class ExcelReportGenerator:
             ws.cell(row=row, column=2).number_format = '#,##0.00'
             ws.cell(row=row, column=3, value=f"{cat.get('pct', 0):.1f}%").border = self.border
             row += 1
+
+    def _create_branch_performance_report(self, ws, data):
+        """Create comprehensive branch performance report in Excel"""
+        # Define colors for styling
+        green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+        yellow_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
+        blue_fill = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
+        gray_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+        red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+        
+        start_row = 6
+        
+        # Executive Summary Section
+        ws.cell(row=start_row, column=1, value="EXECUTIVE SUMMARY")
+        ws.cell(row=start_row, column=1).font = Font(bold=True, size=14)
+        ws.cell(row=start_row, column=1).fill = green_fill
+        ws.merge_cells(start_row=start_row, start_column=1, end_row=start_row, end_column=4)
+        
+        row = start_row + 2
+        summary_data = [
+            ('Total Revenue', f"KES {data.get('total_revenue', 0):,.2f}"),
+            ('Total Orders', f"{data.get('total_orders', 0):,}"),
+            ('Average Satisfaction', f"{data.get('avg_satisfaction', 0):.1f}/5.0"),
+            ('Best Performer', data.get('best_performer', 'N/A')),
+            ('Needs Attention', data.get('worst_performer', 'N/A')),
+        ]
+        
+        for label, value in summary_data:
+            ws.cell(row=row, column=1, value=label).font = Font(bold=True)
+            ws.cell(row=row, column=1).border = self.border
+            ws.cell(row=row, column=2, value=value).border = self.border
+            row += 1
+        
+        row += 2
+        
+        # Branch Performance Comparison
+        ws.cell(row=row, column=1, value="BRANCH PERFORMANCE COMPARISON")
+        ws.cell(row=row, column=1).font = Font(bold=True, size=12)
+        ws.cell(row=row, column=1).fill = blue_fill
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=8)
+        row += 1
+        
+        # Headers
+        headers = ['Branch', 'Revenue', 'Change %', 'Orders', 'AOV', 'Rating', 'Efficiency', 'Target %']
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=row, column=col, value=header)
+            cell.fill = yellow_fill
+            cell.font = Font(bold=True)
+            cell.border = self.border
+            cell.alignment = Alignment(horizontal='center')
+        
+        row += 1
+        
+        # Branch data
+        branches = data.get('branches', [])
+        for branch in branches:
+            revenue_change = branch.get('revenue_change', 0)
+            change_str = f"+{revenue_change:.1f}%" if revenue_change >= 0 else f"{revenue_change:.1f}%"
+            target = branch.get('target_achievement', 0)
+            
+            ws.cell(row=row, column=1, value=branch.get('branch_name', 'Unknown')).border = self.border
+            
+            rev_cell = ws.cell(row=row, column=2, value=branch.get('revenue', 0))
+            rev_cell.border = self.border
+            rev_cell.number_format = '#,##0.00'
+            
+            change_cell = ws.cell(row=row, column=3, value=change_str)
+            change_cell.border = self.border
+            if revenue_change >= 0:
+                change_cell.font = Font(color="006400")  # Green
+            else:
+                change_cell.font = Font(color="8B0000")  # Red
+            
+            ws.cell(row=row, column=4, value=branch.get('orders', 0)).border = self.border
+            
+            aov_cell = ws.cell(row=row, column=5, value=branch.get('avg_order_value', 0))
+            aov_cell.border = self.border
+            aov_cell.number_format = '#,##0.00'
+            
+            ws.cell(row=row, column=6, value=f"{branch.get('customer_satisfaction', 0):.1f}").border = self.border
+            ws.cell(row=row, column=7, value=f"{branch.get('staff_efficiency', 0)}%").border = self.border
+            
+            target_cell = ws.cell(row=row, column=8, value=f"{target}%")
+            target_cell.border = self.border
+            if target >= 100:
+                target_cell.fill = green_fill
+            elif target >= 80:
+                target_cell.fill = yellow_fill
+            else:
+                target_cell.fill = red_fill
+            
+            row += 1
+        
+        row += 2
+        
+        # Performance Rating Scale
+        ws.cell(row=row, column=1, value="PERFORMANCE RATING SCALE")
+        ws.cell(row=row, column=1).font = Font(bold=True, size=12)
+        ws.cell(row=row, column=1).fill = blue_fill
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=3)
+        row += 1
+        
+        ratings = [
+            ('5 - Outstanding', 'Exceeds all targets', '00B050'),
+            ('4 - Exceeds Expectations', 'Consistently exceeds targets', '92D050'),
+            ('3 - Meets Expectations', 'Meets all required targets', 'FFFF00'),
+            ('2 - Needs Improvement', 'Below target', 'FFC000'),
+            ('1 - Unsatisfactory', 'Significantly below expectations', 'FF0000'),
+        ]
+        
+        for rating, desc, color in ratings:
+            cell = ws.cell(row=row, column=1, value=rating)
+            cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
+            cell.font = Font(bold=True, color="FFFFFF" if color in ['00B050', 'FF0000'] else "000000")
+            cell.border = self.border
+            ws.cell(row=row, column=2, value=desc).border = self.border
+            row += 1
+        
+        row += 2
+        
+        # Individual Branch Details
+        for branch in branches:
+            ws.cell(row=row, column=1, value=f"{branch.get('branch_name', 'Unknown')} - DETAILED METRICS")
+            ws.cell(row=row, column=1).font = Font(bold=True, size=11)
+            ws.cell(row=row, column=1).fill = green_fill
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
+            row += 1
+            
+            # KPI headers
+            kpi_headers = ['KPI', 'Value', 'Target', 'Status']
+            for col, header in enumerate(kpi_headers, 1):
+                cell = ws.cell(row=row, column=col, value=header)
+                cell.fill = gray_fill
+                cell.font = Font(bold=True)
+                cell.border = self.border
+            row += 1
+            
+            # KPI data
+            target_ach = branch.get('target_achievement', 100)
+            revenue = branch.get('revenue', 0)
+            target_revenue = revenue / (target_ach / 100) if target_ach > 0 else 0
+            
+            kpis = [
+                ('Revenue', f"KES {revenue:,.2f}", f"KES {target_revenue:,.2f}", 
+                 'On Track' if target_ach >= 80 else 'Below Target'),
+                ('Orders', f"{branch.get('orders', 0):,}", '-', 'Active'),
+                ('Customer Satisfaction', f"{branch.get('customer_satisfaction', 0):.1f}/5.0", '4.0/5.0',
+                 'Good' if branch.get('customer_satisfaction', 0) >= 4.0 else 'Needs Improvement'),
+                ('Staff Efficiency', f"{branch.get('staff_efficiency', 0)}%", '85%',
+                 'Good' if branch.get('staff_efficiency', 0) >= 85 else 'Needs Improvement'),
+                ('Inventory Turnover', f"{branch.get('inventory_turnover', 0)}x", '3x',
+                 'Good' if branch.get('inventory_turnover', 0) >= 3 else 'Low'),
+            ]
+            
+            for kpi, value, target, status in kpis:
+                ws.cell(row=row, column=1, value=kpi).border = self.border
+                ws.cell(row=row, column=2, value=value).border = self.border
+                ws.cell(row=row, column=3, value=target).border = self.border
+                status_cell = ws.cell(row=row, column=4, value=status)
+                status_cell.border = self.border
+                if 'Good' in status or 'On Track' in status or 'Active' in status:
+                    status_cell.fill = green_fill
+                else:
+                    status_cell.fill = yellow_fill
+                row += 1
+            
+            # Top Products
+            top_products = branch.get('top_products', [])
+            if top_products:
+                row += 1
+                ws.cell(row=row, column=1, value="Top Products").font = Font(bold=True)
+                ws.cell(row=row, column=1).fill = yellow_fill
+                ws.cell(row=row, column=2, value="Units Sold").font = Font(bold=True)
+                ws.cell(row=row, column=2).fill = yellow_fill
+                row += 1
+                
+                for prod in top_products[:5]:
+                    ws.cell(row=row, column=1, value=prod.get('name', 'Unknown')).border = self.border
+                    ws.cell(row=row, column=2, value=prod.get('sales', 0)).border = self.border
+                    row += 1
+            
+            row += 2
+
+    def _create_staff_overview_report(self, ws, data: Dict):
+        """Create Staff Overview Excel report"""
+        ws.title = "Staff Overview"
+        
+        # Header styling
+        header_fill = PatternFill(start_color="1E3A5F", end_color="1E3A5F", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True, size=11)
+        green_fill = PatternFill(start_color="10B981", end_color="10B981", fill_type="solid")
+        yellow_fill = PatternFill(start_color="F59E0B", end_color="F59E0B", fill_type="solid")
+        red_fill = PatternFill(start_color="EF4444", end_color="EF4444", fill_type="solid")
+        
+        row = 1
+        
+        # Title
+        ws.merge_cells('A1:F1')
+        ws['A1'] = "FAMOUS GATE HOTEL - STAFF OVERVIEW REPORT"
+        ws['A1'].font = Font(bold=True, size=14)
+        ws['A1'].alignment = Alignment(horizontal='center')
+        row = 3
+        
+        # Executive Summary
+        ws.cell(row=row, column=1, value="EXECUTIVE SUMMARY").font = Font(bold=True, size=12)
+        row += 1
+        
+        summary_headers = ['Total Staff', 'Active', 'On Leave', 'Avg Performance', 'Avg Attendance']
+        for col, header in enumerate(summary_headers, 1):
+            cell = ws.cell(row=row, column=col, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.border = self.border
+        row += 1
+        
+        summary_values = [
+            data.get('total_staff', 0),
+            data.get('active_staff', 0),
+            data.get('on_leave', 0),
+            f"{data.get('avg_performance', 0):.1f}%",
+            f"{data.get('avg_attendance', 0):.1f}%"
+        ]
+        for col, value in enumerate(summary_values, 1):
+            cell = ws.cell(row=row, column=col, value=value)
+            cell.border = self.border
+            cell.alignment = Alignment(horizontal='center')
+        row += 3
+        
+        # Branch Staff Summary
+        branch_summaries = data.get('branch_summaries', [])
+        if branch_summaries:
+            ws.cell(row=row, column=1, value="BRANCH STAFF SUMMARY").font = Font(bold=True, size=12)
+            row += 1
+            
+            branch_headers = ['Branch', 'Total Staff', 'Active', 'On Leave', 'Avg Performance', 'Avg Attendance']
+            for col, header in enumerate(branch_headers, 1):
+                cell = ws.cell(row=row, column=col, value=header)
+                cell.fill = green_fill
+                cell.font = Font(color="FFFFFF", bold=True)
+                cell.border = self.border
+            row += 1
+            
+            for branch in branch_summaries:
+                ws.cell(row=row, column=1, value=branch.get('branch_name', 'N/A')).border = self.border
+                ws.cell(row=row, column=2, value=branch.get('total_staff', 0)).border = self.border
+                ws.cell(row=row, column=3, value=branch.get('active', 0)).border = self.border
+                ws.cell(row=row, column=4, value=branch.get('on_leave', 0)).border = self.border
+                
+                perf = branch.get('avg_performance', 0)
+                perf_cell = ws.cell(row=row, column=5, value=f"{perf:.1f}%")
+                perf_cell.border = self.border
+                if perf >= 90:
+                    perf_cell.fill = PatternFill(start_color="D1FAE5", fill_type="solid")
+                elif perf < 70:
+                    perf_cell.fill = PatternFill(start_color="FEE2E2", fill_type="solid")
+                
+                att = branch.get('avg_attendance', 0)
+                att_cell = ws.cell(row=row, column=6, value=f"{att:.1f}%")
+                att_cell.border = self.border
+                row += 1
+            row += 2
+        
+        # Top Performers
+        top_performers = data.get('top_performers', [])
+        if top_performers:
+            ws.cell(row=row, column=1, value="TOP PERFORMERS").font = Font(bold=True, size=12)
+            row += 1
+            
+            perf_headers = ['Name', 'Branch', 'Role', 'Performance', 'Attendance', 'Rating']
+            for col, header in enumerate(perf_headers, 1):
+                cell = ws.cell(row=row, column=col, value=header)
+                cell.fill = green_fill
+                cell.font = Font(color="FFFFFF", bold=True)
+                cell.border = self.border
+            row += 1
+            
+            for staff in top_performers[:10]:
+                ws.cell(row=row, column=1, value=staff.get('name', 'N/A')).border = self.border
+                ws.cell(row=row, column=2, value=staff.get('branch_name', 'N/A')).border = self.border
+                ws.cell(row=row, column=3, value=staff.get('role', 'N/A')).border = self.border
+                ws.cell(row=row, column=4, value=f"{staff.get('performance_score', 0):.1f}%").border = self.border
+                ws.cell(row=row, column=5, value=f"{staff.get('attendance_rate', 0):.1f}%").border = self.border
+                ws.cell(row=row, column=6, value=f"{staff.get('customer_rating', 0):.1f}/5").border = self.border
+                row += 1
+            row += 2
+        
+        # Needs Attention
+        needs_attention = data.get('needs_attention', [])
+        if needs_attention:
+            ws.cell(row=row, column=1, value="STAFF NEEDING ATTENTION").font = Font(bold=True, size=12)
+            row += 1
+            
+            att_headers = ['Name', 'Branch', 'Role', 'Performance', 'Attendance', 'Issue']
+            for col, header in enumerate(att_headers, 1):
+                cell = ws.cell(row=row, column=col, value=header)
+                cell.fill = red_fill
+                cell.font = Font(color="FFFFFF", bold=True)
+                cell.border = self.border
+            row += 1
+            
+            for staff in needs_attention[:10]:
+                issue = 'Low Performance' if staff.get('performance_score', 100) < 70 else 'Low Attendance'
+                ws.cell(row=row, column=1, value=staff.get('name', 'N/A')).border = self.border
+                ws.cell(row=row, column=2, value=staff.get('branch_name', 'N/A')).border = self.border
+                ws.cell(row=row, column=3, value=staff.get('role', 'N/A')).border = self.border
+                
+                perf_cell = ws.cell(row=row, column=4, value=f"{staff.get('performance_score', 0):.1f}%")
+                perf_cell.border = self.border
+                if staff.get('performance_score', 100) < 70:
+                    perf_cell.fill = PatternFill(start_color="FEE2E2", fill_type="solid")
+                
+                att_cell = ws.cell(row=row, column=5, value=f"{staff.get('attendance_rate', 0):.1f}%")
+                att_cell.border = self.border
+                if staff.get('attendance_rate', 100) < 80:
+                    att_cell.fill = PatternFill(start_color="FEE2E2", fill_type="solid")
+                
+                ws.cell(row=row, column=6, value=issue).border = self.border
+                row += 1
+
+    def _create_compliance_report(self, ws, data: Dict):
+        """Create Compliance Excel report"""
+        ws.title = "Compliance Report"
+        
+        # Header styling
+        header_fill = PatternFill(start_color="1E3A5F", end_color="1E3A5F", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True, size=11)
+        green_fill = PatternFill(start_color="10B981", end_color="10B981", fill_type="solid")
+        yellow_fill = PatternFill(start_color="F59E0B", end_color="F59E0B", fill_type="solid")
+        red_fill = PatternFill(start_color="EF4444", end_color="EF4444", fill_type="solid")
+        
+        row = 1
+        
+        # Title
+        ws.merge_cells('A1:F1')
+        ws['A1'] = "FAMOUS GATE HOTEL - COMPLIANCE REPORT"
+        ws['A1'].font = Font(bold=True, size=14)
+        ws['A1'].alignment = Alignment(horizontal='center')
+        row = 3
+        
+        # Compliance Overview
+        ws.cell(row=row, column=1, value="COMPLIANCE OVERVIEW").font = Font(bold=True, size=12)
+        row += 1
+        
+        overview_headers = ['Total Requirements', 'Compliant', 'Non-Compliant', 'Pending', 'Expired', 'Compliance Rate']
+        for col, header in enumerate(overview_headers, 1):
+            cell = ws.cell(row=row, column=col, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.border = self.border
+        row += 1
+        
+        compliance_rate = data.get('overall_compliance_rate', 0)
+        overview_values = [
+            data.get('total_requirements', 0),
+            data.get('compliant', 0),
+            data.get('non_compliant', 0),
+            data.get('pending', 0),
+            data.get('expired', 0),
+            f"{compliance_rate:.1f}%"
+        ]
+        for col, value in enumerate(overview_values, 1):
+            cell = ws.cell(row=row, column=col, value=value)
+            cell.border = self.border
+            cell.alignment = Alignment(horizontal='center')
+            if col == 6:  # Compliance rate
+                if compliance_rate >= 90:
+                    cell.fill = green_fill
+                    cell.font = Font(color="FFFFFF", bold=True)
+                elif compliance_rate >= 75:
+                    cell.fill = yellow_fill
+                else:
+                    cell.fill = red_fill
+                    cell.font = Font(color="FFFFFF", bold=True)
+        row += 3
+        
+        # Branch Compliance Summary
+        branch_summaries = data.get('branch_summaries', [])
+        if branch_summaries:
+            ws.cell(row=row, column=1, value="BRANCH COMPLIANCE SUMMARY").font = Font(bold=True, size=12)
+            row += 1
+            
+            branch_headers = ['Branch', 'Total', 'Compliant', 'Non-Compliant', 'Pending', 'Rate']
+            for col, header in enumerate(branch_headers, 1):
+                cell = ws.cell(row=row, column=col, value=header)
+                cell.fill = green_fill
+                cell.font = Font(color="FFFFFF", bold=True)
+                cell.border = self.border
+            row += 1
+            
+            for branch in branch_summaries:
+                ws.cell(row=row, column=1, value=branch.get('branch_name', 'N/A')).border = self.border
+                ws.cell(row=row, column=2, value=branch.get('total_requirements', 0)).border = self.border
+                ws.cell(row=row, column=3, value=branch.get('compliant', 0)).border = self.border
+                ws.cell(row=row, column=4, value=branch.get('non_compliant', 0)).border = self.border
+                ws.cell(row=row, column=5, value=branch.get('pending', 0)).border = self.border
+                
+                rate = branch.get('compliance_rate', 0)
+                rate_cell = ws.cell(row=row, column=6, value=f"{rate:.1f}%")
+                rate_cell.border = self.border
+                if rate >= 90:
+                    rate_cell.fill = PatternFill(start_color="D1FAE5", fill_type="solid")
+                elif rate < 75:
+                    rate_cell.fill = PatternFill(start_color="FEE2E2", fill_type="solid")
+                row += 1
+            row += 2
+        
+        # Critical Issues
+        critical_issues = data.get('critical_issues', [])
+        if critical_issues:
+            ws.cell(row=row, column=1, value="CRITICAL ISSUES").font = Font(bold=True, size=12)
+            row += 1
+            
+            crit_headers = ['Requirement', 'Branch', 'Category', 'Status', 'Due Date']
+            for col, header in enumerate(crit_headers, 1):
+                cell = ws.cell(row=row, column=col, value=header)
+                cell.fill = red_fill
+                cell.font = Font(color="FFFFFF", bold=True)
+                cell.border = self.border
+            row += 1
+            
+            for item in critical_issues[:10]:
+                ws.cell(row=row, column=1, value=item.get('requirement', 'N/A')[:50]).border = self.border
+                ws.cell(row=row, column=2, value=item.get('branch_name', 'N/A')).border = self.border
+                ws.cell(row=row, column=3, value=item.get('category', 'N/A')).border = self.border
+                ws.cell(row=row, column=4, value=item.get('status', 'N/A').replace('_', ' ').title()).border = self.border
+                due_date = item.get('due_date', '')
+                ws.cell(row=row, column=5, value=due_date[:10] if due_date else 'N/A').border = self.border
+                row += 1
+            row += 2
+        
+        # Upcoming Deadlines
+        upcoming = data.get('upcoming_deadlines', [])
+        if upcoming:
+            ws.cell(row=row, column=1, value="UPCOMING DEADLINES").font = Font(bold=True, size=12)
+            row += 1
+            
+            up_headers = ['Requirement', 'Branch', 'Category', 'Due Date', 'Status']
+            for col, header in enumerate(up_headers, 1):
+                cell = ws.cell(row=row, column=col, value=header)
+                cell.fill = yellow_fill
+                cell.font = Font(bold=True)
+                cell.border = self.border
+            row += 1
+            
+            for item in upcoming[:10]:
+                ws.cell(row=row, column=1, value=item.get('requirement', 'N/A')[:50]).border = self.border
+                ws.cell(row=row, column=2, value=item.get('branch_name', 'N/A')).border = self.border
+                ws.cell(row=row, column=3, value=item.get('category', 'N/A')).border = self.border
+                due_date = item.get('due_date', '')
+                ws.cell(row=row, column=4, value=due_date[:10] if due_date else 'N/A').border = self.border
+                ws.cell(row=row, column=5, value=item.get('status', 'N/A').replace('_', ' ').title()).border = self.border
+                row += 1
+
+    def _create_branch_comparison_report(self, ws, data):
+        """Create branch comparison report worksheet"""
+        # Extract data
+        title = data.get('title', 'Branch Comparison Report')
+        period = data.get('period', 'month')
+        metric = data.get('metric', 'revenue')
+        branches = data.get('branches', [])
+        
+        # Format labels
+        period_label = {
+            'week': 'Weekly',
+            'month': 'Monthly',
+            'quarter': 'Quarterly',
+            'year': 'Yearly'
+        }.get(period, 'Period')
+        
+        metric_label = {
+            'revenue': 'Revenue (KES)',
+            'occupancy': 'Occupancy Rate (%)',
+            'staff_count': 'Staff Count'
+        }.get(metric, metric.replace('_', ' ').capitalize())
+        
+        # Sort branches by metric value (descending)
+        sorted_branches = sorted(branches, key=lambda x: x.get(metric, 0), reverse=True)
+        
+        # Add title
+        ws.merge_cells('A1:D1')
+        ws.cell(1, 1, title).font = Font(size=16, bold=True)
+        
+        # Add metadata
+        report_date = f"Report Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        ws.merge_cells('A2:D2')
+        ws.cell(2, 1, report_date).font = Font(italic=True)
+        
+        ws.cell(3, 1, "Period:").font = Font(bold=True)
+        ws.cell(3, 2, period_label)
+        
+        ws.cell(4, 1, "Metric:").font = Font(bold=True)
+        ws.cell(4, 2, metric_label)
+        
+        # Add summary if branches exist
+        row = 6
+        if branches:
+            best_branch = sorted_branches[0]['name']
+            best_value = sorted_branches[0].get(metric, 0)
+            
+            # Format value based on metric type
+            if metric == 'revenue':
+                formatted_value = f"KES {best_value:,.2f}"
+            elif metric == 'occupancy':
+                formatted_value = f"{best_value}%"
+            else:
+                formatted_value = str(best_value)
+            
+            summary = f"Based on {metric_label} data for the selected {period}, {best_branch} is the top performing branch with a {metric_label} of {formatted_value}."
+            ws.merge_cells(f'A{row}:D{row}')
+            ws.cell(row, 1, summary).font = Font(italic=True)
+        
+        # Add comparison table
+        row += 2
+        ws.merge_cells(f'A{row}:D{row}')
+        ws.cell(row, 1, "BRANCH COMPARISON").font = Font(bold=True, size=12)
+        
+        row += 1
+        if branches:
+            headers = ["Rank", "Branch", metric_label, "% of Top"]
+            header_fill = PatternFill(start_color="34495e", end_color="34495e", fill_type="solid")
+            header_font = Font(bold=True, color="FFFFFF", size=12)
+            
+            for col, header in enumerate(headers, 1):
+                cell = ws.cell(row, col, header)
+                cell.font = header_font
+                cell.fill = header_fill
+            
+            top_value = sorted_branches[0].get(metric, 1)  # Avoid division by zero
+            
+            for i, branch in enumerate(sorted_branches, 1):
+                row += 1
+                branch_name = branch.get('name', 'Unknown')
+                value = branch.get(metric, 0)
+                
+                # Calculate percentage of top performer
+                percent_of_top = (value / top_value * 100) if top_value else 0
+                
+                # Format value based on metric type
+                if metric == 'revenue':
+                    formatted_value = f"KES {value:,.2f}"
+                elif metric == 'occupancy':
+                    formatted_value = f"{value}%"
+                else:
+                    formatted_value = str(value)
+                
+                ws.cell(row, 1, i)
+                ws.cell(row, 2, branch_name).font = Font(bold=True)
+                ws.cell(row, 3, formatted_value)
+                ws.cell(row, 4, f"{percent_of_top:.1f}%")
+                
+                # Add conditional formatting for visual indicators
+                if i == 1:  # Top performer
+                    ws.cell(row, 1).fill = PatternFill(start_color="D1FAE5", fill_type="solid")
+                elif percent_of_top < 50:  # Low performers
+                    ws.cell(row, 4).fill = PatternFill(start_color="FEE2E2", fill_type="solid")
+        else:
+            row += 1
+            ws.merge_cells(f'A{row}:D{row}')
+            ws.cell(row, 1, "No branch comparison data available")
+        
+        # Add data analysis section
+        row += 3
+        ws.merge_cells(f'A{row}:D{row}')
+        ws.cell(row, 1, "DATA ANALYSIS").font = Font(bold=True, size=12)
+        
+        row += 1
+        if branches and len(branches) > 1:
+            # Calculate statistics
+            values = [b.get(metric, 0) for b in branches]
+            avg_value = sum(values) / len(values)
+            min_value = min(values)
+            max_value = max(values)
+            range_value = max_value - min_value
+            
+            # Format based on metric type
+            if metric == 'revenue':
+                avg_formatted = f"KES {avg_value:,.2f}"
+                min_formatted = f"KES {min_value:,.2f}"
+                max_formatted = f"KES {max_value:,.2f}"
+                range_formatted = f"KES {range_value:,.2f}"
+            elif metric == 'occupancy':
+                avg_formatted = f"{avg_value:.1f}%"
+                min_formatted = f"{min_value}%"
+                max_formatted = f"{max_value}%"
+                range_formatted = f"{range_value}%"
+            else:
+                avg_formatted = f"{avg_value:.1f}"
+                min_formatted = str(min_value)
+                max_formatted = str(max_value)
+                range_formatted = str(range_value)
+            
+            # Add statistics table
+            headers = ["Statistic", "Value"]
+            for col, header in enumerate(headers, 1):
+                ws.cell(row, col, header).font = Font(bold=True)
+                ws.cell(row, col).fill = PatternFill(start_color="F0F0F0", end_color="F0F0F0", fill_type="solid")
+            
+            row += 1
+            ws.cell(row, 1, "Average").font = Font(bold=True)
+            ws.cell(row, 2, avg_formatted)
+            
+            row += 1
+            ws.cell(row, 1, "Minimum").font = Font(bold=True)
+            ws.cell(row, 2, min_formatted)
+            
+            row += 1
+            ws.cell(row, 1, "Maximum").font = Font(bold=True)
+            ws.cell(row, 2, max_formatted)
+            
+            row += 1
+            ws.cell(row, 1, "Range").font = Font(bold=True)
+            ws.cell(row, 2, range_formatted)
+        else:
+            row += 1
+            ws.merge_cells(f'A{row}:D{row}')
+            ws.cell(row, 1, "Insufficient data for statistical analysis")
+        
+        # Add notes
+        row += 3
+        ws.merge_cells(f'A{row}:D{row}')
+        ws.cell(row, 1, "NOTES").font = Font(bold=True, size=12)
+        
+        row += 1
+        ws.merge_cells(f'A{row}:D{row}')
+        ws.cell(row, 1, f"This report provides a comparison of branch performance based on {metric_label.lower()}.").font = Font(italic=True)
+        
+        row += 1
+        ws.merge_cells(f'A{row}:D{row}')
+        ws.cell(row, 1, f"The data shown is for {period_label.lower()} period.").font = Font(italic=True)
+        
+        row += 1
+        ws.merge_cells(f'A{row}:D{row}')
+        ws.cell(row, 1, "Rankings are based on current data and may change over time.").font = Font(italic=True)
 
     def _adjust_column_widths(self, ws):
         """Auto-adjust column widths"""

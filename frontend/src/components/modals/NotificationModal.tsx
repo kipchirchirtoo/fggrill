@@ -121,17 +121,44 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
     }
   };
 
-  const getTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
-    if (seconds < 60) return 'Just now';
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return minutes + 'm ago';
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return hours + 'h ago';
-    const days = Math.floor(hours / 24);
-    if (days < 7) return days + 'd ago';
-    return date.toLocaleDateString();
+  // Static time display to avoid hydration issues
+  const [mounted, setMounted] = useState(false);
+  
+  // Use useEffect to update the mounted state
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
+  // Safe date formatter that avoids hydration mismatches
+  const formatDate = (dateString: string) => {
+    try {
+      if (!dateString) return '';
+      
+      // Always return a fixed format date during server rendering
+      if (!mounted) {
+        return '';
+      }
+      
+      // Simple date formatting for client-side only
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      
+      if (diffMins < 1) return 'Just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return `${diffHours}h ago`;
+      
+      const diffDays = Math.floor(diffHours / 24);
+      if (diffDays < 7) return `${diffDays}d ago`;
+      
+      // Simple date format to avoid locale issues
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    } catch (e) {
+      return '';
+    }
   };
 
   const handleNotificationClick = (notification: Notification) => {
@@ -239,8 +266,10 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
                     )}
                     <div className="flex items-center gap-2 mt-2">
                       <Clock className="h-3.5 w-3.5 text-[#8E8E93]" />
-                      <span className="text-xs text-[#8E8E93]">
-                        {getTimeAgo(notification.created_at)}
+                      <span className="text-xs text-[#8E8E93]" suppressHydrationWarning>
+                        {mounted ? formatDate(notification.created_at) : 
+                          <span className="invisible">timestamp</span>
+                        }
                       </span>
                       {notification.priority === 'urgent' && (
                         <span className="text-xs px-2 py-0.5 bg-[#3C3C43] text-white rounded-full font-medium">

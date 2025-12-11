@@ -7,10 +7,10 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { Button } from "@/components/ui/minimal/button";
 import { staffAPI, payrollAPI } from '@/lib/api';
-import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import Link from 'next/link';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { Users, Calendar, FileText, CreditCard, RefreshCw, DollarSign } from 'lucide-react';
 
 export default function AdminHRPayrollPage() {
   const { user } = useAuth();
@@ -49,7 +49,7 @@ export default function AdminHRPayrollPage() {
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">HR & Payroll</h1><p className="text-gray-500">Human resources management</p></div>
-            <IOSButton variant="secondary" onClick={fetchData}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
+            <IOSButton variant="secondary" onClick={fetchData} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 
           <div className="grid grid-cols-3 gap-4">

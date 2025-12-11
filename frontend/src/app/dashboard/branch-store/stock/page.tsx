@@ -55,8 +55,8 @@ export default function BranchStockPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Stock</h1><p className="text-gray-500">Branch inventory</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchItems}><RefreshCw className="h-4 w-4 mr-2" /> Refresh</IOSButton>
-              <Link href="/dashboard/branch-store/requests"><IOSButton><ShoppingCart className="h-4 w-4 mr-2" /> Requests</IOSButton></Link>
+              <IOSButton variant="secondary" onClick={fetchItems} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <Link href="/dashboard/branch-store/requests"><IOSButton leftIcon={<ShoppingCart />}>Requests</IOSButton></Link>
             </div>
           </div>
 
@@ -95,7 +95,7 @@ export default function BranchStockPage() {
                   <IOSCard key={item.id} className={`p-4 ${isOut ? 'border-red-200 bg-red-50' : isLow ? 'border-yellow-200 bg-yellow-50' : ''}`}>
                     <div className="flex items-start justify-between mb-2">
                       <div><p className="font-bold">{item.name}</p><p className="text-sm text-gray-500">{item.category}</p></div>
-                      {isOut ? <IOSBadge variant="error">Out</IOSBadge> : isLow ? <IOSBadge variant="warning">Low</IOSBadge> : null}
+                      {isOut ? <IOSBadge variant="light" color="danger">Out</IOSBadge> : isLow ? <IOSBadge variant="light" color="warning">Low</IOSBadge> : null}
                     </div>
                     <div className="flex items-end justify-between mt-4">
                       <div><p className="text-2xl font-bold">{item.quantity}</p><p className="text-xs text-gray-500">Min: {item.min_quantity} {item.unit}</p></div>

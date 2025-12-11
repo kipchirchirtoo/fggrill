@@ -163,6 +163,15 @@ export function ReportsPageComponent({
   }, []);
 
   useEffect(() => {
+    // Update selectedBranch when branchId prop changes
+    if (branchId !== undefined && branchId !== null) {
+      setSelectedBranch(branchId.toString());
+    } else if (!isBranchLocked) {
+      setSelectedBranch('all');
+    }
+  }, [branchId, isBranchLocked]);
+
+  useEffect(() => {
     if (activeTab === 'scheduled' && showScheduling) {
       fetchScheduledReports();
     } else if (activeTab === 'history') {
@@ -184,7 +193,11 @@ export function ReportsPageComponent({
   const fetchBranches = async () => {
     try {
       const res = await systemAPI.getBranches();
-      setBranches(res.data || res.branches || []);
+      const branchData = res.data || res.branches || [];
+      setBranches(branchData);
+      
+      // Log for debugging
+      console.log('Fetched branches:', branchData);
     } catch (error) {
       console.error('Error fetching branches:', error);
     }
@@ -252,7 +265,10 @@ export function ReportsPageComponent({
 
     setGenerating(true);
     try {
-      const effectiveBranchId = isBranchLocked ? branchId : (selectedBranch !== 'all' ? parseInt(selectedBranch) : undefined);
+      const effectiveBranchId = isBranchLocked 
+        ? branchId 
+        : (selectedBranch !== 'all' ? parseInt(selectedBranch) : undefined);
+      
       const effectiveBranchName = isBranchLocked 
         ? branchName 
         : (selectedBranch !== 'all' ? branches.find(b => b.id.toString() === selectedBranch)?.name : 'All Branches');
@@ -263,6 +279,8 @@ export function ReportsPageComponent({
         branch_name: effectiveBranchName || 'All Branches'
       };
 
+      console.log('Generating report with filters:', filters);
+      
       await reportsService.downloadReport(reportType, filters, format);
       toast.success(`${reportType.replace('_', ' ')} report downloaded successfully!`);
       setShowGenerateModal(false);
@@ -559,7 +577,7 @@ export function ReportsPageComponent({
                           : 'Not scheduled'}
                       </td>
                       <td className="px-6 py-4">
-                        <IOSBadge variant={schedule.is_active ? 'success' : 'neutral'}>
+                        <IOSBadge variant="light" color={schedule.is_active ? 'success' : 'secondary'}>
                           {schedule.is_active ? 'Active' : 'Paused'}
                         </IOSBadge>
                       </td>
@@ -641,7 +659,7 @@ export function ReportsPageComponent({
                           : new Date(report.created_at).toLocaleString()}
                       </td>
                       <td className="px-6 py-4">
-                        <IOSBadge variant={report.status === 'completed' ? 'success' : report.status === 'failed' ? 'error' : 'pending'}>
+                        <IOSBadge variant="light" color={report.status === 'completed' ? 'success' : report.status === 'failed' ? 'danger' : 'warning'}>
                           {report.status}
                         </IOSBadge>
                       </td>
@@ -704,7 +722,10 @@ export function ReportsPageComponent({
                   <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
                   <select
                     value={selectedBranch}
-                    onChange={(e) => setSelectedBranch(e.target.value)}
+                    onChange={(e) => {
+                      console.log('Branch selector changed to:', e.target.value);
+                      setSelectedBranch(e.target.value);
+                    }}
                     className="w-full px-3 py-2 border border-gray-200 rounded-ios-lg"
                   >
                     <option value="all">All Branches</option>

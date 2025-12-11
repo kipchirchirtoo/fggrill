@@ -285,9 +285,7 @@ function CheckOutModal({
             <IOSButton variant="outline" onClick={onClose} className="flex-1">
               Cancel
             </IOSButton>
-            <IOSButton variant="outline" className="flex-1">
-              <Printer className="h-4 w-4 mr-2" />
-              Print Bill
+            <IOSButton variant="outline" className="flex-1" leftIcon={<Printer />}>Print Bill
             </IOSButton>
             <IOSButton
               onClick={handleCheckOut}
@@ -388,9 +386,7 @@ export default function CheckInPage() {
               <p className="text-gray-500">Manage guest arrivals and departures</p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="outline" onClick={fetchBookings}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
+              <IOSButton variant="outline" onClick={fetchBookings} leftIcon={<RefreshCw />}>Refresh
               </IOSButton>
             </div>
           </div>
@@ -526,8 +522,8 @@ export default function CheckInPage() {
                           <IOSButton
                             onClick={() => openCheckIn(booking)}
                             className="bg-[#34C759] hover:bg-green-700"
+                            leftIcon={<LogIn />}
                           >
-                            <LogIn className="h-4 w-4 mr-2" />
                             Check In
                           </IOSButton>
                         )}
@@ -536,8 +532,8 @@ export default function CheckInPage() {
                           <IOSButton
                             onClick={() => openCheckOut(booking)}
                             className="bg-[#FF3B30] hover:bg-red-700"
+                            leftIcon={<LogOut />}
                           >
-                            <LogOut className="h-4 w-4 mr-2" />
                             Check Out
                           </IOSButton>
                         )}

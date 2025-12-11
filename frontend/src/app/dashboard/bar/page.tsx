@@ -2,15 +2,15 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
-import { Button } from "@/components/ui/minimal/button";
+import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
 import { IOSBadge } from '@/components/ui/ios-badge';
-import { restaurantAPI } from '@/lib/api';
+import { barAPI } from '@/lib/api';
 import { 
-  Wine, ShoppingCart, DollarSign, Clock, Users, GlassWater,
-  RefreshCw, TrendingUp, Plus, ArrowRight, CreditCard
+  Wine, ShoppingCart, DollarSign, Clock, GlassWater,
+  Plus, ArrowRight, CreditCard, RefreshCw, TrendingUp
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -29,6 +29,7 @@ interface Order {
 
 export default function BarDashboard() {
   const { user } = useAuth();
+  const { activeBranchId } = useBranch();
   const [orders, setOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState({ todayOrders: 0, todayRevenue: 0, openTabs: 0, avgOrder: 0 });
   const [isLoading, setIsLoading] = useState(true);
@@ -36,7 +37,7 @@ export default function BarDashboard() {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const ordersRes = await restaurantAPI.getOrders();
+      const ordersRes = await barAPI.getOrders(activeBranchId || undefined);
       if (ordersRes.success) {
         const allOrders = ordersRes.data || [];
         setOrders(allOrders.slice(0, 8));
@@ -53,7 +54,7 @@ export default function BarDashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [activeBranchId]);
 
   useEffect(() => {
     fetchData();
@@ -73,11 +74,11 @@ export default function BarDashboard() {
               <p className="text-gray-500">Manage bar orders and tabs</p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchData}>
-                <RefreshCw className="h-4 w-4 mr-2" /> Refresh
+              <IOSButton variant="secondary" onClick={fetchData} leftIcon={<RefreshCw />}>
+                Refresh
               </IOSButton>
               <Link href="/dashboard/bar/pos">
-                <IOSButton><Plus className="h-4 w-4 mr-2" /> New Order</IOSButton>
+                <IOSButton leftIcon={<Plus />}>New Order</IOSButton>
               </Link>
             </div>
           </div>
@@ -127,7 +128,7 @@ export default function BarDashboard() {
                         <p className="font-medium">#{order.order_number}</p>
                         <p className="text-sm text-gray-500">{order.items_count} items • KES {order.total?.toLocaleString()}</p>
                       </div>
-                      <IOSBadge variant={order.status === 'completed' ? 'success' : 'warning'}>{order.status}</IOSBadge>
+                      <IOSBadge variant="light" color={order.status === 'completed' ? 'success' : 'warning'}>{order.status}</IOSBadge>
                     </div>
                   ))}
                 </div>
