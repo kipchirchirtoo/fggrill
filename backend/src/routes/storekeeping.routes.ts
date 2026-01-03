@@ -160,7 +160,7 @@ router.get('/get_edit_lock_status', authorize(staffRoles), getEditLockStatus);
 router.post('/set_edit_lock_status', authorize(managerRoles), setEditLockStatus);
 
 router.get('/export_data', authorize(staffRoles), exportDataExcel);
-router.post('/import_data', authorize(managerRoles), upload.single('file'), importDataExcel);
+router.post('/import_data', authorize(managerRoles), upload.single('file') as any, importDataExcel);
 
 // =====================================================
 // MULTI-BRANCH INVENTORY ROUTES

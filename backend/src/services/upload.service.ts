@@ -6,7 +6,7 @@ import { logger } from '../utils/logger';
 
 // Define storage engine
 const storage = multer.diskStorage({
-  destination: (req: Request, file: Express.Multer.File, cb: Function) => {
+  destination: (req: any, file: Express.Multer.File, cb: Function) => {
     const uploadDir = path.join(process.env.UPLOAD_DIR || 'uploads');
 
     // Create directory if it doesn't exist
@@ -31,7 +31,7 @@ const storage = multer.diskStorage({
 
     cb(null, finalDir);
   },
-  filename: (req: Request, file: Express.Multer.File, cb: Function) => {
+  filename: (req: any, file: Express.Multer.File, cb: Function) => {
     // Generate unique filename
     const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
     cb(null, `${file.fieldname}-${uniqueSuffix}${path.extname(file.originalname)}`);
@@ -39,7 +39,7 @@ const storage = multer.diskStorage({
 });
 
 // File filter
-const fileFilter = (req: Request, file: Express.Multer.File, cb: Function) => {
+const fileFilter = (req: any, file: Express.Multer.File, cb: Function) => {
   // Allowed file types
   const allowedTypes = {
     'image/jpeg': true,
@@ -73,17 +73,17 @@ const upload = multer({
 
 class UploadService {
   // Single file upload
-  uploadSingle(fieldName: string) {
+  uploadSingle(fieldName: string): any {
     return upload.single(fieldName);
   }
 
   // Multiple files upload
-  uploadMultiple(fieldName: string, maxCount: number) {
+  uploadMultiple(fieldName: string, maxCount: number): any {
     return upload.array(fieldName, maxCount);
   }
 
   // Multiple fields upload
-  uploadFields(fields: { name: string; maxCount: number }[]) {
+  uploadFields(fields: { name: string; maxCount: number }[]): any {
     return upload.fields(fields);
   }
 
