@@ -405,12 +405,12 @@ export const getAvailableRooms = async (
 
     // Find booked room IDs
     const { data: booked, error: bookedError } = await supabase
-      .from('reservations')
+      .from('bookings')
       .select('room_id')
       .neq('status', 'cancelled')
       .neq('status', 'checked_out')
-      .lt('check_in_date', checkOut as string)
-      .gt('check_out_date', checkIn as string);
+      .lte('check_in_date', checkOut as string)
+      .gte('check_out_date', checkIn as string);
 
     if (bookedError) {
       logger.error('Error fetching booked rooms:', bookedError);

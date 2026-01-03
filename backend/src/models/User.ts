@@ -7,20 +7,20 @@ export enum UserRole {
   SUPER_ADMIN = 'super_admin',
   GENERAL_MANAGER = 'general_manager',
   BRANCH_MANAGER = 'branch_manager',
-  
+
   // Front Office & Reception
   RECEPTIONIST = 'receptionist',
   FRONT_DESK_SUPERVISOR = 'front_desk_supervisor',
   CONCIERGE = 'concierge',
   BELL_CAPTAIN = 'bell_captain',
   BELLHOP = 'bellhop',
-  
+
   // Housekeeping
   HOUSEKEEPING = 'housekeeping',
   HOUSEKEEPING_SUPERVISOR = 'housekeeping_supervisor',
   ROOM_ATTENDANT = 'room_attendant',
   LAUNDRY_ATTENDANT = 'laundry_attendant',
-  
+
   // Restaurant & Food Service
   RESTAURANT = 'restaurant',
   RESTAURANT_MANAGER = 'restaurant_manager',
@@ -36,13 +36,13 @@ export enum UserRole {
   FOOD_RUNNER = 'food_runner',
   BUSSER = 'busser',
   HOST_HOSTESS = 'host_hostess',
-  
+
   // Kitchen & POS
   POS_KITCHEN = 'pos_kitchen',
   KITCHEN = 'kitchen',
   KITCHEN_HELPER = 'kitchen_helper',
   DISHWASHER = 'dishwasher',
-  
+
   // Maintenance & Engineering
   MAINTENANCE = 'maintenance',
   MAINTENANCE_SUPERVISOR = 'maintenance_supervisor',
@@ -50,30 +50,30 @@ export enum UserRole {
   PLUMBER = 'plumber',
   HVAC_TECHNICIAN = 'hvac_technician',
   GROUNDSKEEPER = 'groundskeeper',
-  
+
   // Security
   SECURITY_SUPERVISOR = 'security_supervisor',
   SECURITY_GUARD = 'security_guard',
   NIGHT_AUDITOR = 'night_auditor',
-  
+
   // Finance & Administration
   ACCOUNTANT = 'accountant',
   AUDITOR = 'auditor',
   FINANCE_MANAGER = 'finance_manager',
   HR_MANAGER = 'hr_manager',
   PAYROLL_CLERK = 'payroll_clerk',
-  
+
   // Store & Inventory
   CENTRAL_STOREKEEPER = 'central_storekeeper',
   BRANCH_STOREKEEPER = 'branch_storekeeper',
   INVENTORY_CLERK = 'inventory_clerk',
   PURCHASING_MANAGER = 'purchasing_manager',
-  
+
   // Operations
   CENTRAL_OPERATIONS_MANAGER = 'central_operations_manager',
   BRANCH_OPERATIONS_MANAGER = 'branch_operations_manager',
   FACILITIES_MANAGER = 'facilities_manager',
-  
+
   // General
   EMPLOYEE = 'employee'
 }
@@ -237,7 +237,7 @@ export class User implements IUser {
 
   getSignedJwtToken(): string {
     const secret = process.env.JWT_SECRET || '';
-    const options: SignOptions = { expiresIn: Number(process.env.JWT_EXPIRES_IN_SECONDS) || 604800 };
+    const options: SignOptions = { expiresIn: Number(process.env.JWT_EXPIRES_IN_SECONDS) || 86400 };
     return jwt.sign({ id: this.id, role: this.role }, secret, options);
   }
 
