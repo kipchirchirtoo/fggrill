@@ -420,12 +420,14 @@ export const getAvailableRooms = async (
     const bookedIds = (booked || []).map(b => b.room_id).filter(Boolean);
 
     // Find available rooms
-    // We also exclude rooms that are currently in maintenance or out of order
+    // Only show rooms that are:
+    // 1. Status is 'available' or 'cleaning' (cleaning rooms can be booked for future dates)
+    // 2. Not in maintenance or out of order
+    // 3. Not already booked for the selected dates
     let query = supabase
       .from('rooms')
       .select('*, type:room_types!room_type_id(*)')
-      .neq('status', 'maintenance')
-      .neq('status', 'out_of_order');
+      .in('status', ['available', 'cleaning']);
 
     if (bookedIds.length > 0) {
       // Format array for Supabase filter: ("id1","id2")
@@ -449,9 +451,16 @@ export const getAvailableRooms = async (
     const checkOutDate = new Date(checkOut as string);
     const nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
 
+    // Provide helpful message if no rooms available
+    const message = rooms && rooms.length > 0
+      ? `Found ${rooms.length} available room${rooms.length > 1 ? 's' : ''} for your dates`
+      : 'No rooms available for the selected dates. Please try different dates or contact us for assistance.';
+
     res.status(200).json({
       success: true,
+      message,
       data: rooms || [],
+      count: rooms?.length || 0,
       nights: nights,
       dates: {
         checkIn: checkIn,
