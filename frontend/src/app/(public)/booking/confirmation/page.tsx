@@ -19,6 +19,7 @@ import {
 import { toast } from 'sonner';
 import { formatNumber } from '@/lib/utils';
 import { bookingsAPI } from '@/lib/api';
+import { API_URL } from '@/lib/config';
 
 function ConfirmationContent() {
   const router = useRouter();
@@ -35,11 +36,11 @@ function ConfirmationContent() {
     if (confirmationNumber && email) {
       fetchBookingDetails();
     } else if (bookingId) {
-       // Fallback for existing links or internal navigation if logged in (though this might fail if not authenticated, keeping for compatibility)
-       // Better to try redirect or handle differently, but let's try the new method primarily.
-       // Actually, let's just use the new method if available, else try ID but expect 401 if not logged in.
-       // Given the user issue, we should prioritize the confirmation number flow.
-       fetchBookingById();
+      // Fallback for existing links or internal navigation if logged in (though this might fail if not authenticated, keeping for compatibility)
+      // Better to try redirect or handle differently, but let's try the new method primarily.
+      // Actually, let's just use the new method if available, else try ID but expect 401 if not logged in.
+      // Given the user issue, we should prioritize the confirmation number flow.
+      fetchBookingById();
     } else {
       setError('No booking information provided');
       setLoading(false);
@@ -51,7 +52,7 @@ function ConfirmationContent() {
       if (!confirmationNumber || !email) return;
       const response = await bookingsAPI.getBookingByConfirmation(confirmationNumber, email);
       const data = response.data || response;
-      
+
       setBooking(data);
     } catch (error: any) {
       console.error('Error fetching booking:', error);
@@ -63,10 +64,9 @@ function ConfirmationContent() {
 
   const fetchBookingById = async () => {
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
       const response = await fetch(`${API_URL}/api/bookings/${bookingId}`);
       const data = await response.json();
-      
+
       if (data.success) {
         setBooking(data.data);
       } else {
@@ -85,20 +85,20 @@ function ConfirmationContent() {
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '';
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     });
   };
 
   const formatTime = (dateStr: string) => {
     if (!dateStr) return '';
     const date = new Date(dateStr);
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
 
@@ -188,7 +188,7 @@ function ConfirmationContent() {
             className="bg-white rounded-2xl p-6 border border-stone-200"
           >
             <h3 className="text-lg font-semibold text-stone-900 mb-6">Booking Details</h3>
-            
+
             <div className="space-y-4">
               <div className="flex items-start gap-3">
                 <Calendar className="h-5 w-5 text-amber-500 mt-0.5" />
@@ -238,35 +238,35 @@ function ConfirmationContent() {
             className="bg-white rounded-2xl p-6 border border-stone-200"
           >
             <h3 className="text-lg font-semibold text-stone-900 mb-6">Payment Summary</h3>
-            
+
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-stone-600">Room Rate</span>
                 <span className="text-stone-900">KES {formatNumber(booking.roomRate)}</span>
               </div>
-              
+
               <div className="flex justify-between">
                 <span className="text-stone-600">Subtotal</span>
                 <span className="text-stone-900">KES {formatNumber(booking.subtotal)}</span>
               </div>
-              
+
               <div className="flex justify-between">
                 <span className="text-stone-600">Tax (16%)</span>
                 <span className="text-stone-900">KES {formatNumber(booking.taxAmount)}</span>
               </div>
-              
+
               <div className="flex justify-between">
                 <span className="text-stone-600">Service Charge (10%)</span>
                 <span className="text-stone-900">KES {formatNumber(booking.serviceCharge)}</span>
               </div>
-              
+
               {booking.discountAmount > 0 && (
                 <div className="flex justify-between text-green-600">
                   <span>Discount</span>
                   <span>-KES {formatNumber(booking.discountAmount)}</span>
                 </div>
               )}
-              
+
               <div className="border-t border-stone-200 pt-3">
                 <div className="flex justify-between text-lg font-semibold">
                   <span className="text-stone-900">Total Amount</span>
@@ -295,7 +295,7 @@ function ConfirmationContent() {
           className="bg-white rounded-2xl p-6 border border-stone-200 mt-8"
         >
           <h3 className="text-lg font-semibold text-stone-900 mb-6">Need Help?</h3>
-          
+
           <div className="grid md:grid-cols-2 gap-6">
             <div className="flex items-start gap-3">
               <Phone className="h-5 w-5 text-amber-500 mt-0.5" />

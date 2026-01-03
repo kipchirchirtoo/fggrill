@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatNumber } from '@/lib/utils';
+import { API_URL } from '@/lib/config';
 
 function BookingContent() {
   const router = useRouter();
@@ -60,7 +61,6 @@ function BookingContent() {
 
   const fetchRoomDetails = async () => {
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
       const response = await fetch(`${API_URL}/api/rooms/${bookingDetails.roomId}`);
       const data = await response.json();
       if (data.success) {
@@ -123,8 +123,6 @@ function BookingContent() {
     setIsProcessing(true);
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
       // Create booking
       const bookingResponse = await fetch(`${API_URL}/api/bookings`, {
         method: 'POST',

@@ -29,19 +29,22 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   // Dark mode removed - light theme only
-    const [notificationModalOpen, setNotificationModalOpen] = useState(false);
+  const [notificationModalOpen, setNotificationModalOpen] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['Storekeeping']);
   const [unreadCount, setUnreadCount] = useState(0);
 
   // Fetch unread notification count
   useEffect(() => {
     const fetchUnreadCount = async () => {
+      if (!user) return;
+
       try {
         const response = await notificationsAPI.getUnreadCount();
         if (response.success && response.data) {
           setUnreadCount(response.data.count);
         } else {
-          // If API returns error, reset count to 0
+          // If API returns error, reset count to 0 and log it
+          console.warn('Failed to fetch unread count:', response.message);
           setUnreadCount(0);
         }
       } catch (error) {
@@ -50,38 +53,32 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       }
     };
 
-    if (user) {
-      fetchUnreadCount();
-      // Poll for updates every 30 seconds
-      const interval = setInterval(fetchUnreadCount, 30000);
-      return () => clearInterval(interval);
-    } else {
-      // Clear notifications if no user
-      setUnreadCount(0);
-    }
+    fetchUnreadCount();
+    // Poll for updates every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
   }, [user]);
 
   // Update unread count when notification modal closes
-  const handleNotificationModalClose = () => {
+  const handleNotificationModalClose = async () => {
     setNotificationModalOpen(false);
-    // Refresh unread count
-    notificationsAPI.getUnreadCount().then(response => {
+    try {
+      const response = await notificationsAPI.getUnreadCount();
       if (response.success && response.data) {
         setUnreadCount(response.data.count);
       } else {
-        // Reset count on error
         setUnreadCount(0);
       }
-    }).catch(error => {
+    } catch (error) {
       console.error('Error updating notification count:', error);
       setUnreadCount(0);
-    });
+    }
   };
 
   const toggleMenu = (menuName: string) => {
-    setExpandedMenus(prev => 
-      prev.includes(menuName) 
-        ? prev.filter(m => m !== menuName) 
+    setExpandedMenus(prev =>
+      prev.includes(menuName)
+        ? prev.filter(m => m !== menuName)
         : [...prev, menuName]
     );
   };

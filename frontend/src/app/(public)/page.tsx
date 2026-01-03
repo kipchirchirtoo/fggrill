@@ -119,7 +119,7 @@ export default function HomePage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Search for available rooms using Python Room Service
+  // Search for available rooms using bookingsAPI
   const handleSearch = async () => {
     if (!checkIn || !checkOut) {
       toast.error('Please select check-in and check-out dates');
@@ -135,23 +135,18 @@ export default function HomePage() {
     setHasSearched(true);
 
     try {
-      // Use Node.js backend for room availability
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const { bookingsAPI } = await import('@/lib/api');
       const totalGuests = adults + children;
 
-      const response = await fetch(
-        `${API_URL}/api/bookings/available?checkIn=${checkIn}&checkOut=${checkOut}&guests=${totalGuests}`
-      );
+      const response = await bookingsAPI.getAvailableRooms({
+        checkIn,
+        checkOut,
+        guests: totalGuests
+      });
 
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.success && data.data) {
+      if (response.success && response.data) {
         // Normalize room data from backend
-        const normalizedRooms = data.data.map((room: any) => {
+        const normalizedRooms = response.data.map((room: any) => {
           // Handle nested room_types data from Supabase join
           const roomType = room.type || {};
           // Use price_override if set, otherwise use room type's base_price
@@ -178,16 +173,16 @@ export default function HomePage() {
         if (normalizedRooms.length === 0) {
           toast.info('No rooms available for selected dates');
         } else {
-          const nights = data.nights || Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24));
+          const nights = response.nights || Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24));
           toast.success(`Found ${normalizedRooms.length} room(s) for ${nights} night(s)`);
         }
       } else {
         setAvailableRooms([]);
-        toast.error(data.detail || data.message || 'Failed to search rooms');
+        // Error toast is now handled by fetchAPI if showToast: true was used (which it is in getAvailableRooms)
       }
     } catch (error) {
       console.error('Search error:', error);
-      toast.error('Unable to connect to server. Please try again.');
+      // Error toast is handled by fetchAPI
       setAvailableRooms([]);
     } finally {
       setIsSearching(false);
@@ -273,7 +268,7 @@ export default function HomePage() {
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm border-b border-stone-200">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Image src="/fglogo.png" alt="Logo" width={40} height={40} className="object-contain" style={{ width: 'auto', height: 'auto' }} priority />
+            <Image src="/fglogo.png" alt="Logo" width={48} height={48} className="object-contain" priority />
             <div>
               <span className="font-semibold text-stone-900 text-lg">Famous Gate</span>
               <span className="text-xs text-amber-600 block -mt-1 font-medium">HOTEL</span>
@@ -1077,8 +1072,8 @@ export default function HomePage() {
                   key={index}
                   onClick={(e) => { e.stopPropagation(); setLightboxIndex(index); }}
                   className={`relative w-12 h-12 md:w-16 md:h-16 rounded-lg overflow-hidden flex-shrink-0 transition-all duration-200 ${index === lightboxIndex
-                      ? 'ring-2 ring-amber-500 scale-110'
-                      : 'opacity-50 hover:opacity-100'
+                    ? 'ring-2 ring-amber-500 scale-110'
+                    : 'opacity-50 hover:opacity-100'
                     }`}
                 >
                   <Image

@@ -18,6 +18,7 @@ import {
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { PYTHON_API_URL } from '@/lib/config';
 
 interface Booking {
   id: string;
@@ -203,7 +204,7 @@ function CheckOutModal({
   const handlePrintBill = async () => {
     setIsPrinting(true);
     try {
-      const response = await fetch('http://localhost:5001/api/reports/generate/checkout-bill', {
+      const response = await fetch(`${PYTHON_API_URL}/api/reports/generate/checkout-bill`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -250,7 +251,7 @@ function CheckOutModal({
     setIsSubmitting(true);
     try {
       // 1. Perform ML-based Anomaly Detection
-      const anomalyResponse = await fetch('http://localhost:5001/api/finance/verify-anomaly', {
+      const anomalyResponse = await fetch(`${PYTHON_API_URL}/api/finance/verify-anomaly`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

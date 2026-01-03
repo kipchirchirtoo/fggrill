@@ -3030,11 +3030,22 @@ router.put('/reservations/:id/status', protect, validateBranch, async (req, res)
 // POST /rooms - Create a new room
 router.post('/rooms', protect, async (req, res) => {
   try {
-    const { room_number, room_type, floor, rate_per_night, capacity, amenities, status, image_url, images } = req.body;
+    // Accept both camelCase and snake_case field names
+    const room_number = req.body.room_number || req.body.roomNumber;
+    const room_type = req.body.room_type || req.body.roomType || req.body.type;
+    const floor = req.body.floor;
+    const rate_per_night = req.body.rate_per_night || req.body.ratePerNight || req.body.priceOverride;
+    const capacity = req.body.capacity;
+    const amenities = req.body.amenities;
+    const status = req.body.status;
+    const image_url = req.body.image_url || req.body.imageUrl;
+    const images = req.body.images;
+
     const branchId = req.headers['x-branch-id'] || req.query.branch_id;
 
     console.log('Creating room - Request body:', req.body);
     console.log('Creating room - Branch ID:', branchId);
+    console.log('Creating room - Extracted fields:', { room_number, room_type, floor });
 
     // Validate branch ID
     if (!branchId) {
@@ -3045,10 +3056,11 @@ router.post('/rooms', protect, async (req, res) => {
     }
 
     // Validate required fields
-    if (!room_number || !room_type || !floor) {
+    if (!room_number || !room_type || floor === undefined || floor === null) {
       return res.status(400).json({
         success: false,
-        message: 'Room number, type, and floor are required'
+        message: 'Room number, type, and floor are required',
+        received: { room_number, room_type, floor, body: req.body }
       });
     }
 

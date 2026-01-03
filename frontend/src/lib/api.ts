@@ -24,9 +24,14 @@ const MAX_RETRIES = 2;
 // Exponential backoff for retries (ms)
 const getBackoffDelay = (retryCount: number) => Math.min(1000 * 2 ** retryCount, 5000);
 
-async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
+interface FetchOptions extends RequestInit {
+  showToast?: boolean;
+}
+
+async function fetchAPI<T>(endpoint: string, options?: FetchOptions): Promise<T> {
   let retries = 0;
   let lastError: Error | null = null;
+  const showToast = options?.showToast ?? false;
 
   while (retries <= MAX_RETRIES) {
     try {
@@ -71,8 +76,15 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
           }
         }
 
-        const error = await response.json().catch(() => ({ message: 'Request failed' }));
-        throw new Error(error.message || error.detail || 'Request failed');
+        const errorData = await response.json().catch(() => ({ message: 'Request failed' }));
+        const errorMessage = errorData.message || errorData.detail || errorData.error || `Request failed with status ${response.status}`;
+
+        if (showToast && typeof window !== 'undefined') {
+          const { toast } = await import('sonner');
+          toast.error(errorMessage);
+        }
+
+        throw new Error(errorMessage);
       }
 
       return response.json();
@@ -81,11 +93,15 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
 
       // Only retry on network errors or 500-level server errors
       // Don't retry 401 errors (token issues) or other client errors
-      const isNetworkError = lastError.message.includes('fetch');
-      const isServerError = lastError.message.includes('500');
-      const isTokenError = lastError.message.includes('Invalid or expired token');
+      const isNetworkError = lastError.message.includes('fetch') || lastError.message.includes('NetworkError');
+      const isServerError = lastError.message.includes('500') || lastError.message.includes('Internal Server Error');
+      const isTokenError = lastError.message.includes('Invalid or expired token') || lastError.message.includes('Unauthorized');
 
       if (!isNetworkError && !isServerError || isTokenError) {
+        if (showToast && typeof window !== 'undefined' && !isTokenError) {
+          const { toast } = await import('sonner');
+          toast.error(lastError.message);
+        }
         console.error(`API request error (not retrying):`, error);
         break; // Don't retry client errors, token issues, or other problems
       }
@@ -105,9 +121,10 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
   } as unknown as T;
 }
 
-async function fetchPythonAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
+async function fetchPythonAPI<T>(endpoint: string, options?: FetchOptions): Promise<T> {
   let retries = 0;
   let lastError: Error | null = null;
+  const showToast = options?.showToast ?? false;
 
   while (retries <= MAX_RETRIES) {
     try {
@@ -134,17 +151,28 @@ async function fetchPythonAPI<T>(endpoint: string, options?: RequestInit): Promi
       });
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: 'Request failed' }));
-        throw new Error(error.message || error.detail || 'Request failed');
+        const errorData = await response.json().catch(() => ({ message: 'Request failed' }));
+        const errorMessage = errorData.message || errorData.detail || errorData.error || `Request failed with status ${response.status}`;
+
+        if (showToast && typeof window !== 'undefined') {
+          const { toast } = await import('sonner');
+          toast.error(errorMessage);
+        }
+
+        throw new Error(errorMessage);
       }
 
       return response.json();
     } catch (error) {
       lastError = error instanceof Error ? error : new Error('Unknown error');
-      const isNetworkError = lastError.message.includes('fetch');
-      const isServerError = lastError.message.includes('500');
+      const isNetworkError = lastError.message.includes('fetch') || lastError.message.includes('NetworkError');
+      const isServerError = lastError.message.includes('500') || lastError.message.includes('Internal Server Error');
 
       if (!isNetworkError && !isServerError) {
+        if (showToast && typeof window !== 'undefined') {
+          const { toast } = await import('sonner');
+          toast.error(lastError.message);
+        }
         break;
       }
       retries++;
@@ -948,7 +976,7 @@ export const bookingsAPI = {
   },
   updateBooking: (id: string, data: any) => {
     // Map frontend field names to backend expected names
-    const backendData = {};
+    const backendData: Record<string, any> = {};
 
     // Map common fields that might be in different formats
     if (data.room_id || data.roomId) backendData['room_id'] = data.room_id || data.roomId;
@@ -976,11 +1004,20 @@ export const bookingsAPI = {
   checkOut: (id: string) => fetchAPI<any>(`/bookings/${id}/check-out`, { method: 'PUT' }),
   getBookingByConfirmation: (confirmationNumber: string, email: string) =>
     fetchAPI<any>(`/bookings/confirmation/${confirmationNumber}?email=${encodeURIComponent(email)}`),
-  getAvailableRooms: (checkIn: string, checkOut: string, guests?: number, branchId?: number) => {
-    const query = new URLSearchParams({ checkIn, checkOut });
-    if (guests) query.append('guests', String(guests));
-    if (branchId) query.append('branch_id', String(branchId));
-    return fetchAPI<any>(`/bookings/available?${query}`).then(response => {
+  getAvailableRooms: (checkInOrParams: string | { checkIn: string; checkOut: string; guests?: number; branchId?: number }, checkOut?: string, guests?: number, branchId?: number) => {
+    let params: { checkIn: string; checkOut: string; guests?: number; branchId?: number };
+
+    if (typeof checkInOrParams === 'object') {
+      params = checkInOrParams;
+    } else {
+      params = { checkIn: checkInOrParams, checkOut: checkOut!, guests, branchId };
+    }
+
+    const query = new URLSearchParams({ checkIn: params.checkIn, checkOut: params.checkOut });
+    if (params.guests) query.append('guests', String(params.guests));
+    if (params.branchId) query.append('branch_id', String(params.branchId));
+
+    return fetchAPI<any>(`/bookings/available?${query}`, { showToast: true }).then(response => {
       if (response.success && Array.isArray(response.data)) {
         response.data = response.data.map((room: any) => ({
           id: room.id,
@@ -995,7 +1032,7 @@ export const bookingsAPI = {
       }
       return response;
     });
-  }
+  },
 };
 
 // Helper function to calculate nights between two dates

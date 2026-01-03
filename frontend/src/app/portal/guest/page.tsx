@@ -26,10 +26,14 @@ import {
   Gift,
   AlertCircle,
   Bed,
-  Check
+  Check,
+  Star,
+  Award,
+  CheckCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth-context';
+import { API_URL, PYTHON_API_URL } from '@/lib/config';
 
 interface DashboardData {
   profile: any;
@@ -50,8 +54,7 @@ export default function GuestPortal() {
   const [loyaltyDetails, setLoyaltyDetails] = useState<any>(null);
   const [serviceRequests, setServiceRequests] = useState<any>(null);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-  const PYTHON_API_URL = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://localhost:5001';
+  // API_URL and PYTHON_API_URL are now imported from @/lib/config
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -87,7 +90,7 @@ export default function GuestPortal() {
     } finally {
       setLoading(false);
     }
-  }, [API_URL, PYTHON_API_URL, user?.id]);
+  }, [user?.id]);
 
   useEffect(() => {
     fetchDashboard();
@@ -157,8 +160,8 @@ export default function GuestPortal() {
                     key={item.id}
                     onClick={() => setActiveTab(item.id)}
                     className={`px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === item.id
-                        ? 'bg-neutral-100 text-neutral-900 font-medium'
-                        : 'text-neutral-500 hover:text-neutral-900'
+                      ? 'bg-neutral-100 text-neutral-900 font-medium'
+                      : 'text-neutral-500 hover:text-neutral-900'
                       }`}
                   >
                     {item.label}
@@ -209,8 +212,8 @@ export default function GuestPortal() {
               key={item.id}
               onClick={() => setActiveTab(item.id)}
               className={`px-3 py-1.5 text-sm rounded-md whitespace-nowrap transition-colors ${activeTab === item.id
-                  ? 'bg-neutral-100 text-neutral-900 font-medium'
-                  : 'text-neutral-500'
+                ? 'bg-neutral-100 text-neutral-900 font-medium'
+                : 'text-neutral-500'
                 }`}
             >
               {item.label}
@@ -345,8 +348,8 @@ export default function GuestPortal() {
                           </div>
                         </div>
                         <span className={`text-xs px-2 py-0.5 rounded capitalize ${booking.status === 'checked_in' ? 'bg-neutral-900 text-white' :
-                            booking.status === 'confirmed' ? 'bg-neutral-200 text-neutral-700' :
-                              'bg-neutral-100 text-neutral-600'
+                          booking.status === 'confirmed' ? 'bg-neutral-200 text-neutral-700' :
+                            'bg-neutral-100 text-neutral-600'
                           }`}>
                           {booking.status?.replace('_', ' ')}
                         </span>
@@ -378,8 +381,8 @@ export default function GuestPortal() {
                           <p className="text-xs text-neutral-500 capitalize">{request.request_type?.replace('_', ' ')}</p>
                         </div>
                         <span className={`text-xs px-2 py-0.5 rounded capitalize ${request.status === 'completed' ? 'bg-neutral-900 text-white' :
-                            request.status === 'in_progress' ? 'bg-neutral-200 text-neutral-700' :
-                              'bg-neutral-100 text-neutral-700'
+                          request.status === 'in_progress' ? 'bg-neutral-200 text-neutral-700' :
+                            'bg-neutral-100 text-neutral-700'
                           }`}>
                           {request.status?.replace('_', ' ')}
                         </span>
@@ -425,19 +428,19 @@ export default function GuestPortal() {
           </div>
         )}
 
-        {activeTab === 'bookings' && <BookingsTab API_URL={API_URL} />}
-        {activeTab === 'requests' && <RequestsTab API_URL={API_URL} activeBooking={data?.activeBooking} onRefresh={fetchDashboard} />}
-        {activeTab === 'amenities' && <AmenitiesTab API_URL={API_URL} amenities={data?.amenities || []} />}
-        {activeTab === 'loyalty' && <LoyaltyTab API_URL={API_URL} loyalty={data?.loyalty} />}
-        {activeTab === 'messages' && <MessagesTab API_URL={API_URL} activeBooking={data?.activeBooking} />}
-        {activeTab === 'profile' && <ProfileTab API_URL={API_URL} user={user} profile={data?.profile} />}
+        {activeTab === 'bookings' && <BookingsTab />}
+        {activeTab === 'requests' && <RequestsTab activeBooking={data?.activeBooking} onRefresh={fetchDashboard} />}
+        {activeTab === 'amenities' && <AmenitiesTab amenities={data?.amenities || []} />}
+        {activeTab === 'loyalty' && <LoyaltyTab loyalty={data?.loyalty} />}
+        {activeTab === 'messages' && <MessagesTab activeBooking={data?.activeBooking} />}
+        {activeTab === 'profile' && <ProfileTab user={user} profile={data?.profile} />}
       </main>
     </div>
   );
 }
 
 // Bookings Tab Component
-function BookingsTab({ API_URL }: { API_URL: string }) {
+function BookingsTab() {
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -459,7 +462,7 @@ function BookingsTab({ API_URL }: { API_URL: string }) {
       }
     };
     fetchBookings();
-  }, [API_URL]);
+  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -531,7 +534,7 @@ function BookingsTab({ API_URL }: { API_URL: string }) {
 }
 
 // Requests Tab Component
-function RequestsTab({ API_URL, activeBooking, onRefresh }: { API_URL: string; activeBooking: any; onRefresh: () => void }) {
+function RequestsTab({ activeBooking, onRefresh }: { activeBooking: any; onRefresh: () => void }) {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -558,7 +561,7 @@ function RequestsTab({ API_URL, activeBooking, onRefresh }: { API_URL: string; a
     } finally {
       setLoading(false);
     }
-  }, [API_URL]);
+  }, []);
 
   useEffect(() => {
     fetchRequests();
@@ -750,7 +753,7 @@ function RequestsTab({ API_URL, activeBooking, onRefresh }: { API_URL: string; a
 }
 
 // Amenities Tab Component
-function AmenitiesTab({ API_URL, amenities }: { API_URL: string; amenities: any[] }) {
+function AmenitiesTab({ amenities }: { amenities: any[] }) {
   const getCategoryIcon = (category: string) => {
     switch (category) {
       case 'dining': return Utensils;
@@ -823,7 +826,7 @@ function AmenitiesTab({ API_URL, amenities }: { API_URL: string; amenities: any[
 }
 
 // Loyalty Tab Component
-function LoyaltyTab({ API_URL, loyalty }: { API_URL: string; loyalty: any }) {
+function LoyaltyTab({ loyalty }: { loyalty: any }) {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -845,7 +848,7 @@ function LoyaltyTab({ API_URL, loyalty }: { API_URL: string; loyalty: any }) {
       }
     };
     fetchLoyalty();
-  }, [API_URL]);
+  }, []);
 
   const getTierBenefits = (tier: string) => {
     const benefits: Record<string, string[]> = {
@@ -878,8 +881,8 @@ function LoyaltyTab({ API_URL, loyalty }: { API_URL: string; loyalty: any }) {
     );
   }
 
-  const nextTier = getNextTier(loyalty?.tier || 'bronze');
-  const pointsNeeded = getPointsToNextTier(loyalty?.tier || 'bronze', loyalty?.total_points || 0);
+  const nextTier = loyalty?.tier ? getNextTier(loyalty.tier) : 'bronze';
+  const pointsNeeded = loyalty?.tier ? getPointsToNextTier(loyalty.tier, loyalty.total_points || 0) : 5000;
 
   return (
     <div className="space-y-6">
@@ -968,7 +971,7 @@ function LoyaltyTab({ API_URL, loyalty }: { API_URL: string; loyalty: any }) {
 }
 
 // Messages Tab Component
-function MessagesTab({ API_URL, activeBooking }: { API_URL: string; activeBooking: any }) {
+function MessagesTab({ activeBooking }: { activeBooking: any }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [newMessage, setNewMessage] = useState('');
@@ -989,7 +992,7 @@ function MessagesTab({ API_URL, activeBooking }: { API_URL: string; activeBookin
     } finally {
       setLoading(false);
     }
-  }, [API_URL]);
+  }, []);
 
   useEffect(() => {
     fetchMessages();
@@ -1046,8 +1049,8 @@ function MessagesTab({ API_URL, activeBooking }: { API_URL: string; activeBookin
               >
                 <div
                   className={`max-w-[80%] p-4 rounded-2xl ${msg.sender_type === 'guest'
-                      ? 'bg-neutral-900 text-white rounded-br-md'
-                      : 'bg-neutral-100 text-neutral-900 rounded-bl-md'
+                    ? 'bg-neutral-900 text-white rounded-br-md'
+                    : 'bg-neutral-100 text-neutral-900 rounded-bl-md'
                     }`}
                 >
                   <p>{msg.message}</p>
@@ -1092,7 +1095,7 @@ function MessagesTab({ API_URL, activeBooking }: { API_URL: string; activeBookin
 }
 
 // Profile Tab Component
-function ProfileTab({ API_URL, user, profile }: { API_URL: string; user: any; profile: any }) {
+function ProfileTab({ user, profile }: { user: any; profile: any }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
