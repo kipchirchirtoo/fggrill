@@ -1811,6 +1811,48 @@ export const restaurantAPI = {
   },
 };
 
+export const wastageAPI = {
+  createWastageRecord: (data: any) =>
+    fetchAPI<{ success: boolean; data: any }>('/wastage', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      showToast: true
+    }),
+
+  bulkCreateWastageRecords: (records: any[]) =>
+    fetchAPI<{ success: boolean; message: string; data: any }>('/wastage/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ records }),
+      showToast: true
+    }),
+
+  getWastageRecords: (filters?: any) => {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) params.append(key, value as string);
+      });
+    }
+    return fetchAPI<{ success: boolean; data: any }>(`/wastage?${params.toString()}`);
+  },
+
+  getWastageSummary: (period: string = '30d') =>
+    fetchAPI<{ success: boolean; data: any }>(`/wastage/summary?period=${period}`),
+
+  updateWastageRecord: (id: string, data: any) =>
+    fetchAPI<{ success: boolean; data: any }>(`/wastage/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      showToast: true
+    }),
+
+  deleteWastageRecord: (id: string) =>
+    fetchAPI<{ success: boolean; data: any }>(`/wastage/${id}`, {
+      method: 'DELETE',
+      showToast: true
+    }),
+};
+
 // =====================================================
 // RECEIPTS API (Python Microservice)
 // =====================================================

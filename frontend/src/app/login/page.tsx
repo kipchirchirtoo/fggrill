@@ -62,9 +62,9 @@ export default function LoginPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#FAFAF8] flex">
+    <div className="min-h-screen bg-[#FAFAF8] flex items-center justify-center lg:block">
       {/* Left Panel - Branding */}
-      <div className="hidden lg:flex lg:w-[48%] bg-stone-900 relative overflow-hidden">
+      <div className="hidden lg:flex lg:w-[48%] bg-stone-900 relative h-full overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-stone-800 via-stone-900 to-stone-950" />
         <div className="absolute inset-0 opacity-[0.02]" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%23ffffff" fill-opacity="1"%3E%3Cpath d="M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")' }} />
 
@@ -173,8 +173,8 @@ export default function LoginPage() {
                   value={formData.email}
                   onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                   className={`w-full pl-11 pr-4 py-3 bg-white border rounded-xl text-[15px] text-stone-900 placeholder:text-stone-400 transition-all duration-200 focus:outline-none focus:ring-2 ${errors.email
-                      ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
-                      : 'border-stone-200 focus:border-stone-400 focus:ring-stone-100'
+                    ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
+                    : 'border-stone-200 focus:border-stone-400 focus:ring-stone-100'
                     }`}
                   placeholder="you@famousgate.com"
                   autoComplete="email"
@@ -192,8 +192,8 @@ export default function LoginPage() {
                   value={formData.password}
                   onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                   className={`w-full pl-11 pr-12 py-3 bg-white border rounded-xl text-[15px] text-stone-900 placeholder:text-stone-400 transition-all duration-200 focus:outline-none focus:ring-2 ${errors.password
-                      ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
-                      : 'border-stone-200 focus:border-stone-400 focus:ring-stone-100'
+                    ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
+                    : 'border-stone-200 focus:border-stone-400 focus:ring-stone-100'
                     }`}
                   placeholder="Enter your password"
                   autoComplete="current-password"

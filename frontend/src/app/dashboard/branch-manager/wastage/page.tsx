@@ -5,11 +5,11 @@ import { useAuth, UserRole } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { restaurantAPI } from '@/lib/api';
-import { 
+import { wastageAPI } from '@/lib/api';
+import {
   Trash2, RefreshCw, AlertTriangle, TrendingDown, Calendar,
   Flame, Timer, Ban, RotateCcw, Search, HelpCircle, Download,
-  Filter, ChevronDown
+  Filter, ChevronDown, Truck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -25,12 +25,17 @@ interface WastageRecord {
   cost_impact: number;
   description?: string;
   logged_by_name?: string;
+  user?: {
+    first_name: string;
+    last_name: string;
+    email: string;
+  };
   logged_at: string;
   branch_id?: number;
   branch_name?: string;
 }
 
-type WasteReason = 'spoilage' | 'expiry' | 'damage' | 'overcooking' | 'customer_return' | 'quality_control' | 'other';
+type WasteReason = 'spoilage' | 'expiry' | 'damage' | 'overcooking' | 'customer_return' | 'quality_control' | 'damaged_in_transit' | 'other';
 
 const wasteReasonConfig: Record<WasteReason, { label: string; color: string; icon: any; bgColor: string }> = {
   spoilage: { label: 'Spoilage', color: 'text-red-700', icon: AlertTriangle, bgColor: 'bg-red-100' },
@@ -39,6 +44,7 @@ const wasteReasonConfig: Record<WasteReason, { label: string; color: string; ico
   overcooking: { label: 'Overcooked', color: 'text-amber-700', icon: Flame, bgColor: 'bg-amber-100' },
   customer_return: { label: 'Customer Return', color: 'text-blue-700', icon: RotateCcw, bgColor: 'bg-blue-100' },
   quality_control: { label: 'Quality Control', color: 'text-yellow-700', icon: Search, bgColor: 'bg-yellow-100' },
+  damaged_in_transit: { label: 'Damaged in Transit', color: 'text-indigo-700', icon: Truck, bgColor: 'bg-indigo-100' },
   other: { label: 'Other', color: 'text-gray-700', icon: HelpCircle, bgColor: 'bg-gray-100' },
 };
 
@@ -49,7 +55,7 @@ export default function BranchManagerWastagePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [period, setPeriod] = useState<'today' | 'week' | 'month'>('week');
   const [filterReason, setFilterReason] = useState<string>('all');
-  
+
   // Stats
   const [stats, setStats] = useState({
     totalRecords: 0,
@@ -61,26 +67,20 @@ export default function BranchManagerWastagePage() {
     setIsLoading(true);
     try {
       const [recordsRes, summaryRes] = await Promise.all([
-        restaurantAPI.getWastageRecords(),
-        restaurantAPI.getWastageSummary(period),
+        wastageAPI.getWastageRecords(),
+        wastageAPI.getWastageSummary(period === 'today' ? '1d' : period === 'week' ? '7d' : '30d'),
       ]);
 
       if (recordsRes.success) {
         setWastageRecords(recordsRes.data || []);
-        setStats({
-          totalRecords: recordsRes.summary?.totalRecords || recordsRes.data?.length || 0,
-          totalCost: recordsRes.summary?.totalCost || 0,
-          byReason: recordsRes.summary?.byReason || {},
-        });
       }
-      
+
       if (summaryRes.success && summaryRes.data) {
-        setStats(prev => ({
-          ...prev,
-          totalRecords: summaryRes.data.totalRecords || prev.totalRecords,
-          totalCost: summaryRes.data.totalCost || prev.totalCost,
-          byReason: summaryRes.data.byReason || prev.byReason,
-        }));
+        setStats({
+          totalRecords: summaryRes.data.totalItems || 0,
+          totalCost: summaryRes.data.totalCost || 0,
+          byReason: summaryRes.data.byReason || {},
+        });
       }
     } catch (error) {
       console.error('Error fetching wastage data:', error);
@@ -94,7 +94,7 @@ export default function BranchManagerWastagePage() {
     fetchData();
   }, [fetchData]);
 
-  const filteredRecords = wastageRecords.filter(record => 
+  const filteredRecords = wastageRecords.filter(record =>
     filterReason === 'all' || record.reason === filterReason
   );
 
@@ -129,11 +129,10 @@ export default function BranchManagerWastagePage() {
                   <button
                     key={p}
                     onClick={() => setPeriod(p)}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                      period === p 
-                        ? 'bg-white text-gray-900 shadow-sm' 
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${period === p
+                        ? 'bg-white text-gray-900 shadow-sm'
                         : 'text-gray-600 hover:text-gray-900'
-                    }`}
+                      }`}
                   >
                     {p.charAt(0).toUpperCase() + p.slice(1)}
                   </button>
@@ -203,7 +202,7 @@ export default function BranchManagerWastagePage() {
                   const total = stats.totalRecords || 1;
                   const percentage = Math.round((count / total) * 100);
                   const Icon = config.icon;
-                  
+
                   return (
                     <div key={key} className="flex items-center gap-3">
                       <div className={`p-1.5 rounded ${config.bgColor}`}>
@@ -215,7 +214,7 @@ export default function BranchManagerWastagePage() {
                           <span className="font-medium">{count}</span>
                         </div>
                         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div 
+                          <div
                             className={`h-full ${config.bgColor.replace('100', '500')}`}
                             style={{ width: `${percentage}%` }}
                           />
@@ -289,7 +288,7 @@ export default function BranchManagerWastagePage() {
                 {filteredRecords.map((record) => {
                   const reasonConfig = wasteReasonConfig[record.reason as WasteReason] || wasteReasonConfig.other;
                   const Icon = reasonConfig.icon;
-                  
+
                   return (
                     <div key={record.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
                       <div className="flex items-center gap-4">
@@ -311,9 +310,11 @@ export default function BranchManagerWastagePage() {
                         <p className="text-xs text-gray-400">
                           {new Date(record.logged_at).toLocaleDateString()}
                         </p>
-                        {record.logged_by_name && (
+                        {record.user ? (
+                          <p className="text-xs text-gray-400">by {record.user.first_name} {record.user.last_name}</p>
+                        ) : record.logged_by_name ? (
                           <p className="text-xs text-gray-400">by {record.logged_by_name}</p>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                   );

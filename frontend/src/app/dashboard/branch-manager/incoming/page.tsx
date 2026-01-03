@@ -6,6 +6,7 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { BranchPageWrapper } from '@/components/branch/branch-page-wrapper';
 import { branchManagerAPI } from '@/lib/branch-api';
+import { wastageAPI } from '@/lib/api';
 import { toast } from 'sonner';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -245,6 +246,7 @@ function ConfirmDeliveryModal({
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
+      // 1. Confirm the delivery
       const response = await branchManagerAPI.confirmDispatchDelivery(dispatch.id, {
         items_received: items.map((item) => ({
           item_id: item.id,
@@ -256,7 +258,31 @@ function ConfirmDeliveryModal({
       });
 
       if (response.success) {
-        toast.success('Delivery confirmed successfully');
+        // 2. Record wastage for damaged items
+        const damagedItems = items.filter(item => (item.damaged_quantity || 0) > 0);
+
+        if (damagedItems.length > 0) {
+          const wastageRecords = damagedItems.map(item => ({
+            item_name: item.item?.item_name || item.item_sku,
+            item_id: item.item_sku,
+            item_type: 'inventory',
+            quantity: item.damaged_quantity,
+            unit: item.item?.unit || 'unit',
+            reason: 'damaged_in_transit',
+            description: `Damaged during delivery: ${dispatch.dispatch_number}. Notes: ${notes}`
+          }));
+
+          try {
+            await wastageAPI.bulkCreateWastageRecords(wastageRecords);
+            toast.success(`Delivery confirmed and ${wastageRecords.length} wastage records created`);
+          } catch (wastageError) {
+            console.error('Error recording wastage:', wastageError);
+            toast.warning('Delivery confirmed but failed to record wastage automatically');
+          }
+        } else {
+          toast.success('Delivery confirmed successfully');
+        }
+
         onSuccess();
       } else {
         toast.error(response.message || 'Failed to confirm delivery');

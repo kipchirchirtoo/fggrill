@@ -298,7 +298,7 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
   const tax = total - subtotal;
 
   return (
-    <div className="flex gap-4 h-full">
+    <div className="flex flex-col lg:flex-row gap-4 h-full">
       {/* Menu Items */}
       <div className="flex-1 overflow-hidden">
         <div className="bg-white border border-gray-200 rounded-lg h-full flex flex-col">
@@ -320,8 +320,8 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
             <div className="flex gap-2 overflow-x-auto pb-2">
               <button
                 className={`px-3 py-1 text-sm rounded whitespace-nowrap ${selectedCategory === 'all'
-                    ? 'bg-gray-900 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-gray-900 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 onClick={() => setSelectedCategory('all')}
               >
@@ -331,8 +331,8 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
                 <button
                   key={cat.id}
                   className={`px-3 py-1 text-sm rounded whitespace-nowrap ${selectedCategory === cat.id
-                      ? 'bg-gray-900 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-gray-900 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   onClick={() => setSelectedCategory(cat.id)}
                 >
@@ -367,7 +367,7 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
       </div>
 
       {/* Cart & Orders */}
-      <div className="w-80 flex flex-col gap-4">
+      <div className="w-full lg:w-80 flex flex-col gap-4">
         {/* Current Order */}
         <div className="bg-white border border-gray-200 rounded-lg flex-1 flex flex-col">
           <div className="p-4 border-b border-gray-200">
@@ -379,8 +379,8 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
                 <button
                   key={type}
                   className={`px-3 py-1 text-sm rounded ${orderType === type
-                      ? 'bg-gray-900 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-gray-900 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   onClick={() => setOrderType(type)}
                 >
@@ -497,8 +497,8 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
                   <button
                     key={method}
                     className={`px-3 py-1 text-sm rounded ${paymentMethod === method
-                        ? 'bg-gray-900 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'bg-gray-900 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }`}
                     onClick={() => setPaymentMethod(method)}
                   >

@@ -72,17 +72,23 @@
     letter-spacing: -0.011em;
   }
   
-  /* Typography scale - intentional hierarchy */
+  /* Typography scale - intentional hierarchy with fluid scaling */
   h1, .h1 {
-    @apply text-[28px] leading-[34px] font-semibold tracking-[-0.02em] text-stone-900;
+    @apply font-semibold tracking-[-0.02em] text-stone-900;
+    font-size: clamp(22px, 5vw, 28px);
+    line-height: 1.2;
   }
   
   h2, .h2 {
-    @apply text-[22px] leading-[28px] font-semibold tracking-[-0.015em] text-stone-900;
+    @apply font-semibold tracking-[-0.015em] text-stone-900;
+    font-size: clamp(18px, 4vw, 22px);
+    line-height: 1.3;
   }
   
   h3, .h3 {
-    @apply text-[18px] leading-[24px] font-medium tracking-[-0.01em] text-stone-800;
+    @apply font-medium tracking-[-0.01em] text-stone-800;
+    font-size: clamp(16px, 3vw, 18px);
+    line-height: 1.4;
   }
   
   h4, .h4 {
@@ -100,6 +106,12 @@
   
   .caption {
     @apply text-[11px] leading-[14px] font-medium uppercase tracking-[0.04em] text-stone-400;
+  }
+
+  /* Responsive Table Wrapper */
+  .table-responsive {
+    @apply w-full overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0;
+    -webkit-overflow-scrolling: touch;
   }
 }
 

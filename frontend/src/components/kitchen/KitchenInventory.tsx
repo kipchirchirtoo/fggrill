@@ -9,7 +9,7 @@ import {
   ChefHat, Thermometer, Scale, Timer, AlertCircle, Send
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { restaurantAPI, storeAPI } from '@/lib/api';
+import { restaurantAPI, storeAPI, wastageAPI } from '@/lib/api';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSBadge } from '@/components/ui/ios-badge';
@@ -61,7 +61,7 @@ interface KitchenInventoryProps {
 }
 
 const CATEGORIES = [
-  'Proteins', 'Vegetables', 'Fruits', 'Dairy', 'Grains', 
+  'Proteins', 'Vegetables', 'Fruits', 'Dairy', 'Grains',
   'Spices', 'Oils', 'Beverages', 'Frozen', 'Dry Goods', 'Other'
 ];
 
@@ -76,23 +76,23 @@ export function KitchenInventory({ branchId, compact = false }: KitchenInventory
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [sortBy, setSortBy] = useState<'name' | 'quantity' | 'expiry' | 'status'>('status');
-  
+
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isConsumeModalOpen, setIsConsumeModalOpen] = useState(false);
   const [isWastageModalOpen, setIsWastageModalOpen] = useState(false);
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
-  
+
   // Form states
   const [consumeQuantity, setConsumeQuantity] = useState(1);
   const [consumeReason, setConsumeReason] = useState('');
   const [wastageQuantity, setWastageQuantity] = useState(1);
   const [wastageReason, setWastageReason] = useState('');
-  
+
   // Request cart
   const [requestItems, setRequestItems] = useState<{ item: InventoryItem; quantity: number }[]>([]);
-  
+
   // Stats
   const [stats, setStats] = useState({
     totalItems: 0,
@@ -111,7 +111,7 @@ export function KitchenInventory({ branchId, compact = false }: KitchenInventory
     try {
       // Try restaurant inventory first, fallback to store API
       let inventoryData: any[] = [];
-      
+
       try {
         const response = await restaurantAPI.getMenuItems();
         const menuItems = response.data || response || [];
@@ -128,7 +128,7 @@ export function KitchenInventory({ branchId, compact = false }: KitchenInventory
         const minLevel = item.min_level || item.reorder_level || 10;
         const expiryDate = item.expiry_date;
         const isExpired = expiryDate && new Date(expiryDate) < new Date();
-        const isExpiringSoon = expiryDate && !isExpired && 
+        const isExpiringSoon = expiryDate && !isExpired &&
           new Date(expiryDate) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
         let status: InventoryItem['status'] = 'sufficient';
@@ -189,7 +189,7 @@ export function KitchenInventory({ branchId, compact = false }: KitchenInventory
 
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      result = result.filter(i => 
+      result = result.filter(i =>
         i.name.toLowerCase().includes(term) ||
         i.sku.toLowerCase().includes(term)
       );
@@ -253,19 +253,33 @@ export function KitchenInventory({ branchId, compact = false }: KitchenInventory
     if (!selectedItem || wastageQuantity <= 0 || !wastageReason) return;
 
     try {
+      // 1. Record stock out
       await storeAPI.recordStockOut({
         item_sku: selectedItem.sku,
         quantity: wastageQuantity,
         reason: `Wastage: ${wastageReason}`,
-        notes: `Wastage recorded - Cost: KES ${(wastageQuantity * selectedItem.cost_per_unit).toLocaleString()}`
+        notes: `Wastage recorded from kitchen inventory`
       });
 
-      toast.success('Wastage recorded');
+      // 2. Record wastage in wastage_records table
+      await wastageAPI.createWastageRecord({
+        item_name: selectedItem.name,
+        item_id: selectedItem.sku,
+        item_type: 'inventory',
+        quantity: wastageQuantity,
+        unit: selectedItem.unit,
+        reason: wastageReason.toLowerCase().replace(' ', '_'),
+        cost_impact: wastageQuantity * selectedItem.cost_per_unit,
+        description: `Wastage recorded from kitchen inventory. Reason: ${wastageReason}`
+      });
+
+      toast.success('Wastage recorded successfully');
       setIsWastageModalOpen(false);
       setWastageQuantity(1);
       setWastageReason('');
       fetchInventory();
     } catch (error) {
+      console.error('Error recording wastage:', error);
       toast.error('Failed to record wastage');
     }
   };
@@ -338,7 +352,7 @@ export function KitchenInventory({ branchId, compact = false }: KitchenInventory
           <IOSButton variant="outline" onClick={fetchInventory}>
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </IOSButton>
-          <IOSButton 
+          <IOSButton
             variant="outline"
             onClick={() => setIsRequestModalOpen(true)}
             className="relative"
@@ -464,10 +478,9 @@ export function KitchenInventory({ branchId, compact = false }: KitchenInventory
               key={item.id}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className={`p-4 hover:bg-gray-50 transition-colors ${
-                item.status === 'expired' || item.status === 'critical' ? 'bg-red-50' :
-                item.status === 'low' ? 'bg-yellow-50' : ''
-              }`}
+              className={`p-4 hover:bg-gray-50 transition-colors ${item.status === 'expired' || item.status === 'critical' ? 'bg-red-50' :
+                  item.status === 'low' ? 'bg-yellow-50' : ''
+                }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4 flex-1">
@@ -691,8 +704,8 @@ export function KitchenInventory({ branchId, compact = false }: KitchenInventory
               <IOSButton variant="outline" className="flex-1" onClick={() => setIsRequestModalOpen(false)}>
                 Cancel
               </IOSButton>
-              <IOSButton 
-                className="flex-1 bg-[#3C3C43]" 
+              <IOSButton
+                className="flex-1 bg-[#3C3C43]"
                 onClick={submitRequest}
                 disabled={requestItems.length === 0}
               >

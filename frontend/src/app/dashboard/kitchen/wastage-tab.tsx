@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { restaurantAPI } from '@/lib/api';
-import { 
+import { restaurantAPI, wastageAPI } from '@/lib/api';
+import {
   Trash2, Plus, RefreshCw, AlertTriangle, Package, Search,
   Flame, RotateCcw, Ban, Timer, HelpCircle, TrendingDown, Check,
   Edit2, MoreVertical, X
@@ -32,6 +32,10 @@ interface WastageRecord {
   cost_impact: number;
   description?: string;
   logged_by_name?: string;
+  user?: {
+    first_name: string;
+    last_name: string;
+  };
   logged_at: string;
 }
 
@@ -57,7 +61,7 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
   const [wastageRecords, setWastageRecords] = useState<WastageRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Modal state
   const [showRecordModal, setShowRecordModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -65,7 +69,7 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
   const [editingRecord, setEditingRecord] = useState<WastageRecord | null>(null);
   const [deletingRecord, setDeletingRecord] = useState<WastageRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  
+
   // Form states
   const [selectedItem, setSelectedItem] = useState<WastageItem | null>(null);
   const [customItemName, setCustomItemName] = useState('');
@@ -86,21 +90,25 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [itemsRes, recordsRes] = await Promise.all([
+      const [itemsRes, recordsRes, summaryRes] = await Promise.all([
         restaurantAPI.getWastageItems(),
-        restaurantAPI.getWastageRecords(),
+        wastageAPI.getWastageRecords(),
+        wastageAPI.getWastageSummary('30d'),
       ]);
 
       if (itemsRes.success) {
         setWastageItems(itemsRes.data || []);
       }
-      
+
       if (recordsRes.success) {
         setWastageRecords(recordsRes.data || []);
+      }
+
+      if (summaryRes.success && summaryRes.data) {
         setStats({
-          totalRecords: recordsRes.summary?.totalRecords || recordsRes.data?.length || 0,
-          totalCost: recordsRes.summary?.totalCost || 0,
-          byReason: recordsRes.summary?.byReason || {},
+          totalRecords: summaryRes.data.totalItems || 0,
+          totalCost: summaryRes.data.totalCost || 0,
+          byReason: summaryRes.data.byReason || {},
         });
       }
     } catch (error) {
@@ -115,7 +123,7 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
     fetchData();
   }, [fetchData]);
 
-  const filteredItems = wastageItems.filter(item => 
+  const filteredItems = wastageItems.filter(item =>
     item.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -132,7 +140,7 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
 
     setIsSubmitting(true);
     try {
-      await restaurantAPI.createWastageRecord({
+      await wastageAPI.createWastageRecord({
         item_name: itemName,
         item_id: selectedItem?.id,
         quantity,
@@ -141,7 +149,7 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
         cost_impact: costImpact || (selectedItem?.cost ? selectedItem.cost * quantity : 0),
         description: description || undefined,
       });
-      
+
       toast.success('Wastage recorded successfully');
       setShowRecordModal(false);
       resetForm();
@@ -179,7 +187,7 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
 
   const handleUpdateWastage = async () => {
     if (!editingRecord) return;
-    
+
     const itemName = selectedItem?.name || customItemName;
     if (!itemName) {
       toast.error('Please enter an item name');
@@ -192,7 +200,7 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
 
     setIsSubmitting(true);
     try {
-      await restaurantAPI.updateWastageRecord(editingRecord.id, {
+      await wastageAPI.updateWastageRecord(editingRecord.id, {
         item_name: itemName,
         quantity,
         unit: selectedItem?.unit || unit,
@@ -200,7 +208,7 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
         cost_impact: costImpact,
         description: description || undefined,
       });
-      
+
       toast.success('Wastage record updated successfully');
       setShowEditModal(false);
       resetForm();
@@ -215,10 +223,10 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
 
   const handleDeleteRecord = async () => {
     if (!deletingRecord) return;
-    
+
     setIsDeleting(true);
     try {
-      await restaurantAPI.deleteWastageRecord(deletingRecord.id);
+      await wastageAPI.deleteWastageRecord(deletingRecord.id);
       toast.success('Wastage record deleted successfully');
       setShowDeleteConfirm(false);
       setDeletingRecord(null);
@@ -276,13 +284,13 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <h2 className="text-base font-medium text-gray-900">Wastage Records</h2>
         <div className="flex gap-2">
-          <button 
+          <button
             onClick={fetchData}
             className="px-3 py-2 border border-gray-300 text-gray-700 rounded text-sm font-medium hover:bg-gray-50"
           >
             Refresh
           </button>
-          <button 
+          <button
             onClick={() => setShowRecordModal(true)}
             className="px-3 py-2 bg-red-600 text-white rounded text-sm font-medium hover:bg-red-700"
           >
@@ -296,7 +304,7 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
         <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
           <p className="text-gray-500 mb-1">No wastage recorded yet</p>
           <p className="text-sm text-gray-400 mb-4">Record food waste to track losses</p>
-          <button 
+          <button
             onClick={() => setShowRecordModal(true)}
             className="px-4 py-2 bg-red-600 text-white rounded text-sm font-medium hover:bg-red-700"
           >
@@ -308,7 +316,7 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
           {wastageRecords.map((record) => {
             const reasonConfig = wasteReasonConfig[record.reason as WasteReason] || wasteReasonConfig.other;
             const Icon = reasonConfig.icon;
-            
+
             return (
               <div key={record.id} className="bg-white border border-gray-200 rounded-lg p-4">
                 <div className="flex items-center justify-between">
@@ -334,9 +342,11 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
                       <p className="text-xs text-gray-400">
                         {new Date(record.logged_at).toLocaleDateString()} {new Date(record.logged_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
-                      {record.logged_by_name && (
+                      {record.user ? (
+                        <p className="text-xs text-gray-400">by {record.user.first_name} {record.user.last_name}</p>
+                      ) : record.logged_by_name ? (
                         <p className="text-xs text-gray-400">by {record.logged_by_name}</p>
-                      )}
+                      ) : null}
                     </div>
                     <div className="flex gap-1">
                       <button
@@ -389,7 +399,7 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
                   className="w-full h-10 pl-9 pr-4 text-sm bg-gray-100 border-0 rounded-lg focus:ring-2 focus:ring-red-500"
                 />
               </div>
-              
+
               {/* Item suggestions */}
               {searchQuery && !selectedItem && filteredItems.length > 0 && (
                 <div className="max-h-32 overflow-y-auto border rounded-lg mb-2">
@@ -405,7 +415,7 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
                   ))}
                 </div>
               )}
-              
+
               {selectedItem && (
                 <div className="bg-red-50 border border-red-200 p-2 rounded-lg flex items-center justify-between">
                   <div>
@@ -429,11 +439,10 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
                     <button
                       key={key}
                       onClick={() => setReason(key)}
-                      className={`p-2 rounded-lg border-2 text-center transition-all ${
-                        reason === key 
-                          ? `border-red-500 ${config.bgColor}` 
+                      className={`p-2 rounded-lg border-2 text-center transition-all ${reason === key
+                          ? `border-red-500 ${config.bgColor}`
                           : 'border-gray-200 hover:border-gray-300'
-                      }`}
+                        }`}
                     >
                       <Icon className={`h-4 w-4 mx-auto mb-1 ${config.color}`} />
                       <p className={`text-xs font-medium ${config.color}`}>{config.label}</p>
@@ -505,14 +514,14 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
 
             {/* Actions */}
             <div className="flex gap-2 pt-4">
-              <IOSButton 
-                variant="secondary" 
+              <IOSButton
+                variant="secondary"
                 className="flex-1"
                 onClick={() => { setShowRecordModal(false); resetForm(); }}
               >
                 Cancel
               </IOSButton>
-              <IOSButton 
+              <IOSButton
                 className="flex-1"
                 onClick={handleRecordWastage}
                 disabled={isSubmitting || (!selectedItem && !customItemName)}
@@ -556,11 +565,10 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
                     <button
                       key={key}
                       onClick={() => setReason(key)}
-                      className={`p-2 rounded-lg border-2 text-center transition-all ${
-                        reason === key 
-                          ? `border-stone-500 ${config.bgColor}` 
+                      className={`p-2 rounded-lg border-2 text-center transition-all ${reason === key
+                          ? `border-stone-500 ${config.bgColor}`
                           : 'border-gray-200 hover:border-gray-300'
-                      }`}
+                        }`}
                     >
                       <Icon className={`h-4 w-4 mx-auto mb-1 ${config.color}`} />
                       <p className={`text-xs font-medium ${config.color}`}>{config.label}</p>
@@ -627,14 +635,14 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
 
             {/* Actions */}
             <div className="flex gap-2 pt-4">
-              <IOSButton 
-                variant="secondary" 
+              <IOSButton
+                variant="secondary"
                 className="flex-1"
                 onClick={() => { setShowEditModal(false); resetForm(); }}
               >
                 Cancel
               </IOSButton>
-              <IOSButton 
+              <IOSButton
                 className="flex-1"
                 onClick={handleUpdateWastage}
                 disabled={isSubmitting || !customItemName}
@@ -671,14 +679,14 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
               This action cannot be undone.
             </p>
             <div className="flex gap-2 pt-2">
-              <IOSButton 
-                variant="secondary" 
+              <IOSButton
+                variant="secondary"
                 className="flex-1"
                 onClick={() => { setShowDeleteConfirm(false); setDeletingRecord(null); }}
               >
                 Cancel
               </IOSButton>
-              <IOSButton 
+              <IOSButton
                 className="flex-1"
                 onClick={handleDeleteRecord}
                 disabled={isDeleting}

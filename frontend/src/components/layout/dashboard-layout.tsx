@@ -293,7 +293,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
           {/* Main content area */}
           <main className="flex-1 overflow-y-auto bg-[#FAFAF8] scrollbar-thin">
-            <div className="p-5 lg:p-6">
+            <div className="p-4 sm:p-5 lg:p-6">
               {children}
             </div>
           </main>
