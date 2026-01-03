@@ -76,15 +76,28 @@ initializeApp().then(({ app, httpServer }) => {
         'http://localhost:3000',
         'http://localhost:3001',
         'http://127.0.0.1:3000',
-        'http://127.0.0.1:3001'
+        'http://127.0.0.1:3001',
+        'https://famousgate.hirall.com',
+        'https://api.hirall.com',
+        'https://services.hirall.com'
       ];
+
+      // Add FRONTEND_URL from env if it exists
+      if (process.env.FRONTEND_URL) {
+        allowedOrigins.push(process.env.FRONTEND_URL);
+      }
 
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
-      // Allow all localhost and 127.0.0.1 origins (any port) - fallback
+      // Allow all localhost and 127.0.0.1 origins (any port)
       if (origin.match(/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) {
+        return callback(null, true);
+      }
+
+      // Allow any subdomain of hirall.com
+      if (origin.match(/^https:\/\/([a-z0-9-]+\.)*hirall\.com$/)) {
         return callback(null, true);
       }
 
