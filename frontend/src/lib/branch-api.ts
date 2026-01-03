@@ -4,7 +4,7 @@
  */
 
 // Use the same API_URL as defined in api.ts, but default to the Node backend on 5000
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+import { API_URL } from './config';
 
 // Safe localStorage access (handles SSR)
 const getStorageValue = (key: string): string | null => {

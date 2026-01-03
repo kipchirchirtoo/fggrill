@@ -56,7 +56,7 @@ export interface NotificationSubscriber {
   notificationTypes: string[];
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+import { API_URL } from './config';
 
 export async function sendNotification(notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) {
   try {
@@ -105,23 +105,23 @@ export function canViewNotification(
   userBranchId?: string
 ): boolean {
   const userLevel = ROLE_HIERARCHY[userRole] || 0;
-  
+
   // Check visibility level
   if (notification.visibility) {
     const requiredLevel = LEVEL_MIN_ROLE[notification.visibility];
     if (userLevel < requiredLevel) return false;
   }
-  
+
   // Check specific target roles
   if (notification.targetRoles && notification.targetRoles.length > 0) {
     if (!notification.targetRoles.includes(userRole)) return false;
   }
-  
+
   // Check specific departments
   if (notification.targetDepartments && notification.targetDepartments.length > 0) {
     if (!userDepartment || !notification.targetDepartments.includes(userDepartment)) return false;
   }
-  
+
   // Check branch restriction
   if (notification.targetBranchId) {
     if (userBranchId !== notification.targetBranchId) {
@@ -129,7 +129,7 @@ export function canViewNotification(
       if (userLevel < ROLE_HIERARCHY[UserRole.GENERAL_MANAGER]) return false;
     }
   }
-  
+
   return true;
 }
 
@@ -140,7 +140,7 @@ export function filterNotificationsForUser(
   userDepartment?: string,
   userBranchId?: string
 ): Notification[] {
-  return notifications.filter(n => 
+  return notifications.filter(n =>
     canViewNotification(n, userRole, userDepartment, userBranchId)
   );
 }

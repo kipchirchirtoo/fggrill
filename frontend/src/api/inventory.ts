@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+import { API_URL } from '@/lib/config';
 
 // Item Management
 export async function createItem(data: any) {
@@ -64,7 +64,7 @@ export async function getConsumptionRecords(branch: string, department?: string,
     ...(startDate && { startDate }),
     ...(endDate && { endDate })
   });
-  
+
   const response = await fetch(`${API_URL}/api/inventory/consumption?${params}`, {
     headers: {
       'Authorization': `Bearer ${localStorage.getItem('token')}`

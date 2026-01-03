@@ -6,7 +6,7 @@ import {
   notifyStockTransfer
 } from './notifications';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+import { API_URL } from './config';
 
 // Automated workflow for purchase orders
 export const handlePurchaseOrderWorkflow = async (orderId: string, action: 'create' | 'approve' | 'reject' | 'receive') => {
@@ -126,7 +126,7 @@ export const monitorStockLevels = async () => {
     if (!response.ok) throw new Error('Failed to check stock levels');
 
     const lowStockItems = await response.json();
-    
+
     if (lowStockItems.length > 0) {
       await notifyLowStock(lowStockItems);
       await autoGeneratePurchaseOrders(lowStockItems);
@@ -186,7 +186,7 @@ const checkAndCreatePurchaseOrders = async (requisition: any) => {
     if (!response.ok) throw new Error('Failed to check stock availability');
 
     const { itemsToOrder } = await response.json();
-    
+
     if (itemsToOrder.length > 0) {
       await autoGeneratePurchaseOrders(itemsToOrder);
     }

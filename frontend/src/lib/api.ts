@@ -3,8 +3,7 @@
  * All API calls should go through this service for consistency
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-const PYTHON_API_URL = process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL || 'http://localhost:5001';
+import { API_URL, PYTHON_API_URL, PYTHON_SERVICE_URL, ROOM_SERVICE_URL, REPORTS_SERVICE_URL } from './config';
 
 // Helper to get auth headers - safe for SSR
 const getHeaders = () => {
@@ -2292,7 +2291,6 @@ export const notificationsAPI = {
 // REPORTS SERVICE (Python Microservice)
 // =====================================================
 
-const REPORTS_SERVICE_URL = process.env.NEXT_PUBLIC_REPORTS_SERVICE_URL || 'http://localhost:5001';
 
 export const reportsService = {
   // Health check
@@ -2464,7 +2462,6 @@ export const reportsService = {
 };
 
 // Export all APIs as a single object
-const PYTHON_SERVICE_URL = process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL || 'http://localhost:5001';
 
 // Accounting API
 export const accountingAPI = {
@@ -2579,7 +2576,6 @@ export const accountingAPI = {
 };
 
 // ==================== ROOM SERVICE API (Python Microservice) ====================
-const ROOM_SERVICE_URL = process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL || 'http://localhost:5001';
 
 export const roomServiceAPI = {
   // Check room availability

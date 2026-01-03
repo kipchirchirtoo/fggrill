@@ -33,7 +33,7 @@ interface BranchContextType {
 const BranchContext = createContext<BranchContextType | undefined>(undefined);
 
 // API URL
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+import { API_URL } from '@/lib/config';
 
 // Branch Provider Component
 export function BranchProvider({ children }: { children: ReactNode }) {
