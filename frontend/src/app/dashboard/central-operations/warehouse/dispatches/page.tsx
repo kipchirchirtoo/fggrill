@@ -10,31 +10,52 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { centralOperationsAPI } from '@/lib/branch-api';
 import { toast } from 'sonner';
-import { 
-  Truck, Search, Filter, RefreshCw, 
-  Clock, CheckCircle, ArrowRight, 
+import {
+  Truck, Search, Filter, RefreshCw,
+  Clock, CheckCircle, ArrowRight,
   PlusCircle, PackageCheck, ArrowDown
 } from 'lucide-react';
 import { BranchPageWrapper } from '@/components/branch/branch-page-wrapper';
 
 // Dispatch type
 interface DispatchItem {
-  sku: string;
-  name: string;
+  id?: string;
+  item_sku: string;
+  item_name?: string;
   quantity: number;
-  unit: string;
+  dispatched_quantity?: number;
+  unit?: string;
+  item?: {
+    sku: string;
+    item_name: string;
+    unit: string;
+  };
 }
 
 interface Dispatch {
   id: string;
-  branch_id: number;
-  branch_name: string;
+  dispatch_number: string;
   request_id?: string;
-  status: string;
-  dispatched_by?: string;
-  received_by?: string;
+  request_number?: string;
+  from_branch_id: number;
+  to_branch_id: number;
+  requesting_branch_id: number;
+  branch_name?: string;
+  from_branch?: { id: number; name: string; code: string };
+  to_branch?: { id: number; name: string; code: string };
+  status: 'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED' | 'DRAFT' | 'CONFIRMED';
+  carrier?: string;
+  tracking_number?: string;
+  vehicle_number?: string;
+  driver_name?: string;
+  driver_phone?: string;
+  dispatched_by?: number;
+  dispatched_by_name?: string;
+  received_by?: number;
+  received_by_name?: string;
   items: DispatchItem[];
   notes?: string;
+  dispatch_notes?: string;
   created_at: string;
   updated_at: string;
   dispatched_at?: string;
@@ -55,7 +76,7 @@ function WarehouseDispatchesContent() {
   const [isDispatching, setIsDispatching] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedItems, setSelectedItems] = useState<DispatchItem[]>([
-    { sku: '', name: '', quantity: 0, unit: '' }
+    { item_sku: '', item_name: '', quantity: 0, unit: '' }
   ]);
   const [newDispatchBranch, setNewDispatchBranch] = useState<string>('');
   const [newDispatchNotes, setNewDispatchNotes] = useState<string>('');
@@ -76,7 +97,7 @@ function WarehouseDispatchesContent() {
     setIsLoading(true);
     try {
       const response = await centralOperationsAPI.getDispatches();
-      
+
       if (response.success) {
         setDispatches(response.data || []);
       } else {
@@ -94,41 +115,55 @@ function WarehouseDispatchesContent() {
 
   const filterDispatches = () => {
     let filtered = [...dispatches];
-    
+
     // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(dispatch => 
-        dispatch.id.toLowerCase().includes(query) || 
+      filtered = filtered.filter(dispatch =>
+        dispatch.dispatch_number.toLowerCase().includes(query) ||
         dispatch.branch_name?.toLowerCase().includes(query) ||
-        dispatch.request_id?.toLowerCase().includes(query) ||
-        dispatch.items.some(item => item.name.toLowerCase().includes(query) || item.sku.toLowerCase().includes(query))
+        dispatch.request_number?.toLowerCase().includes(query) ||
+        (dispatch.tracking_number && dispatch.tracking_number.toLowerCase().includes(query)) ||
+        dispatch.items.some(item => (item.item_name && item.item_name.toLowerCase().includes(query)) || item.item_sku.toLowerCase().includes(query))
       );
     }
-    
+
     // Filter by branch
     if (selectedBranch !== 'all') {
-      filtered = filtered.filter(dispatch => dispatch.branch_id === parseInt(selectedBranch));
+      filtered = filtered.filter(dispatch => dispatch.requesting_branch_id === parseInt(selectedBranch));
     }
-    
+
     // Filter by status
     if (selectedStatus !== 'all') {
       filtered = filtered.filter(dispatch => dispatch.status === selectedStatus);
     }
-    
+
     setFilteredDispatches(filtered);
   };
 
-  const handleViewDetails = (dispatch: Dispatch) => {
+  const handleViewDetails = async (dispatch: Dispatch) => {
     setDispatchDetails(dispatch);
     setShowDetailsModal(true);
+
+    // Fetch full details to get enriched data
+    try {
+      const response = await centralOperationsAPI.getDispatchNote(dispatch.id);
+      if (response.success) {
+        setDispatchDetails(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching dispatch details:', error);
+    }
   };
 
   const handleDispatch = async (id: string) => {
     setIsDispatching(true);
     try {
-      const response = await centralOperationsAPI.dispatchItems(id);
-      
+      const response = await centralOperationsAPI.dispatchNote(id, {
+        carrier: 'Internal',
+        tracking_number: `TRK-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+      });
+
       if (response.success) {
         toast.success('Items dispatched successfully');
         setShowDetailsModal(false);
@@ -147,8 +182,8 @@ function WarehouseDispatchesContent() {
   const fetchInventory = async () => {
     setIsLoadingInventory(true);
     try {
-      const response = await centralOperationsAPI.getMasterInventory();
-      
+      const response = await centralOperationsAPI.getWarehouseInventory();
+
       if (response.success) {
         setInventory(response.data || []);
       } else {
@@ -164,14 +199,14 @@ function WarehouseDispatchesContent() {
 
   const handleOpenCreateModal = () => {
     fetchInventory();
-    setSelectedItems([{ sku: '', name: '', quantity: 0, unit: '' }]);
+    setSelectedItems([{ item_sku: '', item_name: '', quantity: 0, unit: '' }]);
     setNewDispatchBranch('');
     setNewDispatchNotes('');
     setShowCreateModal(true);
   };
 
   const handleAddItem = () => {
-    setSelectedItems([...selectedItems, { sku: '', name: '', quantity: 0, unit: '' }]);
+    setSelectedItems([...selectedItems, { item_sku: '', item_name: '', quantity: 0, unit: '' }]);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -182,23 +217,23 @@ function WarehouseDispatchesContent() {
 
   const handleItemChange = (index: number, field: keyof DispatchItem, value: any) => {
     const newItems = [...selectedItems];
-    
-    if (field === 'sku' && value) {
-      const inventoryItem = inventory.find(item => item.sku === value);
+
+    if (field === 'item_sku' && value) {
+      const inventoryItem = inventory.find(item => item.item_sku === value);
       if (inventoryItem) {
         newItems[index] = {
-          sku: inventoryItem.sku,
-          name: inventoryItem.name,
-          quantity: newItems[index].quantity || 0,
-          unit: inventoryItem.unit
+          ...newItems[index],
+          item_sku: inventoryItem.item_sku,
+          item_name: inventoryItem.item_name,
+          unit: inventoryItem.unit_of_measure
         };
       } else {
         newItems[index][field] = value;
       }
     } else {
-      newItems[index][field] = value;
+      (newItems[index] as any)[field] = value;
     }
-    
+
     setSelectedItems(newItems);
   };
 
@@ -208,7 +243,7 @@ function WarehouseDispatchesContent() {
       return;
     }
 
-    if (selectedItems.some(item => !item.sku || !item.quantity)) {
+    if (selectedItems.some(item => !item.item_sku || !item.quantity)) {
       toast.error('Please fill in all item fields');
       return;
     }
@@ -216,11 +251,14 @@ function WarehouseDispatchesContent() {
     setIsDispatching(true);
     try {
       const response = await centralOperationsAPI.createDispatch({
-        branch_id: parseInt(newDispatchBranch),
-        items: selectedItems,
+        requesting_branch_id: parseInt(newDispatchBranch),
+        items: selectedItems.map(item => ({
+          item_sku: item.item_sku,
+          quantity: item.quantity
+        })),
         notes: newDispatchNotes
       });
-      
+
       if (response.success) {
         toast.success('Dispatch created successfully');
         setShowCreateModal(false);
@@ -238,10 +276,10 @@ function WarehouseDispatchesContent() {
 
   const getBadgeColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'warning';
-      case 'in_transit': return 'primary';
-      case 'delivered': return 'success';
-      case 'cancelled': return 'danger';
+      case 'PENDING': return 'warning';
+      case 'IN_TRANSIT': return 'primary';
+      case 'DELIVERED': return 'success';
+      case 'CANCELLED': return 'danger';
       default: return 'secondary';
     }
   };
@@ -256,27 +294,22 @@ function WarehouseDispatchesContent() {
   };
 
   return (
-    <ProtectedRoute allowedRoles={[
-      UserRole.SUPER_ADMIN,
-      UserRole.GENERAL_MANAGER,
-      UserRole.CENTRAL_OPERATIONS_MANAGER,
-      UserRole.CENTRAL_STOREKEEPER
-    ]}>
+    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.CENTRAL_OPERATIONS_MANAGER, UserRole.CENTRAL_STOREKEEPER]}>
       <BranchAwareDashboardLayout
         title="Warehouse Dispatches"
         subtitle="Manage inventory dispatches to branches"
         requireBranchContext={false}
         actionButton={
           <div className="flex space-x-2">
-            <IOSButton 
-              variant="secondary" 
-              onClick={fetchDispatches} 
+            <IOSButton
+              variant="secondary"
+              onClick={fetchDispatches}
               leftIcon={<RefreshCw className="h-4 w-4" />}
             >
               Refresh
             </IOSButton>
-            <IOSButton 
-              variant="primary" 
+            <IOSButton
+              variant="primary"
               onClick={handleOpenCreateModal}
               leftIcon={<PlusCircle className="h-4 w-4" />}
             >
@@ -295,11 +328,11 @@ function WarehouseDispatchesContent() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Pending</p>
-                  <p className="text-lg font-semibold">{filteredDispatches.filter(d => d.status === 'pending').length}</p>
+                  <p className="text-lg font-semibold">{filteredDispatches.filter(d => d.status === 'PENDING').length}</p>
                 </div>
               </div>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <div className="flex items-center space-x-3">
                 <div className="p-2 bg-gray-100 rounded-lg">
@@ -307,11 +340,11 @@ function WarehouseDispatchesContent() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">In Transit</p>
-                  <p className="text-lg font-semibold">{filteredDispatches.filter(d => d.status === 'in_transit').length}</p>
+                  <p className="text-lg font-semibold">{filteredDispatches.filter(d => d.status === 'IN_TRANSIT').length}</p>
                 </div>
               </div>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <div className="flex items-center space-x-3">
                 <div className="p-2 bg-gray-100 rounded-lg">
@@ -319,7 +352,7 @@ function WarehouseDispatchesContent() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Delivered</p>
-                  <p className="text-lg font-semibold">{filteredDispatches.filter(d => d.status === 'delivered').length}</p>
+                  <p className="text-lg font-semibold">{filteredDispatches.filter(d => d.status === 'DELIVERED').length}</p>
                 </div>
               </div>
             </IOSCard>
@@ -329,7 +362,7 @@ function WarehouseDispatchesContent() {
           <IOSCard className="p-4">
             <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search by ID, branch, or items"
@@ -338,10 +371,10 @@ function WarehouseDispatchesContent() {
                   className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-ios-lg text-sm"
                 />
               </div>
-              
+
               <div className="flex space-x-4">
                 <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                   <select
                     value={selectedBranch}
                     onChange={(e) => setSelectedBranch(e.target.value)}
@@ -355,19 +388,19 @@ function WarehouseDispatchesContent() {
                     ))}
                   </select>
                 </div>
-                
+
                 <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                   <select
                     value={selectedStatus}
                     onChange={(e) => setSelectedStatus(e.target.value)}
                     className="pl-9 pr-4 py-2 border border-gray-200 rounded-ios-lg text-sm appearance-none bg-white"
                   >
                     <option value="all">All Statuses</option>
-                    <option value="pending">Pending</option>
-                    <option value="in_transit">In Transit</option>
-                    <option value="delivered">Delivered</option>
-                    <option value="cancelled">Cancelled</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="IN_TRANSIT">In Transit</option>
+                    <option value="DELIVERED">Delivered</option>
+                    <option value="CANCELLED">Cancelled</option>
                   </select>
                 </div>
               </div>
@@ -380,11 +413,11 @@ function WarehouseDispatchesContent() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b bg-gray-50">
-                    <th className="text-left p-4 text-sm font-medium text-gray-600">Dispatch ID</th>
+                    <th className="text-left p-4 text-sm font-medium text-gray-600">Dispatch #</th>
                     <th className="text-left p-4 text-sm font-medium text-gray-600">Branch</th>
                     <th className="text-left p-4 text-sm font-medium text-gray-600">Date Created</th>
                     <th className="text-center p-4 text-sm font-medium text-gray-600">Status</th>
-                    <th className="text-left p-4 text-sm font-medium text-gray-600">Request ID</th>
+                    <th className="text-left p-4 text-sm font-medium text-gray-600">Request #</th>
                     <th className="text-center p-4 text-sm font-medium text-gray-600">Items</th>
                     <th className="text-center p-4 text-sm font-medium text-gray-600">Actions</th>
                   </tr>
@@ -411,27 +444,27 @@ function WarehouseDispatchesContent() {
                   ) : (
                     filteredDispatches.map((dispatch) => (
                       <tr key={dispatch.id} className="border-b hover:bg-gray-50">
-                        <td className="p-4 text-sm font-medium">{dispatch.id}</td>
+                        <td className="p-4 text-sm font-medium">{dispatch.dispatch_number}</td>
                         <td className="p-4 text-sm">{dispatch.branch_name}</td>
                         <td className="p-4 text-sm">{formatDate(dispatch.created_at)}</td>
                         <td className="p-4 text-center">
                           <IOSBadge color={getBadgeColor(dispatch.status)}>
-                            {dispatch.status.charAt(0).toUpperCase() + dispatch.status.slice(1).replace('_', ' ')}
+                            {dispatch.status.replace('_', ' ')}
                           </IOSBadge>
                         </td>
-                        <td className="p-4 text-sm">{dispatch.request_id || '-'}</td>
+                        <td className="p-4 text-sm">{dispatch.request_number || '-'}</td>
                         <td className="p-4 text-sm text-center">{dispatch.items ? dispatch.items.length : 0}</td>
                         <td className="p-4 text-center">
                           <div className="flex justify-center space-x-2">
-                            <IOSButton 
-                              variant="ghost" 
+                            <IOSButton
+                              variant="ghost"
                               size="sm"
                               onClick={() => handleViewDetails(dispatch)}
                             >
                               View
                             </IOSButton>
-                            {dispatch.status === 'pending' && (
-                              <IOSButton 
+                            {dispatch.status === 'PENDING' && (
+                              <IOSButton
                                 variant="ghost"
                                 color="primary"
                                 size="sm"
@@ -459,10 +492,10 @@ function WarehouseDispatchesContent() {
               <div className="p-6 space-y-4">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h2 className="text-xl font-bold">Dispatch Details: {dispatchDetails.id}</h2>
+                    <h2 className="text-xl font-bold">Dispatch: {dispatchDetails.dispatch_number}</h2>
                     <div className="flex space-x-2 mt-1">
                       <IOSBadge color={getBadgeColor(dispatchDetails.status)}>
-                        {dispatchDetails.status.charAt(0).toUpperCase() + dispatchDetails.status.slice(1).replace('_', ' ')}
+                        {dispatchDetails.status.replace('_', ' ')}
                       </IOSBadge>
                     </div>
                   </div>
@@ -471,91 +504,94 @@ function WarehouseDispatchesContent() {
                   </IOSButton>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Branch</p>
-                    <p className="font-medium">{dispatchDetails.branch_name}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Related Request</p>
-                    <p className="font-medium">{dispatchDetails.request_id || 'Direct Dispatch'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Created Date</p>
-                    <p className="font-medium">
-                      {formatDate(dispatchDetails.created_at)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Last Updated</p>
-                    <p className="font-medium">
-                      {formatDate(dispatchDetails.updated_at)}
-                    </p>
-                  </div>
-                  
-                  {dispatchDetails.dispatched_at && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-gray-900 border-b pb-2">Branch Information</h3>
                     <div>
-                      <p className="text-sm text-gray-500">Dispatched Date</p>
+                      <p className="text-xs text-gray-500 uppercase font-bold">From Branch</p>
+                      <p className="font-medium">{dispatchDetails.from_branch?.name || 'Central Warehouse'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase font-bold">To Branch</p>
+                      <p className="font-medium text-blue-600">{dispatchDetails.to_branch?.name || dispatchDetails.branch_name || `Branch ID: ${dispatchDetails.to_branch_id || dispatchDetails.requesting_branch_id}`}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase font-bold">Related Request</p>
+                      <p className="font-medium">{dispatchDetails.request_number || dispatchDetails.stock_request?.request_number || 'Direct Dispatch'}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-gray-900 border-b pb-2">Logistics Details</h3>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase font-bold">Vehicle Number</p>
+                      <p className="font-medium">{dispatchDetails.vehicle_number || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase font-bold">Driver Name</p>
+                      <p className="font-medium">{dispatchDetails.driver_name || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase font-bold">Driver Phone</p>
+                      <p className="font-medium">{dispatchDetails.driver_phone || '-'}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-gray-900 border-b pb-2">Timeline</h3>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase font-bold">Created Date</p>
+                      <p className="font-medium">{formatDate(dispatchDetails.created_at)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase font-bold">Dispatched Date</p>
                       <p className="font-medium">{formatDate(dispatchDetails.dispatched_at)}</p>
                     </div>
-                  )}
-                  
-                  {dispatchDetails.dispatched_by && (
                     <div>
-                      <p className="text-sm text-gray-500">Dispatched By</p>
-                      <p className="font-medium">{dispatchDetails.dispatched_by}</p>
-                    </div>
-                  )}
-                  
-                  {dispatchDetails.received_at && (
-                    <div>
-                      <p className="text-sm text-gray-500">Received Date</p>
+                      <p className="text-xs text-gray-500 uppercase font-bold">Received Date</p>
                       <p className="font-medium">{formatDate(dispatchDetails.received_at)}</p>
                     </div>
-                  )}
-                  
-                  {dispatchDetails.received_by && (
-                    <div>
-                      <p className="text-sm text-gray-500">Received By</p>
-                      <p className="font-medium">{dispatchDetails.received_by}</p>
-                    </div>
-                  )}
+                  </div>
                 </div>
-                
-                {dispatchDetails.notes && (
-                  <div>
-                    <p className="text-sm text-gray-500">Notes</p>
-                    <p className="p-2 bg-gray-50 rounded-ios-lg mt-1">{dispatchDetails.notes}</p>
+
+                {(dispatchDetails.notes || dispatchDetails.dispatch_notes) && (
+                  <div className="bg-gray-50 p-4 rounded-xl">
+                    <p className="text-xs text-gray-500 uppercase font-bold mb-1">Notes</p>
+                    <p className="text-sm">{dispatchDetails.notes || dispatchDetails.dispatch_notes}</p>
                   </div>
                 )}
 
                 <div>
                   <p className="font-medium mb-2">Dispatched Items</p>
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b bg-gray-50">
-                        <th className="text-left p-2 text-sm font-medium text-gray-600">SKU</th>
-                        <th className="text-left p-2 text-sm font-medium text-gray-600">Item</th>
-                        <th className="text-center p-2 text-sm font-medium text-gray-600">Quantity</th>
-                        <th className="text-center p-2 text-sm font-medium text-gray-600">Unit</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dispatchDetails.items.map((item, index) => (
-                        <tr key={index} className="border-b">
-                          <td className="p-2 text-sm">{item.sku}</td>
-                          <td className="p-2 text-sm">{item.name}</td>
-                          <td className="p-2 text-sm text-center">{item.quantity}</td>
-                          <td className="p-2 text-sm text-center">{item.unit}</td>
+                  <div className="border rounded-xl overflow-hidden">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b bg-gray-50">
+                          <th className="text-left p-3 text-xs font-bold text-gray-500 uppercase">SKU</th>
+                          <th className="text-left p-3 text-xs font-bold text-gray-500 uppercase">Item</th>
+                          <th className="text-center p-3 text-xs font-bold text-gray-500 uppercase">Quantity</th>
+                          <th className="text-center p-3 text-xs font-bold text-gray-500 uppercase">Unit</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {dispatchDetails.items.map((item, index) => (
+                          <tr key={index} className="border-b last:border-0 hover:bg-gray-50 transition-colors">
+                            <td className="p-3 text-sm font-mono text-gray-600">{item.item_sku}</td>
+                            <td className="p-3 text-sm font-medium text-gray-900">{item.item_name || item.item?.item_name || '-'}</td>
+                            <td className="p-3 text-sm text-center font-semibold text-blue-600">
+                              {item.dispatched_quantity || item.quantity}
+                            </td>
+                            <td className="p-3 text-sm text-center text-gray-600">{item.unit || item.item?.unit || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
-                {dispatchDetails.status === 'pending' && (
+                {dispatchDetails.status === 'PENDING' && (
                   <div className="flex justify-end space-x-3 pt-4">
-                    <IOSButton 
+                    <IOSButton
                       variant="primary"
                       leftIcon={<Truck className="h-4 w-4" />}
                       onClick={() => {
@@ -616,7 +652,7 @@ function WarehouseDispatchesContent() {
                   <div>
                     <div className="flex justify-between items-center mb-2">
                       <label className="block text-sm font-medium text-gray-700">Items</label>
-                      <IOSButton 
+                      <IOSButton
                         size="sm"
                         variant="ghost"
                         onClick={handleAddItem}
@@ -636,17 +672,17 @@ function WarehouseDispatchesContent() {
                         {selectedItems.map((item, index) => (
                           <div key={index} className="flex space-x-3">
                             <div className="flex-1">
-                              <label className="text-xs text-gray-500">SKU</label>
+                              <label className="text-xs text-gray-500">Item</label>
                               <select
-                                value={item.sku}
-                                onChange={(e) => handleItemChange(index, 'sku', e.target.value)}
+                                value={item.item_sku}
+                                onChange={(e) => handleItemChange(index, 'item_sku', e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                                 required
                               >
                                 <option value="">Select Item</option>
                                 {inventory.map((invItem) => (
-                                  <option key={invItem.sku} value={invItem.sku}>
-                                    {invItem.sku} - {invItem.name} ({invItem.central_stock} in stock)
+                                  <option key={invItem.item_sku} value={invItem.item_sku}>
+                                    {invItem.item_sku} - {invItem.item_name} ({invItem.quantity} in stock)
                                   </option>
                                 ))}
                               </select>
@@ -664,7 +700,7 @@ function WarehouseDispatchesContent() {
                             </div>
                             <div className="flex items-end pb-2">
                               {selectedItems.length > 1 && (
-                                <IOSButton 
+                                <IOSButton
                                   size="sm"
                                   variant="ghost"
                                   color="danger"
@@ -682,13 +718,13 @@ function WarehouseDispatchesContent() {
                   </div>
 
                   <div className="flex justify-end space-x-3 pt-4">
-                    <IOSButton 
-                      variant="secondary" 
+                    <IOSButton
+                      variant="secondary"
                       onClick={() => setShowCreateModal(false)}
                     >
                       Cancel
                     </IOSButton>
-                    <IOSButton 
+                    <IOSButton
                       variant="primary"
                       onClick={handleCreateDispatch}
                       disabled={isDispatching}

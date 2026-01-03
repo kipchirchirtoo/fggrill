@@ -103,16 +103,16 @@ function BranchExpensesContent() {
         setExpenses(response.data.expenses);
         setCategories(response.data.categories || []);
       } else {
-        // Fallback
-        setExpenses(generatePlaceholderExpenses());
-        setCategories(generatePlaceholderCategories());
+        // Show empty state
+        setExpenses([]);
+        setCategories([]);
       }
     } catch (error) {
       console.error('Error fetching expenses:', error);
       toast.error('Failed to load expense data');
-      // Fallback
-      setExpenses(generatePlaceholderExpenses());
-      setCategories(generatePlaceholderCategories());
+      // Show empty state on error
+      setExpenses([]);
+      setCategories([]);
     } finally {
       setIsLoading(false);
     }
@@ -290,7 +290,7 @@ function BranchExpensesContent() {
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
           <div className="flex gap-2 w-full md:w-auto">
             <div className="relative w-full md:w-64">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
               <Input
                 placeholder="Search expenses..."
                 className="pl-9"

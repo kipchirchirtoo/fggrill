@@ -13,6 +13,7 @@ import {
   Search, RefreshCw, Plus, Package, MapPin, Calendar, User,
   CheckCircle, Clock, XCircle, Phone, Eye
 } from 'lucide-react';
+import { housekeepingAPI } from '@/lib/api';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -60,33 +61,23 @@ export default function LostFoundPage() {
   });
   const [claimInfo, setClaimInfo] = useState({ name: '', phone: '', id_number: '' });
 
+  const fetchItems = async () => {
+    setIsLoading(true);
+    try {
+      const response = await housekeepingAPI.getLostFoundItems();
+      if (response.success) {
+        setItems(response.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching items:', error);
+      setItems([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // Mock data - replace with API call
-    setItems([
-      {
-        id: '1',
-        item_name: 'iPhone 14 Pro',
-        description: 'Black iPhone with cracked screen protector',
-        category: 'Electronics',
-        found_location: 'Room 205',
-        found_date: new Date().toISOString(),
-        found_by: 'Mary K.',
-        status: 'stored',
-        storage_location: 'Lost & Found Cabinet A',
-      },
-      {
-        id: '2',
-        item_name: 'Gold Watch',
-        description: 'Rolex style gold watch',
-        category: 'Jewelry',
-        found_location: 'Restaurant',
-        found_date: new Date(Date.now() - 86400000).toISOString(),
-        found_by: 'John D.',
-        status: 'stored',
-        storage_location: 'Safe Box 3',
-      },
-    ]);
-    setIsLoading(false);
+    fetchItems();
   }, []);
 
   const filteredItems = items.filter((item) => {
@@ -98,40 +89,57 @@ export default function LostFoundPage() {
     return matchesSearch && matchesStatus;
   });
 
-  const handleAddItem = () => {
+  const handleAddItem = async () => {
     if (!newItem.item_name || !newItem.found_location) {
       toast.error('Please fill required fields');
       return;
     }
 
-    const item: LostFoundItem = {
-      id: Date.now().toString(),
-      ...newItem,
-      found_date: new Date().toISOString(),
-      found_by: user?.name || 'Staff',
-      status: 'stored',
-    };
-
-    setItems([item, ...items]);
-    setAddModalOpen(false);
-    setNewItem({ item_name: '', description: '', category: 'Other', found_location: '', storage_location: '' });
-    toast.success('Item logged successfully');
+    try {
+      const response = await housekeepingAPI.createLostFoundItem({
+        ...newItem,
+        found_by: user?.email || 'Staff',
+      });
+      
+      if (response.success) {
+        toast.success('Item logged successfully');
+        setAddModalOpen(false);
+        setNewItem({ item_name: '', description: '', category: 'Other', found_location: '', storage_location: '' });
+        fetchItems();
+      } else {
+        toast.error(response.message || 'Failed to log item');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to log item');
+    }
   };
 
-  const handleClaim = () => {
+  const handleClaim = async () => {
     if (!selectedItem || !claimInfo.name || !claimInfo.phone) {
       toast.error('Please fill claim information');
       return;
     }
 
-    setItems(items.map(item => 
-      item.id === selectedItem.id 
-        ? { ...item, status: 'claimed' as const, claimed_by: claimInfo.name, claimed_date: new Date().toISOString() }
-        : item
-    ));
-    setClaimModalOpen(false);
-    setClaimInfo({ name: '', phone: '', id_number: '' });
-    toast.success('Item marked as claimed');
+    try {
+      const response = await housekeepingAPI.updateLostFoundStatus(selectedItem.id, {
+        status: 'claimed',
+        claimed_by: claimInfo.name,
+        claimed_phone: claimInfo.phone,
+        claimed_id: claimInfo.id_number,
+      });
+      
+      if (response.success) {
+        toast.success('Item marked as claimed');
+        setClaimModalOpen(false);
+        setClaimInfo({ name: '', phone: '', id_number: '' });
+        setSelectedItem(null);
+        fetchItems();
+      } else {
+        toast.error(response.message || 'Failed to update item');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update item');
+    }
   };
 
   const stats = {
@@ -161,13 +169,13 @@ export default function LostFoundPage() {
               <p className="text-sm text-gray-500">Total Items</p>
               <p className="text-2xl font-bold">{stats.total}</p>
             </IOSCard>
-            <IOSCard className="p-4 border-l-4 border-[#007AFF]">
+            <IOSCard className="p-4">
               <p className="text-sm text-gray-500">In Storage</p>
-              <p className="text-2xl font-bold text-[#007AFF]">{stats.stored}</p>
+              <p className="text-2xl font-bold">{stats.stored}</p>
             </IOSCard>
-            <IOSCard className="p-4 border-l-4 border-green-500">
+            <IOSCard className="p-4">
               <p className="text-sm text-gray-500">Claimed</p>
-              <p className="text-2xl font-bold text-[#34C759]">{stats.claimed}</p>
+              <p className="text-2xl font-bold">{stats.claimed}</p>
             </IOSCard>
           </div>
 
@@ -175,12 +183,12 @@ export default function LostFoundPage() {
           <IOSCard className="p-4">
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                 <Input
                   placeholder="Search items..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
+                  className="pl-9"
                 />
               </div>
               <div className="flex gap-2">

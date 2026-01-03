@@ -8,8 +8,8 @@ import { DepartmentCommunication } from '@/components/communication';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
-import { 
-  Home, Sparkles, Clock, CheckCircle, AlertCircle, 
+import {
+  Home, Sparkles, Clock, CheckCircle, AlertCircle,
   RefreshCw, Send, Users, Bed, ArrowLeft
 } from 'lucide-react';
 import { housekeepingAPI } from '@/lib/api';
@@ -49,12 +49,12 @@ export default function ReceptionHousekeepingPage() {
     setIsLoading(true);
     try {
       // Fetch housekeeping tasks
-      const tasksRes = await housekeepingAPI.getTasks({ status: 'pending' });
+      const tasksRes = await housekeepingAPI.getTasks({ status: 'pending', branch_id: user?.branch_id || undefined });
       const tasksData = tasksRes.data || tasksRes.tasks || tasksRes || [];
       setTasks(Array.isArray(tasksData) ? tasksData : []);
 
       // Fetch room grid for status
-      const roomsRes = await housekeepingAPI.getRoomGrid();
+      const roomsRes = await housekeepingAPI.getRoomGrid(user?.branch_id?.toString());
       const roomsData = roomsRes.data || roomsRes.rooms || roomsRes || [];
       setRoomStatuses(Array.isArray(roomsData) ? roomsData.map((r: any) => ({
         room_number: r.room_number,
@@ -75,7 +75,8 @@ export default function ReceptionHousekeepingPage() {
         request_type: 'cleaning',
         priority: priority,
         description: 'Room cleaning requested by reception',
-        source: 'reception'
+        source: 'reception',
+        branch_id: user?.branch_id || undefined
       });
       toast.success(`Cleaning request sent for Room ${roomNumber}`);
       fetchData();
@@ -86,20 +87,20 @@ export default function ReceptionHousekeepingPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'clean': return 'bg-green-100 text-green-700';
-      case 'dirty': return 'bg-red-100 text-red-700';
-      case 'cleaning': return 'bg-blue-100 text-blue-700';
-      case 'inspecting': return 'bg-yellow-100 text-yellow-700';
-      default: return 'bg-gray-100 text-gray-700';
+      case 'clean': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'dirty': return 'bg-rose-50 text-rose-700 border-rose-200';
+      case 'cleaning': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'inspecting': return 'bg-amber-50 text-amber-700 border-amber-200';
+      default: return 'bg-gray-50 text-gray-700 border-gray-200';
     }
   };
 
   const getTaskStatusColor = (status: string) => {
     switch (status) {
-      case 'completed': return 'bg-green-100 text-green-700';
-      case 'in_progress': return 'bg-blue-100 text-blue-700';
-      case 'pending': return 'bg-yellow-100 text-yellow-700';
-      default: return 'bg-gray-100 text-gray-700';
+      case 'pending': return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'in_progress': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'completed': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      default: return 'bg-gray-50 text-gray-700 border-gray-200';
     }
   };
 
@@ -129,94 +130,56 @@ export default function ReceptionHousekeepingPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <IOSButton variant="outline" onClick={fetchData}>
+              <IOSButton variant="outline" onClick={fetchData} className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]">
                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               </IOSButton>
-              <DepartmentCommunication 
-                fromDepartment="reception" 
-                branchId={user?.branch_id}
+              <DepartmentCommunication
+                fromDepartment="reception"
+                branchId={user?.branch_id || undefined}
               />
             </div>
           </div>
 
           {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <IOSCard className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-yellow-100">
-                  <Clock className="h-5 w-5 text-yellow-600" />
+            {[
+              { label: 'Pending', value: stats.pending, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
+              { label: 'In Progress', value: stats.inProgress, icon: Sparkles, color: 'text-blue-600', bg: 'bg-blue-50' },
+              { label: 'Completed', value: stats.completed, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+              { label: 'Dirty Rooms', value: stats.dirtyRooms, icon: AlertCircle, color: 'text-rose-600', bg: 'bg-rose-50' },
+              { label: 'Being Cleaned', value: stats.cleaningRooms, icon: Home, color: 'text-blue-600', bg: 'bg-blue-50' },
+            ].map((stat) => (
+              <IOSCard key={stat.label} className="p-4 border-none shadow-sm bg-white">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-xl ${stat.bg}`}>
+                    <stat.icon className={`h-5 w-5 ${stat.color}`} />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                    <p className="text-xs text-gray-500 font-medium">{stat.label}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-2xl font-bold">{stats.pending}</p>
-                  <p className="text-xs text-gray-500">Pending</p>
-                </div>
-              </div>
-            </IOSCard>
-            <IOSCard className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-blue-100">
-                  <Sparkles className="h-5 w-5 text-[#007AFF]" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{stats.inProgress}</p>
-                  <p className="text-xs text-gray-500">In Progress</p>
-                </div>
-              </div>
-            </IOSCard>
-            <IOSCard className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-green-100">
-                  <CheckCircle className="h-5 w-5 text-[#34C759]" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{stats.completed}</p>
-                  <p className="text-xs text-gray-500">Completed</p>
-                </div>
-              </div>
-            </IOSCard>
-            <IOSCard className="p-4 bg-red-50">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-red-100">
-                  <AlertCircle className="h-5 w-5 text-[#FF3B30]" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-red-700">{stats.dirtyRooms}</p>
-                  <p className="text-xs text-[#FF3B30]">Dirty Rooms</p>
-                </div>
-              </div>
-            </IOSCard>
-            <IOSCard className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-blue-100">
-                  <Home className="h-5 w-5 text-[#007AFF]" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{stats.cleaningRooms}</p>
-                  <p className="text-xs text-gray-500">Being Cleaned</p>
-                </div>
-              </div>
-            </IOSCard>
+              </IOSCard>
+            ))}
           </div>
 
           {/* Tabs */}
           <div className="flex gap-2 border-b">
             <button
               onClick={() => setActiveTab('requests')}
-              className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-                activeTab === 'requests' 
-                  ? 'border-[#3C3C43] text-[#3C3C43]' 
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              className={`px-4 py-2 font-medium border-b-2 transition-colors ${activeTab === 'requests'
+                ? 'border-[#3C3C43] text-[#3C3C43]'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
             >
               Active Requests
             </button>
             <button
               onClick={() => setActiveTab('status')}
-              className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-                activeTab === 'status' 
-                  ? 'border-[#3C3C43] text-[#3C3C43]' 
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              className={`px-4 py-2 font-medium border-b-2 transition-colors ${activeTab === 'status'
+                ? 'border-[#3C3C43] text-[#3C3C43]'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
             >
               Room Status
             </button>
@@ -251,9 +214,9 @@ export default function ReceptionHousekeepingPage() {
                           {task.assigned_to}
                         </span>
                       )}
-                      <IOSBadge className={getTaskStatusColor(task.status)}>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getTaskStatusColor(task.status)}`}>
                         {task.status.replace('_', ' ')}
-                      </IOSBadge>
+                      </span>
                     </div>
                   </div>
                 ))
@@ -264,18 +227,13 @@ export default function ReceptionHousekeepingPage() {
               {roomStatuses.map(room => (
                 <div
                   key={room.room_number}
-                  className={`p-3 rounded-xl border-2 text-center cursor-pointer transition-all hover:shadow-none 0_2px_8px_rgba(0,0,0,0.05)] ${
-                    room.status === 'dirty' ? 'border-red-200 bg-red-50' :
-                    room.status === 'cleaning' ? 'border-blue-200 bg-blue-50' :
-                    room.status === 'inspecting' ? 'border-yellow-200 bg-yellow-50' :
-                    'border-green-200 bg-green-50'
-                  }`}
+                  className="p-3 rounded-xl border-2 text-center cursor-pointer transition-all hover:shadow-sm border-[rgba(60,60,67,0.12)] bg-[#FFFFFF] hover:bg-[#FAFAFA]"
                   onClick={() => room.status === 'dirty' && requestRoomCleaning(room.room_number)}
                 >
                   <p className="text-lg font-bold">{room.room_number}</p>
-                  <IOSBadge className={`text-xs ${getStatusColor(room.status)}`}>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase ${getStatusColor(room.status)}`}>
                     {room.status}
-                  </IOSBadge>
+                  </span>
                 </div>
               ))}
               {roomStatuses.length === 0 && !isLoading && (

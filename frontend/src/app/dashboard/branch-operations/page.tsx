@@ -50,7 +50,7 @@ function BranchOperationsDashboardContent() {
     try {
       console.log(`Fetching dashboard data with branch ID: ${activeBranchId}`);
       const response = await branchOperationsAPI.getDashboard(activeBranchId);
-      
+
       // Debug response
       console.log('API Response:', response);
 
@@ -112,12 +112,12 @@ function BranchOperationsDashboardContent() {
           {apiError && (
             <IOSCard className="p-4 mb-4 bg-red-50 border-red-200">
               <h3 className="font-bold text-red-600 mb-2">API Error Occurred</h3>
-              <pre className="text-xs overflow-auto p-2 bg-gray-50 rounded border">
+              <pre className="text-xs overflow-auto p-2 bg-stone-50 rounded border">
                 {JSON.stringify(apiError, null, 2)}
               </pre>
               <div className="mt-3">
                 <p className="text-sm mb-2"><strong>Debug Info:</strong></p>
-                <ul className="list-disc pl-5 text-xs text-gray-700">
+                <ul className="list-disc pl-5 text-xs text-stone-700">
                   <li>Branch ID: {activeBranchId}</li>
                   <li>Branch Name: {activeBranch?.name}</li>
                   <li>URL: {`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/branch-operations/dashboard`}</li>
@@ -130,19 +130,19 @@ function BranchOperationsDashboardContent() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <IOSCard className="p-4">
               <DollarSign className="h-5 w-5 text-green-600 mb-2" />
-              <p className="text-sm text-gray-500">Revenue (Today)</p>
+              <p className="text-sm text-stone-500">Revenue (Today)</p>
               <p className="text-lg font-bold">KES {(stats.revenue / 1000).toFixed(0)}K</p>
             </IOSCard>
 
             <IOSCard className="p-4">
               <Bed className="h-5 w-5 text-blue-600 mb-2" />
-              <p className="text-sm text-gray-500">Occupancy</p>
+              <p className="text-sm text-stone-500">Occupancy</p>
               <p className="text-lg font-bold">{stats.occupancy}%</p>
             </IOSCard>
 
             <IOSCard className="p-4">
               <Users className="h-5 w-5 text-purple-600 mb-2" />
-              <p className="text-sm text-gray-500">Staff</p>
+              <p className="text-sm text-stone-500">Staff</p>
               <p className="text-lg font-bold">
                 {stats.staff.active}/{stats.staff.total}
               </p>
@@ -150,7 +150,7 @@ function BranchOperationsDashboardContent() {
 
             <IOSCard className="p-4">
               <ClipboardList className="h-5 w-5 text-yellow-600 mb-2" />
-              <p className="text-sm text-gray-500">Pending Tasks</p>
+              <p className="text-sm text-stone-500">Pending Tasks</p>
               <p className="text-lg font-bold text-yellow-600">{stats.pendingTasks}</p>
             </IOSCard>
           </div>
@@ -159,25 +159,25 @@ function BranchOperationsDashboardContent() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <IOSCard className="p-4">
               <ArrowUpRight className="h-5 w-5 text-green-600 mb-2" />
-              <p className="text-sm text-gray-500">Arrivals Today</p>
+              <p className="text-sm text-stone-500">Arrivals Today</p>
               <p className="text-lg font-bold text-green-600">{stats.arrivals}</p>
             </IOSCard>
 
             <IOSCard className="p-4">
               <UserCheck className="h-5 w-5 text-blue-600 mb-2" />
-              <p className="text-sm text-gray-500">Departures Today</p>
+              <p className="text-sm text-stone-500">Departures Today</p>
               <p className="text-lg font-bold">{stats.departures}</p>
             </IOSCard>
 
             <IOSCard className="p-4">
               <Send className="h-5 w-5 text-orange-600 mb-2" />
-              <p className="text-sm text-gray-500">Stock Requests</p>
+              <p className="text-sm text-stone-500">Stock Requests</p>
               <p className="text-lg font-bold">{stats.stockRequests}</p>
             </IOSCard>
 
             <IOSCard className="p-4">
               <Boxes className="h-5 w-5 text-cyan-600 mb-2" />
-              <p className="text-sm text-gray-500">Incoming Stock</p>
+              <p className="text-sm text-stone-500">Incoming Stock</p>
               <p className="text-lg font-bold text-cyan-600">{stats.incomingStock.length}</p>
             </IOSCard>
           </div>
@@ -214,9 +214,9 @@ function BranchOperationsDashboardContent() {
 
               {isLoading ? (
                 <div className="animate-pulse space-y-3">
-                  <div className="h-16 bg-gray-100 rounded-lg"></div>
-                  <div className="h-16 bg-gray-100 rounded-lg"></div>
-                  <div className="h-16 bg-gray-100 rounded-lg"></div>
+                  <div className="h-16 bg-stone-100 rounded-lg"></div>
+                  <div className="h-16 bg-stone-100 rounded-lg"></div>
+                  <div className="h-16 bg-stone-100 rounded-lg"></div>
                 </div>
               ) : stats.upcomingReservations && stats.upcomingReservations.length > 0 ? (
                 <div className="space-y-2">
@@ -231,12 +231,12 @@ function BranchOperationsDashboardContent() {
                         <div className="flex justify-between">
                           <div>
                             <p className="font-medium">{reservation.guest_name}</p>
-                            <p className="text-sm text-gray-500">
+                            <p className="text-sm text-stone-500">
                               {reservation.room_type} {reservation.room_number ? `#${reservation.room_number}` : ''} • {nights} {nights === 1 ? 'night' : 'nights'}
                             </p>
                           </div>
                           <div className="text-right">
-                            <p className="text-sm text-gray-700">
+                            <p className="text-sm text-stone-700">
                               {checkInDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {checkOutDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                             </p>
                             {isToday && <p className="text-xs text-blue-600">Check-in today</p>}
@@ -248,8 +248,8 @@ function BranchOperationsDashboardContent() {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-2" />
-                  <p className="text-gray-500 text-sm">No upcoming reservations</p>
+                  <Calendar className="h-12 w-12 text-stone-300 mx-auto mb-2" />
+                  <p className="text-stone-500 text-sm">No upcoming reservations</p>
                   <Link href="/dashboard/branch-operations/operations/reservations">
                     <IOSButton variant="secondary" size="sm" className="mt-3">
                       Create Reservation
@@ -272,9 +272,9 @@ function BranchOperationsDashboardContent() {
 
               {isLoading ? (
                 <div className="animate-pulse space-y-3">
-                  <div className="h-16 bg-gray-100 rounded-lg"></div>
-                  <div className="h-16 bg-gray-100 rounded-lg"></div>
-                  <div className="h-16 bg-gray-100 rounded-lg"></div>
+                  <div className="h-16 bg-stone-100 rounded-lg"></div>
+                  <div className="h-16 bg-stone-100 rounded-lg"></div>
+                  <div className="h-16 bg-stone-100 rounded-lg"></div>
                 </div>
               ) : stats.incomingStock && stats.incomingStock.length > 0 ? (
                 <div className="space-y-2">
@@ -283,14 +283,14 @@ function BranchOperationsDashboardContent() {
                       <div className="flex justify-between">
                         <div>
                           <p className="font-medium">{dispatch.dispatch_number || `Dispatch #${dispatch.id}`}</p>
-                          <p className="text-sm text-gray-500">
+                          <p className="text-sm text-stone-500">
                             {dispatch.items?.length || 0} items {dispatch.source ? `from ${dispatch.source}` : ''}
                           </p>
                         </div>
                         <div className="text-right">
                           <span className={`px-2 py-1 text-xs rounded-full ${dispatch.status === 'in_transit' ? 'bg-yellow-100 text-yellow-800' :
                             dispatch.status === 'approved' ? 'bg-blue-100 text-blue-800' :
-                              'bg-gray-100 text-gray-800'
+                              'bg-stone-100 text-stone-800'
                             }`}>
                             {dispatch.status === 'in_transit' ? 'In Transit' :
                               dispatch.status === 'approved' ? 'Approved' :
@@ -303,8 +303,8 @@ function BranchOperationsDashboardContent() {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <Boxes className="h-12 w-12 text-gray-300 mx-auto mb-2" />
-                  <p className="text-gray-500 text-sm">No incoming stock</p>
+                  <Boxes className="h-12 w-12 text-stone-300 mx-auto mb-2" />
+                  <p className="text-stone-500 text-sm">No incoming stock</p>
                   <Link href="/dashboard/branch-operations/inventory/requests">
                     <IOSButton variant="secondary" size="sm" className="mt-3">
                       Request Stock

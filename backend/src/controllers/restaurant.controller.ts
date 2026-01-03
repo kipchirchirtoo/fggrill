@@ -47,8 +47,9 @@ export const getMenuItems = async (
     if (req.query.category) {
       query = query.eq('category_id', req.query.category);
     }
-    if (req.query.branch_id) {
-      query = query.or(`branch_id.eq.${req.query.branch_id},branch_id.is.null`);
+    const branchId = req.user?.branch_id || req.query.branch_id;
+    if (branchId) {
+      query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
     }
     if (req.query.available === 'true') {
       query = query.eq('is_available', true);
@@ -104,11 +105,11 @@ export const createMenuItem = async (
         price,
         image_url: imageUrl,
         preparation_time: preparationTime,
-        is_vegetarian: isVegetarian,
-        is_spicy: isSpicy,
+        is_vegetarian: isVegetarian ?? false,
+        is_spicy: isSpicy ?? false,
         allergens,
         ingredients,
-        branch_id: branchId || null
+        branch_id: req.user?.branch_id || branchId || null
       }])
       .select()
       .single();
@@ -171,11 +172,11 @@ export const updateMenuItem = async (
     if (price !== undefined) updateData.price = price;
     if (imageUrl !== undefined || image_url !== undefined) updateData.image_url = imageUrl || image_url;
     if (preparationTime !== undefined || preparation_time !== undefined) updateData.preparation_time = preparationTime || preparation_time;
-    if (isVegetarian !== undefined || is_vegetarian !== undefined) updateData.is_vegetarian = isVegetarian ?? is_vegetarian;
-    if (isSpicy !== undefined || is_spicy !== undefined) updateData.is_spicy = isSpicy ?? is_spicy;
+    if (isVegetarian !== undefined || is_vegetarian !== undefined) updateData.is_vegetarian = (isVegetarian ?? is_vegetarian) ?? false;
+    if (isSpicy !== undefined || is_spicy !== undefined) updateData.is_spicy = (isSpicy ?? is_spicy) ?? false;
     if (allergens !== undefined) updateData.allergens = allergens;
     if (ingredients !== undefined) updateData.ingredients = ingredients;
-    if (isAvailable !== undefined || is_available !== undefined) updateData.is_available = isAvailable ?? is_available;
+    if (isAvailable !== undefined || is_available !== undefined) updateData.is_available = (isAvailable ?? is_available) ?? true;
     if (branchId !== undefined || branch_id !== undefined) updateData.branch_id = branchId || branch_id || null;
 
     const { data: item, error } = await supabase
@@ -254,7 +255,7 @@ export const toggleItemAvailability = async (
     // Toggle it
     const { data: updatedItem, error: updateError } = await supabase
       .from('restaurant_menu_items')
-      .update({ 
+      .update({
         is_available: !item.is_available,
         updated_at: new Date().toISOString()
       })
@@ -284,43 +285,53 @@ export const createOrder = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const {
-      orderType,
-      tableNumber,
-      roomNumber,
-      guestId,
-      guestName,
-      specialInstructions,
-      items,
-      paymentMethod,
-      status,
-      branchId
-    } = req.body;
+    // Support both camelCase and snake_case field names from frontend
+    const orderType = req.body.orderType || req.body.order_type;
+    const tableNumber = req.body.tableNumber || req.body.table_number;
+    const roomNumber = req.body.roomNumber || req.body.room_number;
+    const guestId = req.body.guestId || req.body.guest_id;
+    const guestName = req.body.guestName || req.body.guest_name || req.body.customer_name;
+    const specialInstructions = req.body.specialInstructions || req.body.special_instructions;
+    const items = req.body.items;
+    const paymentMethod = req.body.paymentMethod || req.body.payment_method;
+    const status = req.body.status;
+    // Fallback to user's branch if not provided in body
+    const branchId = req.body.branchId || req.body.branch_id || req.user?.branch_id;
+
+    if (!branchId) {
+      logger.warn('Order creation attempted without branch_id');
+      // Proceeding might be okay for super admin or specific cases, but let's log it.
+      // Ideally we should probably require it, but legacy data might not have it.
+    }
 
     // Generate order number
     const { data: orderNumber } = await supabase
       .rpc('generate_order_number');
 
     // Create order
+    const orderData = {
+      order_number: orderNumber,
+      order_type: orderType,
+      table_number: tableNumber,
+      room_number: roomNumber,
+      guest_id: guestId,
+      guest_name: guestName,
+      special_instructions: specialInstructions,
+      total_amount: 0, // Will be calculated by trigger
+      payment_method: paymentMethod,
+      payment_status: status === 'confirmed' ? 'paid' : 'pending',
+      status: status || 'pending',
+      confirmed_at: status === 'confirmed' ? new Date().toISOString() : null,
+      confirmed_by: status === 'confirmed' ? req.user?.id : null,
+      created_by: req.user?.id,
+      branch_id: branchId
+    };
+
+    console.log('Creating order with data:', JSON.stringify(orderData, null, 2));
+
     const { data: order, error: orderError } = await supabase
       .from('restaurant_orders')
-      .insert([{
-        order_number: orderNumber,
-        order_type: orderType,
-        table_number: tableNumber,
-        room_number: roomNumber,
-        guest_id: guestId,
-        guest_name: guestName,
-        special_instructions: specialInstructions,
-        total_amount: 0, // Will be calculated by trigger
-        payment_method: paymentMethod,
-        payment_status: status === 'confirmed' ? 'paid' : 'pending',
-        status: status || 'pending',
-        confirmed_at: status === 'confirmed' ? new Date().toISOString() : null,
-        confirmed_by: status === 'confirmed' ? req.user?.id : null,
-        created_by: req.user?.id,
-        branch_id: branchId
-      }])
+      .insert([orderData])
       .select()
       .single();
 
@@ -328,22 +339,55 @@ export const createOrder = async (
       throw orderError || new Error('Failed to create order');
     }
 
-    // Create order items
+    // Create order items - support both camelCase and snake_case field names
+    console.log('Creating order items, received items:', JSON.stringify(items, null, 2));
+
+    if (!items || items.length === 0) {
+      throw new Error('No items provided for order');
+    }
+
+    const orderItems = items.map((item: any) => {
+      const menuItemId = item.menuItemId || item.menu_item_id;
+      const unitPrice = item.unitPrice || item.unit_price;
+      const qty = item.quantity;
+      const notes = item.specialInstructions || item.special_instructions || item.notes;
+
+      console.log('Processing item:', { menuItemId, unitPrice, qty, notes });
+
+      return {
+        order_id: order.id,
+        menu_item_id: menuItemId,
+        quantity: qty,
+        unit_price: unitPrice,
+        total_price: qty * unitPrice,
+        special_instructions: notes
+      };
+    });
+
+    console.log('Inserting order items:', JSON.stringify(orderItems, null, 2));
+
     const { error: itemsError } = await supabase
       .from('restaurant_order_items')
-      .insert(
-        items.map((item: any) => ({
-          order_id: order.id,
-          menu_item_id: item.menuItemId,
-          quantity: item.quantity,
-          unit_price: item.unitPrice,
-          total_price: item.quantity * item.unitPrice,
-          special_instructions: item.specialInstructions
-        }))
-      );
+      .insert(orderItems);
 
     if (itemsError) {
+      console.error('Error inserting order items:', itemsError);
       throw itemsError;
+    }
+
+    console.log('Order items created successfully');
+
+    // Calculate total amount from order items
+    const totalAmount = orderItems.reduce((sum: number, item: any) => sum + item.total_price, 0);
+
+    // Update order with calculated total
+    const { error: updateError } = await supabase
+      .from('restaurant_orders')
+      .update({ total_amount: totalAmount })
+      .eq('id', order.id);
+
+    if (updateError) {
+      throw updateError;
     }
 
     // Get updated order with items
@@ -400,27 +444,27 @@ export const updateOrderStatus = async (
       return;
     }
 
-    // Update order status
+    // Update order status - only update status and timestamps, not user references
+    // (prepared_by, delivered_by, cancelled_by reference staff_profiles, not users)
     const { data: updatedOrder, error: updateError } = await supabase
       .from('restaurant_orders')
       .update({
         status,
         updated_at: new Date().toISOString(),
         ...(status === 'confirmed' ? {
-          confirmed_at: new Date().toISOString(),
-          confirmed_by: req.user?.id
+          confirmed_at: new Date().toISOString()
         } : {}),
         ...(status === 'preparing' ? {
-          prepared_at: new Date().toISOString(),
-          prepared_by: req.user?.id
+          prepared_at: new Date().toISOString()
         } : {}),
-        ...(status === 'delivered' ? {
-          delivered_at: new Date().toISOString(),
-          delivered_by: req.user?.id
+        ...(status === 'ready' ? {
+          prepared_at: new Date().toISOString()
+        } : {}),
+        ...(status === 'delivered' || status === 'served' ? {
+          delivered_at: new Date().toISOString()
         } : {}),
         ...(status === 'cancelled' ? {
           cancelled_at: new Date().toISOString(),
-          cancelled_by: req.user?.id,
           cancellation_reason: req.body.reason
         } : {})
       })
@@ -516,11 +560,18 @@ export const getOrders = async (
     if (req.query.type) {
       query = query.eq('order_type', req.query.type);
     }
-    if (req.query.guest) {
-      query = query.eq('guest_id', req.query.guest);
+    const branchId = req.user?.branch_id || req.query.branch_id;
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
     }
-    if (req.query.branch_id) {
-      query = query.eq('branch_id', req.query.branch_id);
+    if (req.query.date) {
+      const date = req.query.date as string;
+      const startDate = `${date}T00:00:00`;
+      const endDate = `${date}T23:59:59`;
+      query = query.gte('created_at', startDate).lte('created_at', endDate);
+    }
+    if (req.query.startDate && req.query.endDate) {
+      query = query.gte('created_at', req.query.startDate).lte('created_at', req.query.endDate);
     }
 
     const { data: orders, error, count } = await query;
@@ -529,13 +580,20 @@ export const getOrders = async (
       throw error;
     }
 
+    // Transform data to match frontend expectations
+    const transformedOrders = orders?.map(order => ({
+      ...order,
+      total: order.total_amount, // Map total_amount to total for frontend
+      items_count: order.items?.length || 0
+    })) || [];
+
     res.status(200).json({
       success: true,
       count: orders.length,
       total: count || 0,
       page,
       pages: Math.ceil((count || 0) / limit),
-      data: orders
+      data: transformedOrders
     });
   } catch (error) {
     next(error);
@@ -931,6 +989,62 @@ export const deleteMenuItemImage = async (
     if (updateError) throw updateError;
 
     res.status(200).json({ success: true, message: 'Image deleted' });
+  } catch (error) {
+    next(error);
+  }
+};
+// @desc    Get daily sales report
+// @route   GET /api/restaurant/reports/daily-sales
+// @access  Private
+export const getDailySales = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const date = req.query.date as string || new Date().toISOString().split('T')[0];
+    const branchId = req.query.branch_id;
+
+    const startDate = `${date}T00:00:00`;
+    const endDate = `${date}T23:59:59`;
+
+    let query = supabase
+      .from('restaurant_orders')
+      .select('*')
+      .gte('created_at', startDate)
+      .lte('created_at', endDate)
+      .neq('status', 'cancelled');
+
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
+    }
+
+    const { data: orders, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    const total = orders?.reduce((sum, order) => sum + (order.total_amount || 0), 0) || 0;
+    const ordersCount = orders?.length || 0;
+    const avgOrderValue = ordersCount > 0 ? total / ordersCount : 0;
+
+    const byType = {
+      dine_in: orders?.filter(o => o.order_type === 'dine_in').length || 0,
+      takeaway: orders?.filter(o => o.order_type === 'takeaway').length || 0,
+      room_service: orders?.filter(o => o.order_type === 'room_service').length || 0
+    };
+
+    res.status(200).json({
+      success: true,
+      data: {
+        date,
+        total,
+        orders_count: ordersCount,
+        avg_order_value: avgOrderValue,
+        by_type: byType
+      }
+    });
   } catch (error) {
     next(error);
   }

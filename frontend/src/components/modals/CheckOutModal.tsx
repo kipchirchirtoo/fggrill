@@ -74,7 +74,7 @@ export function CheckOutModal({ isOpen, onClose, initialData }: CheckOutModalPro
 
   const handleSearch = async () => {
     try {
-      const res = await bookingsAPI.getBookings({ status: 'checked_in' });
+      const res = await bookingsAPI.getBookings({ status: 'checked_in', limit: 100 });
       const list = res.data || [];
       const term = (searchTerm || '').toLowerCase();
       const found = list.find((b: any) => {
@@ -165,7 +165,7 @@ export function CheckOutModal({ isOpen, onClose, initialData }: CheckOutModalPro
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search by room number or guest name"
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-ios-lg"
+                className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-ios-lg"
               />
             </div>
             <button

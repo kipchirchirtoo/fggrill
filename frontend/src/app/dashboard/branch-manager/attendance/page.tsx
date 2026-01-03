@@ -2,74 +2,390 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
-import { Button } from "@/components/ui/minimal/button";
+import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/minimal/card";
 import { IOSBadge } from '@/components/ui/ios-badge';
-import { staffAPI } from '@/lib/api';
-import { UserCheck, RefreshCw, Clock, User, CheckCircle, XCircle } from 'lucide-react';
-import { IOSButton } from '@/components/ui/ios-button';
-import { IOSCard } from '@/components/ui/ios-card';
+import { staffAPI, attendanceAnalyticsAPI } from '@/lib/api';
+import {
+  RefreshCw, Calendar, Users, Timer,
+  Search, Download, ChevronRight, CheckCircle2, AlertCircle
+} from 'lucide-react';
+import { format } from 'date-fns';
+import { toast } from 'sonner';
 
-interface Attendance { id: string; employee_name: string; check_in?: string; check_out?: string; status: 'present' | 'absent' | 'late'; }
+interface AttendanceRecord {
+  id: string;
+  staff_id: string;
+  attendance_date: string;
+  clock_in?: string;
+  clock_out?: string;
+  status: 'present' | 'absent' | 'late' | 'leave';
+  notes?: string;
+  staff?: {
+    id_number: string;
+    user: {
+      first_name: string;
+      last_name: string;
+      email: string;
+    };
+  };
+}
 
 export default function BranchAttendancePage() {
   const { user } = useAuth();
-  const [attendance, setAttendance] = useState<Attendance[]>([]);
+  const { activeBranchId, activeBranch } = useBranch();
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [analytics, setAnalytics] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchAttendance = useCallback(async () => {
+  const currentBranchId = activeBranchId || user?.branch_id;
+
+  const fetchData = useCallback(async () => {
+    if (!currentBranchId) return;
     setIsLoading(true);
     try {
-      const response = await staffAPI.getAttendance();
-      if (response.success) setAttendance(response.data || []);
-    } catch (error) { console.error('Error:', error); }
-    finally { setIsLoading(false); }
-  }, []);
+      const [attendanceRes, analyticsRes] = await Promise.all([
+        staffAPI.getAttendance({ branch_id: currentBranchId, date: selectedDate }),
+        attendanceAnalyticsAPI.analyze(currentBranchId, selectedDate)
+      ]);
 
-  useEffect(() => { fetchAttendance(); }, [fetchAttendance]);
+      if (attendanceRes.success) {
+        setAttendance(attendanceRes.data || []);
+      }
+      if (analyticsRes.success) {
+        setAnalytics(analyticsRes.summary);
+      }
+    } catch (error) {
+      console.error('Error fetching attendance data:', error);
+      toast.error('Failed to load attendance data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentBranchId, selectedDate]);
 
-  const stats = { present: attendance.filter(a => a.status === 'present').length, absent: attendance.filter(a => a.status === 'absent').length, late: attendance.filter(a => a.status === 'late').length };
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const filteredAttendance = attendance.filter(a => {
+    const name = `${a.staff?.user.first_name} ${a.staff?.user.last_name}`.toLowerCase();
+    const id = a.staff?.id_number?.toLowerCase() || '';
+    return name.includes(searchQuery.toLowerCase()) || id.includes(searchQuery.toLowerCase());
+  });
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'present': return 'success';
+      case 'late': return 'warning';
+      case 'absent': return 'danger';
+      case 'leave': return 'secondary';
+      default: return 'info';
+    }
+  };
+
+  const handleExport = () => {
+    if (filteredAttendance.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+
+    const headers = ['Date', 'Employee ID', 'Name', 'Clock In', 'Clock Out', 'Status', 'Notes'];
+    const csvData = filteredAttendance.map(a => [
+      a.attendance_date,
+      a.staff?.id_number || '',
+      `${a.staff?.user.first_name} ${a.staff?.user.last_name}`,
+      a.clock_in ? format(new Date(a.clock_in), 'HH:mm:ss') : '',
+      a.clock_out ? format(new Date(a.clock_out), 'HH:mm:ss') : '',
+      a.status,
+      a.notes || ''
+    ]);
+
+    const csvContent = [headers, ...csvData].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `attendance_${selectedDate}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Attendance report exported');
+  };
+
+  const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(null);
+
+  const handleExportPDF = async () => {
+    if (!currentBranchId) return;
+
+    try {
+      toast.loading('Generating PDF report...');
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL}/api/reports/generate/branded-pdf`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          reportType: 'employee_attendance',
+          filters: {
+            branch_id: currentBranchId,
+            start_date: selectedDate,
+            end_date: selectedDate,
+            branch_name: activeBranch?.name || 'Branch'
+          },
+          useRealData: true
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to generate PDF');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Attendance_Report_${selectedDate}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.dismiss();
+      toast.success('PDF report downloaded');
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      toast.dismiss();
+      toast.error('Failed to export PDF');
+    }
+  };
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
       <DashboardLayout>
-        <div className="space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div><h1 className="text-2xl font-bold text-gray-900">Attendance</h1><p className="text-gray-500">Today's staff attendance</p></div>
-            <IOSButton variant="secondary" onClick={fetchAttendance} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+        <div className="max-w-7xl mx-auto space-y-8 pb-10">
+          {/* Header Section */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+            <div>
+              <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">Attendance Log</h1>
+              <p className="text-sm text-stone-500 mt-1">Daily staff records for {activeBranch?.name}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="h-10 pl-9 pr-4 bg-white border border-stone-200 rounded-lg text-sm focus:ring-1 focus:ring-stone-400 outline-none transition-all"
+                />
+              </div>
+              <button
+                onClick={fetchData}
+                className="h-10 w-10 flex items-center justify-center border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
+                title="Refresh data"
+              >
+                <RefreshCw className={`h-4 w-4 text-stone-600 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                onClick={handleExport}
+                className="h-10 px-4 bg-white border border-stone-200 text-stone-700 rounded-lg text-sm font-medium hover:bg-stone-50 transition-colors flex items-center gap-2"
+              >
+                <Download className="h-4 w-4" />
+                CSV
+              </button>
+              <button
+                onClick={handleExportPDF}
+                className="h-10 px-4 bg-stone-900 text-white rounded-lg text-sm font-medium hover:bg-stone-800 transition-colors flex items-center gap-2"
+              >
+                <Download className="h-4 w-4" />
+                PDF Report
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <IOSCard className="p-4 border-l-4 border-green-500"><CheckCircle className="h-6 w-6 text-[#34C759] mb-2" /><p className="text-sm text-gray-500">Present</p><p className="text-xl font-bold text-[#34C759]">{stats.present}</p></IOSCard>
-            <IOSCard className="p-4 border-l-4 border-red-500"><XCircle className="h-6 w-6 text-[#FF3B30] mb-2" /><p className="text-sm text-gray-500">Absent</p><p className="text-xl font-bold text-[#FF3B30]">{stats.absent}</p></IOSCard>
-            <IOSCard className="p-4 border-l-4 border-yellow-500"><Clock className="h-6 w-6 text-yellow-600 mb-2" /><p className="text-sm text-gray-500">Late</p><p className="text-xl font-bold text-yellow-600">{stats.late}</p></IOSCard>
+          {/* Stats Overview */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {[
+              { label: 'Total Staff', value: analytics?.total_staff || 0, icon: Users },
+              { label: 'Present', value: analytics?.present || 0, icon: CheckCircle2 },
+              { label: 'Late', value: analytics?.late || 0, icon: AlertCircle },
+              { label: 'Total Hours', value: `${analytics?.total_hours || 0}h`, icon: Timer },
+            ].map((stat, i) => (
+              <div key={i} className="bg-white border border-stone-100 rounded-xl p-5 shadow-sm">
+                <div className="flex items-center gap-2.5 mb-2">
+                  <stat.icon className="h-4 w-4 text-stone-400" />
+                  <span className="text-[11px] font-semibold text-stone-400 uppercase tracking-wider">{stat.label}</span>
+                </div>
+                <div className="text-2xl font-bold text-stone-900">{stat.value}</div>
+              </div>
+            ))}
           </div>
 
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
-          ) : attendance.length === 0 ? (
-            <IOSCard className="p-12 text-center"><UserCheck className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No attendance records</p></IOSCard>
-          ) : (
-            <div className="space-y-3">
-              {attendance.map((record) => (
-                <IOSCard key={record.id} className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center"><User className="h-5 w-5 text-[#007AFF]" /></div>
-                      <div>
-                        <p className="font-bold">{record.employee_name}</p>
-                        <p className="text-sm text-gray-500">
-                          {record.check_in && `In: ${record.check_in}`}
-                          {record.check_out && ` • Out: ${record.check_out}`}
-                        </p>
+          {/* Main Content Area */}
+          <Card className="border-stone-100 shadow-sm overflow-hidden">
+            <CardHeader className="border-b border-stone-50 bg-white py-5 px-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <CardTitle className="text-lg font-medium text-stone-900">Records</CardTitle>
+                <div className="relative w-full md:w-80">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by name or ID..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full h-10 pl-9 pr-3 text-sm bg-stone-50/50 border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-400 outline-none transition-all"
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-stone-50/50 border-b border-stone-100">
+                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider">Staff Member</th>
+                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider">Employee ID</th>
+                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider">Clock In</th>
+                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider">Clock Out</th>
+                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-50">
+                    {isLoading ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-16 text-center text-stone-400">
+                          <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-3 opacity-20" />
+                          <span className="text-sm">Loading records...</span>
+                        </td>
+                      </tr>
+                    ) : filteredAttendance.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-16 text-center text-stone-400">
+                          <span className="text-sm">No attendance records found for this date.</span>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredAttendance.map((record) => (
+                        <tr key={record.id} className="hover:bg-stone-50/30 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center text-stone-600 font-semibold text-xs">
+                                {record.staff?.user.first_name?.[0]}{record.staff?.user.last_name?.[0]}
+                              </div>
+                              <div>
+                                <div className="text-sm font-medium text-stone-900">
+                                  {record.staff?.user.first_name} {record.staff?.user.last_name}
+                                </div>
+                                <div className="text-[11px] text-stone-400">{record.staff?.user.email}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-stone-600 font-mono">{record.staff?.id_number || '-'}</td>
+                          <td className="px-6 py-4 text-sm text-stone-600">
+                            {record.clock_in ? format(new Date(record.clock_in), 'HH:mm:ss') : '--:--'}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-stone-600">
+                            {record.clock_out ? format(new Date(record.clock_out), 'HH:mm:ss') : (
+                              <span className="text-stone-400 italic">Active</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <IOSBadge color={getStatusColor(record.status)} variant="light" size="sm">
+                              {record.status.toUpperCase()}
+                            </IOSBadge>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button
+                              onClick={() => setSelectedRecord(record)}
+                              className="p-1.5 text-stone-300 hover:text-stone-600 transition-colors"
+                            >
+                              <ChevronRight className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Details Modal */}
+          {selectedRecord && (
+            <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="px-6 py-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
+                  <h3 className="font-semibold text-stone-900">Attendance Details</h3>
+                  <button
+                    onClick={() => setSelectedRecord(null)}
+                    className="text-stone-400 hover:text-stone-600 transition-colors"
+                  >
+                    <span className="sr-only">Close</span>
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="p-6 space-y-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-full bg-stone-100 flex items-center justify-center text-stone-600 font-bold text-xl">
+                      {selectedRecord.staff?.user.first_name?.[0]}{selectedRecord.staff?.user.last_name?.[0]}
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-semibold text-stone-900">
+                        {selectedRecord.staff?.user.first_name} {selectedRecord.staff?.user.last_name}
+                      </h4>
+                      <p className="text-sm text-stone-500">{selectedRecord.staff?.user.email}</p>
+                      <p className="text-xs font-mono text-stone-400 mt-1">{selectedRecord.staff?.id_number}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
+                      <div className="text-xs text-stone-400 uppercase tracking-wider font-semibold mb-1">Clock In</div>
+                      <div className="text-stone-900 font-medium">
+                        {selectedRecord.clock_in ? format(new Date(selectedRecord.clock_in), 'HH:mm:ss') : '--:--'}
                       </div>
                     </div>
-                    <IOSBadge variant={record.status === 'present' ? 'success' : record.status === 'absent' ? 'error' : 'warning'}>{record.status}</IOSBadge>
+                    <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
+                      <div className="text-xs text-stone-400 uppercase tracking-wider font-semibold mb-1">Clock Out</div>
+                      <div className="text-stone-900 font-medium">
+                        {selectedRecord.clock_out ? format(new Date(selectedRecord.clock_out), 'HH:mm:ss') : 'Active'}
+                      </div>
+                    </div>
                   </div>
-                </IOSCard>
-              ))}
+
+                  <div>
+                    <div className="text-xs text-stone-400 uppercase tracking-wider font-semibold mb-2">Status</div>
+                    <IOSBadge color={getStatusColor(selectedRecord.status)} variant="light" size="lg" className="w-full justify-center">
+                      {selectedRecord.status.toUpperCase()}
+                    </IOSBadge>
+                  </div>
+
+                  {selectedRecord.notes && (
+                    <div>
+                      <div className="text-xs text-stone-400 uppercase tracking-wider font-semibold mb-2">Notes</div>
+                      <div className="p-3 bg-stone-50 rounded-lg border border-stone-100 text-sm text-stone-600">
+                        {selectedRecord.notes}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="px-6 py-4 bg-stone-50 border-t border-stone-100 flex justify-end">
+                  <button
+                    onClick={() => setSelectedRecord(null)}
+                    className="px-4 py-2 bg-white border border-stone-200 rounded-lg text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

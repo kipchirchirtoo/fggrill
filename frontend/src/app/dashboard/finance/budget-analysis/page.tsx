@@ -5,26 +5,36 @@ import { UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { financeAPI } from '@/lib/api';
-import { PieChart, RefreshCw } from 'lucide-react';
+import { PieChart, RefreshCw, Calendar } from 'lucide-react';
+import { BranchSelector } from '@/components/finance/BranchSelector';
 
 interface BudgetItem { category: string; budgeted: number; actual: number; variance: number; percentUsed: number; }
 
 export default function BudgetAnalysisPage() {
   const [budgets, setBudgets] = useState<BudgetItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [month, setMonth] = useState(new Date().getMonth() + 1);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await financeAPI.getBudgetAnalysis();
+      const response = await financeAPI.getBudgetAnalysis({
+        branch_id: selectedBranch || undefined,
+        year,
+        month
+      });
       if (response?.success && Array.isArray(response.data)) {
         setBudgets(response.data);
       } else if (Array.isArray(response)) {
         setBudgets(response);
+      } else {
+        setBudgets([]);
       }
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, []);
+  }, [selectedBranch, year, month]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -38,14 +48,32 @@ export default function BudgetAnalysisPage() {
       <DashboardLayout>
         <div className="space-y-6 max-w-6xl">
           {/* Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold text-gray-900">Budget Analysis</h1>
-              <p className="text-sm text-gray-500 mt-1">Track budget vs actual spending</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <BranchSelector
+              selectedBranch={selectedBranch}
+              onBranchChange={setSelectedBranch}
+            />
+            <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-lg px-3 py-1.5">
+              <Calendar className="h-4 w-4 text-stone-400" />
+              <select
+                value={year}
+                onChange={(e) => setYear(Number(e.target.value))}
+                className="text-[13px] text-stone-600 bg-transparent border-none focus:ring-0 p-0"
+              >
+                {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+              <select
+                value={month}
+                onChange={(e) => setMonth(Number(e.target.value))}
+                className="text-[13px] text-stone-600 bg-transparent border-none focus:ring-0 p-0"
+              >
+                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                  <option key={m} value={m}>{new Date(2000, m - 1).toLocaleString('default', { month: 'short' })}</option>
+                ))}
+              </select>
             </div>
-            <button onClick={fetchData} disabled={isLoading} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+            <button onClick={fetchData} disabled={isLoading} className="p-2.5 text-stone-500 bg-white border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors">
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              Refresh
             </button>
           </div>
 

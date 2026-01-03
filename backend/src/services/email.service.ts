@@ -1,5 +1,8 @@
 import nodemailer from 'nodemailer';
 import { logger } from '../utils/logger';
+import { emailTemplates } from '../utils/emailTemplates';
+import { enterpriseEmailTemplates } from '../utils/emailTemplates.enterprise';
+import { barcodeGeneratorService } from './barcodeGenerator.service';
 
 interface EmailOptions {
   to: string;
@@ -27,7 +30,7 @@ class EmailService {
   async sendEmail(options: EmailOptions): Promise<void> {
     try {
       const mailOptions = {
-        from: `${process.env.FROM_NAME} <${process.env.FROM_EMAIL}>`,
+        from: `${process.env.SMTP_FROM_NAME || 'FG Grill Hotel'} <${process.env.SMTP_FROM_EMAIL}>`,
         to: options.to,
         subject: options.subject,
         html: options.html,
@@ -44,43 +47,20 @@ class EmailService {
   }
 
   async sendWelcomeEmail(name: string, email: string): Promise<void> {
-    const html = `
-      <h1>Welcome to Famous Gate Hotel!</h1>
-      <p>Dear ${name},</p>
-      <p>Thank you for registering with us. We're excited to have you on board!</p>
-      <p>You can now access our system to:</p>
-      <ul>
-        <li>View your schedule and tasks</li>
-        <li>Access important documents</li>
-        <li>Communicate with your team</li>
-        <li>And much more!</li>
-      </ul>
-      <p>If you have any questions, please don't hesitate to contact us.</p>
-      <p>Best regards,<br>Famous Gate Hotel Team</p>
-    `;
-
     await this.sendEmail({
       to: email,
-      subject: 'Welcome to Famous Gate Hotel',
-      html
+      subject: 'Welcome to FG Grill Hotel',
+      html: emailTemplates.welcome(name)
     });
   }
 
   async sendPasswordResetEmail(email: string, resetToken: string): Promise<void> {
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
-    const html = `
-      <h1>Password Reset Request</h1>
-      <p>You are receiving this email because you (or someone else) has requested to reset your password.</p>
-      <p>Please click the link below to reset your password:</p>
-      <p><a href="${resetUrl}">Reset Password</a></p>
-      <p>This link will expire in 10 minutes.</p>
-      <p>If you did not request this, please ignore this email and your password will remain unchanged.</p>
-    `;
-
+    
     await this.sendEmail({
       to: email,
-      subject: 'Password Reset Request',
-      html
+      subject: 'Password Reset Request - FG Grill Hotel',
+      html: emailTemplates.passwordReset(resetUrl)
     });
   }
 
@@ -88,75 +68,60 @@ class EmailService {
     email: string,
     bookingDetails: any
   ): Promise<void> {
-    const html = `
-      <h1>Booking Confirmation</h1>
-      <p>Dear ${bookingDetails.guest.firstName},</p>
-      <p>Your booking has been confirmed. Here are the details:</p>
-      <table>
-        <tr>
-          <td><strong>Booking Reference:</strong></td>
-          <td>${bookingDetails.bookingNumber}</td>
-        </tr>
-        <tr>
-          <td><strong>Check-in:</strong></td>
-          <td>${new Date(bookingDetails.checkIn).toLocaleDateString()}</td>
-        </tr>
-        <tr>
-          <td><strong>Check-out:</strong></td>
-          <td>${new Date(bookingDetails.checkOut).toLocaleDateString()}</td>
-        </tr>
-        <tr>
-          <td><strong>Room Type:</strong></td>
-          <td>${bookingDetails.roomType}</td>
-        </tr>
-        <tr>
-          <td><strong>Total Amount:</strong></td>
-          <td>KES ${bookingDetails.totalAmount.toLocaleString()}</td>
-        </tr>
-      </table>
-      <p>We look forward to welcoming you!</p>
-      <p>Best regards,<br>Famous Gate Hotel Team</p>
-    `;
+    try {
+      // Generate barcode for booking
+      const confirmationNumber = bookingDetails.confirmation_number || bookingDetails.id;
+      logger.info(`Generating barcode for booking ${confirmationNumber}`);
+      
+      const barcodeBase64 = await barcodeGeneratorService.generateBarcode(confirmationNumber);
+      
+      if (barcodeBase64) {
+        logger.info(`Barcode generated successfully for ${confirmationNumber}`);
+      } else {
+        logger.warn(`Barcode generation failed for ${confirmationNumber}, sending email without barcode`);
+      }
 
-    await this.sendEmail({
-      to: email,
-      subject: 'Booking Confirmation - Famous Gate Hotel',
-      html
-    });
+      // Prepare email options with CID attachment for barcode
+      const mailOptions: any = {
+        to: email,
+        subject: 'Booking Confirmation - Famous Gate Hotel',
+        html: enterpriseEmailTemplates.bookingConfirmation(bookingDetails, barcodeBase64 || undefined),
+        attachments: []
+      };
+
+      // Add barcode as CID attachment if available
+      if (barcodeBase64) {
+        mailOptions.attachments.push({
+          filename: 'barcode.png',
+          content: Buffer.from(barcodeBase64, 'base64'),
+          cid: 'barcode@famousgatehotel',
+          contentType: 'image/png'
+        });
+      }
+
+      // Send email with attachment
+      await this.sendEmail(mailOptions);
+      
+      logger.info(`Booking confirmation email sent to ${email} with${barcodeBase64 ? '' : 'out'} barcode`);
+    } catch (error) {
+      logger.error('Error in sendBookingConfirmation:', error);
+      // Fallback to sending without barcode if there's an error
+      await this.sendEmail({
+        to: email,
+        subject: 'Booking Confirmation - Famous Gate Hotel',
+        html: enterpriseEmailTemplates.bookingConfirmation(bookingDetails)
+      });
+    }
   }
 
   async sendMaintenanceAlert(
     email: string,
     taskDetails: any
   ): Promise<void> {
-    const html = `
-      <h1>Maintenance Alert</h1>
-      <p>A new maintenance task has been assigned:</p>
-      <table>
-        <tr>
-          <td><strong>Task Number:</strong></td>
-          <td>${taskDetails.taskNumber}</td>
-        </tr>
-        <tr>
-          <td><strong>Location:</strong></td>
-          <td>${taskDetails.location}</td>
-        </tr>
-        <tr>
-          <td><strong>Priority:</strong></td>
-          <td>${taskDetails.priority}</td>
-        </tr>
-        <tr>
-          <td><strong>Description:</strong></td>
-          <td>${taskDetails.description}</td>
-        </tr>
-      </table>
-      <p>Please check the maintenance portal for more details.</p>
-    `;
-
     await this.sendEmail({
       to: email,
-      subject: 'New Maintenance Task Assigned',
-      html
+      subject: 'New Maintenance Task Assigned - FG Grill Hotel',
+      html: emailTemplates.maintenanceAlert(taskDetails)
     });
   }
 
@@ -164,34 +129,10 @@ class EmailService {
     email: string,
     itemDetails: any
   ): Promise<void> {
-    const html = `
-      <h1>Low Stock Alert</h1>
-      <p>The following item is running low on stock:</p>
-      <table>
-        <tr>
-          <td><strong>Item Code:</strong></td>
-          <td>${itemDetails.itemCode}</td>
-        </tr>
-        <tr>
-          <td><strong>Name:</strong></td>
-          <td>${itemDetails.name}</td>
-        </tr>
-        <tr>
-          <td><strong>Current Stock:</strong></td>
-          <td>${itemDetails.currentStock}</td>
-        </tr>
-        <tr>
-          <td><strong>Minimum Stock:</strong></td>
-          <td>${itemDetails.minimumStock}</td>
-        </tr>
-      </table>
-      <p>Please reorder this item soon.</p>
-    `;
-
     await this.sendEmail({
       to: email,
-      subject: 'Low Stock Alert',
-      html
+      subject: 'Low Stock Alert - FG Grill Hotel',
+      html: emailTemplates.inventoryAlert(itemDetails)
     });
   }
 
@@ -247,6 +188,17 @@ class EmailService {
         html,
         text: `Stock Transfer Request\n\nThe following order has been placed by ${user.email} on ${formattedTime}.\n\n${itemsText}`
     });
+  }
+
+  async testConnection(): Promise<boolean> {
+    try {
+      await this.transporter.verify();
+      logger.info('SMTP connection verified successfully');
+      return true;
+    } catch (error: any) {
+      logger.error('SMTP connection failed:', error);
+      return false;
+    }
   }
 
   private stripHtml(html: string): string {

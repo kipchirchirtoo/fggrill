@@ -30,22 +30,62 @@ export default function HousekeepingReportsPage() {
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month'>('week');
   const [reportData, setReportData] = useState<ReportData | null>(null);
 
+  const fetchReportData = async () => {
+    setIsLoading(true);
+    try {
+      // Calculate date range
+      const endDate = new Date();
+      const startDate = new Date();
+      if (dateRange === 'today') {
+        startDate.setHours(0, 0, 0, 0);
+      } else if (dateRange === 'week') {
+        startDate.setDate(startDate.getDate() - 7);
+      } else {
+        startDate.setMonth(startDate.getMonth() - 1);
+      }
+      
+      const [dailyRes, performanceRes, inspectionRes] = await Promise.all([
+        housekeepingAPI.getDailyReport(endDate.toISOString().split('T')[0]),
+        housekeepingAPI.getStaffPerformanceReport(startDate.toISOString().split('T')[0], endDate.toISOString().split('T')[0]),
+        housekeepingAPI.getInspectionStats(startDate.toISOString().split('T')[0], endDate.toISOString().split('T')[0]),
+      ]);
+      
+      const roomsCleaned = dailyRes.success ? (dailyRes.data?.roomsCleaned || dailyRes.data?.tasks_completed || 0) : 0;
+      const avgTime = dailyRes.success ? (dailyRes.data?.averageTime || dailyRes.data?.avg_completion_time || 0) : 0;
+      const passed = inspectionRes.success ? (inspectionRes.data?.passed || 0) : 0;
+      const failed = inspectionRes.success ? (inspectionRes.data?.failed || 0) : 0;
+      const staffPerf = performanceRes.success ? (performanceRes.data || []).map((s: any) => ({
+        name: s.name || `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+        rooms: s.rooms_cleaned || s.tasks_completed || 0,
+        avgTime: s.avg_time || s.average_completion_time || 0,
+        rating: s.rating || s.performance_score || 0,
+      })) : [];
+      
+      setReportData({
+        period: dateRange,
+        roomsCleaned,
+        averageTime: avgTime,
+        inspectionsPassed: passed,
+        inspectionsFailed: failed,
+        staffPerformance: staffPerf,
+      });
+    } catch (error) {
+      console.error('Error fetching report data:', error);
+      setReportData({
+        period: dateRange,
+        roomsCleaned: 0,
+        averageTime: 0,
+        inspectionsPassed: 0,
+        inspectionsFailed: 0,
+        staffPerformance: [],
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // Mock data - replace with API call
-    setReportData({
-      period: dateRange,
-      roomsCleaned: dateRange === 'today' ? 25 : dateRange === 'week' ? 175 : 720,
-      averageTime: 28,
-      inspectionsPassed: dateRange === 'today' ? 22 : dateRange === 'week' ? 160 : 680,
-      inspectionsFailed: dateRange === 'today' ? 3 : dateRange === 'week' ? 15 : 40,
-      staffPerformance: [
-        { name: 'Mary Wanjiku', rooms: 45, avgTime: 25, rating: 4.8 },
-        { name: 'John Kamau', rooms: 42, avgTime: 27, rating: 4.6 },
-        { name: 'Grace Muthoni', rooms: 40, avgTime: 30, rating: 4.5 },
-        { name: 'Peter Ochieng', rooms: 38, avgTime: 32, rating: 4.3 },
-      ],
-    });
-    setIsLoading(false);
+    fetchReportData();
   }, [dateRange]);
 
   const handleExport = (format: 'pdf' | 'excel') => {
@@ -129,7 +169,7 @@ export default function HousekeepingReportsPage() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Pass Rate</p>
-                      <p className="text-xl font-bold text-[#34C759]">{passRate}%</p>
+                      <p className="text-xl font-bold">{passRate}%</p>
                     </div>
                   </div>
                 </IOSCard>
@@ -140,7 +180,7 @@ export default function HousekeepingReportsPage() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Failed Inspections</p>
-                      <p className="text-xl font-bold text-[#FF3B30]">{reportData.inspectionsFailed}</p>
+                      <p className="text-xl font-bold">{reportData.inspectionsFailed}</p>
                     </div>
                   </div>
                 </IOSCard>
@@ -206,7 +246,7 @@ export default function HousekeepingReportsPage() {
                   </h3>
                   <div className="h-48 flex items-center justify-center bg-gray-50 rounded-ios-lg">
                     <div className="text-center">
-                      <p className="text-4xl font-bold text-[#34C759]">{passRate}%</p>
+                      <p className="text-4xl font-bold">{passRate}%</p>
                       <p className="text-gray-500">Pass Rate</p>
                     </div>
                   </div>

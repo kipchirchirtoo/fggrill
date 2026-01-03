@@ -8,6 +8,7 @@ import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription }
 import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Calendar, RefreshCw, ChevronLeft, ChevronRight, Wrench, Clock, CheckCircle } from 'lucide-react';
+import { maintenanceAPI } from '@/lib/api';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
@@ -19,14 +20,32 @@ export default function MaintenanceSchedulePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
 
+  const fetchTasks = async () => {
+    setIsLoading(true);
+    try {
+      const response = await maintenanceAPI.getRequests();
+      if (response.success) {
+        // Map maintenance requests to scheduled tasks format
+        const mappedTasks = (response.data || []).map((r: any) => ({
+          id: r.id,
+          title: r.title || r.description,
+          asset: r.asset_name,
+          date: r.scheduled_date || r.created_at?.split('T')[0],
+          time: r.scheduled_time || '09:00',
+          type: r.type || 'repair',
+          status: r.status === 'completed' ? 'completed' : r.status === 'overdue' ? 'overdue' : 'scheduled',
+        }));
+        setTasks(mappedTasks);
+      }
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // Mock data
-    setTasks([
-      { id: '1', title: 'HVAC Filter Replacement', asset: 'HVAC System', date: new Date().toISOString().split('T')[0], time: '09:00', type: 'preventive', status: 'scheduled' },
-      { id: '2', title: 'Generator Inspection', asset: 'Backup Generator', date: new Date().toISOString().split('T')[0], time: '14:00', type: 'inspection', status: 'scheduled' },
-      { id: '3', title: 'Pool Pump Service', asset: 'Pool Pump', date: new Date(Date.now() + 86400000).toISOString().split('T')[0], time: '10:00', type: 'repair', status: 'scheduled' },
-    ]);
-    setIsLoading(false);
+    fetchTasks();
   }, []);
 
   const navigateDate = (direction: 'prev' | 'next') => {
@@ -59,8 +78,8 @@ export default function MaintenanceSchedulePage() {
 
           <div className="grid grid-cols-3 gap-4">
             <IOSCard className="p-4 text-center"><p className="text-sm text-gray-500">Scheduled</p><p className="text-2xl font-bold">{tasks.filter(t => t.status === 'scheduled').length}</p></IOSCard>
-            <IOSCard className="p-4 text-center"><p className="text-sm text-gray-500">Completed</p><p className="text-2xl font-bold text-[#34C759]">{tasks.filter(t => t.status === 'completed').length}</p></IOSCard>
-            <IOSCard className="p-4 text-center"><p className="text-sm text-gray-500">Overdue</p><p className="text-2xl font-bold text-[#FF3B30]">{tasks.filter(t => t.status === 'overdue').length}</p></IOSCard>
+            <IOSCard className="p-4 text-center"><p className="text-sm text-gray-500">Completed</p><p className="text-2xl font-bold">{tasks.filter(t => t.status === 'completed').length}</p></IOSCard>
+            <IOSCard className="p-4 text-center"><p className="text-sm text-gray-500">Overdue</p><p className="text-2xl font-bold">{tasks.filter(t => t.status === 'overdue').length}</p></IOSCard>
           </div>
 
           {isLoading ? (

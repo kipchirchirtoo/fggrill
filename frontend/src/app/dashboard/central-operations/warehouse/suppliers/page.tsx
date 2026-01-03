@@ -64,7 +64,7 @@ function SuppliersContent() {
   const fetchSuppliers = useCallback(async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('auth_token') || 'demo-token';
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE}/api/central-operations/warehouse/suppliers`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -111,7 +111,7 @@ function SuppliersContent() {
     
     setActionLoading(true);
     try {
-      const token = localStorage.getItem('auth_token') || 'demo-token';
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE}/api/central-operations/warehouse/suppliers`, {
         method: 'POST',
         headers: {
@@ -157,7 +157,7 @@ function SuppliersContent() {
     
     setActionLoading(true);
     try {
-      const token = localStorage.getItem('auth_token') || 'demo-token';
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE}/api/central-operations/warehouse/suppliers/${selectedSupplier.id}`, {
         method: 'PUT',
         headers: {
@@ -201,7 +201,7 @@ function SuppliersContent() {
     
     setActionLoading(true);
     try {
-      const token = localStorage.getItem('auth_token') || 'demo-token';
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE}/api/central-operations/warehouse/suppliers/${selectedSupplier.id}`, {
         method: 'DELETE',
         headers: {
@@ -368,7 +368,7 @@ function SuppliersContent() {
           <IOSCard className="p-4">
             <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search suppliers..."
@@ -441,7 +441,7 @@ function SuppliersContent() {
                         <div>
                           <div className="flex items-center space-x-2">
                             <span className="font-semibold">{supplier.name}</span>
-                            <IOSBadge variant={supplier.status === 'active' ? 'success' : 'secondary'}>
+                            <IOSBadge color={supplier.status === 'active' ? 'success' : 'secondary'}>
                               {supplier.status}
                             </IOSBadge>
                           </div>

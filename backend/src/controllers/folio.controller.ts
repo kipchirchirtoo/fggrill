@@ -5,11 +5,34 @@ import { supabase } from '../config/database';
 
 export const getFolio = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const folio = await Folio.findByReservationId(req.params.reservationId);
-    if (!folio) throw new AppError('Folio not found', 404);
-    
+    const { reservationId } = req.params;
+    let folio = await Folio.findByReservationId(reservationId);
+
+    // Lazy creation: if folio doesn't exist, create it
+    if (!folio) {
+      // Get reservation details to populate folio
+      const { data: reservation, error: resError } = await supabase
+        .from('reservations')
+        .select('*')
+        .eq('id', reservationId)
+        .single();
+
+      if (resError || !reservation) {
+        throw new AppError('Reservation not found', 404);
+      }
+
+      folio = new Folio({
+        reservationId: reservation.id,
+        guestId: reservation.guest_id,
+        status: 'open',
+        roomCharges: reservation.total_amount || 0
+      });
+      await folio.save();
+      console.log(`Lazy created folio for reservation: ${reservationId}`);
+    }
+
     const transactions = await folio.getTransactions();
-    
+
     res.status(200).json({
       success: true,
       data: {

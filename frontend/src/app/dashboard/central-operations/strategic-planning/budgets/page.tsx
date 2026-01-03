@@ -56,7 +56,7 @@ function BudgetsContent() {
   const fetchBudgets = useCallback(async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('auth_token') || 'demo-token';
+      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE}/api/central-operations/strategic-planning/budgets`, { 
         headers: { 'Authorization': `Bearer ${token}` } 
       });
@@ -79,7 +79,7 @@ function BudgetsContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('auth_token') || 'demo-token';
+      const token = localStorage.getItem('token');
       const url = editingBudget 
         ? `${API_BASE}/api/central-operations/strategic-planning/budgets/${editingBudget.id}`
         : `${API_BASE}/api/central-operations/strategic-planning/budgets`;
@@ -125,7 +125,7 @@ function BudgetsContent() {
   const handleDelete = async (id: number) => {
     if (!confirm('Are you sure you want to delete this budget?')) return;
     try {
-      const token = localStorage.getItem('auth_token') || 'demo-token';
+      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE}/api/central-operations/strategic-planning/budgets/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
@@ -144,7 +144,7 @@ function BudgetsContent() {
 
   const handleApprove = async (id: number, status: 'approved' | 'rejected') => {
     try {
-      const token = localStorage.getItem('auth_token') || 'demo-token';
+      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE}/api/central-operations/strategic-planning/budgets/${id}`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },

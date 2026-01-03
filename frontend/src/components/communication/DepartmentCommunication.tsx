@@ -42,7 +42,7 @@ const DEPARTMENT_CONFIG = {
   housekeeping: {
     icon: Home,
     label: 'Housekeeping',
-    color: 'bg-blue-100 text-blue-700',
+    color: 'bg-[#F2F2F7] text-[#3C3C43]',
     requestTypes: [
       { id: 'cleaning', label: 'Room Cleaning' },
       { id: 'turndown', label: 'Turndown Service' },
@@ -57,7 +57,7 @@ const DEPARTMENT_CONFIG = {
   maintenance: {
     icon: Wrench,
     label: 'Maintenance',
-    color: 'bg-orange-100 text-orange-700',
+    color: 'bg-[#F2F2F7] text-[#3C3C43]',
     requestTypes: [
       { id: 'ac_issue', label: 'AC Issue' },
       { id: 'plumbing', label: 'Plumbing Issue' },
@@ -72,7 +72,7 @@ const DEPARTMENT_CONFIG = {
   room_service: {
     icon: UtensilsCrossed,
     label: 'Room Service',
-    color: 'bg-green-100 text-green-700',
+    color: 'bg-[#F2F2F7] text-[#3C3C43]',
     requestTypes: [
       { id: 'food_order', label: 'Food Order' },
       { id: 'beverage', label: 'Beverage Order' },
@@ -82,7 +82,7 @@ const DEPARTMENT_CONFIG = {
   concierge: {
     icon: Users,
     label: 'Concierge',
-    color: 'bg-purple-100 text-purple-700',
+    color: 'bg-[#F2F2F7] text-[#3C3C43]',
     requestTypes: [
       { id: 'transport', label: 'Transportation' },
       { id: 'tour', label: 'Tour Booking' },
@@ -93,10 +93,10 @@ const DEPARTMENT_CONFIG = {
 };
 
 const PRIORITY_OPTIONS = [
-  { value: 'low', label: 'Low', color: 'bg-gray-100 text-gray-700' },
-  { value: 'normal', label: 'Normal', color: 'bg-blue-100 text-blue-700' },
-  { value: 'high', label: 'High', color: 'bg-orange-100 text-orange-700' },
-  { value: 'urgent', label: 'Urgent', color: 'bg-red-100 text-red-700' }
+  { value: 'low', label: 'Low', color: 'bg-[#F2F2F7] text-[#3C3C43]' },
+  { value: 'normal', label: 'Normal', color: 'bg-[#F2F2F7] text-[#3C3C43]' },
+  { value: 'high', label: 'High', color: 'bg-[#F2F2F7] text-[#3C3C43]' },
+  { value: 'urgent', label: 'Urgent', color: 'bg-[#F2F2F7] text-[#3C3C43]' }
 ];
 
 export function DepartmentCommunication({
@@ -220,22 +220,11 @@ export function DepartmentCommunication({
   };
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed': return 'bg-green-100 text-green-700';
-      case 'in_progress': return 'bg-blue-100 text-blue-700';
-      case 'assigned': return 'bg-purple-100 text-purple-700';
-      case 'cancelled': return 'bg-red-100 text-red-700';
-      default: return 'bg-yellow-100 text-yellow-700';
-    }
+    return 'bg-[#F2F2F7] text-[#3C3C43]';
   };
 
   const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'urgent': return 'bg-red-100 text-red-700';
-      case 'high': return 'bg-orange-100 text-orange-700';
-      case 'low': return 'bg-gray-100 text-gray-700';
-      default: return 'bg-blue-100 text-blue-700';
-    }
+    return 'bg-[#F2F2F7] text-[#3C3C43]';
   };
 
   return (
@@ -244,8 +233,8 @@ export function DepartmentCommunication({
       <IOSButton 
         onClick={() => setIsOpen(true)}
         className="bg-[#3C3C43] hover:bg-[#000000] text-white"
+        leftIcon={<MessageSquare className="h-4 w-4" />}
       >
-        <MessageSquare className="h-4 w-4 mr-2" />
         Department Request
         {activeRequests.filter(r => r.status === 'pending').length > 0 && (
           <span className="ml-2 bg-red-500 text-white rounded-full px-2 py-0.5 text-xs font-bold">
@@ -419,19 +408,15 @@ export function DepartmentCommunication({
 
                   {/* Actions */}
                   <div className="flex gap-3 pt-2">
-                    <IOSButton variant="outline" className="flex-1" onClick={() => { resetForm(); setIsOpen(false); }}>
+                    <IOSButton variant="outline" className="flex-1 border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]" onClick={() => { resetForm(); setIsOpen(false); }}>
                       Cancel
                     </IOSButton>
                     <IOSButton 
-                      className="flex-1 bg-[#3C3C43] hover:bg-[#000000]"
+                      className="flex-1 bg-[#3C3C43] hover:bg-[#000000] text-white"
                       onClick={handleSubmitRequest}
                       disabled={isSubmitting || !roomNumber}
+                      leftIcon={isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     >
-                      {isSubmitting ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      ) : (
-                        <Send className="h-4 w-4 mr-2" />
-                      )}
                       Send Request
                     </IOSButton>
                   </div>

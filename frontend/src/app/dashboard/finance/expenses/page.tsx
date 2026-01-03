@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { financeAPI } from '@/lib/api';
 import { Receipt, Plus, RefreshCw, Search, Check, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
+import { BranchSelector } from '@/components/finance/BranchSelector';
+import { DateRangeSelector, DateRangePreset } from '@/components/finance/DateRangeSelector';
 
 interface Expense { id: string; description: string; amount: number; category: string; status: 'pending' | 'approved' | 'rejected'; date: string; }
 
@@ -17,27 +19,47 @@ export default function ExpensesPage() {
   const { user } = useAuth();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
+  const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [datePreset, setDatePreset] = useState<DateRangePreset>('month');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [formData, setFormData] = useState({ description: '', amount: 0, category: 'Other', date: new Date().toISOString().split('T')[0] });
 
+  const [breakdown, setBreakdown] = useState<any>(null);
+
   const fetchExpenses = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await financeAPI.getExpenses({ status: statusFilter !== 'all' ? statusFilter : undefined });
-      if (response.success) setExpenses(response.data || []);
+      const [expensesRes, breakdownRes] = await Promise.all([
+        financeAPI.getExpenses({
+          branch_id: selectedBranch || undefined,
+          startDate,
+          endDate,
+          status: statusFilter !== 'all' ? statusFilter : undefined
+        }),
+        financeAPI.getExpenseBreakdown({
+          branch_id: selectedBranch || undefined,
+          start_date: startDate,
+          end_date: endDate
+        })
+      ]);
+
+      if (expensesRes.success) setExpenses(expensesRes.data || []);
+      if (breakdownRes.success) setBreakdown(breakdownRes.data || null);
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, [statusFilter]);
+  }, [selectedBranch, startDate, endDate, statusFilter]);
 
   useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
 
   const filteredExpenses = expenses.filter((e) => e.description?.toLowerCase().includes(searchQuery.toLowerCase()));
-  const stats = { 
-    total: expenses.reduce((sum, e) => sum + e.amount, 0), 
-    pending: expenses.filter(e => e.status === 'pending').length, 
-    approved: expenses.filter(e => e.status === 'approved').reduce((sum, e) => sum + e.amount, 0) 
+  const stats = {
+    total: expenses.reduce((sum, e) => sum + e.amount, 0),
+    pending: expenses.filter(e => e.status === 'pending').length,
+    approved: expenses.filter(e => e.status === 'approved').reduce((sum, e) => sum + e.amount, 0)
   };
 
   const handleAddExpense = async () => {
@@ -66,30 +88,68 @@ export default function ExpensesPage() {
               <h1 className="text-2xl font-semibold text-gray-900">Expenses</h1>
               <p className="text-sm text-gray-500 mt-1">Track and manage expenses</p>
             </div>
-            <div className="flex gap-2">
-              <button onClick={fetchExpenses} disabled={isLoading} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+            <div className="flex flex-wrap items-center gap-3">
+              <BranchSelector
+                selectedBranch={selectedBranch}
+                onBranchChange={setSelectedBranch}
+              />
+              <DateRangeSelector
+                startDate={startDate}
+                endDate={endDate}
+                onRangeChange={(start, end) => {
+                  setStartDate(start);
+                  setEndDate(end);
+                }}
+                preset={datePreset}
+                onPresetChange={setDatePreset}
+              />
+              <button onClick={fetchExpenses} disabled={isLoading} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               </button>
-              <button onClick={() => setAddModalOpen(true)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800">
+              <button onClick={() => setAddModalOpen(true)} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors">
                 <Plus className="h-4 w-4" />
                 Add Expense
               </button>
             </div>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-white border border-gray-200 rounded-lg p-5">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">Total Expenses</p>
-              <p className="text-2xl font-semibold text-gray-900 mt-1">KES {stats.total.toLocaleString()}</p>
+          {/* Stats & Breakdown */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 grid grid-cols-3 gap-4">
+              <div className="bg-white border border-gray-200 rounded-lg p-5">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Total Expenses</p>
+                <p className="text-2xl font-semibold text-gray-900 mt-1">KES {stats.total.toLocaleString()}</p>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-lg p-5">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Pending Approval</p>
+                <p className="text-2xl font-semibold text-gray-900 mt-1">{stats.pending}</p>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-lg p-5">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Approved</p>
+                <p className="text-2xl font-semibold text-gray-900 mt-1">KES {stats.approved.toLocaleString()}</p>
+              </div>
             </div>
+
+            {/* Breakdown Chart */}
             <div className="bg-white border border-gray-200 rounded-lg p-5">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">Pending Approval</p>
-              <p className="text-2xl font-semibold text-gray-900 mt-1">{stats.pending}</p>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-5">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">Approved</p>
-              <p className="text-2xl font-semibold text-gray-900 mt-1">KES {stats.approved.toLocaleString()}</p>
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">Expense Breakdown</h3>
+              {breakdown && breakdown.categories && breakdown.categories.length > 0 ? (
+                <div className="space-y-3">
+                  {breakdown.categories.slice(0, 5).map((cat: any) => (
+                    <div key={cat.category} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="font-medium text-gray-700">{cat.category}</span>
+                        <span className="text-gray-500">KES {cat.amount.toLocaleString()} ({cat.percentage}%)</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-gray-900 rounded-full" style={{ width: `${cat.percentage}%` }}></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-32 text-sm text-gray-500">No data available</div>
+              )}
             </div>
           </div>
 
@@ -97,25 +157,24 @@ export default function ExpensesPage() {
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input 
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
+                <input
                   type="text"
-                  placeholder="Search expenses..." 
-                  value={searchQuery} 
-                  onChange={(e) => setSearchQuery(e.target.value)} 
-                  className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200" 
+                  placeholder="Search expenses..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200"
                 />
               </div>
               <div className="flex gap-1">
                 {['all', 'pending', 'approved', 'rejected'].map((status) => (
-                  <button 
-                    key={status} 
+                  <button
+                    key={status}
                     onClick={() => setStatusFilter(status)}
-                    className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                      statusFilter === status 
-                        ? 'bg-gray-900 text-white' 
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
+                    className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${statusFilter === status
+                      ? 'bg-gray-900 text-white'
+                      : 'text-gray-600 hover:bg-gray-100'
+                      }`}
                   >
                     {status.charAt(0).toUpperCase() + status.slice(1)}
                   </button>
@@ -149,11 +208,10 @@ export default function ExpensesPage() {
                   </div>
                   <div className="flex items-center gap-4">
                     <p className="font-semibold text-gray-900">KES {expense.amount.toLocaleString()}</p>
-                    <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
-                      expense.status === 'approved' ? 'bg-gray-100 text-gray-700' :
+                    <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${expense.status === 'approved' ? 'bg-gray-100 text-gray-700' :
                       expense.status === 'rejected' ? 'bg-gray-100 text-gray-500' :
-                      'bg-gray-100 text-gray-600'
-                    }`}>
+                        'bg-gray-100 text-gray-600'
+                      }`}>
                       {expense.status.charAt(0).toUpperCase() + expense.status.slice(1)}
                     </span>
                     {expense.status === 'pending' && user?.role === UserRole.SUPER_ADMIN && (
@@ -175,27 +233,27 @@ export default function ExpensesPage() {
             <div className="space-y-4 mt-4">
               <div>
                 <label className="text-sm font-medium text-gray-700">Description *</label>
-                <input 
+                <input
                   type="text"
-                  value={formData.description} 
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })} 
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200"
                 />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700">Amount (KES) *</label>
-                <input 
-                  type="number" 
-                  value={formData.amount} 
-                  onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })} 
+                <input
+                  type="number"
+                  value={formData.amount}
+                  onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
                   className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200"
                 />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700">Category</label>
-                <select 
-                  value={formData.category} 
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })} 
+                <select
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200"
                 >
                   {categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
@@ -203,10 +261,10 @@ export default function ExpensesPage() {
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700">Date</label>
-                <input 
-                  type="date" 
-                  value={formData.date} 
-                  onChange={(e) => setFormData({ ...formData, date: e.target.value })} 
+                <input
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                   className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-200"
                 />
               </div>

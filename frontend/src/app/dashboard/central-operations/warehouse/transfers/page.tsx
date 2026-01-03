@@ -369,7 +369,7 @@ function WarehouseTransfersContent() {
           <IOSCard className="p-4">
             <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search by ID or branch..."

@@ -1,0 +1,5 @@
+Flask==2.3.3
+Flask-CORS==4.0.0
+schedule==1.2.0
+Jinja2==3.1.2
+smtplib-ssl==1.0.4

@@ -22,6 +22,7 @@ export function CheckInModal({ isOpen, onClose, initialData }: CheckInModalProps
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [amount, setAmount] = useState(0);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [isPaid, setIsPaid] = useState(false);
 
   useEffect(() => {
     if (initialData) {
@@ -31,23 +32,39 @@ export function CheckInModal({ isOpen, onClose, initialData }: CheckInModalProps
           (new Date(initialData.check_out || initialData.check_out_date).getTime() - new Date(initialData.check_in || initialData.check_in_date).getTime()) / (1000 * 60 * 60 * 24)
         )
       );
+      
+      // Check if the booking is already paid
+      const amountPaid = initialData.amount_paid || initialData.deposit_amount || 0;
+      const totalAmount = initialData.total_amount || 0;
+      const isPaidInFull = amountPaid >= totalAmount;
+      
+      setIsPaid(isPaidInFull);
+      if (isPaidInFull) {
+        setAmount(0); // No additional payment needed
+      } else {
+        setAmount(totalAmount - amountPaid); // Set the remaining balance
+      }
+      
       setSelectedBooking({
         id: initialData.id,
         guestName: initialData.guest_name || `${initialData.guest?.first_name || ''} ${initialData.guest?.last_name || ''}`.trim() || 'Guest',
         roomNumber: initialData.room_number || initialData.room?.room_number || 'Unassigned',
         checkIn: initialData.check_in || initialData.check_in_date,
         checkOut: initialData.check_out || initialData.check_out_date,
-        nights
+        nights,
+        totalAmount: totalAmount,
+        amountPaid: amountPaid
       });
     } else {
       setSelectedBooking(null);
       setSearchTerm('');
+      setIsPaid(false);
     }
   }, [initialData, isOpen]);
 
   const handleSearch = async () => {
     try {
-      const res = await bookingsAPI.getBookings({ status: 'confirmed' });
+      const res = await bookingsAPI.getBookings({ status: 'confirmed', limit: 100 });
       const list = res.data || [];
       const term = (searchTerm || '').toLowerCase();
       const found = list.find((b: any) => {
@@ -127,7 +144,7 @@ export function CheckInModal({ isOpen, onClose, initialData }: CheckInModalProps
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Search by booking number or guest name"
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-ios-lg"
+                  className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-ios-lg"
                 />
               </div>
               <button
@@ -165,36 +182,60 @@ export function CheckInModal({ isOpen, onClose, initialData }: CheckInModalProps
                 </div>
               </div>
 
-              {/* Payment */}
+              {/* Payment Status */}
               <div className="space-y-4">
-                <h3 className="font-medium text-gray-900">Payment Details</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-1">
-                      Payment Method
-                    </label>
-                    <select
-                      value={paymentMethod}
-                      onChange={(e) => setPaymentMethod(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
-                    >
-                      <option value="cash">Cash</option>
-                      <option value="card">Card</option>
-                      <option value="mpesa">M-Pesa</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-1">
-                      Amount (KES)
-                    </label>
-                    <input
-                      type="number"
-                      value={amount}
-                      onChange={(e) => setAmount(Number(e.target.value))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
-                    />
-                  </div>
+                <div className="flex justify-between items-center">
+                  <h3 className="font-medium text-gray-900">Payment Details</h3>
+                  {isPaid && (
+                    <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium flex items-center">
+                      <CheckCircle className="h-4 w-4 mr-1" />
+                      Paid in Full
+                    </span>
+                  )}
                 </div>
+                
+                {selectedBooking && (
+                  <div className="bg-gray-50 p-3 rounded-ios-lg">
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-gray-600">Total Amount:</span>
+                      <span className="font-medium">KES {selectedBooking.totalAmount?.toLocaleString() || '0'}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Already Paid:</span>
+                      <span className="font-medium text-green-600">KES {selectedBooking.amountPaid?.toLocaleString() || '0'}</span>
+                    </div>
+                  </div>
+                )}
+                
+                {!isPaid && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-1">
+                        Payment Method
+                      </label>
+                      <select
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
+                      >
+                        <option value="cash">Cash</option>
+                        <option value="card">Card</option>
+                        <option value="mpesa">M-Pesa</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-1">
+                        Amount (KES)
+                      </label>
+                      <input
+                        type="number"
+                        value={amount}
+                        onChange={(e) => setAmount(Number(e.target.value))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Documents Section */}

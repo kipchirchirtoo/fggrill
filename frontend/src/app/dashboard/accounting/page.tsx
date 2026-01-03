@@ -10,7 +10,7 @@ import {
   Clock, AlertCircle, TrendingUp, TrendingDown, DollarSign, Receipt,
   Calculator, FileSpreadsheet, UserCheck, Shield, BarChart3, Activity,
   Calendar, Building2, CreditCard, Wallet, PiggyBank, Target, Scale,
-  Stamp, Signature, FileSignature, Archive, RefreshCw, ChevronDown, X
+  Stamp, FileSignature, Archive, RefreshCw, ChevronDown, X
 } from 'lucide-react';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';

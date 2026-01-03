@@ -8,7 +8,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { barAPI } from '@/lib/api';
-import { 
+import {
   Wine, ShoppingCart, DollarSign, Clock, GlassWater,
   Plus, ArrowRight, CreditCard, RefreshCw, TrendingUp
 } from 'lucide-react';
@@ -19,11 +19,12 @@ import { IOSCard } from '@/components/ui/ios-card';
 
 interface Order {
   id: string;
-  order_number: string;
-  table_number?: string;
+  order_number?: string;
+  seat_number?: string;
+  guest_name?: string;
   status: string;
   total: number;
-  items_count: number;
+  items?: any[];
   created_at: string;
 }
 
@@ -62,104 +63,112 @@ export default function BarDashboard() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  const canSeeRevenue = [
+    UserRole.SUPER_ADMIN,
+    UserRole.GENERAL_MANAGER,
+    UserRole.BRANCH_MANAGER,
+    UserRole.ACCOUNTANT
+  ].includes(user?.role as UserRole);
+
+  const statCards = [
+    { label: 'Orders', value: stats.todayOrders, icon: ShoppingCart, show: true },
+    { label: 'Revenue', value: `KES ${stats.todayRevenue.toLocaleString()}`, icon: DollarSign, show: canSeeRevenue },
+    { label: 'Open Tabs', value: stats.openTabs, icon: CreditCard, show: true },
+    { label: 'Avg Order', value: `KES ${stats.avgOrder.toLocaleString()}`, icon: TrendingUp, show: canSeeRevenue },
+  ].filter(s => s.show);
+
   return (
     <ProtectedRoute allowedRoles={[UserRole.BARTENDER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <Wine className="h-7 w-7" /> Bar Dashboard
-              </h1>
-              <p className="text-gray-500">Manage bar orders and tabs</p>
+              <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Bar Dashboard</h1>
+              <p className="text-stone-500 mt-0.5">Manage bar orders and tabs</p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchData} leftIcon={<RefreshCw />}>
-                Refresh
-              </IOSButton>
+              <button onClick={fetchData} disabled={isLoading} className="btn-secondary">
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
               <Link href="/dashboard/bar/pos">
-                <IOSButton leftIcon={<Plus />}>New Order</IOSButton>
+                <button className="btn-primary">
+                  <Plus className="h-4 w-4" />
+                  <span>New Order</span>
+                </button>
               </Link>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <IOSCard className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-ios-lg"><ShoppingCart className="h-5 w-5 text-[#007AFF]" /></div>
-                <div><p className="text-sm text-gray-500">Orders</p><p className="text-xl font-bold">{stats.todayOrders}</p></div>
+          {/* Stats Grid */}
+          <div className={`grid grid-cols-2 ${canSeeRevenue ? 'md:grid-cols-4' : 'md:grid-cols-2'} gap-3`}>
+            {statCards.map((stat, i) => (
+              <div key={i} className="stat-card">
+                <div className="stat-icon">
+                  <stat.icon className="h-5 w-5" />
+                </div>
+                <p className="stat-value text-[20px]">{stat.value}</p>
+                <p className="stat-label">{stat.label}</p>
               </div>
-            </IOSCard>
-            <IOSCard className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 rounded-ios-lg"><DollarSign className="h-5 w-5 text-[#34C759]" /></div>
-                <div><p className="text-sm text-gray-500">Revenue</p><p className="text-xl font-bold">KES {stats.todayRevenue.toLocaleString()}</p></div>
-              </div>
-            </IOSCard>
-            <IOSCard className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-yellow-100 rounded-ios-lg"><CreditCard className="h-5 w-5 text-yellow-600" /></div>
-                <div><p className="text-sm text-gray-500">Open Tabs</p><p className="text-xl font-bold text-yellow-600">{stats.openTabs}</p></div>
-              </div>
-            </IOSCard>
-            <IOSCard className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 rounded-ios-lg"><TrendingUp className="h-5 w-5 text-purple-600" /></div>
-                <div><p className="text-sm text-gray-500">Avg Order</p><p className="text-xl font-bold">KES {stats.avgOrder.toLocaleString()}</p></div>
-              </div>
-            </IOSCard>
+            ))}
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-6">
-            <IOSCard className="p-6">
+          <div className="grid lg:grid-cols-2 gap-5">
+            {/* Recent Orders */}
+            <div className="card-elevated p-5">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold font-sf-pro-display">Recent Orders</h2>
-                <Link href="/dashboard/bar/orders"><IOSButton variant="ghost" size="sm">View All</IOSButton></Link>
+                <h2 className="text-[15px] font-semibold text-stone-900">Recent Orders</h2>
+                <Link href="/dashboard/bar/orders">
+                  <button className="text-[13px] font-medium text-stone-600 hover:text-stone-900">View All</button>
+                </Link>
               </div>
               {isLoading ? (
-                <div className="flex justify-center py-8"><RefreshCw className="h-6 w-6 animate-spin text-gray-400" /></div>
+                <div className="flex justify-center py-8"><RefreshCw className="h-6 w-6 animate-spin text-stone-400" /></div>
               ) : orders.length === 0 ? (
-                <div className="text-center py-8 text-gray-500"><Wine className="h-12 w-12 mx-auto mb-2 text-gray-300" /><p>No orders yet</p></div>
+                <div className="empty-state">
+                  <div className="empty-state-icon"><Wine className="h-6 w-6 text-stone-400" /></div>
+                  <p className="empty-state-title">No orders yet</p>
+                </div>
               ) : (
-                <div className="space-y-3 max-h-72 overflow-y-auto">
+                <div className="space-y-2 max-h-72 overflow-y-auto scrollbar-thin">
                   {orders.map((order) => (
-                    <div key={order.id} className="p-3 border rounded-ios-lg flex items-center justify-between">
+                    <div key={order.id} className="p-3 bg-stone-50 rounded-lg flex items-center justify-between hover:bg-stone-100 transition-colors">
                       <div>
-                        <p className="font-medium">#{order.order_number}</p>
-                        <p className="text-sm text-gray-500">{order.items_count} items • KES {order.total?.toLocaleString()}</p>
+                        <p className="text-[13px] font-medium text-stone-800">#{order.order_number}</p>
+                        <p className="text-[11px] text-stone-500">{order.items?.length || 0} items • KES {order.total?.toLocaleString()}</p>
                       </div>
-                      <IOSBadge variant="light" color={order.status === 'completed' ? 'success' : 'warning'}>{order.status}</IOSBadge>
+                      <span className={`text-[11px] font-medium px-2 py-1 rounded-full ${order.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {order.status}
+                      </span>
                     </div>
                   ))}
                 </div>
               )}
-            </IOSCard>
+            </div>
 
-            <IOSCard className="p-6">
-              <h2 className="text-lg font-semibold font-sf-pro-display mb-4">Quick Actions</h2>
+            {/* Quick Actions */}
+            <div className="card-elevated p-5">
+              <h2 className="text-[15px] font-semibold text-stone-900 mb-4">Quick Actions</h2>
               <div className="grid grid-cols-2 gap-3">
-                <Link href="/dashboard/bar/pos">
-                  <IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-blue-50">
-                    <ShoppingCart className="h-8 w-8 text-[#007AFF] mb-2" /><p className="font-medium">POS</p><p className="text-sm text-gray-500">Take orders</p>
-                  </IOSCard>
-                </Link>
-                <Link href="/dashboard/bar/tabs">
-                  <IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-yellow-50">
-                    <CreditCard className="h-8 w-8 text-yellow-600 mb-2" /><p className="font-medium">Tabs</p><p className="text-sm text-gray-500">Open tabs</p>
-                  </IOSCard>
-                </Link>
-                <Link href="/dashboard/bar/menu">
-                  <IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-green-50">
-                    <GlassWater className="h-8 w-8 text-[#34C759] mb-2" /><p className="font-medium">Menu</p><p className="text-sm text-gray-500">Drinks menu</p>
-                  </IOSCard>
-                </Link>
-                <Link href="/dashboard/bar/inventory">
-                  <IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-purple-50">
-                    <Wine className="h-8 w-8 text-purple-600 mb-2" /><p className="font-medium">Stock</p><p className="text-sm text-gray-500">Inventory</p>
-                  </IOSCard>
-                </Link>
+                {[
+                  { href: '/dashboard/bar/pos', icon: ShoppingCart, label: 'POS', desc: 'Take orders' },
+                  { href: '/dashboard/bar/tabs', icon: CreditCard, label: 'Tabs', desc: 'Open tabs' },
+                  { href: '/dashboard/bar/orders', icon: GlassWater, label: 'Orders', desc: 'View orders' },
+                  { href: '/dashboard/bar/inventory', icon: Wine, label: 'Stock', desc: 'Inventory' },
+                ].map((item) => (
+                  <Link key={item.href} href={item.href}>
+                    <div className="action-card group">
+                      <div className="action-card-icon">
+                        <item.icon className="h-5 w-5" />
+                      </div>
+                      <p className="action-card-label">{item.label}</p>
+                      <p className="text-[11px] text-stone-400 mt-0.5">{item.desc}</p>
+                    </div>
+                  </Link>
+                ))}
               </div>
-            </IOSCard>
+            </div>
           </div>
         </div>
       </DashboardLayout>

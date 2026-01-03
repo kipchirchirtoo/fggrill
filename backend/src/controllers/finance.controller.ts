@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
+import { aggregationService } from '../services/aggregation.service';
 
 // @desc    Get all transactions
 // @route   GET /api/finance/transactions
@@ -22,17 +23,20 @@ export const getTransactions = async (
       .range(startIndex, startIndex + limit - 1);
 
     // Add filters
-    if (req.query.type) {
+    if (req.query.type && req.query.type !== 'all') {
       query = query.eq('transaction_type', req.query.type);
     }
     if (req.query.category) {
       query = query.eq('category', req.query.category);
     }
-    if (req.query.startDate) {
-      query = query.gte('created_at', req.query.startDate);
+    if (req.query.branch_id) {
+      query = query.eq('branch_id', req.query.branch_id);
     }
-    if (req.query.endDate) {
-      query = query.lte('created_at', req.query.endDate);
+    if (req.query.startDate || req.query.from_date) {
+      query = query.gte('created_at', req.query.startDate || req.query.from_date);
+    }
+    if (req.query.endDate || req.query.to_date) {
+      query = query.lte('created_at', req.query.endDate || req.query.to_date);
     }
 
     const { data: transactions, error, count } = await query;
@@ -64,53 +68,43 @@ export const createTransaction = async (
 ): Promise<void> => {
   try {
     const {
-      transactionType,
+      transaction_type,
       amount,
       description,
       category,
-      referenceType,
-      referenceId,
-      paymentMethod,
-      paymentReference,
-      notes,
-      branchId
+      payment_method,
+      branch_id,
+      payment_date,
+      notes
     } = req.body;
 
     // Generate transaction number
-    const { data: transactionNumber } = await supabase
-      .rpc('generate_transaction_number');
+    const transaction_number = `TXN-${Date.now()}`;
 
-    // Create transaction
     const { data: transaction, error } = await supabase
       .from('finance_transactions')
       .insert([{
-        transaction_number: transactionNumber,
-        transaction_type: transactionType,
+        transaction_number,
+        transaction_type,
         amount,
         description,
         category,
-        reference_type: referenceType,
-        reference_id: referenceId,
-        payment_method: paymentMethod,
-        payment_reference: paymentReference,
+        payment_method,
+        branch_id,
+        payment_date: payment_date || new Date().toISOString(),
+        payment_status: 'completed',
         notes,
-        branch_id: branchId,
-        created_by: req.user?.id,
-        payment_date: new Date().toISOString()
+        created_by: req.user?.id
       }])
       .select()
       .single();
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     res.status(201).json({
       success: true,
       data: transaction
     });
-
-    logger.info(`New transaction created: ${transactionNumber}`);
   } catch (error) {
     next(error);
   }
@@ -140,11 +134,20 @@ export const getInvoices = async (
       .range(startIndex, startIndex + limit - 1);
 
     // Add filters
-    if (req.query.status) {
+    if (req.query.status && req.query.status !== 'all') {
       query = query.eq('status', req.query.status);
     }
     if (req.query.guest) {
       query = query.eq('guest_id', req.query.guest);
+    }
+    if (req.query.branch_id) {
+      query = query.eq('branch_id', req.query.branch_id);
+    }
+    if (req.query.startDate) {
+      query = query.gte('created_at', req.query.startDate);
+    }
+    if (req.query.endDate) {
+      query = query.lte('created_at', req.query.endDate);
     }
 
     const { data: invoices, error, count } = await query;
@@ -335,53 +338,118 @@ export const getFinancialOverview = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // Get total revenue
-    const { data: revenue } = await supabase
+    const { branch_id, startDate, endDate } = req.query;
+
+    // 1. Restaurant Revenue
+    let restaurantQuery = supabase
+      .from('restaurant_orders')
+      .select('total_amount')
+      .in('status', ['completed', 'paid', 'delivered']);
+
+    // 2. Bar Revenue
+    let barQuery = supabase
+      .from('bar_orders')
+      .select('total')
+      .in('status', ['completed', 'paid', 'closed']);
+
+    // 3. Room Revenue (Reservations)
+    // Note: reservations might not have branch_id directly, join with rooms
+    let roomQuery = supabase
+      .from('reservations')
+      .select('total_amount, rooms!room_id!inner(branch_id)')
+      .in('status', ['confirmed', 'checked_in', 'checked_out']);
+
+    // 4. Expenses
+    let expensesTableQuery = supabase
+      .from('expenses')
+      .select('amount')
+      .in('status', ['approved', 'paid']);
+
+    // 5. Finance Transactions (Other Income/Expense)
+    let financeIncomeQuery = supabase
       .from('finance_transactions')
       .select('amount')
       .eq('transaction_type', 'income')
       .eq('payment_status', 'completed');
 
-    // Get total expenses
-    const { data: expenses } = await supabase
+    let financeExpenseQuery = supabase
       .from('finance_transactions')
       .select('amount')
       .eq('transaction_type', 'expense')
       .eq('payment_status', 'completed');
 
-    // Get revenue by category
-    const { data: revenueBySource } = await supabase
-      .from('finance_transactions')
-      .select('reference_type, amount')
-      .eq('transaction_type', 'income')
-      .eq('payment_status', 'completed');
+    // Apply filters
+    if (branch_id) {
+      restaurantQuery = restaurantQuery.eq('branch_id', branch_id);
+      barQuery = barQuery.eq('branch_id', branch_id);
+      roomQuery = roomQuery.eq('rooms.branch_id', branch_id);
+      expensesTableQuery = expensesTableQuery.eq('branch_id', branch_id);
+      financeIncomeQuery = financeIncomeQuery.eq('branch_id', branch_id);
+      financeExpenseQuery = financeExpenseQuery.eq('branch_id', branch_id);
+    }
 
-    // Get expenses by category
-    const { data: expensesByCategory } = await supabase
-      .from('finance_transactions')
-      .select('category, amount')
-      .eq('transaction_type', 'expense')
-      .eq('payment_status', 'completed');
+    if (startDate) {
+      restaurantQuery = restaurantQuery.gte('created_at', startDate);
+      barQuery = barQuery.gte('created_at', startDate);
+      roomQuery = roomQuery.gte('created_at', startDate);
+      expensesTableQuery = expensesTableQuery.gte('expense_date', startDate);
+      financeIncomeQuery = financeIncomeQuery.gte('created_at', startDate);
+      financeExpenseQuery = financeExpenseQuery.gte('created_at', startDate);
+    }
+
+    if (endDate) {
+      restaurantQuery = restaurantQuery.lte('created_at', endDate);
+      barQuery = barQuery.lte('created_at', endDate);
+      roomQuery = roomQuery.lte('created_at', endDate);
+      expensesTableQuery = expensesTableQuery.lte('expense_date', endDate);
+      financeIncomeQuery = financeIncomeQuery.lte('created_at', endDate);
+      financeExpenseQuery = financeExpenseQuery.lte('created_at', endDate);
+    }
+
+    // Get pending payments (unpaid invoices)
+    let pendingQuery = supabase
+      .from('accounting_ar_invoices')
+      .select('balance')
+      .neq('status', 'paid');
+
+    if (branch_id) {
+      pendingQuery = pendingQuery.eq('branch_id', branch_id);
+    }
+
+    const [
+      { data: restaurantRevenue },
+      { data: barRevenue },
+      { data: roomRevenue },
+      { data: expensesData },
+      { data: financeIncome },
+      { data: financeExpense },
+      { data: pendingData }
+    ] = await Promise.all([
+      restaurantQuery,
+      barQuery,
+      roomQuery,
+      expensesTableQuery,
+      financeIncomeQuery,
+      financeExpenseQuery,
+      pendingQuery
+    ]);
 
     // Calculate totals
-    const totalRevenue = revenue?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
-    const totalExpenses = expenses?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
+    const totalRestaurant = restaurantRevenue?.reduce((sum, item) => sum + Number(item.total_amount), 0) || 0;
+    const totalBar = barRevenue?.reduce((sum, item) => sum + Number(item.total), 0) || 0;
+    const totalRoom = roomRevenue?.reduce((sum, item) => sum + Number(item.total_amount), 0) || 0;
+    const totalFinanceIncome = financeIncome?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
+
+    const totalRevenue = totalRestaurant + totalBar + totalRoom + totalFinanceIncome;
+
+    const totalExpensesTable = expensesData?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
+    const totalFinanceExpense = financeExpense?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
+
+    const totalExpenses = totalExpensesTable + totalFinanceExpense;
+
+    const pendingPayments = pendingData?.reduce((sum, item) => sum + Number(item.balance), 0) || 0;
     const netProfit = totalRevenue - totalExpenses;
     const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
-
-    // Group revenue by source
-    const revenueBreakdown = revenueBySource?.reduce((acc: any, item) => {
-      const source = item.reference_type || 'other';
-      acc[source] = (acc[source] || 0) + Number(item.amount);
-      return acc;
-    }, {});
-
-    // Group expenses by category
-    const expenseBreakdown = expensesByCategory?.reduce((acc: any, item) => {
-      const category = item.category || 'other';
-      acc[category] = (acc[category] || 0) + Number(item.amount);
-      return acc;
-    }, {});
 
     res.status(200).json({
       success: true,
@@ -390,8 +458,15 @@ export const getFinancialOverview = async (
         totalExpenses,
         netProfit,
         profitMargin,
-        revenueBreakdown,
-        expenseBreakdown
+        pendingPayments,
+        breakdown: {
+          restaurant: totalRestaurant,
+          bar: totalBar,
+          room: totalRoom,
+          other_income: totalFinanceIncome,
+          operational_expenses: totalExpensesTable,
+          other_expenses: totalFinanceExpense
+        }
       }
     });
   } catch (error) {
@@ -626,7 +701,7 @@ export const approveExpense = async (
 
 // ============== ADVANCED FINANCIAL TOOLS ==============
 
-// @desc    Get Cash Flow Report
+// @desc    Get Cash Flow Report (Multi-Source Aggregation)
 // @route   GET /api/finance/cashflow
 // @access  Private (Finance Staff)
 export const getCashFlowReport = async (
@@ -639,77 +714,39 @@ export const getCashFlowReport = async (
     const start = startDate as string || new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString();
     const end = endDate as string || new Date().toISOString();
 
-    // Get income transactions
-    let incomeQuery = supabase
-      .from('finance_transactions')
-      .select('amount, category, created_at, payment_method')
-      .eq('transaction_type', 'INCOME')
-      .gte('created_at', start)
-      .lte('created_at', end);
+    const dateRange = { startDate: start, endDate: end };
+    const branchId = branch_id ? Number(branch_id) : undefined;
 
-    // Get expense transactions
-    let expenseQuery = supabase
-      .from('finance_transactions')
-      .select('amount, category, created_at, payment_method')
-      .eq('transaction_type', 'EXPENSE')
-      .gte('created_at', start)
-      .lte('created_at', end);
+    // Use aggregation service to get data from ALL sources
+    const [aggregatedData, dailyCashFlow] = await Promise.all([
+      aggregationService.getAggregatedData(dateRange, branchId),
+      aggregationService.getDailyCashFlow(dateRange, branchId),
+    ]);
 
-    if (branch_id) {
-      incomeQuery = incomeQuery.eq('branch_id', branch_id);
-      expenseQuery = expenseQuery.eq('branch_id', branch_id);
-    }
+    const totalInflow = aggregatedData.revenue;
+    const totalOutflow = aggregatedData.expenses;
+    const netCashFlow = aggregatedData.netProfit;
 
-    const [incomeRes, expenseRes] = await Promise.all([incomeQuery, expenseQuery]);
-
-    const income = incomeRes.data || [];
-    const expenses = expenseRes.data || [];
-
-    const totalIncome = income.reduce((sum, t) => sum + (t.amount || 0), 0);
-    const totalExpenses = expenses.reduce((sum, t) => sum + (t.amount || 0), 0);
-    const netCashFlow = totalIncome - totalExpenses;
-
-    // Group by category
-    const incomeByCategory: Record<string, number> = {};
-    const expensesByCategory: Record<string, number> = {};
-
-    income.forEach(t => {
-      incomeByCategory[t.category || 'Other'] = (incomeByCategory[t.category || 'Other'] || 0) + t.amount;
-    });
-
-    expenses.forEach(t => {
-      expensesByCategory[t.category || 'Other'] = (expensesByCategory[t.category || 'Other'] || 0) + t.amount;
-    });
-
-    // Daily cash flow
-    const dailyCashFlow: Record<string, { income: number; expenses: number; net: number }> = {};
-    
-    income.forEach(t => {
-      const date = t.created_at.split('T')[0];
-      if (!dailyCashFlow[date]) dailyCashFlow[date] = { income: 0, expenses: 0, net: 0 };
-      dailyCashFlow[date].income += t.amount;
-      dailyCashFlow[date].net += t.amount;
-    });
-
-    expenses.forEach(t => {
-      const date = t.created_at.split('T')[0];
-      if (!dailyCashFlow[date]) dailyCashFlow[date] = { income: 0, expenses: 0, net: 0 };
-      dailyCashFlow[date].expenses += t.amount;
-      dailyCashFlow[date].net -= t.amount;
-    });
+    // Transform daily data to periods
+    const periods = dailyCashFlow.map(d => ({
+      period: d.date,
+      inflow: d.inflow,
+      outflow: d.outflow,
+      net: d.net
+    }));
 
     res.status(200).json({
       success: true,
       data: {
         summary: {
-          totalIncome,
-          totalExpenses,
-          netCashFlow,
-          profitMargin: totalIncome > 0 ? ((netCashFlow / totalIncome) * 100).toFixed(2) : 0
+          totalInflow: Math.round(totalInflow * 100) / 100,
+          totalOutflow: Math.round(totalOutflow * 100) / 100,
+          netCashFlow: Math.round(netCashFlow * 100) / 100,
+          profitMargin: totalInflow > 0 ? ((netCashFlow / totalInflow) * 100).toFixed(2) : 0
         },
-        incomeByCategory,
-        expensesByCategory,
-        dailyCashFlow: Object.entries(dailyCashFlow).map(([date, data]) => ({ date, ...data })).sort((a, b) => a.date.localeCompare(b.date)),
+        periods,
+        revenueBySource: aggregatedData.revenueBySource,
+        expensesByCategory: aggregatedData.expensesByCategory,
         period: { start, end }
       }
     });
@@ -718,7 +755,7 @@ export const getCashFlowReport = async (
   }
 };
 
-// @desc    Get Profit & Loss Statement
+// @desc    Get Profit & Loss Statement (Multi-Source Aggregation)
 // @route   GET /api/finance/profit-loss
 // @access  Private (Finance Staff)
 export const getProfitLossStatement = async (
@@ -731,71 +768,50 @@ export const getProfitLossStatement = async (
     const start = startDate as string || new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString();
     const end = endDate as string || new Date().toISOString();
 
-    // Revenue categories
-    const revenueCategories = ['ROOM_REVENUE', 'FOOD_BEVERAGE', 'SERVICES', 'OTHER_INCOME'];
-    const expenseCategories = ['SALARIES', 'UTILITIES', 'SUPPLIES', 'MAINTENANCE', 'MARKETING', 'ADMIN', 'OTHER_EXPENSE'];
+    const dateRange = { startDate: start, endDate: end };
+    const branchId = branch_id ? Number(branch_id) : undefined;
 
-    let revenueQuery = supabase
-      .from('finance_transactions')
-      .select('amount, category')
-      .eq('transaction_type', 'INCOME')
-      .gte('created_at', start)
-      .lte('created_at', end);
+    // Get aggregated data from all sources
+    const aggregatedData = await aggregationService.getAggregatedData(dateRange, branchId);
 
-    let expenseQuery = supabase
-      .from('finance_transactions')
-      .select('amount, category')
-      .eq('transaction_type', 'EXPENSE')
-      .gte('created_at', start)
-      .lte('created_at', end);
+    const totalRevenue = aggregatedData.revenue;
+    const expensesByCategory = aggregatedData.expensesByCategory;
 
-    if (branch_id) {
-      revenueQuery = revenueQuery.eq('branch_id', branch_id);
-      expenseQuery = expenseQuery.eq('branch_id', branch_id);
-    }
+    // Calculate COGS (Food & Beverage, Supplies, Inventory)
+    const cogsCategories = ['Food & Beverage', 'Supplies', 'Inventory', 'FOOD_BEVERAGE', 'SUPPLIES'];
+    const costOfGoods = Object.entries(expensesByCategory)
+      .filter(([cat]) => cogsCategories.some(c => cat.toLowerCase().includes(c.toLowerCase())))
+      .reduce((sum, [, amount]) => sum + amount, 0);
 
-    const [revenueRes, expenseRes] = await Promise.all([revenueQuery, expenseQuery]);
+    // Calculate Operating Expenses (Salaries, Utilities, Maintenance, Marketing, etc.)
+    const opexCategories = ['Salaries', 'Utilities', 'Maintenance', 'Marketing', 'Transport', 'Rent', 'SALARIES', 'UTILITIES', 'MAINTENANCE', 'MARKETING'];
+    const operatingExpenses = Object.entries(expensesByCategory)
+      .filter(([cat]) => opexCategories.some(c => cat.toLowerCase().includes(c.toLowerCase())))
+      .reduce((sum, [, amount]) => sum + amount, 0);
 
-    const revenues = revenueRes.data || [];
-    const expenses = expenseRes.data || [];
+    // Other expenses
+    const otherExpenses = aggregatedData.expenses - costOfGoods - operatingExpenses;
 
-    // Calculate revenue breakdown
-    const revenueBreakdown: Record<string, number> = {};
-    let totalRevenue = 0;
-    revenues.forEach(t => {
-      const cat = t.category || 'OTHER_INCOME';
-      revenueBreakdown[cat] = (revenueBreakdown[cat] || 0) + t.amount;
-      totalRevenue += t.amount;
-    });
-
-    // Calculate expense breakdown
-    const expenseBreakdown: Record<string, number> = {};
-    let totalExpenses = 0;
-    expenses.forEach(t => {
-      const cat = t.category || 'OTHER_EXPENSE';
-      expenseBreakdown[cat] = (expenseBreakdown[cat] || 0) + t.amount;
-      totalExpenses += t.amount;
-    });
-
-    const grossProfit = totalRevenue;
-    const operatingExpenses = totalExpenses;
-    const netProfit = grossProfit - operatingExpenses;
+    // Calculate P&L components
+    const grossProfit = totalRevenue - costOfGoods;
+    const operatingIncome = grossProfit - operatingExpenses;
+    const netProfit = operatingIncome - otherExpenses;
+    const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
     res.status(200).json({
       success: true,
       data: {
-        revenue: {
-          breakdown: revenueBreakdown,
-          total: totalRevenue
-        },
-        expenses: {
-          breakdown: expenseBreakdown,
-          total: totalExpenses
-        },
-        grossProfit,
-        operatingExpenses,
-        netProfit,
-        profitMargin: totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(2) : 0,
+        revenue: Math.round(totalRevenue * 100) / 100,
+        costOfGoods: Math.round(costOfGoods * 100) / 100,
+        grossProfit: Math.round(grossProfit * 100) / 100,
+        operatingExpenses: Math.round(operatingExpenses * 100) / 100,
+        operatingIncome: Math.round(operatingIncome * 100) / 100,
+        otherIncome: 0, // Can be enhanced later
+        otherExpenses: Math.round(otherExpenses * 100) / 100,
+        netProfit: Math.round(netProfit * 100) / 100,
+        margin: Math.round(margin * 10) / 10,
+        revenueBySource: aggregatedData.revenueBySource,
+        expensesByCategory,
         period: { start, end }
       }
     });
@@ -820,29 +836,134 @@ export const getRevenueByBranch = async (
     // Get all branches
     const { data: branches } = await supabase.from('branches').select('id, name, code');
 
-    // Get transactions grouped by branch
+    // 1. Restaurant Revenue
+    const { data: restaurantRevenue } = await supabase
+      .from('restaurant_orders')
+      .select('total_amount, branch_id')
+      .in('status', ['completed', 'paid', 'delivered'])
+      .gte('created_at', start)
+      .lte('created_at', end);
+
+    // 2. Bar Revenue
+    const { data: barRevenue } = await supabase
+      .from('bar_orders')
+      .select('total, branch_id')
+      .in('status', ['completed', 'paid', 'closed'])
+      .gte('created_at', start)
+      .lte('created_at', end);
+
+    // 3. Room Revenue
+    const { data: roomRevenue } = await supabase
+      .from('reservations')
+      .select('total_amount, rooms!room_id!inner(branch_id)')
+      .in('status', ['confirmed', 'checked_in', 'checked_out'])
+      .gte('created_at', start)
+      .lte('created_at', end);
+
+    // 4. Expenses
+    const { data: expensesData } = await supabase
+      .from('expenses')
+      .select('amount, branch_id')
+      .in('status', ['approved', 'paid'])
+      .gte('expense_date', start)
+      .lte('expense_date', end);
+
+    // 5. Finance Transactions
     const { data: transactions } = await supabase
       .from('finance_transactions')
       .select('amount, transaction_type, branch_id')
       .gte('created_at', start)
-      .lte('created_at', end);
+      .lte('created_at', end)
+      .eq('payment_status', 'completed');
 
-    const branchData: Record<string, { income: number; expenses: number; net: number; name: string; code: string }> = {};
+    const branchData: Record<string, {
+      income: number;
+      expenses: number;
+      net: number;
+      name: string;
+      code: string;
+      breakdown: {
+        restaurant: number;
+        bar: number;
+        rooms: number;
+        other_income: number;
+        operational_expenses: number;
+        other_expenses: number;
+      }
+    }> = {};
 
     branches?.forEach(b => {
-      branchData[b.id] = { income: 0, expenses: 0, net: 0, name: b.name, code: b.code };
+      branchData[b.id] = {
+        income: 0,
+        expenses: 0,
+        net: 0,
+        name: b.name,
+        code: b.code || '',
+        breakdown: {
+          restaurant: 0,
+          bar: 0,
+          rooms: 0,
+          other_income: 0,
+          operational_expenses: 0,
+          other_expenses: 0
+        }
+      };
     });
 
+    // Aggregate Restaurant
+    restaurantRevenue?.forEach(r => {
+      if (r.branch_id && branchData[r.branch_id]) {
+        const amount = Number(r.total_amount);
+        branchData[r.branch_id].income += amount;
+        branchData[r.branch_id].breakdown.restaurant += amount;
+      }
+    });
+
+    // Aggregate Bar
+    barRevenue?.forEach(b => {
+      if (b.branch_id && branchData[b.branch_id]) {
+        const amount = Number(b.total);
+        branchData[b.branch_id].income += amount;
+        branchData[b.branch_id].breakdown.bar += amount;
+      }
+    });
+
+    // Aggregate Rooms
+    roomRevenue?.forEach((r: any) => {
+      const branchId = r.rooms?.branch_id;
+      if (branchId && branchData[branchId]) {
+        const amount = Number(r.total_amount);
+        branchData[branchId].income += amount;
+        branchData[branchId].breakdown.rooms += amount;
+      }
+    });
+
+    // Aggregate Expenses Table
+    expensesData?.forEach(e => {
+      if (e.branch_id && branchData[e.branch_id]) {
+        const amount = Number(e.amount);
+        branchData[e.branch_id].expenses += amount;
+        branchData[e.branch_id].breakdown.operational_expenses += amount;
+      }
+    });
+
+    // Aggregate Finance Transactions
     transactions?.forEach(t => {
       if (t.branch_id && branchData[t.branch_id]) {
-        if (t.transaction_type === 'INCOME') {
-          branchData[t.branch_id].income += t.amount;
-          branchData[t.branch_id].net += t.amount;
+        const amount = Number(t.amount);
+        if (t.transaction_type === 'income') {
+          branchData[t.branch_id].income += amount;
+          branchData[t.branch_id].breakdown.other_income += amount;
         } else {
-          branchData[t.branch_id].expenses += t.amount;
-          branchData[t.branch_id].net -= t.amount;
+          branchData[t.branch_id].expenses += amount;
+          branchData[t.branch_id].breakdown.other_expenses += amount;
         }
       }
+    });
+
+    // Calculate Net
+    Object.keys(branchData).forEach(id => {
+      branchData[id].net = branchData[id].income - branchData[id].expenses;
     });
 
     const branchRevenue = Object.entries(branchData).map(([id, data]) => ({
@@ -882,12 +1003,12 @@ export const getBudgetAnalysis = async (
     const currentYear = year || new Date().getFullYear();
     const currentMonth = month || new Date().getMonth() + 1;
 
-    // Get budgets
+    // Get budgets - FIXED: use fiscal_year and fiscal_month
     let budgetQuery = supabase
       .from('budgets')
       .select('*')
-      .eq('year', currentYear)
-      .eq('month', currentMonth);
+      .eq('fiscal_year', String(currentYear))
+      .eq('fiscal_month', String(currentMonth).padStart(2, '0'));
 
     if (branch_id) {
       budgetQuery = budgetQuery.eq('branch_id', branch_id);
@@ -895,14 +1016,14 @@ export const getBudgetAnalysis = async (
 
     const { data: budgets } = await budgetQuery;
 
-    // Get actual expenses for the period
+    // Get actual expenses for the period - FIXED: use lowercase 'expense'
     const startDate = new Date(Number(currentYear), Number(currentMonth) - 1, 1).toISOString();
-    const endDate = new Date(Number(currentYear), Number(currentMonth), 0).toISOString();
+    const endDate = new Date(Number(currentYear), Number(currentMonth), 0, 23, 59, 59).toISOString();
 
     let expenseQuery = supabase
       .from('finance_transactions')
       .select('amount, category')
-      .eq('transaction_type', 'EXPENSE')
+      .eq('transaction_type', 'expense')
       .gte('created_at', startDate)
       .lte('created_at', endDate);
 
@@ -915,41 +1036,29 @@ export const getBudgetAnalysis = async (
     // Calculate actuals by category
     const actualsByCategory: Record<string, number> = {};
     expenses?.forEach(e => {
-      actualsByCategory[e.category || 'Other'] = (actualsByCategory[e.category || 'Other'] || 0) + e.amount;
+      const cat = String(e.category || 'other');
+      actualsByCategory[cat] = (actualsByCategory[cat] || 0) + e.amount;
     });
 
-    // Compare budget vs actual
+    // Transform to frontend format - flat array with percentUsed
     const analysis = budgets?.map(b => {
-      const actual = actualsByCategory[b.category] || 0;
-      const variance = b.amount - actual;
-      const variancePercent = b.amount > 0 ? ((variance / b.amount) * 100).toFixed(2) : 0;
+      const budgeted = Number(b.allocated_amount) || 0;
+      const actual = actualsByCategory[String(b.category)] || 0;
+      const variance = budgeted - actual;
+      const percentUsed = budgeted > 0 ? (actual / budgeted) * 100 : 0;
+
       return {
-        category: b.category,
-        budgeted: b.amount,
+        category: String(b.category),
+        budgeted,
         actual,
         variance,
-        variancePercent,
-        status: variance >= 0 ? 'UNDER_BUDGET' : 'OVER_BUDGET'
+        percentUsed
       };
     }) || [];
 
-    const totals = analysis.reduce((acc, a) => ({
-      budgeted: acc.budgeted + a.budgeted,
-      actual: acc.actual + a.actual,
-      variance: acc.variance + a.variance
-    }), { budgeted: 0, actual: 0, variance: 0 });
-
     res.status(200).json({
       success: true,
-      data: {
-        analysis,
-        totals: {
-          ...totals,
-          variancePercent: totals.budgeted > 0 ? ((totals.variance / totals.budgeted) * 100).toFixed(2) : 0,
-          status: totals.variance >= 0 ? 'UNDER_BUDGET' : 'OVER_BUDGET'
-        },
-        period: { year: currentYear, month: currentMonth }
-      }
+      data: analysis
     });
   } catch (error) {
     next(error);
@@ -969,19 +1078,19 @@ export const getTaxSummary = async (
     const start = startDate as string || new Date(new Date().getFullYear(), 0, 1).toISOString();
     const end = endDate as string || new Date().toISOString();
 
-    // Get all income
+    // Get all income - FIXED: use lowercase 'income'
     const { data: income } = await supabase
       .from('finance_transactions')
       .select('amount, category')
-      .eq('transaction_type', 'INCOME')
+      .eq('transaction_type', 'income')
       .gte('created_at', start)
       .lte('created_at', end);
 
-    // Get all expenses
+    // Get all expenses - FIXED: use lowercase 'expense'
     const { data: expenses } = await supabase
       .from('finance_transactions')
       .select('amount, category')
-      .eq('transaction_type', 'EXPENSE')
+      .eq('transaction_type', 'expense')
       .gte('created_at', start)
       .lte('created_at', end);
 
@@ -1030,25 +1139,31 @@ export const getFinancialForecast = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { months = 3 } = req.query;
+    const { months = 3, branch_id } = req.query;
     const forecastMonths = Number(months);
 
     // Get last 6 months of data for trend analysis
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-    const { data: historicalData } = await supabase
+    let historicalQuery = supabase
       .from('finance_transactions')
       .select('amount, transaction_type, created_at')
       .gte('created_at', sixMonthsAgo.toISOString());
 
+    if (branch_id) {
+      historicalQuery = historicalQuery.eq('branch_id', branch_id);
+    }
+
+    const { data: historicalData } = await historicalQuery;
+
     // Group by month
     const monthlyData: Record<string, { income: number; expenses: number }> = {};
-    
+
     historicalData?.forEach(t => {
       const month = t.created_at.substring(0, 7); // YYYY-MM
       if (!monthlyData[month]) monthlyData[month] = { income: 0, expenses: 0 };
-      if (t.transaction_type === 'INCOME') {
+      if (t.transaction_type === 'income') {
         monthlyData[month].income += t.amount;
       } else {
         monthlyData[month].expenses += t.amount;
@@ -1056,7 +1171,7 @@ export const getFinancialForecast = async (
     });
 
     const months_data = Object.entries(monthlyData).sort((a, b) => a[0].localeCompare(b[0]));
-    
+
     // Calculate averages for forecasting
     const avgIncome = months_data.reduce((sum, [_, d]) => sum + d.income, 0) / Math.max(months_data.length, 1);
     const avgExpenses = months_data.reduce((sum, [_, d]) => sum + d.expenses, 0) / Math.max(months_data.length, 1);
@@ -1071,7 +1186,12 @@ export const getFinancialForecast = async (
       expenseGrowth = first.expenses > 0 ? (last.expenses - first.expenses) / first.expenses / months_data.length : 0;
     }
 
-    // Generate forecast
+    // Calculate confidence based on data availability and consistency
+    const baseConfidence = Math.min((months_data.length / 6) * 100, 100);
+    const varianceConfidence = months_data.length >= 3 ? 85 : 70;
+    const confidence = Math.round((baseConfidence + varianceConfidence) / 2);
+
+    // Generate forecast - FIXED: return flat array with correct field names
     const forecast = [];
     let currentIncome = avgIncome;
     let currentExpenses = avgExpenses;
@@ -1080,36 +1200,23 @@ export const getFinancialForecast = async (
     for (let i = 1; i <= forecastMonths; i++) {
       const forecastDate = new Date(today);
       forecastDate.setMonth(forecastDate.getMonth() + i);
-      const monthStr = forecastDate.toISOString().substring(0, 7);
+      const monthStr = forecastDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
 
       currentIncome = currentIncome * (1 + incomeGrowth);
       currentExpenses = currentExpenses * (1 + expenseGrowth);
 
       forecast.push({
         month: monthStr,
-        projectedIncome: Math.round(currentIncome),
+        projectedRevenue: Math.round(currentIncome),
         projectedExpenses: Math.round(currentExpenses),
-        projectedNet: Math.round(currentIncome - currentExpenses)
+        projectedProfit: Math.round(currentIncome - currentExpenses),
+        confidence
       });
     }
 
     res.status(200).json({
       success: true,
-      data: {
-        historical: months_data.map(([month, data]) => ({
-          month,
-          income: data.income,
-          expenses: data.expenses,
-          net: data.income - data.expenses
-        })),
-        forecast,
-        trends: {
-          avgMonthlyIncome: Math.round(avgIncome),
-          avgMonthlyExpenses: Math.round(avgExpenses),
-          incomeGrowthRate: (incomeGrowth * 100).toFixed(2),
-          expenseGrowthRate: (expenseGrowth * 100).toFixed(2)
-        }
-      }
+      data: forecast
     });
   } catch (error) {
     next(error);
@@ -1125,17 +1232,31 @@ export const getAccountsReceivablePayable = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const { branch_id } = req.query;
+
     // Get unpaid invoices (Accounts Receivable)
-    const { data: unpaidInvoices } = await supabase
+    let arQuery = supabase
       .from('finance_invoices')
       .select('id, invoice_number, guest_id, total_amount, amount_paid, due_date, status')
       .in('status', ['PENDING', 'PARTIAL', 'OVERDUE']);
 
+    if (branch_id) {
+      arQuery = arQuery.eq('branch_id', branch_id);
+    }
+
+    const { data: unpaidInvoices } = await arQuery;
+
     // Get pending supplier payments (Accounts Payable)
-    const { data: pendingPayments } = await supabase
+    let apQuery = supabase
       .from('expenses')
       .select('id, description, amount, expense_date, status')
       .eq('status', 'approved');
+
+    if (branch_id) {
+      apQuery = apQuery.eq('branch_id', branch_id);
+    }
+
+    const { data: pendingPayments } = await apQuery;
 
     const totalReceivable = unpaidInvoices?.reduce((sum, inv) => sum + (inv.total_amount - (inv.amount_paid || 0)), 0) || 0;
     const totalPayable = pendingPayments?.reduce((sum, p) => sum + p.amount, 0) || 0;
@@ -1182,7 +1303,7 @@ export const getAccountsReceivablePayable = async (
   }
 };
 
-// @desc    Get Financial KPIs
+// @desc    Get Financial KPIs (Multi-Source Aggregation)
 // @route   GET /api/finance/kpis
 // @access  Private (Finance Staff)
 export const getFinancialKPIs = async (
@@ -1191,11 +1312,11 @@ export const getFinancialKPIs = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { period = 'month' } = req.query;
-    
+    const { period = 'month', branch_id } = req.query;
+
     let startDate: Date;
     const endDate = new Date();
-    
+
     switch (period) {
       case 'week':
         startDate = new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -1213,62 +1334,89 @@ export const getFinancialKPIs = async (
         startDate.setMonth(startDate.getMonth() - 1);
     }
 
-    // Get transactions
-    const { data: transactions } = await supabase
-      .from('finance_transactions')
-      .select('amount, transaction_type, category')
-      .gte('created_at', startDate.toISOString())
-      .lte('created_at', endDate.toISOString());
+    const branchId = branch_id ? Number(branch_id) : undefined;
 
-    const income = transactions?.filter(t => t.transaction_type === 'INCOME') || [];
-    const expenses = transactions?.filter(t => t.transaction_type === 'EXPENSE') || [];
+    // Get current period data using aggregation service
+    const currData = await aggregationService.getAggregatedData(
+      { startDate: startDate.toISOString(), endDate: endDate.toISOString() },
+      branchId
+    );
 
-    const totalRevenue = income.reduce((sum, t) => sum + t.amount, 0);
-    const totalExpenses = expenses.reduce((sum, t) => sum + t.amount, 0);
-    const netIncome = totalRevenue - totalExpenses;
-
-    // Calculate previous period for comparison
+    // Get previous period data for comparison
     const prevStartDate = new Date(startDate.getTime() - (endDate.getTime() - startDate.getTime()));
-    
-    const { data: prevTransactions } = await supabase
-      .from('finance_transactions')
-      .select('amount, transaction_type')
-      .gte('created_at', prevStartDate.toISOString())
-      .lt('created_at', startDate.toISOString());
+    const prevData = await aggregationService.getAggregatedData(
+      { startDate: prevStartDate.toISOString(), endDate: startDate.toISOString() },
+      branchId
+    );
 
-    const prevIncome = prevTransactions?.filter(t => t.transaction_type === 'INCOME') || [];
-    const prevExpenses = prevTransactions?.filter(t => t.transaction_type === 'EXPENSE') || [];
-    const prevRevenue = prevIncome.reduce((sum, t) => sum + t.amount, 0);
-    const prevTotalExpenses = prevExpenses.reduce((sum, t) => sum + t.amount, 0);
+    const totalRevenue = currData.revenue;
+    const totalExpenses = currData.expenses;
+    const netIncome = currData.netProfit;
+
+    const prevRevenue = prevData.revenue;
+    const prevTotalExpenses = prevData.expenses;
+    const prevNetIncome = prevData.netProfit;
 
     const revenueGrowth = prevRevenue > 0 ? ((totalRevenue - prevRevenue) / prevRevenue * 100) : 0;
     const expenseGrowth = prevTotalExpenses > 0 ? ((totalExpenses - prevTotalExpenses) / prevTotalExpenses * 100) : 0;
+    const profitMargin = totalRevenue > 0 ? (netIncome / totalRevenue) * 100 : 0;
+    const expenseRatio = totalRevenue > 0 ? (totalExpenses / totalRevenue) * 100 : 0;
+
+    // Transform to array format for frontend
+    const kpis = [
+      {
+        name: 'Total Revenue',
+        value: Math.round(totalRevenue * 100) / 100,
+        unit: 'KES',
+        change: Math.round(revenueGrowth * 10) / 10,
+        trend: revenueGrowth > 0 ? 'up' as const : revenueGrowth < 0 ? 'down' as const : 'stable' as const
+      },
+      {
+        name: 'Total Expenses',
+        value: Math.round(totalExpenses * 100) / 100,
+        unit: 'KES',
+        change: Math.round(expenseGrowth * 10) / 10,
+        trend: expenseGrowth > 0 ? 'up' as const : expenseGrowth < 0 ? 'down' as const : 'stable' as const
+      },
+      {
+        name: 'Net Income',
+        value: Math.round(netIncome * 100) / 100,
+        unit: 'KES',
+        change: prevNetIncome > 0 ? Math.round(((netIncome - prevNetIncome) / prevNetIncome * 100) * 10) / 10 : 0,
+        trend: netIncome > prevNetIncome ? 'up' as const : netIncome < prevNetIncome ? 'down' as const : 'stable' as const
+      },
+      {
+        name: 'Profit Margin',
+        value: Math.round(profitMargin * 10) / 10,
+        unit: '%',
+        target: 20,
+        change: Math.round((revenueGrowth - expenseGrowth) * 10) / 10,
+        trend: profitMargin > 15 ? 'up' as const : profitMargin < 10 ? 'down' as const : 'stable' as const
+      },
+      {
+        name: 'Expense Ratio',
+        value: Math.round(expenseRatio * 10) / 10,
+        unit: '%',
+        target: 80,
+        change: Math.round((expenseGrowth - revenueGrowth) * 10) / 10,
+        trend: expenseRatio < 80 ? 'up' as const : expenseRatio > 90 ? 'down' as const : 'stable' as const
+      },
+      {
+        name: 'Revenue Growth',
+        value: Math.round(revenueGrowth * 10) / 10,
+        unit: '%',
+        target: 10,
+        change: Math.round(revenueGrowth * 10) / 10,
+        trend: revenueGrowth > 0 ? 'up' as const : revenueGrowth < 0 ? 'down' as const : 'stable' as const
+      }
+    ];
 
     res.status(200).json({
       success: true,
-      data: {
-        kpis: {
-          totalRevenue,
-          totalExpenses,
-          netIncome,
-          profitMargin: totalRevenue > 0 ? ((netIncome / totalRevenue) * 100).toFixed(2) : 0,
-          expenseRatio: totalRevenue > 0 ? ((totalExpenses / totalRevenue) * 100).toFixed(2) : 0,
-          revenueGrowth: revenueGrowth.toFixed(2),
-          expenseGrowth: expenseGrowth.toFixed(2)
-        },
-        period: {
-          start: startDate.toISOString(),
-          end: endDate.toISOString(),
-          type: period
-        },
-        comparison: {
-          prevRevenue,
-          prevExpenses: prevTotalExpenses,
-          prevNetIncome: prevRevenue - prevTotalExpenses
-        }
-      }
+      data: kpis
     });
   } catch (error) {
     next(error);
   }
 };
+

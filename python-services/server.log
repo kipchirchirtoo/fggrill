@@ -1,0 +1,44 @@
+2026-01-01 10:55:38,038 - accounting.routes - INFO - Audit: CREATED on entry 9f0e73b1-57ff-4844-bfcc-c4110fcba0dd by accountant@famousgate.com
+2026-01-01 10:55:38,038 - accounting.routes - INFO - Audit: CREATED on entry 8de40028-73e3-463a-b518-4c509dcf786d by restaurant@famousgate.com
+2026-01-01 10:55:38,038 - accounting.routes - INFO - Audit: CREATED on entry b906f6cf-2453-4e7d-b7f2-a2f87d8f0964 by accountant@famousgate.com
+2026-01-01 10:55:39,973 - budget_analytics - INFO - Connected to Supabase database
+2026-01-01 10:55:39,988 - reports.database_fetcher - INFO - Connected to Supabase database
+2026-01-01 10:55:40,004 - reports.database_fetcher - INFO - Connected to Supabase database
+2026-01-01 10:55:40,034 - reports.database_fetcher - INFO - Connected to Supabase database
+2026-01-01 10:55:40,066 - __main__ - INFO - Report scheduler daemon started in background
+2026-01-01 10:55:40,068 - email_automation.routes - INFO - Email scheduler started
+2026-01-01 10:55:40,068 - __main__ - INFO - Email automation scheduler started
+2026-01-01 10:55:40,068 - __main__ - INFO - Starting Famous Gate Unified Python Service on port 5001
+2026-01-01 10:55:40,068 - __main__ - INFO - Services: Reports, Finance, Accounting, Receipts, Email, Templates, Barcodes, Portals
+ * Serving Flask app 'app'
+ * Debug mode: on
+2026-01-01 10:55:40,188 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5001
+ * Running on http://10.209.98.233:5001
+2026-01-01 10:55:40,188 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-01-01 10:55:40,189 - werkzeug - INFO -  * Restarting with stat
+2026-01-01 10:55:42,702 - accounting.routes - INFO - Audit: CREATED on entry 0e23ad0f-2de4-4c59-800d-ad7070843f0e by accountant@famousgate.com
+2026-01-01 10:55:42,702 - accounting.routes - INFO - Audit: CREATED on entry f4f105f7-2ea2-44c4-80f7-b693ef2273b6 by restaurant@famousgate.com
+2026-01-01 10:55:42,702 - accounting.routes - INFO - Audit: CREATED on entry 8cab67cc-4f82-4286-9c33-1382d7a8526f by accountant@famousgate.com
+2026-01-01 10:55:43,367 - httpx - INFO - HTTP Request: GET https://utsvlihpudfraxzcmtle.supabase.co/rest/v1/scheduled_reports?select=id&name=eq.Daily%20Sales%20Summary "HTTP/2 200 OK"
+2026-01-01 10:55:43,733 - httpx - INFO - HTTP Request: GET https://utsvlihpudfraxzcmtle.supabase.co/rest/v1/scheduled_reports?select=id&name=eq.Weekly%20Occupancy%20Report "HTTP/2 200 OK"
+2026-01-01 10:55:44,142 - httpx - INFO - HTTP Request: GET https://utsvlihpudfraxzcmtle.supabase.co/rest/v1/scheduled_reports?select=id&name=eq.Monthly%20Financial%20Summary "HTTP/2 200 OK"
+2026-01-01 10:55:44,586 - budget_analytics - INFO - Connected to Supabase database
+2026-01-01 10:55:44,604 - reports.database_fetcher - INFO - Connected to Supabase database
+2026-01-01 10:55:44,617 - reports.database_fetcher - INFO - Connected to Supabase database
+2026-01-01 10:55:44,636 - reports.database_fetcher - INFO - Connected to Supabase database
+2026-01-01 10:55:44,661 - __main__ - INFO - Report scheduler daemon started in background
+2026-01-01 10:55:44,662 - email_automation.routes - INFO - Email scheduler started
+2026-01-01 10:55:44,662 - __main__ - INFO - Email automation scheduler started
+2026-01-01 10:55:44,662 - __main__ - INFO - Starting Famous Gate Unified Python Service on port 5001
+2026-01-01 10:55:44,662 - __main__ - INFO - Services: Reports, Finance, Accounting, Receipts, Email, Templates, Barcodes, Portals
+2026-01-01 10:55:44,673 - werkzeug - WARNING -  * Debugger is active!
+2026-01-01 10:55:44,674 - werkzeug - INFO -  * Debugger PIN: 832-302-757
+2026-01-01 10:55:45,402 - httpx - INFO - HTTP Request: GET https://utsvlihpudfraxzcmtle.supabase.co/rest/v1/scheduled_reports?select=id&name=eq.Daily%20Sales%20Summary "HTTP/2 200 OK"
+2026-01-01 10:55:45,821 - httpx - INFO - HTTP Request: GET https://utsvlihpudfraxzcmtle.supabase.co/rest/v1/scheduled_reports?select=id&name=eq.Daily%20Inventory%20Alert "HTTP/2 200 OK"
+2026-01-01 10:55:45,822 - httpx - INFO - HTTP Request: GET https://utsvlihpudfraxzcmtle.supabase.co/rest/v1/scheduled_reports?select=id&name=eq.Weekly%20Occupancy%20Report "HTTP/2 200 OK"
+2026-01-01 10:55:45,822 - report_scheduler - INFO - Report scheduler daemon started
+2026-01-01 10:55:46,637 - httpx - INFO - HTTP Request: GET https://utsvlihpudfraxzcmtle.supabase.co/rest/v1/scheduled_reports?select=id&name=eq.Monthly%20Financial%20Summary "HTTP/2 200 OK"
+2026-01-01 10:55:47,041 - httpx - INFO - HTTP Request: GET https://utsvlihpudfraxzcmtle.supabase.co/rest/v1/scheduled_reports?select=id&name=eq.Daily%20Inventory%20Alert "HTTP/2 200 OK"
+2026-01-01 10:55:47,042 - report_scheduler - INFO - Report scheduler daemon started

@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { supabase } from '../config/database';
+import { supabase } from '../config/supabase';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { logger } from '../utils/logger';
-import { UserRole } from '../models/User';
+import db from '../db';
 
 // @desc    Register user
 // @route   POST /api/auth/register
@@ -100,70 +102,94 @@ export const login = async (
       return;
     }
 
-    // Demo accounts support in development mode
-    if (process.env.NODE_ENV === 'development') {
-      // Check if this is a demo account
-      const demoAccounts = [
-        'admin@dev.com',
-        'admin@famousgate.com',
-        'central-ops@famousgate.com',
-        'branch-ops@famousgate.com',
-        'facilities@famousgate.com',
-        'central.manager@famousgate.com',
-        'warehouse@famousgate.com',
-        'logistics@famousgate.com',
-        'gm@famousgate.com',
-        'manager.bomet@famousgate.com',
-        'central@famousgate.com',
-        'reception@famousgate.com',
-        'restaurant@famousgate.com',
-        'accountant@famousgate.com'
-      ];
-      
-      if (demoAccounts.includes(email)) {
-        logger.info(`Demo account login: ${email}`);
-        
-        // Create mock user and session
-        const user = {
-          id: 'demo-' + Math.random().toString(36).substring(2, 15),
-          email,
-          first_name: email.split('@')[0].split('.')[0],
-          last_name: email.split('@')[0].split('.').length > 1 ? 
-            email.split('@')[0].split('.')[1] : 'User',
-          role: email.includes('central-ops') ? 'central_operations_manager' :
-                 email.includes('branch-ops') ? 'branch_operations_manager' :
-                 email.includes('admin') ? 'super_admin' : 'employee',
-          branch_id: email.includes('central') || email.includes('admin') ? null : 1,
-          is_central: email.includes('central') || email.includes('admin'),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
-        
-        const session = {
-          access_token: 'demo-token-' + Date.now(),
-          refresh_token: 'demo-refresh-' + Date.now(),
-          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
-          user: { id: user.id, email: user.email }
-        };
-        
-        res.status(200).json({
-          success: true,
-          data: {
-            user,
-            session
-          }
-        });
-        return;
-      }
-    }
+    // No demo accounts - use real authentication only
 
-    // Sign in with Supabase
+    // Try Supabase Auth first
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password
     });
 
-    if (authError) {
+    if (!authError && authData?.user) {
+      // Supabase Auth succeeded
+      const { data: profile, error: profileError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single();
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      // Update last login
+      await supabase
+        .from('users')
+        .update({ last_login: new Date().toISOString() })
+        .eq('id', authData.user.id);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          user: profile,
+          session: authData.session
+        }
+      });
+
+      logger.info(`User logged in via Supabase Auth: ${email}`);
+      return;
+    }
+
+    // Fallback: Direct database authentication
+    logger.info(`Supabase Auth failed for ${email}, trying direct DB auth`);
+    
+    let storedHash: string | null = null;
+    let userId: string | null = null;
+    let userProfile: any = null;
+    
+    try {
+      // Use direct PostgreSQL connection with timeout settings
+      const { Pool } = require('pg');
+      const pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false },
+        connectionTimeoutMillis: 10000,
+        query_timeout: 10000,
+        max: 1
+      });
+      
+      // Get user profile and auth data in one query
+      const result = await pool.query(
+        `SELECT 
+          u.id, u.email, u.first_name, u.last_name, u.role, u.branch_id,
+          au.encrypted_password
+        FROM public.users u
+        LEFT JOIN auth.users au ON u.id = au.id
+        WHERE u.email = $1`,
+        [email]
+      );
+      
+      await pool.end();
+      
+      if (result.rows[0]) {
+        const row = result.rows[0];
+        userId = row.id;
+        storedHash = row.encrypted_password;
+        userProfile = {
+          id: row.id,
+          email: row.email,
+          first_name: row.first_name,
+          last_name: row.last_name,
+          role: row.role,
+          branch_id: row.branch_id,
+          status: row.status
+        };
+      }
+    } catch (dbError) {
+      logger.error('Direct DB auth error:', dbError);
+    }
+
+    if (!storedHash || !userId) {
       res.status(401).json({
         success: false,
         message: 'Invalid credentials'
@@ -171,33 +197,68 @@ export const login = async (
       return;
     }
 
-    // Get user profile
-    const { data: profile, error: profileError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', authData.user.id)
-      .single();
-
-    if (profileError) {
-      throw profileError;
+    // Verify password with bcrypt
+    const passwordMatch = await bcrypt.compare(password, storedHash);
+    
+    if (!passwordMatch) {
+      res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+      return;
     }
 
-    // Update last login
-    await supabase
-      .from('users')
-      .update({ last_login: new Date().toISOString() })
-      .eq('id', authData.user.id);
+    if (!userProfile) {
+      res.status(401).json({
+        success: false,
+        message: 'User profile not found'
+      });
+      return;
+    }
 
-    // Send response
+    // Update last login using direct DB (avoid Supabase timeout)
+    try {
+      await db.query(
+        'UPDATE public.users SET last_login = NOW() WHERE id = $1',
+        [userId]
+      );
+    } catch (updateError) {
+      logger.warn('Failed to update last login:', updateError);
+    }
+
+    // Generate JWT token
+    const jwtSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'fallback-secret-key';
+    const accessToken = jwt.sign(
+      { 
+        sub: userId, 
+        email: userProfile.email,
+        role: userProfile.role,
+        aud: 'authenticated'
+      },
+      jwtSecret,
+      { expiresIn: '24h' }
+    );
+
+    const refreshToken = jwt.sign(
+      { sub: userId, type: 'refresh' },
+      jwtSecret,
+      { expiresIn: '7d' }
+    );
+
     res.status(200).json({
       success: true,
       data: {
-        user: profile,
-        session: authData.session
+        user: userProfile,
+        session: {
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          user: { id: userId, email: userProfile.email }
+        }
       }
     });
 
-    logger.info(`User logged in: ${email}`);
+    logger.info(`User logged in via direct DB auth: ${email}`);
   } catch (error) {
     next(error);
   }
@@ -284,9 +345,8 @@ export const getMe = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-    if (sessionError || !session) {
+    // User is already authenticated by protect middleware
+    if (!req.user || !req.user.id) {
       res.status(401).json({
         success: false,
         message: 'Not authorized'
@@ -294,14 +354,19 @@ export const getMe = async (
       return;
     }
 
+    // Get full user profile from database
     const { data: profile, error: profileError } = await supabase
       .from('users')
       .select('*')
-      .eq('id', session.user.id)
+      .eq('id', req.user.id)
       .single();
 
-    if (profileError) {
-      throw profileError;
+    if (profileError || !profile) {
+      res.status(404).json({
+        success: false,
+        message: 'User profile not found'
+      });
+      return;
     }
 
     res.status(200).json({

@@ -18,6 +18,22 @@ try:
 except ImportError:
     ESCPOS_AVAILABLE = False
     logging.warning("python-escpos not installed. Install with: pip install python-escpos")
+    
+    # Define a dummy class to prevent NameError if the library is missing
+    class Dummy:
+        def __init__(self, *args, **kwargs):
+            self.output = b""
+        def text(self, txt):
+            if isinstance(txt, str):
+                self.output += txt.encode('utf-8')
+            else:
+                self.output += txt
+        def set(self, *args, **kwargs): pass
+        def cut(self): self.text("\n[CUT]\n")
+        def close(self): pass
+        def image(self, *args, **kwargs): pass
+        def barcode(self, *args, **kwargs): pass
+        def qr(self, *args, **kwargs): pass
 
 logger = logging.getLogger(__name__)
 

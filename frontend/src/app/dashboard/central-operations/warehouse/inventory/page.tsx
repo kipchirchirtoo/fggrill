@@ -11,8 +11,8 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { centralOperationsAPI } from '@/lib/branch-api';
 import { toast } from 'sonner';
-import { 
-  Package, Search, Filter, RefreshCw, PlusCircle, 
+import {
+  Package, Search, Filter, RefreshCw, PlusCircle,
   Truck, AlertTriangle, Check, ShoppingCart, Camera, X, Keyboard, Scan, Barcode, Eye, Building2
 } from 'lucide-react';
 import { BranchPageWrapper } from '@/components/branch/branch-page-wrapper';
@@ -86,14 +86,14 @@ function CentralWarehouseInventoryContent() {
   const [showLowStock, setShowLowStock] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
   const [branchList, setBranchList] = useState<Branch[]>([]);
-  
+
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDispatchModal, setShowDispatchModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   // Form states for adding/editing items
   const [formSku, setFormSku] = useState('');
   const [formName, setFormName] = useState('');
@@ -105,19 +105,26 @@ function CentralWarehouseInventoryContent() {
   const [formCostPrice, setFormCostPrice] = useState(0);
   const [skuPreview, setSkuPreview] = useState('FGH-BAR-ITEM-XXXX');
   const [useAutoSku, setUseAutoSku] = useState(true);
-  
+
   // States for dispatch
   const [dispatchBranch, setDispatchBranch] = useState('');
   const [dispatchQuantity, setDispatchQuantity] = useState(0);
   const [dispatchNotes, setDispatchNotes] = useState('');
-  
+
   // Barcode scanner states
   const [isScannerActive, setIsScannerActive] = useState(false);
   const [formBarcode, setFormBarcode] = useState('');
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const scanTimeout = useRef<NodeJS.Timeout | null>(null);
-  
+
+
+  // Sync context branches to branchList whenever context updates
+  useEffect(() => {
+    if (Array.isArray(contextBranches) && contextBranches.length > 0 && branchList.length === 0) {
+      setBranchList(contextBranches as Branch[]);
+    }
+  }, [contextBranches, branchList.length]);
 
   // Fetch branches and inventory on mount
   useEffect(() => {
@@ -131,19 +138,20 @@ function CentralWarehouseInventoryContent() {
   }, [selectedBranch]);
 
   const fetchBranches = async () => {
+    // First, try to use context branches if available
+    if (Array.isArray(contextBranches) && contextBranches.length > 0) {
+      setBranchList(contextBranches as Branch[]);
+      return; // Context branches are sufficient
+    }
+
+    // Otherwise, fetch from API
     try {
       const response = await centralOperationsAPI.getAllBranches();
-      if (response.success && Array.isArray(response.data)) {
+      if (response.success && Array.isArray(response.data) && response.data.length > 0) {
         setBranchList(response.data);
-      } else if (Array.isArray(contextBranches)) {
-        setBranchList(contextBranches as Branch[]);
       }
     } catch (error) {
       console.error('Error fetching branches:', error);
-      // Fallback to context branches
-      if (Array.isArray(contextBranches)) {
-        setBranchList(contextBranches as Branch[]);
-      }
     }
   };
 
@@ -167,9 +175,9 @@ function CentralWarehouseInventoryContent() {
       if (selectedBranch && selectedBranch !== 'all') {
         params.branch_id = selectedBranch;
       }
-      
+
       const response = await centralOperationsAPI.getMasterInventory(params);
-      
+
       if (response.success) {
         setItems(response.data || []);
       } else {
@@ -199,22 +207,22 @@ function CentralWarehouseInventoryContent() {
     setUseAutoSku(true);
     setSkuPreview('FGH-BAR-ITEM-XXXX');
     setIsScannerActive(false);
-    
+
     setShowAddModal(true);
-    
+
     // Focus barcode input after modal opens
     setTimeout(() => {
       barcodeInputRef.current?.focus();
     }, 150);
   };
-  
+
   // ==========================================
   // BARCODE SCANNER FUNCTIONS
   // ==========================================
   const startCameraScanner = async () => {
     setIsScannerActive(true);
     await new Promise(resolve => setTimeout(resolve, 200));
-    
+
     try {
       const html5QrCode = new Html5Qrcode("central-barcode-reader", {
         formatsToSupport: [
@@ -230,7 +238,7 @@ function CentralWarehouseInventoryContent() {
         ],
         verbose: false
       });
-      
+
       scannerRef.current = html5QrCode;
 
       await html5QrCode.start(
@@ -243,7 +251,7 @@ function CentralWarehouseInventoryContent() {
           setFormSku(decodedText);
           lookupBarcode(decodedText);
         },
-        () => {}
+        () => { }
       );
     } catch (err) {
       console.error('Camera error:', err);
@@ -269,17 +277,17 @@ function CentralWarehouseInventoryContent() {
 
   const lookupBarcode = useCallback(async (code: string) => {
     if (!code || code.trim().length < 2) return;
-    
+
     const cleanCode = code.trim();
     try {
       // Try to find existing item by SKU/barcode
       const response = await centralOperationsAPI.getMasterInventory({ search: cleanCode });
-      
+
       if (response.success && response.data && response.data.length > 0) {
-        const existingItem = response.data.find((item: InventoryItem) => 
+        const existingItem = response.data.find((item: InventoryItem) =>
           item.sku.toLowerCase() === cleanCode.toLowerCase()
         );
-        
+
         if (existingItem) {
           // Item found - pre-fill form
           setFormSku(existingItem.sku);
@@ -310,12 +318,12 @@ function CentralWarehouseInventoryContent() {
     const value = e.target.value;
     setFormBarcode(value);
     setFormSku(value);
-    
+
     // Clear existing timeout
     if (scanTimeout.current) {
       clearTimeout(scanTimeout.current);
     }
-    
+
     // Auto-trigger search after scanner finishes (hardware scanners type fast)
     if (value.length >= 3) {
       scanTimeout.current = setTimeout(() => {
@@ -335,7 +343,7 @@ function CentralWarehouseInventoryContent() {
       }
     }
   };
-  
+
   // Cleanup scanner on unmount or modal close
   useEffect(() => {
     return () => {
@@ -343,17 +351,17 @@ function CentralWarehouseInventoryContent() {
       if (scanTimeout.current) clearTimeout(scanTimeout.current);
     };
   }, []);
-  
+
   // Stop scanner when modal closes
   useEffect(() => {
     if (!showAddModal) {
       stopCameraScanner();
     }
   }, [showAddModal]);
-  
+
   const handleOpenEditModal = (item: InventoryItem) => {
     setSelectedItem(item);
-    
+
     // Populate form fields
     setFormSku(item.sku);
     setFormName(item.name);
@@ -362,10 +370,10 @@ function CentralWarehouseInventoryContent() {
     setFormStock(item.central_stock);
     setFormReorderLevel(item.reorder_level);
     setFormValue(item.value);
-    
+
     setShowEditModal(true);
   };
-  
+
   const handleOpenDispatchModal = (item: InventoryItem) => {
     setSelectedItem(item);
     setDispatchQuantity(0);
@@ -373,7 +381,7 @@ function CentralWarehouseInventoryContent() {
     setDispatchNotes('');
     setShowDispatchModal(true);
   };
-  
+
   const handleAddItem = async () => {
     // Validate form - name is required, SKU can be auto-generated
     if (!formName?.trim()) {
@@ -388,11 +396,11 @@ function CentralWarehouseInventoryContent() {
       toast.error('Please select a unit');
       return;
     }
-    
+
     setIsSubmitting(true);
     try {
       const token = localStorage.getItem('token');
-      
+
       // Determine SKU - use form value or let backend auto-generate
       let skuToUse = formSku?.trim();
       if (useAutoSku || !skuToUse) {
@@ -409,14 +417,14 @@ function CentralWarehouseInventoryContent() {
             barcode: formBarcode || null
           })
         });
-        
+
         if (skuResponse.ok) {
           const skuData = await skuResponse.json();
           if (skuData.success && skuData.sku) {
             skuToUse = skuData.sku;
           }
         }
-        
+
         // Fallback if SKU generation fails
         if (!skuToUse) {
           const categoryCode = CATEGORY_CODES[formCategory] || 'GEN';
@@ -425,10 +433,10 @@ function CentralWarehouseInventoryContent() {
           skuToUse = `FGH-${categoryCode}-${productCode}-${timestamp}`;
         }
       }
-      
+
       // Calculate value from cost price and stock
       const calculatedValue = formCostPrice * formStock;
-      
+
       const response = await centralOperationsAPI.createMasterItem({
         sku: skuToUse,
         name: formName.trim(),
@@ -439,7 +447,7 @@ function CentralWarehouseInventoryContent() {
         value: calculatedValue || formValue,
         branch_allocations: {}
       });
-      
+
       if (response.success) {
         toast.success(`Item added successfully! SKU: ${skuToUse}`);
         setShowAddModal(false);
@@ -454,16 +462,16 @@ function CentralWarehouseInventoryContent() {
       setIsSubmitting(false);
     }
   };
-  
+
   const handleEditItem = async () => {
     if (!selectedItem) return;
-    
+
     // Validate form
     if (!formName || !formCategory || !formUnit) {
       toast.error('Please fill in all required fields');
       return;
     }
-    
+
     setIsSubmitting(true);
     try {
       const response = await centralOperationsAPI.updateMasterItem(selectedItem.sku, {
@@ -475,7 +483,7 @@ function CentralWarehouseInventoryContent() {
         value: formValue,
         branch_allocations: selectedItem.branch_allocations
       });
-      
+
       if (response.success) {
         toast.success('Item updated successfully');
         setShowEditModal(false);
@@ -490,18 +498,18 @@ function CentralWarehouseInventoryContent() {
       setIsSubmitting(false);
     }
   };
-  
+
   const handleDispatchItem = async () => {
     if (!selectedItem || !dispatchBranch || dispatchQuantity <= 0) {
       toast.error('Please select a branch and specify a valid quantity');
       return;
     }
-    
+
     if (dispatchQuantity > selectedItem.central_stock) {
       toast.error(`Cannot dispatch more than available stock (${selectedItem.central_stock} ${selectedItem.unit}s)`);
       return;
     }
-    
+
     setIsSubmitting(true);
     try {
       const response = await centralOperationsAPI.createDispatch({
@@ -514,7 +522,7 @@ function CentralWarehouseInventoryContent() {
         }],
         notes: dispatchNotes
       });
-      
+
       if (response.success) {
         toast.success('Dispatch created successfully');
         setShowDispatchModal(false);
@@ -532,21 +540,21 @@ function CentralWarehouseInventoryContent() {
 
   const filterItems = () => {
     let filtered = [...items];
-    
+
     // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(item => 
-        item.name.toLowerCase().includes(query) || 
+      filtered = filtered.filter(item =>
+        item.name.toLowerCase().includes(query) ||
         item.sku.toLowerCase().includes(query)
       );
     }
-    
+
     // Filter by category
     if (selectedCategory !== 'all') {
       filtered = filtered.filter(item => item.category === selectedCategory);
     }
-    
+
     // Filter by branch (show items with allocation to selected branch)
     if (selectedBranch && selectedBranch !== 'all') {
       filtered = filtered.filter(item => {
@@ -554,17 +562,17 @@ function CentralWarehouseInventoryContent() {
         return allocations[selectedBranch] !== undefined && allocations[selectedBranch] > 0;
       });
     }
-    
+
     // Filter by low stock
     if (showLowStock) {
       filtered = filtered.filter(item => item.central_stock <= item.reorder_level);
     }
-    
+
     setFilteredItems(filtered);
   };
 
   const categories = ['all', ...new Set(items.map(item => item.category))];
-  
+
   const totalValue = filteredItems.reduce((sum, item) => sum + item.value, 0);
   const lowStockCount = filteredItems.filter(item => item.central_stock <= item.reorder_level).length;
 
@@ -581,15 +589,15 @@ function CentralWarehouseInventoryContent() {
         requireBranchContext={false}
         actionButton={
           <div className="flex space-x-2">
-            <IOSButton 
-              variant="secondary" 
-              onClick={fetchInventory} 
+            <IOSButton
+              variant="secondary"
+              onClick={fetchInventory}
               leftIcon={<RefreshCw className="h-4 w-4" />}
             >
               Refresh
             </IOSButton>
-            <IOSButton 
-              variant="primary" 
+            <IOSButton
+              variant="primary"
               leftIcon={<PlusCircle className="h-4 w-4" />}
               onClick={handleOpenAddModal}
             >
@@ -608,9 +616,9 @@ function CentralWarehouseInventoryContent() {
                   Viewing inventory for: <strong>{branchList.find(b => b.id.toString() === selectedBranch)?.name || 'Selected Branch'}</strong>
                 </span>
               </div>
-              <IOSButton 
-                variant="ghost" 
-                size="sm" 
+              <IOSButton
+                variant="ghost"
+                size="sm"
                 onClick={() => setSelectedBranch('all')}
                 className="text-gray-600 hover:text-gray-800"
               >
@@ -632,7 +640,7 @@ function CentralWarehouseInventoryContent() {
                 </div>
               </div>
             </IOSCard>
-            
+
             <IOSCard className="p-4 border border-gray-200">
               <div className="flex items-center space-x-3">
                 <div className="p-2 bg-gray-100 rounded-lg">
@@ -644,7 +652,7 @@ function CentralWarehouseInventoryContent() {
                 </div>
               </div>
             </IOSCard>
-            
+
             <IOSCard className="p-4 border border-gray-200">
               <div className="flex items-center space-x-3">
                 <div className="p-2 bg-gray-100 rounded-lg">
@@ -656,7 +664,7 @@ function CentralWarehouseInventoryContent() {
                 </div>
               </div>
             </IOSCard>
-            
+
             <IOSCard className="p-4 border border-gray-200">
               <div className="flex items-center space-x-3">
                 <div className="p-2 bg-gray-100 rounded-lg">
@@ -674,7 +682,7 @@ function CentralWarehouseInventoryContent() {
           <IOSCard className="p-4">
             <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search by name or SKU"
@@ -683,11 +691,11 @@ function CentralWarehouseInventoryContent() {
                   className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-ios-lg text-sm"
                 />
               </div>
-              
+
               <div className="flex flex-wrap gap-3">
                 {/* Branch Selector */}
                 <div className="relative">
-                  <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                   <select
                     value={selectedBranch}
                     onChange={(e) => setSelectedBranch(e.target.value)}
@@ -704,7 +712,7 @@ function CentralWarehouseInventoryContent() {
 
                 {/* Category Filter */}
                 <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                   <select
                     value={selectedCategory}
                     onChange={(e) => setSelectedCategory(e.target.value)}
@@ -717,7 +725,7 @@ function CentralWarehouseInventoryContent() {
                     ))}
                   </select>
                 </div>
-                
+
                 <label className="flex items-center space-x-2 px-3 py-2 border border-gray-200 rounded-ios-lg bg-white cursor-pointer hover:bg-gray-50">
                   <input
                     type="checkbox"
@@ -786,16 +794,16 @@ function CentralWarehouseInventoryContent() {
                         </td>
                         <td className="p-4 text-center">
                           <div className="flex justify-center space-x-2">
-                            <IOSButton 
-                              variant="ghost" 
+                            <IOSButton
+                              variant="ghost"
                               size="sm"
                               onClick={() => handleOpenEditModal(item)}
                             >
                               Edit
                             </IOSButton>
-                            <IOSButton 
-                              variant="ghost" 
-                              size="sm" 
+                            <IOSButton
+                              variant="ghost"
+                              size="sm"
                               leftIcon={<Truck className="h-3.5 w-3.5" />}
                               onClick={() => handleOpenDispatchModal(item)}
                             >
@@ -822,16 +830,16 @@ function CentralWarehouseInventoryContent() {
                       <X className="h-5 w-5" />
                     </IOSButton>
                   </div>
-                  
+
                   {/* Camera Scanner Overlay */}
                   {isScannerActive && (
                     <div className="fixed inset-0 bg-black bg-opacity-90 flex flex-col items-center justify-center z-[60]">
                       <div className="w-full max-w-md p-4">
                         <div className="flex justify-between items-center mb-4">
                           <h3 className="text-lg font-semibold text-white">Scan Barcode</h3>
-                          <IOSButton 
-                            variant="ghost" 
-                            size="sm" 
+                          <IOSButton
+                            variant="ghost"
+                            size="sm"
                             onClick={stopCameraScanner}
                             className="text-white hover:bg-white/20"
                           >
@@ -842,16 +850,16 @@ function CentralWarehouseInventoryContent() {
                           <Camera className="h-8 w-8 mx-auto mb-2 text-white" />
                           <p className="text-sm text-gray-300">Point camera at product barcode</p>
                         </div>
-                        
+
                         <div id="central-barcode-reader" className="w-full overflow-hidden rounded-xl border-2 border-white/30"></div>
-                        
+
                         <p className="text-center text-xs text-gray-400 mt-4">
                           Supports: UPC, EAN, Code 128, Code 39
                         </p>
                       </div>
                     </div>
                   )}
-                  
+
                   <div className="space-y-4">
                     {/* SKU Preview Banner */}
                     <div className="p-3 bg-gray-50 rounded-ios-lg border border-gray-200">
@@ -886,7 +894,7 @@ function CentralWarehouseInventoryContent() {
                           Barcode (Optional)
                         </label>
                       </div>
-                      
+
                       <div className="flex gap-2">
                         <div className="flex-1">
                           <input
@@ -900,15 +908,15 @@ function CentralWarehouseInventoryContent() {
                             autoComplete="off"
                           />
                         </div>
-                        <IOSButton 
-                          type="button" 
+                        <IOSButton
+                          type="button"
                           variant="secondary"
                           size="sm"
                           onClick={() => lookupBarcode(formBarcode)}
                         >
                           <Search className="h-4 w-4" />
                         </IOSButton>
-                        <IOSButton 
+                        <IOSButton
                           type="button"
                           variant="outline"
                           size="sm"
@@ -917,7 +925,7 @@ function CentralWarehouseInventoryContent() {
                           <Camera className="h-4 w-4" />
                         </IOSButton>
                       </div>
-                      
+
                       <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
                         <span className="flex items-center gap-1">
                           <Keyboard className="h-3 w-3" />
@@ -930,7 +938,7 @@ function CentralWarehouseInventoryContent() {
                         </span>
                       </div>
                     </div>
-                    
+
                     {/* SKU Field - only show if not auto-generating */}
                     {!useAutoSku && (
                       <div>
@@ -944,7 +952,7 @@ function CentralWarehouseInventoryContent() {
                         />
                       </div>
                     )}
-                    
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Item Name *</label>
                       <input
@@ -956,7 +964,7 @@ function CentralWarehouseInventoryContent() {
                         required
                       />
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
@@ -971,7 +979,7 @@ function CentralWarehouseInventoryContent() {
                           ))}
                         </select>
                       </div>
-                      
+
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Unit *</label>
                         <select
@@ -986,7 +994,7 @@ function CentralWarehouseInventoryContent() {
                         </select>
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-4 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Initial Stock</label>
@@ -998,7 +1006,7 @@ function CentralWarehouseInventoryContent() {
                           min="0"
                         />
                       </div>
-                      
+
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Cost Price</label>
                         <input
@@ -1011,7 +1019,7 @@ function CentralWarehouseInventoryContent() {
                           placeholder="KES"
                         />
                       </div>
-                      
+
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Reorder Level</label>
                         <input
@@ -1022,7 +1030,7 @@ function CentralWarehouseInventoryContent() {
                           min="0"
                         />
                       </div>
-                      
+
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Total Value</label>
                         <input
@@ -1033,15 +1041,15 @@ function CentralWarehouseInventoryContent() {
                         />
                       </div>
                     </div>
-                    
+
                     <div className="flex justify-end space-x-3 pt-4 border-t">
-                      <IOSButton 
-                        variant="secondary" 
+                      <IOSButton
+                        variant="secondary"
                         onClick={() => setShowAddModal(false)}
                       >
                         Cancel
                       </IOSButton>
-                      <IOSButton 
+                      <IOSButton
                         variant="primary"
                         onClick={handleAddItem}
                         disabled={isSubmitting}
@@ -1055,7 +1063,7 @@ function CentralWarehouseInventoryContent() {
               </div>
             </div>
           )}
-          
+
           {/* Edit Item Modal */}
           {showEditModal && selectedItem && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -1067,7 +1075,7 @@ function CentralWarehouseInventoryContent() {
                       Close
                     </IOSButton>
                   </div>
-                  
+
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Name*</label>
@@ -1080,7 +1088,7 @@ function CentralWarehouseInventoryContent() {
                         required
                       />
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Category*</label>
@@ -1093,7 +1101,7 @@ function CentralWarehouseInventoryContent() {
                           required
                         />
                       </div>
-                      
+
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Unit*</label>
                         <input
@@ -1106,7 +1114,7 @@ function CentralWarehouseInventoryContent() {
                         />
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Stock</label>
@@ -1118,7 +1126,7 @@ function CentralWarehouseInventoryContent() {
                           min="0"
                         />
                       </div>
-                      
+
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Reorder Level</label>
                         <input
@@ -1129,7 +1137,7 @@ function CentralWarehouseInventoryContent() {
                           min="0"
                         />
                       </div>
-                      
+
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Value (KES)</label>
                         <input
@@ -1141,15 +1149,15 @@ function CentralWarehouseInventoryContent() {
                         />
                       </div>
                     </div>
-                    
+
                     <div className="flex justify-end space-x-3 pt-4">
-                      <IOSButton 
-                        variant="secondary" 
+                      <IOSButton
+                        variant="secondary"
                         onClick={() => setShowEditModal(false)}
                       >
                         Cancel
                       </IOSButton>
-                      <IOSButton 
+                      <IOSButton
                         variant="primary"
                         onClick={handleEditItem}
                         disabled={isSubmitting}
@@ -1162,7 +1170,7 @@ function CentralWarehouseInventoryContent() {
               </div>
             </div>
           )}
-          
+
           {/* Dispatch Modal */}
           {showDispatchModal && selectedItem && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -1174,17 +1182,17 @@ function CentralWarehouseInventoryContent() {
                       Close
                     </IOSButton>
                   </div>
-                  
+
                   <div>
                     <p className="text-sm text-gray-500">SKU</p>
                     <p className="font-medium">{selectedItem.sku}</p>
                   </div>
-                  
+
                   <div>
                     <p className="text-sm text-gray-500">Available Stock</p>
                     <p className="font-medium">{selectedItem.central_stock} {selectedItem.unit}s</p>
                   </div>
-                  
+
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Branch*</label>
@@ -1202,7 +1210,7 @@ function CentralWarehouseInventoryContent() {
                         ))}
                       </select>
                     </div>
-                    
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Quantity*</label>
                       <input
@@ -1215,7 +1223,7 @@ function CentralWarehouseInventoryContent() {
                         required
                       />
                     </div>
-                    
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
                       <textarea
@@ -1225,15 +1233,15 @@ function CentralWarehouseInventoryContent() {
                         rows={3}
                       ></textarea>
                     </div>
-                    
+
                     <div className="flex justify-end space-x-3 pt-4">
-                      <IOSButton 
-                        variant="secondary" 
+                      <IOSButton
+                        variant="secondary"
                         onClick={() => setShowDispatchModal(false)}
                       >
                         Cancel
                       </IOSButton>
-                      <IOSButton 
+                      <IOSButton
                         variant="primary"
                         onClick={handleDispatchItem}
                         disabled={isSubmitting || dispatchQuantity <= 0 || !dispatchBranch}

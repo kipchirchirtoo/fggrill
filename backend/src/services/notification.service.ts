@@ -134,8 +134,15 @@ class NotificationService {
   /**
    * Get notifications for a specific user
    */
-  async getNotificationsForUser(userId: number, filters?: NotificationFilter): Promise<Notification[]> {
+  async getNotificationsForUser(userId: string, filters?: NotificationFilter): Promise<Notification[]> {
     try {
+      // Validate userId is a valid UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!userId || !uuidRegex.test(userId)) {
+        logger.warn('Invalid userId for notifications:', userId);
+        return [];
+      }
+
       // First get user details
       const { data: userData, error: userError } = await supabase
         .from('users')
@@ -143,17 +150,25 @@ class NotificationService {
         .eq('id', userId)
         .single();
 
-      if (userError) {
-        logger.error('Error fetching user details:', userError);
+      if (userError || !userData) {
+        logger.warn('Could not fetch user details for notifications:', userError?.message);
         return [];
+      }
+
+      // Build query conditions based on user data
+      let orConditions = `user_id.eq.${userId}`;
+      if (userData.role) {
+        orConditions += `,role.eq.${userData.role}`;
+      }
+      if (userData.branch_id) {
+        orConditions += `,branch_id.eq.${userData.branch_id}`;
       }
 
       // Build query for notifications
       let query = supabase
         .from('notifications')
         .select('*')
-        .or(`user_id.eq.${userId},role.eq.${userData.role},branch_id.eq.${userData.branch_id}`)
-        .or('expires_at.is.null,expires_at.gt.' + new Date().toISOString());
+        .or(orConditions);
 
       // Apply filters
       if (filters?.is_read !== undefined) {
@@ -194,8 +209,15 @@ class NotificationService {
   /**
    * Get unread count for a user
    */
-  async getUnreadCount(userId: number): Promise<number> {
+  async getUnreadCount(userId: string): Promise<number> {
     try {
+      // Validate userId is a valid UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!userId || !uuidRegex.test(userId)) {
+        logger.warn('Invalid userId for notification count:', userId);
+        return 0;
+      }
+
       // Get user details
       const { data: userData, error: userError } = await supabase
         .from('users')
@@ -203,20 +225,32 @@ class NotificationService {
         .eq('id', userId)
         .single();
 
-      if (userError) {
-        logger.error('Error fetching user for count:', userError);
+      if (userError || !userData) {
+        logger.error('Error fetching user for count:', userError?.message);
         return 0;
+      }
+
+      // Build query conditions based on user data
+      let orConditions = `user_id.eq.${userId}`;
+      if (userData.role) {
+        orConditions += `,role.eq.${userData.role}`;
+      }
+      if (userData.branch_id) {
+        orConditions += `,branch_id.eq.${userData.branch_id}`;
       }
 
       const { count, error } = await supabase
         .from('notifications')
         .select('*', { count: 'exact', head: true })
-        .or(`user_id.eq.${userId},role.eq.${userData.role},branch_id.eq.${userData.branch_id}`)
-        .eq('is_read', false)
-        .or('expires_at.is.null,expires_at.gt.' + new Date().toISOString());
+        .or(orConditions)
+        .eq('is_read', false);
 
       if (error) {
-        logger.error('Error counting notifications:', error);
+        // Table might not exist yet - that's okay
+        if (error.code === '42P01') {
+          return 0;
+        }
+        logger.error('Error counting notifications:', error.message);
         return 0;
       }
 

@@ -21,27 +21,35 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 
-// Service request interface
-interface ServiceRequest {
+// Stock request interface
+interface StockRequestItem {
   id: string;
-  request_number: string;
-  type: string;
-  status: string;
-  priority: string;
-  created_at: string;
-  updated_at: string;
-  description: string;
-  room_number?: string;
-  requested_by: string;
-  assigned_to?: string;
-  comments?: string[];
+  item_sku: string;
+  item_name?: string;
+  requested_quantity: number;
+  approved_quantity?: number;
+  unit?: string;
 }
 
-function ServiceRequestsContent() {
+interface StockRequest {
+  id: string;
+  request_number: string;
+  request_type: 'REPLENISHMENT' | 'SPECIAL_ORDER' | 'EMERGENCY';
+  status: 'PENDING' | 'REVIEWED' | 'APPROVED' | 'PARTIALLY_APPROVED' | 'DISPATCHED' | 'RECEIVED' | 'CANCELLED' | 'REJECTED';
+  priority: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+  reason?: string;
+  needed_by_date?: string;
+  created_at: string;
+  updated_at: string;
+  requesting_branch_id: number;
+  items?: StockRequestItem[];
+}
+
+function StockRequestsContent() {
   const { user } = useAuth();
   const { activeBranch, activeBranchId } = useBranch();
-  const [requests, setRequests] = useState<ServiceRequest[]>([]);
-  const [filteredRequests, setFilteredRequests] = useState<ServiceRequest[]>([]);
+  const [requests, setRequests] = useState<StockRequest[]>([]);
+  const [filteredRequests, setFilteredRequests] = useState<StockRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -53,19 +61,19 @@ function ServiceRequestsContent() {
 
   // Form data
   const [formData, setFormData] = useState({
-    type: '',
-    priority: 'medium',
-    room_number: '',
-    description: '',
-    assigned_to: ''
+    request_type: 'REPLENISHMENT',
+    priority: 'NORMAL',
+    reason: '',
+    needed_by_date: format(new Date(), 'yyyy-MM-dd'),
+    items: [{ item_sku: '', requested_quantity: 1 }]
   });
 
   // Stats
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
-    inProgress: 0,
-    completed: 0
+    approved: 0,
+    dispatched: 0
   });
 
   useEffect(() => {
@@ -81,9 +89,8 @@ function ServiceRequestsContent() {
   const fetchRequests = async () => {
     setIsLoading(true);
     try {
-      const response = await branchOperationsAPI.getServiceRequests(
+      const response = await branchOperationsAPI.getStockRequests(
         {
-          type: typeFilter !== 'all' ? typeFilter : undefined,
           status: statusFilter !== 'all' ? statusFilter : undefined
         },
         activeBranchId ?? undefined
@@ -94,39 +101,39 @@ function ServiceRequestsContent() {
         setRequests(requestsData);
 
         // Calculate stats
-        const pending = requestsData.filter((r: ServiceRequest) => r.status === 'pending').length;
-        const inProgress = requestsData.filter((r: ServiceRequest) => r.status === 'in_progress').length;
-        const completed = requestsData.filter((r: ServiceRequest) => r.status === 'completed').length;
+        const pending = requestsData.filter((r: StockRequest) => r.status === 'PENDING').length;
+        const approved = requestsData.filter((r: StockRequest) => ['APPROVED', 'PARTIALLY_APPROVED'].includes(r.status)).length;
+        const dispatched = requestsData.filter((r: StockRequest) => r.status === 'DISPATCHED').length;
 
         setStats({
           total: requestsData.length,
           pending,
-          inProgress,
-          completed
+          approved,
+          dispatched
         });
       } else {
-        throw new Error(response.message || 'Failed to fetch service requests');
+        throw new Error(response.message || 'Failed to fetch stock requests');
       }
     } catch (error) {
-      console.error('Error fetching service requests:', error);
-      toast.error('Failed to load service requests');
+      console.error('Error fetching stock requests:', error);
+      toast.error('Failed to load stock requests');
       setRequests([]);
-      setStats({ total: 0, pending: 0, inProgress: 0, completed: 0 });
+      setStats({ total: 0, pending: 0, approved: 0, dispatched: 0 });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const updateStatsFromData = (data: ServiceRequest[]) => {
-    const pending = data.filter(r => r.status === 'pending').length;
-    const inProgress = data.filter(r => r.status === 'in_progress').length;
-    const completed = data.filter(r => r.status === 'completed').length;
+  const updateStatsFromData = (data: StockRequest[]) => {
+    const pending = data.filter(r => r.status === 'PENDING').length;
+    const approved = data.filter(r => ['APPROVED', 'PARTIALLY_APPROVED'].includes(r.status)).length;
+    const dispatched = data.filter(r => r.status === 'DISPATCHED').length;
 
     setStats({
       total: data.length,
       pending,
-      inProgress,
-      completed
+      approved,
+      dispatched
     });
   };
 
@@ -137,11 +144,11 @@ function ServiceRequestsContent() {
   const handleCloseModal = () => {
     setShowNewRequestModal(false);
     setFormData({
-      type: '',
-      priority: 'medium',
-      room_number: '',
-      description: '',
-      assigned_to: ''
+      request_type: 'REPLENISHMENT',
+      priority: 'NORMAL',
+      reason: '',
+      needed_by_date: format(new Date(), 'yyyy-MM-dd'),
+      items: [{ item_sku: '', requested_quantity: 1 }]
     });
   };
 
@@ -154,21 +161,24 @@ function ServiceRequestsContent() {
     setIsSubmitting(true);
 
     try {
-      const response = await branchOperationsAPI.createServiceRequest(
-        formData,
+      const response = await branchOperationsAPI.createStockRequest(
+        {
+          ...formData,
+          requesting_branch_id: activeBranchId
+        },
         activeBranchId ?? undefined
       );
 
       if (response.success) {
-        toast.success('Service request created successfully!');
+        toast.success('Stock request created successfully!');
         handleCloseModal();
         fetchRequests(); // Refresh the list
       } else {
-        throw new Error(response.message || 'Failed to create service request');
+        throw new Error(response.message || 'Failed to create stock request');
       }
     } catch (error: any) {
-      console.error('Error creating service request:', error);
-      toast.error(error.message || 'Failed to create service request');
+      console.error('Error creating stock request:', error);
+      toast.error(error.message || 'Failed to create stock request');
     } finally {
       setIsSubmitting(false);
     }
@@ -179,7 +189,7 @@ function ServiceRequestsContent() {
 
     // Apply type filter
     if (typeFilter !== 'all') {
-      filtered = filtered.filter(request => request.type === typeFilter);
+      filtered = filtered.filter(request => request.request_type === typeFilter);
     }
 
     // Apply status filter
@@ -192,8 +202,7 @@ function ServiceRequestsContent() {
       const searchLower = searchTerm.toLowerCase();
       filtered = filtered.filter(request =>
         request.request_number.toLowerCase().includes(searchLower) ||
-        request.description.toLowerCase().includes(searchLower) ||
-        (request.room_number && request.room_number.toLowerCase().includes(searchLower))
+        (request.reason && request.reason.toLowerCase().includes(searchLower))
       );
     }
 
@@ -202,14 +211,22 @@ function ServiceRequestsContent() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'pending':
+      case 'PENDING':
         return <IOSBadge className="bg-yellow-100 text-yellow-700">Pending</IOSBadge>;
-      case 'in_progress':
-        return <IOSBadge className="bg-blue-100 text-blue-700">In Progress</IOSBadge>;
-      case 'completed':
-        return <IOSBadge className="bg-green-100 text-green-700">Completed</IOSBadge>;
-      case 'cancelled':
+      case 'REVIEWED':
+        return <IOSBadge className="bg-blue-100 text-blue-700">Reviewed</IOSBadge>;
+      case 'APPROVED':
+        return <IOSBadge className="bg-green-100 text-green-700">Approved</IOSBadge>;
+      case 'PARTIALLY_APPROVED':
+        return <IOSBadge className="bg-emerald-100 text-emerald-700">Partially Approved</IOSBadge>;
+      case 'DISPATCHED':
+        return <IOSBadge className="bg-purple-100 text-purple-700">Dispatched</IOSBadge>;
+      case 'RECEIVED':
+        return <IOSBadge className="bg-indigo-100 text-indigo-700">Received</IOSBadge>;
+      case 'CANCELLED':
         return <IOSBadge className="bg-red-100 text-red-700">Cancelled</IOSBadge>;
+      case 'REJECTED':
+        return <IOSBadge className="bg-orange-100 text-orange-700">Rejected</IOSBadge>;
       default:
         return <IOSBadge className="bg-gray-100 text-gray-700">{status}</IOSBadge>;
     }
@@ -217,11 +234,13 @@ function ServiceRequestsContent() {
 
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
-      case 'high':
-        return <IOSBadge className="bg-red-100 text-red-700">High</IOSBadge>;
-      case 'medium':
-        return <IOSBadge className="bg-orange-100 text-orange-700">Medium</IOSBadge>;
-      case 'low':
+      case 'URGENT':
+        return <IOSBadge className="bg-red-100 text-red-700">Urgent</IOSBadge>;
+      case 'HIGH':
+        return <IOSBadge className="bg-orange-100 text-orange-700">High</IOSBadge>;
+      case 'NORMAL':
+        return <IOSBadge className="bg-blue-100 text-blue-700">Normal</IOSBadge>;
+      case 'LOW':
         return <IOSBadge className="bg-green-100 text-green-700">Low</IOSBadge>;
       default:
         return <IOSBadge className="bg-gray-100 text-gray-700">{priority}</IOSBadge>;
@@ -230,18 +249,14 @@ function ServiceRequestsContent() {
 
   const getTypeLabel = (type: string) => {
     switch (type) {
-      case 'maintenance':
-        return 'Maintenance';
-      case 'housekeeping':
-        return 'Housekeeping';
-      case 'facility':
-        return 'Facility';
-      case 'it':
-        return 'IT Support';
-      case 'security':
-        return 'Security';
+      case 'REPLENISHMENT':
+        return 'Replenishment';
+      case 'SPECIAL_ORDER':
+        return 'Special Order';
+      case 'EMERGENCY':
+        return 'Emergency';
       default:
-        return type.charAt(0).toUpperCase() + type.slice(1);
+        return type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
     }
   };
 
@@ -253,23 +268,24 @@ function ServiceRequestsContent() {
     }
   };
 
-  const handleStatusChange = async (requestId: string, newStatus: string) => {
+  const handleCancelRequest = async (requestId: string) => {
+    if (!confirm('Are you sure you want to cancel this request?')) return;
+
     try {
-      const response = await branchOperationsAPI.updateServiceRequestStatus(
+      const response = await branchOperationsAPI.cancelStockRequest(
         requestId,
-        newStatus,
         activeBranchId ?? undefined
       );
 
       if (response.success) {
-        toast.success(`Request status updated to ${newStatus}`);
+        toast.success(`Request cancelled successfully`);
         fetchRequests(); // Refresh the list
       } else {
-        throw new Error(response.message || 'Failed to update status');
+        throw new Error(response.message || 'Failed to cancel request');
       }
     } catch (error: any) {
-      console.error('Error updating request status:', error);
-      toast.error(error.message || 'Failed to update request status');
+      console.error('Error cancelling request:', error);
+      toast.error(error.message || 'Failed to cancel request');
     }
   };
 
@@ -283,11 +299,11 @@ function ServiceRequestsContent() {
       UserRole.GENERAL_MANAGER
     ]}>
       <BranchAwareDashboardLayout
-        title="Service Requests"
-        subtitle={`Manage service requests for ${activeBranch?.name || 'your branch'}`}
+        title="Stock Requests"
+        subtitle={`Manage inventory requests for ${activeBranch?.name || 'your branch'}`}
         actionButton={
           <IOSButton leftIcon={<Plus />} onClick={handleOpenNewRequest}>
-            New Request
+            New Stock Request
           </IOSButton>
         }
       >
@@ -307,15 +323,15 @@ function ServiceRequestsContent() {
             </IOSCard>
 
             <IOSCard className="p-4">
-              <Clock className="h-5 w-5 text-blue-600 mb-2" />
-              <p className="text-sm text-gray-500">In Progress</p>
-              <p className="text-lg font-bold text-blue-600">{stats.inProgress}</p>
+              <CheckCircle2 className="h-5 w-5 text-green-600 mb-2" />
+              <p className="text-sm text-gray-500">Approved</p>
+              <p className="text-lg font-bold text-green-600">{stats.approved}</p>
             </IOSCard>
 
             <IOSCard className="p-4">
-              <CheckCircle2 className="h-5 w-5 text-green-600 mb-2" />
-              <p className="text-sm text-gray-500">Completed</p>
-              <p className="text-lg font-bold text-green-600">{stats.completed}</p>
+              <RefreshCw className="h-5 w-5 text-purple-600 mb-2" />
+              <p className="text-sm text-gray-500">Dispatched</p>
+              <p className="text-lg font-bold text-purple-600">{stats.dispatched}</p>
             </IOSCard>
           </div>
 
@@ -323,12 +339,12 @@ function ServiceRequestsContent() {
           <IOSCard className="p-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                 <Input
                   placeholder="Search requests..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-9"
                 />
               </div>
 
@@ -339,11 +355,9 @@ function ServiceRequestsContent() {
                   className="w-full h-10 px-3 rounded-ios-lg border border-gray-200"
                 >
                   <option value="all">All Types</option>
-                  <option value="maintenance">Maintenance</option>
-                  <option value="housekeeping">Housekeeping</option>
-                  <option value="facility">Facility</option>
-                  <option value="it">IT Support</option>
-                  <option value="security">Security</option>
+                  <option value="REPLENISHMENT">Replenishment</option>
+                  <option value="SPECIAL_ORDER">Special Order</option>
+                  <option value="EMERGENCY">Emergency</option>
                 </select>
               </div>
 
@@ -354,10 +368,13 @@ function ServiceRequestsContent() {
                   className="w-full h-10 px-3 rounded-ios-lg border border-gray-200"
                 >
                   <option value="all">All Statuses</option>
-                  <option value="pending">Pending</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="REVIEWED">Reviewed</option>
+                  <option value="APPROVED">Approved</option>
+                  <option value="DISPATCHED">Dispatched</option>
+                  <option value="RECEIVED">Received</option>
+                  <option value="CANCELLED">Cancelled</option>
+                  <option value="REJECTED">Rejected</option>
                 </select>
               </div>
 
@@ -381,11 +398,11 @@ function ServiceRequestsContent() {
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Request #</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Room</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Items</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Priority</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Created</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Needed By</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
@@ -412,15 +429,15 @@ function ServiceRequestsContent() {
                           {request.request_number}
                         </td>
                         <td className="px-4 py-4">
-                          {getTypeLabel(request.type)}
+                          {getTypeLabel(request.request_type)}
                         </td>
                         <td className="px-4 py-4">
                           <div className="truncate max-w-xs">
-                            {request.description}
+                            {request.reason || '-'}
                           </div>
                         </td>
                         <td className="px-4 py-4 text-center">
-                          {request.room_number || '-'}
+                          {request.items?.length || 0} items
                         </td>
                         <td className="px-4 py-4 text-center">
                           {getPriorityBadge(request.priority)}
@@ -429,34 +446,25 @@ function ServiceRequestsContent() {
                           {getStatusBadge(request.status)}
                         </td>
                         <td className="px-4 py-4 text-center text-sm">
-                          {formatDate(request.created_at)}
+                          {request.needed_by_date ? formatDate(request.needed_by_date) : '-'}
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex justify-center space-x-2">
-                            {request.status === 'pending' && (
+                            {request.status === 'PENDING' && (
                               <IOSButton
                                 size="sm"
                                 variant="secondary"
-                                onClick={() => handleStatusChange(request.id, 'in_progress')}
+                                onClick={() => handleCancelRequest(request.id)}
                               >
-                                Start
-                              </IOSButton>
-                            )}
-                            {request.status === 'in_progress' && (
-                              <IOSButton
-                                size="sm"
-                                variant="secondary"
-                                onClick={() => handleStatusChange(request.id, 'completed')}
-                              >
-                                Complete
+                                Cancel
                               </IOSButton>
                             )}
                             <IOSButton
                               size="sm"
                               variant="outline"
-                              leftIcon={<MessageSquare className="h-3 w-3" />}
+                              leftIcon={<ClipboardList className="h-3 w-3" />}
                             >
-                              Comment
+                              Details
                             </IOSButton>
                           </div>
                         </td>
@@ -472,77 +480,130 @@ function ServiceRequestsContent() {
 
       {/* New Request Modal */}
       <Dialog open={showNewRequestModal} onOpenChange={setShowNewRequestModal}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Create New Service Request</DialogTitle>
+            <DialogTitle>Create New Stock Request</DialogTitle>
             <DialogDescription>
-              Submit a new service request for {activeBranch?.name}
+              Submit a new inventory request for {activeBranch?.name}
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleCreateRequest} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="type">Request Type *</Label>
-              <select
-                id="type"
-                required
-                value={formData.type}
-                onChange={(e) => handleFormChange('type', e.target.value)}
-                className="w-full h-10 px-3 rounded-ios-lg border border-gray-200"
-              >
-                <option value="">Select Type</option>
-                <option value="maintenance">Maintenance</option>
-                <option value="housekeeping">Housekeeping</option>
-                <option value="facility">Facility</option>
-                <option value="it">IT Support</option>
-                <option value="security">Security</option>
-              </select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="request_type">Request Type *</Label>
+                <select
+                  id="request_type"
+                  required
+                  value={formData.request_type}
+                  onChange={(e) => handleFormChange('request_type', e.target.value)}
+                  className="w-full h-10 px-3 rounded-ios-lg border border-gray-200"
+                >
+                  <option value="REPLENISHMENT">Replenishment</option>
+                  <option value="SPECIAL_ORDER">Special Order</option>
+                  <option value="EMERGENCY">Emergency</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="priority">Priority</Label>
+                <select
+                  id="priority"
+                  value={formData.priority}
+                  onChange={(e) => handleFormChange('priority', e.target.value)}
+                  className="w-full h-10 px-3 rounded-ios-lg border border-gray-200"
+                >
+                  <option value="LOW">Low</option>
+                  <option value="NORMAL">Normal</option>
+                  <option value="HIGH">High</option>
+                  <option value="URGENT">Urgent</option>
+                </select>
+              </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="priority">Priority</Label>
-              <select
-                id="priority"
-                value={formData.priority}
-                onChange={(e) => handleFormChange('priority', e.target.value)}
-                className="w-full h-10 px-3 rounded-ios-lg border border-gray-200"
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="room_number">Room Number (Optional)</Label>
+              <Label htmlFor="needed_by_date">Needed By Date</Label>
               <Input
-                id="room_number"
-                value={formData.room_number}
-                onChange={(e) => handleFormChange('room_number', e.target.value)}
-                placeholder="e.g., 301"
+                id="needed_by_date"
+                type="date"
+                value={formData.needed_by_date}
+                onChange={(e) => handleFormChange('needed_by_date', e.target.value)}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">Description *</Label>
+              <Label htmlFor="reason">Reason / Notes</Label>
               <Textarea
-                id="description"
-                required
-                value={formData.description}
-                onChange={(e) => handleFormChange('description', e.target.value)}
-                placeholder="Describe the issue or request..."
-                rows={4}
+                id="reason"
+                value={formData.reason}
+                onChange={(e) => handleFormChange('reason', e.target.value)}
+                placeholder="Why is this stock needed?"
+                rows={2}
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="assigned_to">Assign To (Optional)</Label>
-              <Input
-                id="assigned_to"
-                value={formData.assigned_to}
-                onChange={(e) => handleFormChange('assigned_to', e.target.value)}
-                placeholder="e.g., Maintenance Team"
-              />
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <Label>Items Requested</Label>
+                <IOSButton
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setFormData({
+                    ...formData,
+                    items: [...formData.items, { item_sku: '', requested_quantity: 1 }]
+                  })}
+                >
+                  Add Item
+                </IOSButton>
+              </div>
+
+              <div className="max-h-48 overflow-y-auto space-y-2 pr-2">
+                {formData.items.map((item, index) => (
+                  <div key={index} className="flex gap-2 items-end">
+                    <div className="flex-1 space-y-1">
+                      <Label className="text-xs">SKU / Item Name</Label>
+                      <Input
+                        value={item.item_sku}
+                        onChange={(e) => {
+                          const newItems = [...formData.items];
+                          newItems[index].item_sku = e.target.value;
+                          setFormData({ ...formData, items: newItems });
+                        }}
+                        placeholder="e.g. BEV-TUSK-001"
+                        required
+                      />
+                    </div>
+                    <div className="w-24 space-y-1">
+                      <Label className="text-xs">Qty</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={item.requested_quantity}
+                        onChange={(e) => {
+                          const newItems = [...formData.items];
+                          newItems[index].requested_quantity = parseInt(e.target.value) || 0;
+                          setFormData({ ...formData, items: newItems });
+                        }}
+                        required
+                      />
+                    </div>
+                    {formData.items.length > 1 && (
+                      <IOSButton
+                        type="button"
+                        variant="ghost"
+                        className="text-red-500 h-10"
+                        onClick={() => {
+                          const newItems = formData.items.filter((_, i) => i !== index);
+                          setFormData({ ...formData, items: newItems });
+                        }}
+                      >
+                        &times;
+                      </IOSButton>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
 
             <DialogFooter>
@@ -558,7 +619,7 @@ function ServiceRequestsContent() {
                 type="submit"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? 'Creating...' : 'Create Request'}
+                {isSubmitting ? 'Submitting...' : 'Submit Request'}
               </IOSButton>
             </DialogFooter>
           </form>
@@ -569,10 +630,10 @@ function ServiceRequestsContent() {
 }
 
 // Export a wrapper component that provides BranchContext
-export default function ServiceRequestsPage() {
+export default function StockRequestsPage() {
   return (
     <BranchPageWrapper>
-      <ServiceRequestsContent />
+      <StockRequestsContent />
     </BranchPageWrapper>
   );
 }

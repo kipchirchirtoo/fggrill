@@ -121,15 +121,14 @@ function BranchStaffAttendanceContent() {
     setIsLoading(true);
     try {
       // Get staff members
-      const staffResponse = await branchOperationsAPI.getStaff(activeBranchId);
+      const staffResponse = await branchOperationsAPI.getStaff(activeBranchId || undefined);
       if (staffResponse.success && Array.isArray(staffResponse.data)) {
         setStaff(staffResponse.data);
         setFilteredStaff(staffResponse.data);
       } else {
-        // Fallback
-        const placeholderStaff = generatePlaceholderStaff();
-        setStaff(placeholderStaff);
-        setFilteredStaff(placeholderStaff);
+        // No staff data available
+        setStaff([]);
+        setFilteredStaff([]);
       }
 
       // Get attendance records for the current month
@@ -139,13 +138,13 @@ function BranchStaffAttendanceContent() {
       const attendanceResponse = await branchOperationsAPI.getAttendanceRecords({
         startDate,
         endDate
-      }, activeBranchId);
+      }, activeBranchId || undefined);
 
       if (attendanceResponse.success && Array.isArray(attendanceResponse.data)) {
         setAttendanceRecords(attendanceResponse.data);
       } else {
-        // Fallback
-        setAttendanceRecords(generatePlaceholderAttendance());
+        // No attendance data available
+        setAttendanceRecords([]);
       }
 
       // Calculate summary stats for today
@@ -154,61 +153,26 @@ function BranchStaffAttendanceContent() {
     } catch (error) {
       console.error('Error fetching attendance data:', error);
       toast.error('Failed to load attendance data');
-      // Fallback on error
-      const placeholderStaff = generatePlaceholderStaff();
-      setStaff(placeholderStaff);
-      setFilteredStaff(placeholderStaff);
-      setAttendanceRecords(generatePlaceholderAttendance());
+      // Show empty state on error
+      setStaff([]);
+      setFilteredStaff([]);
+      setAttendanceRecords([]);
     } finally {
       setIsLoading(false);
     }
   };
 
   const calculateSummaryStats = () => {
-    // This would typically be calculated from the records for the selected day
-    // For now using dummy data or calculating from available records
+    // Calculate from actual attendance records for the selected day
+    const todayStr = format(currentDate, 'yyyy-MM-dd');
+    const todayRecords = attendanceRecords.filter(r => r.date === todayStr);
     setSummary({
-      present: 12,
-      absent: 1,
-      late: 2,
-      leave: 1,
-      half_day: 0
+      present: todayRecords.filter(r => r.status === 'present').length,
+      absent: todayRecords.filter(r => r.status === 'absent').length,
+      late: todayRecords.filter(r => r.status === 'late').length,
+      leave: todayRecords.filter(r => r.status === 'leave').length,
+      half_day: todayRecords.filter(r => r.status === 'half_day').length
     });
-  };
-
-  // Helper functions for placeholder data
-  const generatePlaceholderStaff = (): StaffMember[] => [
-    { id: '1', name: 'John Doe', position: 'Chef', department: 'Kitchen' },
-    { id: '2', name: 'Jane Smith', position: 'Waitress', department: 'Service' },
-    { id: '3', name: 'Mike Johnson', position: 'Bartender', department: 'Bar' },
-    { id: '4', name: 'Sarah Wilson', position: 'Manager', department: 'Management' },
-    { id: '5', name: 'David Brown', position: 'Housekeeper', department: 'Housekeeping' },
-  ];
-
-  const generatePlaceholderAttendance = (): AttendanceRecord[] => {
-    const records: AttendanceRecord[] = [];
-    const todayStr = format(today, 'yyyy-MM-dd');
-
-    // Generate some random records
-    records.push({
-      id: 'a-1',
-      staff_id: '1',
-      date: todayStr,
-      status: 'present',
-      check_in: '08:00',
-      check_out: '16:00'
-    });
-
-    records.push({
-      id: 'a-2',
-      staff_id: '2',
-      date: todayStr,
-      status: 'late',
-      check_in: '09:15',
-      notes: 'Traffic delay'
-    });
-
-    return records;
   };
 
   const handlePrevMonth = () => setCurrentDate(subMonths(currentDate, 1));
@@ -328,7 +292,7 @@ function BranchStaffAttendanceContent() {
           </div>
 
           <div className="relative w-full md:w-64">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
             <Input
               placeholder="Search staff..."
               className="pl-9"

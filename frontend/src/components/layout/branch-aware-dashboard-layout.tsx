@@ -20,6 +20,19 @@ interface BranchAwareDashboardLayoutProps {
   hideBranchSelector?: boolean;
 }
 
+// Single-branch roles that should NOT see the branch selector
+const SINGLE_BRANCH_ROLES = [
+  UserRole.BRANCH_MANAGER,
+  UserRole.HOUSEKEEPING,
+  UserRole.HOUSEKEEPING_SUPERVISOR,
+  UserRole.MAINTENANCE,
+  UserRole.RECEPTIONIST,
+  UserRole.RESTAURANT,
+  UserRole.POS_KITCHEN,
+  UserRole.BARTENDER,
+  UserRole.BRANCH_STOREKEEPER,
+];
+
 export function BranchAwareDashboardLayout({
   children,
   allowedRoles,
@@ -28,10 +41,15 @@ export function BranchAwareDashboardLayout({
   title,
   subtitle,
   actionButton,
-  hideBranchSelector = false
+  hideBranchSelector: hideBranchSelectorProp
 }: BranchAwareDashboardLayoutProps) {
-  const { activeBranch, activeBranchId, isLoading: branchLoading, refreshBranches } = useBranch();
+  const { activeBranch, activeBranchId, isLoading: branchLoading, refreshBranches, userBranches } = useBranch();
   const { user } = useAuth();
+  
+  // Auto-hide branch selector for single-branch roles or if user has only one branch
+  const isSingleBranchRole = user?.role && SINGLE_BRANCH_ROLES.includes(user.role as UserRole);
+  const hasOnlyOneBranch = userBranches.length <= 1;
+  const hideBranchSelector = hideBranchSelectorProp ?? (isSingleBranchRole || hasOnlyOneBranch);
   const [isBranchRefreshing, setIsBranchRefreshing] = useState(false);
 
   const handleRefreshBranch = async () => {

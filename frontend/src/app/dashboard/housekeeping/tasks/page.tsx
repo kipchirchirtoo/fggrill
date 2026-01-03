@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { housekeepingAPI } from '@/lib/api';
 import { 
   ClipboardList, Plus, Search, RefreshCw, Filter, Play, Pause, Check,
-  Clock, AlertTriangle, User, Bed, Calendar, MoreVertical, X
+  Clock, AlertTriangle, User, Bed, Calendar, MoreVertical, X, Edit2, Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -72,6 +72,9 @@ export default function HousekeepingTasksPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // New task form
   const [newTask, setNewTask] = useState({
@@ -161,6 +164,56 @@ export default function HousekeepingTasksPage() {
     }
   };
 
+  const openEditModal = (task: Task) => {
+    setSelectedTask(task);
+    setNewTask({
+      room_number: task.room_number,
+      task_type: task.task_type,
+      priority: task.priority,
+      assigned_to: task.assigned_to || '',
+      notes: task.notes || '',
+    });
+    setEditModalOpen(true);
+  };
+
+  const handleEditTask = async () => {
+    if (!selectedTask || !newTask.room_number) {
+      toast.error('Please enter room number');
+      return;
+    }
+    try {
+      await housekeepingAPI.updateTask(selectedTask.id, newTask);
+      toast.success('Task updated successfully');
+      setEditModalOpen(false);
+      setSelectedTask(null);
+      setNewTask({ room_number: '', task_type: 'checkout_clean', priority: 'normal', assigned_to: '', notes: '' });
+      fetchTasks();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update task');
+    }
+  };
+
+  const handleDeleteTask = async () => {
+    if (!selectedTask) return;
+    setIsDeleting(true);
+    try {
+      await housekeepingAPI.deleteTask(selectedTask.id);
+      toast.success('Task deleted successfully');
+      setDeleteConfirmOpen(false);
+      setSelectedTask(null);
+      fetchTasks();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete task');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const confirmDeleteTask = (task: Task) => {
+    setSelectedTask(task);
+    setDeleteConfirmOpen(true);
+  };
+
   // Stats
   const stats = {
     total: tasks.length,
@@ -213,12 +266,12 @@ export default function HousekeepingTasksPage() {
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                   <Input
                     placeholder="Search by room or staff..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                    className="pl-9"
                   />
                 </div>
               </div>
@@ -314,6 +367,20 @@ export default function HousekeepingTasksPage() {
                               Complete
                             </IOSButton>
                           )}
+                          <IOSButton 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => openEditModal(task)}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </IOSButton>
+                          <IOSButton 
+                            size="sm" 
+                            variant="destructive"
+                            onClick={() => confirmDeleteTask(task)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </IOSButton>
                           <IOSButton 
                             size="sm" 
                             variant="outline"
@@ -460,6 +527,127 @@ export default function HousekeepingTasksPage() {
                 </div>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Task Modal */}
+        <Dialog open={editModalOpen} onOpenChange={(open) => { setEditModalOpen(open); if (!open) setSelectedTask(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Edit2 className="h-5 w-5" />
+                Edit Task
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+              <div>
+                <label className="text-sm font-medium">Room Number *</label>
+                <Input
+                  value={newTask.room_number}
+                  onChange={(e) => setNewTask({ ...newTask, room_number: e.target.value })}
+                  placeholder="e.g., 101"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Task Type</label>
+                <select
+                  value={newTask.task_type}
+                  onChange={(e) => setNewTask({ ...newTask, task_type: e.target.value })}
+                  className="w-full p-2 border rounded-ios-lg mt-1"
+                >
+                  {taskTypes.map((type) => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Priority</label>
+                <select
+                  value={newTask.priority}
+                  onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
+                  className="w-full p-2 border rounded-ios-lg mt-1"
+                >
+                  {Object.entries(priorityConfig).map(([key, val]) => (
+                    <option key={key} value={key}>{val.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Assign To</label>
+                <select
+                  value={newTask.assigned_to}
+                  onChange={(e) => setNewTask({ ...newTask, assigned_to: e.target.value })}
+                  className="w-full p-2 border rounded-ios-lg mt-1"
+                >
+                  <option value="">Unassigned</option>
+                  {staff.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name || `${s.first_name} ${s.last_name}`}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Notes</label>
+                <textarea
+                  value={newTask.notes}
+                  onChange={(e) => setNewTask({ ...newTask, notes: e.target.value })}
+                  className="w-full p-2 border rounded-ios-lg mt-1"
+                  rows={2}
+                />
+              </div>
+              <div className="flex gap-3">
+                <IOSButton variant="outline" onClick={() => setEditModalOpen(false)} className="flex-1">
+                  Cancel
+                </IOSButton>
+                <IOSButton onClick={handleEditTask} className="flex-1">
+                  Update Task
+                </IOSButton>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Modal */}
+        <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+                Delete Task
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-stone-600">
+                Are you sure you want to delete this task?
+              </p>
+              {selectedTask && (
+                <div className="p-3 bg-stone-50 rounded-lg">
+                  <p className="font-medium">Room {selectedTask.room_number}</p>
+                  <p className="text-sm text-stone-500 capitalize">
+                    {selectedTask.task_type?.replace('_', ' ')} • {selectedTask.priority}
+                  </p>
+                </div>
+              )}
+              <p className="text-sm text-stone-500">
+                This action cannot be undone.
+              </p>
+              <div className="flex gap-2 pt-2">
+                <IOSButton 
+                  variant="outline" 
+                  className="flex-1"
+                  onClick={() => { setDeleteConfirmOpen(false); setSelectedTask(null); }}
+                >
+                  Cancel
+                </IOSButton>
+                <IOSButton 
+                  className="flex-1"
+                  onClick={handleDeleteTask}
+                  disabled={isDeleting}
+                  variant="destructive"
+                >
+                  {isDeleting ? 'Deleting...' : 'Delete'}
+                </IOSButton>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
       </DashboardLayout>

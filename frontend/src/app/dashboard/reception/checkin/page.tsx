@@ -10,7 +10,7 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { bookingsAPI, roomsAPI, guestAPI } from '@/lib/api';
-import { 
+import {
   LogIn, LogOut, Search, RefreshCw, Calendar, Clock, User, Bed,
   CheckCircle, XCircle, AlertTriangle, Phone, Mail, CreditCard,
   FileText, DollarSign, Users, Building2, ArrowRight, Printer
@@ -41,11 +41,11 @@ interface Booking {
 }
 
 const statusConfig: Record<string, { label: string; color: string; bgColor: string }> = {
-  pending: { label: 'Pending', color: 'text-yellow-700', bgColor: 'bg-yellow-100' },
-  confirmed: { label: 'Confirmed', color: 'text-blue-700', bgColor: 'bg-blue-100' },
-  checked_in: { label: 'Checked In', color: 'text-green-700', bgColor: 'bg-green-100' },
-  checked_out: { label: 'Checked Out', color: 'text-gray-700', bgColor: 'bg-gray-100' },
-  cancelled: { label: 'Cancelled', color: 'text-red-700', bgColor: 'bg-red-100' },
+  pending: { label: 'Pending', color: 'text-[#3C3C43]', bgColor: 'bg-[#F2F2F7]' },
+  confirmed: { label: 'Confirmed', color: 'text-[#3C3C43]', bgColor: 'bg-[#F2F2F7]' },
+  checked_in: { label: 'Checked In', color: 'text-[#3C3C43]', bgColor: 'bg-[#F2F2F7]' },
+  checked_out: { label: 'Checked Out', color: 'text-[#3C3C43]', bgColor: 'bg-[#F2F2F7]' },
+  cancelled: { label: 'Cancelled', color: 'text-[#3C3C43]', bgColor: 'bg-[#F2F2F7]' },
 };
 
 // Check-In Modal
@@ -94,22 +94,22 @@ function CheckInModal({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <LogIn className="h-5 w-5 text-[#34C759]" />
+            <LogIn className="h-5 w-5 text-[#3C3C43]" />
             Check-In Guest
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 mt-4">
           {/* Booking Summary */}
-          <div className="p-4 bg-blue-50 rounded-ios-lg border border-blue-200">
+          <div className="p-4 bg-[#F2F2F7] rounded-ios-lg border border-[rgba(60,60,67,0.12)]">
             <div className="flex justify-between items-start">
               <div>
-                <p className="font-bold text-lg">{booking.guest_name}</p>
-                <p className="text-sm text-[#007AFF]">{booking.guest_phone}</p>
+                <p className="font-bold text-lg text-[#000000]">{booking.guest_name}</p>
+                <p className="text-sm text-[#3C3C43]">{booking.guest_phone}</p>
               </div>
               <div className="text-right">
-                <p className="font-bold">Room {booking.room_number}</p>
-                <p className="text-sm text-[#007AFF] capitalize">{booking.room_type}</p>
+                <p className="font-bold text-[#000000]">Room {booking.room_number}</p>
+                <p className="text-sm text-[#3C3C43] capitalize">{booking.room_type}</p>
               </div>
             </div>
           </div>
@@ -140,13 +140,13 @@ function CheckInModal({
               <span>Total Amount</span>
               <span className="font-medium">KES {booking.total_amount?.toLocaleString()}</span>
             </div>
-            <div className="flex justify-between text-[#34C759]">
+            <div className="flex justify-between text-[#3C3C43]">
               <span>Amount Paid</span>
               <span className="font-medium">KES {booking.amount_paid?.toLocaleString()}</span>
             </div>
             <div className="flex justify-between text-lg font-bold border-t pt-2">
               <span>Balance Due</span>
-              <span className={balance > 0 ? 'text-[#FF3B30]' : 'text-[#34C759]'}>
+              <span className="text-[#3C3C43]">
                 KES {balance.toLocaleString()}
               </span>
             </div>
@@ -154,9 +154,9 @@ function CheckInModal({
 
           {/* Special Requests */}
           {booking.special_requests && (
-            <div className="p-3 bg-yellow-50 rounded-ios-lg border border-yellow-200">
-              <p className="text-sm font-medium text-yellow-800">Special Requests</p>
-              <p className="text-sm text-yellow-700">{booking.special_requests}</p>
+            <div className="p-3 bg-[#F2F2F7] rounded-ios-lg border border-[rgba(60,60,67,0.12)]">
+              <p className="text-sm font-medium text-[#3C3C43]">Special Requests</p>
+              <p className="text-sm text-[#3C3C43]">{booking.special_requests}</p>
             </div>
           )}
 
@@ -168,7 +168,7 @@ function CheckInModal({
             <IOSButton
               onClick={handleCheckIn}
               disabled={isSubmitting}
-              className="flex-1 bg-[#34C759] hover:bg-green-700"
+              className="flex-1 bg-[#3C3C43] hover:bg-[#000000] text-white"
             >
               {isSubmitting ? 'Processing...' : 'Complete Check-In'}
             </IOSButton>
@@ -194,9 +194,51 @@ function CheckOutModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [additionalCharges, setAdditionalCharges] = useState(0);
 
+  const [isPrinting, setIsPrinting] = useState(false);
+
   if (!booking) return null;
 
   const balance = booking.total_amount - booking.amount_paid + additionalCharges;
+
+  const handlePrintBill = async () => {
+    setIsPrinting(true);
+    try {
+      const response = await fetch('http://localhost:5001/api/reports/generate/checkout-bill', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          guest_name: booking.guest_name,
+          guest_phone: booking.guest_phone,
+          room_number: booking.room_number,
+          nights: Math.ceil((new Date().getTime() - new Date(booking.check_in).getTime()) / (1000 * 60 * 60 * 24)),
+          room_charges: booking.total_amount,
+          additional_charges: additionalCharges,
+          amount_paid: booking.amount_paid,
+          balance: balance
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to generate bill');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Bill_${booking.guest_name.replace(' ', '_')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Bill generated successfully');
+    } catch (error) {
+      console.error('Error printing bill:', error);
+      toast.error('Failed to generate bill');
+    } finally {
+      setIsPrinting(false);
+    }
+  };
 
   const handleCheckOut = async () => {
     if (balance > 0) {
@@ -207,6 +249,36 @@ function CheckOutModal({
 
     setIsSubmitting(true);
     try {
+      // 1. Perform ML-based Anomaly Detection
+      const anomalyResponse = await fetch('http://localhost:5001/api/finance/verify-anomaly', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: booking.total_amount,
+          currency: 'KES',
+          payment_method: 'mixed',
+          guest_history: { total_stays: 1 }, // Placeholder, ideally from booking data
+          recent_transactions_count: 1
+        })
+      });
+
+      if (anomalyResponse.ok) {
+        const anomalyResult = await anomalyResponse.json();
+        if (anomalyResult.data && anomalyResult.data.is_high_risk) {
+          const proceed = confirm(
+            `⚠️ SECURITY WARNING: High Risk Detected!\n\n` +
+            `Risk Score: ${anomalyResult.data.risk_score}/100\n` +
+            `Factors: ${anomalyResult.data.risk_factors.join(', ')}\n\n` +
+            `Do you want to proceed with checkout anyway?`
+          );
+          if (!proceed) {
+            setIsSubmitting(false);
+            return;
+          }
+        }
+      }
+
+      // 2. Proceed with Checkout
       await bookingsAPI.checkOut(booking.id);
       await roomsAPI.updateRoomStatus(booking.room_id, 'cleaning');
       toast.success(`Guest checked out from Room ${booking.room_number}`);
@@ -224,22 +296,22 @@ function CheckOutModal({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <LogOut className="h-5 w-5 text-[#FF3B30]" />
+            <LogOut className="h-5 w-5 text-[#3C3C43]" />
             Check-Out Guest
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 mt-4">
           {/* Guest Info */}
-          <div className="p-4 bg-red-50 rounded-ios-lg border border-red-200">
+          <div className="p-4 bg-[#F2F2F7] rounded-ios-lg border border-[rgba(60,60,67,0.12)]">
             <div className="flex justify-between items-start">
               <div>
-                <p className="font-bold text-lg">{booking.guest_name}</p>
-                <p className="text-sm text-[#FF3B30]">{booking.guest_phone}</p>
+                <p className="font-bold text-lg text-[#000000]">{booking.guest_name}</p>
+                <p className="text-sm text-[#3C3C43]">{booking.guest_phone}</p>
               </div>
               <div className="text-right">
-                <p className="font-bold">Room {booking.room_number}</p>
-                <p className="text-sm text-[#FF3B30]">
+                <p className="font-bold text-[#000000]">Room {booking.room_number}</p>
+                <p className="text-sm text-[#3C3C43]">
                   {Math.ceil((new Date().getTime() - new Date(booking.check_in).getTime()) / (1000 * 60 * 60 * 24))} nights
                 </p>
               </div>
@@ -261,22 +333,22 @@ function CheckOutModal({
                 className="w-32 text-right"
               />
             </div>
-            <div className="flex justify-between text-[#34C759]">
+            <div className="flex justify-between text-[#3C3C43]">
               <span>Amount Paid</span>
               <span className="font-medium">-KES {booking.amount_paid?.toLocaleString()}</span>
             </div>
             <div className="flex justify-between text-xl font-bold border-t pt-2">
               <span>Balance</span>
-              <span className={balance > 0 ? 'text-[#FF3B30]' : 'text-[#34C759]'}>
+              <span className="text-[#3C3C43]">
                 KES {balance.toLocaleString()}
               </span>
             </div>
           </div>
 
           {balance > 0 && (
-            <div className="p-3 bg-yellow-50 rounded-ios-lg border border-yellow-200 flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-yellow-600" />
-              <p className="text-sm text-yellow-700">Outstanding balance must be settled</p>
+            <div className="p-3 bg-[#F2F2F7] rounded-ios-lg border border-[rgba(60,60,67,0.12)] flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-[#3C3C43]" />
+              <p className="text-sm text-[#3C3C43]">Outstanding balance must be settled</p>
             </div>
           )}
 
@@ -285,12 +357,19 @@ function CheckOutModal({
             <IOSButton variant="outline" onClick={onClose} className="flex-1">
               Cancel
             </IOSButton>
-            <IOSButton variant="outline" className="flex-1" leftIcon={<Printer />}>Print Bill
+            <IOSButton
+              variant="outline"
+              className="flex-1"
+              leftIcon={<Printer />}
+              onClick={handlePrintBill}
+              disabled={isPrinting}
+            >
+              {isPrinting ? 'Printing...' : 'Print Bill'}
             </IOSButton>
             <IOSButton
               onClick={handleCheckOut}
               disabled={isSubmitting}
-              className="flex-1 bg-[#FF3B30] hover:bg-red-700"
+              className="flex-1 bg-[#3C3C43] hover:bg-[#000000] text-white"
             >
               {isSubmitting ? 'Processing...' : 'Check Out'}
             </IOSButton>
@@ -306,7 +385,7 @@ export default function CheckInPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'arrivals' | 'inhouse' | 'departures'>('arrivals');
+  const [activeTab, setActiveTab] = useState<'checkin' | 'checkout'>('checkin');
 
   // Modals
   const [checkInModalOpen, setCheckInModalOpen] = useState(false);
@@ -316,7 +395,7 @@ export default function CheckInPage() {
   const fetchBookings = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await bookingsAPI.getBookings();
+      const response = await bookingsAPI.getBookings({ branch_id: user?.branch_id });
       if (response.success) {
         setBookings(response.data || []);
       }
@@ -326,7 +405,7 @@ export default function CheckInPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [user?.branch_id]);
 
   useEffect(() => {
     fetchBookings();
@@ -336,7 +415,7 @@ export default function CheckInPage() {
 
   // Filter bookings by tab
   const filteredBookings = bookings.filter((booking) => {
-    const matchesSearch = 
+    const matchesSearch =
       booking.guest_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       booking.room_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       booking.guest_phone?.includes(searchQuery);
@@ -344,15 +423,14 @@ export default function CheckInPage() {
     if (!matchesSearch) return false;
 
     const checkInDate = booking.check_in?.split('T')[0];
-    const checkOutDate = booking.check_out?.split('T')[0];
 
     switch (activeTab) {
-      case 'arrivals':
+      case 'checkin':
+        // Show confirmed/pending bookings for today that haven't checked in
         return checkInDate === today && (booking.status === 'confirmed' || booking.status === 'pending');
-      case 'inhouse':
+      case 'checkout':
+        // Show all currently checked-in guests
         return booking.status === 'checked_in';
-      case 'departures':
-        return checkOutDate === today && booking.status === 'checked_in';
       default:
         return true;
     }
@@ -362,7 +440,6 @@ export default function CheckInPage() {
   const stats = {
     arrivals: bookings.filter(b => b.check_in?.split('T')[0] === today && (b.status === 'confirmed' || b.status === 'pending')).length,
     inhouse: bookings.filter(b => b.status === 'checked_in').length,
-    departures: bookings.filter(b => b.check_out?.split('T')[0] === today && b.status === 'checked_in').length,
   };
 
   const openCheckIn = (booking: Booking) => {
@@ -386,54 +463,64 @@ export default function CheckInPage() {
               <p className="text-gray-500">Manage guest arrivals and departures</p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="outline" onClick={fetchBookings} leftIcon={<RefreshCw />}>Refresh
+              <IOSButton variant="outline" onClick={fetchBookings} leftIcon={<RefreshCw />} className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]">
+                Refresh
               </IOSButton>
             </div>
           </div>
 
-          {/* Stats Tabs */}
-          <div className="grid grid-cols-3 gap-4">
-            <IOSCard
-              className={`p-4 cursor-pointer transition-all ${activeTab === 'arrivals' ? 'ring-2 ring-green-500 bg-green-50' : ''}`}
-              onClick={() => setActiveTab('arrivals')}
-            >
+          {/* Tabs Navigation */}
+          <div className="border-b border-gray-200">
+            <div className="flex gap-8">
+              <button
+                onClick={() => setActiveTab('checkin')}
+                className={`pb-4 px-2 font-medium text-sm border-b-2 transition-colors ${activeTab === 'checkin'
+                  ? 'border-[#3C3C43] text-[#3C3C43]'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+              >
+                <div className="flex items-center gap-2">
+                  <LogIn className="h-4 w-4" />
+                  Check-In
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveTab('checkout')}
+                className={`pb-4 px-2 font-medium text-sm border-b-2 transition-colors ${activeTab === 'checkout'
+                  ? 'border-[#3C3C43] text-[#3C3C43]'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+              >
+                <div className="flex items-center gap-2">
+                  <LogOut className="h-4 w-4" />
+                  Check-Out
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-2 gap-4">
+            <IOSCard className="p-4 border-none shadow-sm bg-white">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-green-100 rounded-xl">
-                  <LogIn className="h-6 w-6 text-[#34C759]" />
+                <div className="p-3 bg-blue-50 rounded-xl">
+                  <LogIn className="h-6 w-6 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Today's Arrivals</p>
-                  <p className="text-2xl font-bold text-[#34C759]">{stats.arrivals}</p>
+                  <p className="text-sm text-gray-500 font-medium">Today's Arrivals</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.arrivals}</p>
                 </div>
               </div>
             </IOSCard>
 
-            <IOSCard
-              className={`p-4 cursor-pointer transition-all ${activeTab === 'inhouse' ? 'ring-2 ring-blue-500 bg-blue-50' : ''}`}
-              onClick={() => setActiveTab('inhouse')}
-            >
+            <IOSCard className="p-4 border-none shadow-sm bg-white">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-blue-100 rounded-xl">
-                  <Users className="h-6 w-6 text-[#007AFF]" />
+                <div className="p-3 bg-emerald-50 rounded-xl">
+                  <Users className="h-6 w-6 text-emerald-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">In-House Guests</p>
-                  <p className="text-2xl font-bold text-[#007AFF]">{stats.inhouse}</p>
-                </div>
-              </div>
-            </IOSCard>
-
-            <IOSCard
-              className={`p-4 cursor-pointer transition-all ${activeTab === 'departures' ? 'ring-2 ring-red-500 bg-red-50' : ''}`}
-              onClick={() => setActiveTab('departures')}
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-red-100 rounded-xl">
-                  <LogOut className="h-6 w-6 text-[#FF3B30]" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Today's Departures</p>
-                  <p className="text-2xl font-bold text-[#FF3B30]">{stats.departures}</p>
+                  <p className="text-sm text-gray-500 font-medium">In-House Guests</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.inhouse}</p>
                 </div>
               </div>
             </IOSCard>
@@ -442,12 +529,12 @@ export default function CheckInPage() {
           {/* Search */}
           <IOSCard className="p-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
               <Input
                 placeholder="Search by guest name, room, or phone..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                className="pl-9"
               />
             </div>
           </IOSCard>
@@ -461,9 +548,8 @@ export default function CheckInPage() {
             <IOSCard className="p-12 text-center">
               <Calendar className="h-12 w-12 mx-auto text-gray-300 mb-4" />
               <p className="text-gray-500">
-                {activeTab === 'arrivals' && 'No arrivals scheduled for today'}
-                {activeTab === 'inhouse' && 'No guests currently in-house'}
-                {activeTab === 'departures' && 'No departures scheduled for today'}
+                {activeTab === 'checkin' && 'No arrivals scheduled for today'}
+                {activeTab === 'checkout' && 'No guests currently in-house'}
               </p>
             </IOSCard>
           ) : (
@@ -479,7 +565,7 @@ export default function CheckInPage() {
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                       {/* Guest & Room Info */}
                       <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold">
+                        <div className="w-12 h-12 rounded-full bg-[#3C3C43] flex items-center justify-center text-white font-bold">
                           {(booking.guest_name || 'GU').split(' ').map(n => n?.[0] || '').join('').slice(0, 2) || 'GU'}
                         </div>
                         <div>
@@ -518,20 +604,20 @@ export default function CheckInPage() {
                           {statusInfo.label}
                         </IOSBadge>
 
-                        {activeTab === 'arrivals' && (
+                        {activeTab === 'checkin' && (
                           <IOSButton
                             onClick={() => openCheckIn(booking)}
-                            className="bg-[#34C759] hover:bg-green-700"
+                            className="bg-[#3C3C43] hover:bg-[#000000] text-white"
                             leftIcon={<LogIn />}
                           >
                             Check In
                           </IOSButton>
                         )}
 
-                        {(activeTab === 'inhouse' || activeTab === 'departures') && (
+                        {activeTab === 'checkout' && (
                           <IOSButton
                             onClick={() => openCheckOut(booking)}
-                            className="bg-[#FF3B30] hover:bg-red-700"
+                            className="bg-[#3C3C43] hover:bg-[#000000] text-white"
                             leftIcon={<LogOut />}
                           >
                             Check Out

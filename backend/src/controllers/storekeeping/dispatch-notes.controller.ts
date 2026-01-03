@@ -1,0 +1,635 @@
+import { Request, Response, NextFunction } from 'express';
+import { supabase } from '../../config/database';
+import { AppError } from '../../middleware/errorHandler';
+import { logger } from '../../utils/logger';
+import * as BranchInventoryService from '../../services/branch-inventory.service';
+
+// @desc    Get all dispatch notes
+// @route   GET /api/dispatch-notes
+// @access  Private
+export const getDispatchNotes = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { from_branch_id, to_branch_id, status, from_date, to_date } = req.query;
+        const user = req.user;
+        const isCentral = ['admin', 'central_operations_manager', 'general_manager'].includes(user?.role || '');
+
+        let query = supabase
+            .from('dispatch_notes')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        // Apply filters
+        if (from_branch_id) {
+            query = query.eq('from_branch_id', from_branch_id);
+        }
+
+        // If not central, only show dispatches to the user's branch
+        if (!isCentral && user?.branch_id) {
+            query = query.eq('to_branch_id', user.branch_id);
+        } else if (to_branch_id) {
+            query = query.eq('to_branch_id', to_branch_id);
+        }
+        if (status) {
+            query = query.eq('status', status);
+        }
+        if (from_date) {
+            query = query.gte('created_at', from_date);
+        }
+        if (to_date) {
+            query = query.lte('created_at', to_date);
+        }
+
+        const { data: dispatches, error } = await query;
+
+        if (error) throw error;
+
+        if (!dispatches || dispatches.length === 0) {
+            res.status(200).json({
+                success: true,
+                count: 0,
+                data: []
+            });
+            return;
+        }
+
+        // Get branch details
+        const branchIds = [...new Set([...dispatches.map(d => d.from_branch_id), ...dispatches.map(d => d.to_branch_id)])];
+        const { data: branches } = await supabase
+            .from('branches')
+            .select('id, name, code')
+            .in('id', branchIds);
+
+        // Get dispatch items
+        const dispatchIds = dispatches.map(d => d.id);
+        const { data: items } = await supabase
+            .from('dispatch_items')
+            .select('*')
+            .in('dispatch_id', dispatchIds);
+
+        // Map data
+        const enrichedDispatches = dispatches.map(dispatch => ({
+            ...dispatch,
+            from_branch: branches?.find(b => b.id === dispatch.from_branch_id),
+            to_branch: branches?.find(b => b.id === dispatch.to_branch_id),
+            items: items?.filter(i => i.dispatch_id === dispatch.id) || []
+        }));
+
+        res.status(200).json({
+            success: true,
+            count: enrichedDispatches.length,
+            data: enrichedDispatches
+        });
+    } catch (error) {
+        logger.error('Error fetching dispatch notes:', error);
+        // Return empty list instead of crashing
+        res.status(200).json({
+            success: true,
+            count: 0,
+            data: []
+        });
+    }
+};
+
+// @desc    Get single dispatch note
+// @route   GET /api/dispatch-notes/:id
+// @access  Private
+export const getDispatchNote = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+
+        const { data: dispatch, error } = await supabase
+            .from('dispatch_notes')
+            .select(`
+        *,
+        from_branch:branches!from_branch_id(id, name, code, contact_person),
+        to_branch:branches!to_branch_id(id, name, code, contact_person),
+        created_by_user:users!created_by(id, first_name, last_name, email),
+        picker:users!picker_id(id, first_name, last_name),
+        packer:users!packer_id(id, first_name, last_name),
+        dispatcher:users!dispatcher_id(id, first_name, last_name),
+        receiver:users!receiver_id(id, first_name, last_name),
+        stock_request:stock_requests(id, request_number, priority),
+        items:dispatch_items(
+          *,
+          item:simple_items!item_sku(sku, item_name, description, unit, category)
+        )
+      `)
+            .eq('id', id)
+            .single();
+
+        if (error || !dispatch) {
+            throw new AppError('Dispatch note not found', 404);
+        }
+
+        res.status(200).json({
+            success: true,
+            data: dispatch
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Create new dispatch note
+// @route   POST /api/dispatch-notes
+// @access  Private (Central Ops)
+// @desc    Create new dispatch note
+// @route   POST /api/dispatch-notes
+// @access  Private (Central Ops)
+export const createDispatchNote = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const {
+            stock_request_id,
+            request_id,
+            from_branch_id,
+            to_branch_id,
+            vehicle_number,
+            driver_name,
+            driver_phone,
+            estimated_delivery,
+            dispatch_notes,
+            items
+        } = req.body;
+
+        const userId = req.user?.id;
+        const finalRequestId = stock_request_id || request_id;
+
+        // Handle creation from request ID
+        if (finalRequestId && (!items || items.length === 0)) {
+            // 1. Get Central Warehouse
+            const central = await BranchInventoryService.getCentralWarehouse();
+            if (!central) {
+                throw new AppError('Central warehouse not configured', 500);
+            }
+
+            // 2. Get Request Details
+            const { data: request, error: requestError } = await supabase
+                .from('stock_requests')
+                .select('*, requesting_branch:branches!requesting_branch_id(code)')
+                .eq('id', finalRequestId)
+                .single();
+
+            if (requestError || !request) {
+                throw new AppError('Stock request not found', 404);
+            }
+
+            // 3. Get Request Items
+            const { data: requestItems } = await supabase
+                .from('stock_request_items')
+                .select('*')
+                .eq('request_id', finalRequestId);
+
+            if (!requestItems || requestItems.length === 0) {
+                throw new AppError('No items found in this request', 400);
+            }
+
+            // Use approved_quantity if available, otherwise use requested_quantity for approved requests
+            const dispatchItems = requestItems.map((item: any) => ({
+                item_sku: item.item_sku,
+                dispatched_quantity: item.approved_quantity || item.requested_quantity,
+                status: 'PENDING'
+            }));
+
+            // 4. Create Dispatch
+            const dispatch = await BranchInventoryService.createDispatchFromRequest(
+                finalRequestId,
+                central.id,
+                request.requesting_branch_id,
+                request.requesting_branch.code,
+                userId,
+                dispatchItems,
+                vehicle_number,
+                driver_name,
+                driver_phone,
+                estimated_delivery,
+                dispatch_notes
+            );
+
+            res.status(201).json({
+                success: true,
+                data: dispatch
+            });
+            return;
+        }
+
+        if (!from_branch_id || !to_branch_id || !items || items.length === 0) {
+            throw new AppError('From branch, to branch, and items are required', 400);
+        }
+
+        // Get destination branch code for dispatch number generation
+        const { data: branch } = await supabase
+            .from('branches')
+            .select('code')
+            .eq('id', to_branch_id)
+            .single();
+
+        if (!branch) {
+            throw new AppError('Destination branch not found', 404);
+        }
+
+        // Generate dispatch number using database function
+        const { data: dispatchNumberData, error: numberError } = await supabase
+            .rpc('get_next_dispatch_number', { p_branch_code: branch.code });
+
+        if (numberError) {
+            logger.error('Error generating dispatch number:', numberError);
+            throw new AppError('Failed to generate dispatch number', 500);
+        }
+
+        const dispatch_number = dispatchNumberData;
+
+        // Create dispatch note
+        const { data: newDispatch, error: dispatchError } = await supabase
+            .from('dispatch_notes')
+            .insert({
+                dispatch_number,
+                stock_request_id: stock_request_id || null,
+                from_branch_id,
+                to_branch_id,
+                created_by: userId,
+                vehicle_number,
+                driver_name,
+                driver_phone,
+                estimated_delivery,
+                dispatch_notes,
+                status: 'DRAFT'
+            })
+            .select()
+            .single();
+
+        if (dispatchError) throw dispatchError;
+
+        // Insert dispatch items
+        const dispatchItems = items.map((item: any) => ({
+            dispatch_id: newDispatch.id,
+            item_sku: item.item_sku,
+            dispatched_quantity: item.dispatched_quantity,
+            batch_number: item.batch_number,
+            expiry_date: item.expiry_date,
+            bin_location: item.bin_location,
+            status: 'PENDING'
+        }));
+
+        const { error: itemsError } = await supabase
+            .from('dispatch_items')
+            .insert(dispatchItems);
+
+        if (itemsError) throw itemsError;
+
+        // Fetch complete dispatch with items
+        const { data: completeDispatch } = await supabase
+            .from('dispatch_notes')
+            .select(`
+        *,
+        from_branch:branches!from_branch_id(id, name, code),
+        to_branch:branches!to_branch_id(id, name, code),
+        items:dispatch_items(
+          *,
+          item:simple_items!item_sku(sku, item_name, description, unit)
+        )
+      `)
+            .eq('id', newDispatch.id)
+            .single();
+
+        res.status(201).json({
+            success: true,
+            data: completeDispatch
+        });
+    } catch (error) {
+        logger.error('Error creating dispatch note:', error);
+        next(error);
+    }
+};
+
+// @desc    Update dispatch status
+// @route   PUT /api/dispatch-notes/:id/status
+// @access  Private
+export const updateDispatchStatus = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { status, notes } = req.body;
+        const userId = req.user?.id;
+
+        const updateData: any = {
+            status,
+            updated_at: new Date().toISOString()
+        };
+
+        // Set timestamps based on status
+        switch (status) {
+            case 'PICKING':
+                updateData.picker_id = userId;
+                break;
+            case 'PACKING':
+                updateData.picked_at = new Date().toISOString();
+                updateData.packer_id = userId;
+                break;
+            case 'READY':
+                updateData.packed_at = new Date().toISOString();
+                break;
+            case 'IN_TRANSIT':
+                updateData.dispatched_at = new Date().toISOString();
+                updateData.dispatcher_id = userId;
+
+                // Reserve stock in central warehouse
+                const { data: dispatch } = await supabase
+                    .from('dispatch_notes')
+                    .select('from_branch_id, items:dispatch_items(item_sku, dispatched_quantity)')
+                    .eq('id', id)
+                    .single();
+
+                if (dispatch?.items) {
+                    for (const item of dispatch.items) {
+                        // Deduct from central warehouse stock
+                        await supabase.rpc('update_branch_stock', {
+                            p_branch_id: dispatch.from_branch_id,
+                            p_item_sku: item.item_sku,
+                            p_quantity_change: -item.dispatched_quantity
+                        });
+
+                        // Add to in-transit stock
+                        await supabase
+                            .from('in_transit_stock')
+                            .insert({
+                                dispatch_id: id,
+                                item_sku: item.item_sku,
+                                quantity: item.dispatched_quantity
+                            });
+                    }
+                }
+                break;
+            case 'DELIVERED':
+                updateData.delivered_at = new Date().toISOString();
+                break;
+            case 'CONFIRMED':
+                updateData.confirmed_at = new Date().toISOString();
+                updateData.receiver_id = userId;
+                break;
+        }
+
+        if (notes) {
+            updateData.delivery_notes = notes;
+        }
+
+        const { data: dispatch, error } = await supabase
+            .from('dispatch_notes')
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.status(200).json({
+            success: true,
+            message: `Dispatch status updated to ${status}`,
+            data: dispatch
+        });
+    } catch (error) {
+        logger.error('Error updating dispatch status:', error);
+        next(error);
+    }
+};
+
+// @desc    Dispatch items (set to IN_TRANSIT and deduct stock)
+// @route   PUT /api/dispatch-notes/:id/dispatch
+// @access  Private
+export const dispatchItems = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const userId = req.user?.id;
+
+        // Get dispatch details
+        const { data: dispatch, error: fetchError } = await supabase
+            .from('dispatch_notes')
+            .select(`
+                *,
+                items:dispatch_items(*)
+            `)
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !dispatch) {
+            throw new AppError('Dispatch note not found', 404);
+        }
+
+        if (dispatch.status === 'IN_TRANSIT') {
+            throw new AppError('Dispatch is already in transit', 400);
+        }
+
+        // Update dispatch status to IN_TRANSIT
+        const { error: updateError } = await supabase
+            .from('dispatch_notes')
+            .update({
+                status: 'IN_TRANSIT',
+                dispatched_at: new Date().toISOString(),
+                dispatcher_id: userId,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id);
+
+        if (updateError) throw updateError;
+
+        // Deduct stock from central warehouse and add to in-transit
+        if (dispatch.items && dispatch.items.length > 0) {
+            for (const item of dispatch.items) {
+                // Deduct from central warehouse
+                await supabase.rpc('update_branch_stock', {
+                    p_branch_id: dispatch.from_branch_id,
+                    p_item_sku: item.item_sku,
+                    p_quantity_change: -item.dispatched_quantity
+                });
+
+                // Add to in-transit stock
+                await supabase
+                    .from('in_transit_stock')
+                    .insert({
+                        dispatch_id: id,
+                        item_sku: item.item_sku,
+                        quantity: item.dispatched_quantity
+                    });
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Dispatch sent to transit successfully'
+        });
+    } catch (error) {
+        logger.error('Error dispatching items:', error);
+        next(error);
+    }
+};
+
+// @desc    Confirm delivery and update receiving branch stock
+// @route   PUT /api/dispatch-notes/:id/confirm-delivery
+// @access  Private
+export const confirmDelivery = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { items_received, discrepancy_notes } = req.body;
+        const userId = req.user?.id;
+
+        // Get dispatch details
+        const { data: dispatch, error: fetchError } = await supabase
+            .from('dispatch_notes')
+            .select(`
+        *,
+        items:dispatch_items(*)
+      `)
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !dispatch) {
+            throw new AppError('Dispatch note not found', 404);
+        }
+
+        // Update dispatch status
+        await supabase
+            .from('dispatch_notes')
+            .update({
+                status: 'CONFIRMED',
+                confirmed_at: new Date().toISOString(),
+                receiver_id: userId,
+                discrepancy_notes,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id);
+
+        // Update dispatch items with received quantities
+        for (const receivedItem of items_received) {
+            const originalItem = dispatch.items.find((i: any) => i.id === receivedItem.item_id);
+
+            if (originalItem) {
+                const damaged = receivedItem.damaged_quantity || 0;
+                const missing = originalItem.dispatched_quantity - receivedItem.received_quantity - damaged;
+
+                await supabase
+                    .from('dispatch_items')
+                    .update({
+                        received_quantity: receivedItem.received_quantity,
+                        damaged_quantity: damaged,
+                        missing_quantity: missing > 0 ? missing : 0,
+                        status: missing > 0 ? 'PARTIAL' : 'RECEIVED',
+                        discrepancy_reason: receivedItem.discrepancy_reason
+                    })
+                    .eq('id', receivedItem.item_id);
+
+                // Add to receiving branch stock
+                await supabase.rpc('update_branch_stock', {
+                    p_branch_id: dispatch.to_branch_id,
+                    p_item_sku: originalItem.item_sku,
+                    p_quantity_change: receivedItem.received_quantity
+                });
+
+                // Log stock movement
+                await supabase
+                    .from('branch_stock_movements')
+                    .insert({
+                        branch_id: dispatch.to_branch_id,
+                        item_sku: originalItem.item_sku,
+                        movement_type: 'DISPATCH_RECEIVE',
+                        quantity: receivedItem.received_quantity,
+                        reference_type: 'DISPATCH',
+                        reference_id: id,
+                        reference_number: dispatch.dispatch_number,
+                        performed_by: userId,
+                        notes: `Received from dispatch ${dispatch.dispatch_number}`
+                    });
+
+                // Remove from in-transit stock
+                await supabase
+                    .from('in_transit_stock')
+                    .delete()
+                    .eq('dispatch_id', id)
+                    .eq('item_sku', originalItem.item_sku);
+            }
+        }
+
+        // Update stock request status if linked
+        if (dispatch.stock_request_id) {
+            await supabase
+                .from('stock_requests')
+                .update({
+                    status: 'DELIVERED',
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', dispatch.stock_request_id);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Delivery confirmed and stock updated'
+        });
+    } catch (error) {
+        logger.error('Error confirming delivery:', error);
+        next(error);
+    }
+};
+
+// @desc    Delete dispatch note (only if DRAFT)
+// @route   DELETE /api/dispatch-notes/:id
+// @access  Private
+export const deleteDispatchNote = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+
+        // Check if dispatch is in DRAFT status
+        const { data: dispatch } = await supabase
+            .from('dispatch_notes')
+            .select('status')
+            .eq('id', id)
+            .single();
+
+        if (!dispatch) {
+            throw new AppError('Dispatch note not found', 404);
+        }
+
+        if (dispatch.status !== 'DRAFT') {
+            throw new AppError('Only draft dispatches can be deleted', 400);
+        }
+
+        const { error } = await supabase
+            .from('dispatch_notes')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+
+        res.status(200).json({
+            success: true,
+            message: 'Dispatch note deleted'
+        });
+    } catch (error) {
+        logger.error('Error deleting dispatch note:', error);
+        next(error);
+    }
+};

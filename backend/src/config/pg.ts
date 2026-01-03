@@ -2,7 +2,7 @@ import { Pool, QueryResult } from 'pg';
 import { logger } from '../utils/logger';
 
 // Flag to track if PostgreSQL is available
-let pgAvailable = false;  // Start as false - will be set to true on successful connection
+let pgAvailable = !!process.env.DATABASE_URL; // Initialize based on presence of URL
 let poolInitialized = false;
 
 // Lazy pool initialization - don't create until needed
@@ -16,7 +16,7 @@ const mockPool = {
   connect: async () => {
     throw new Error('PostgreSQL is not available');
   },
-  end: async () => {},
+  end: async () => { },
   on: () => mockPool,
   off: () => mockPool,
   once: () => mockPool,
@@ -32,21 +32,23 @@ const SKIP_PG = process.env.SKIP_POSTGRES === 'true';
 // Initialize pool with error handling
 const initPool = (): Pool => {
   if (_pool) return _pool;
-  
+
   // Skip PostgreSQL if explicitly disabled
   if (SKIP_PG) {
     console.warn('PostgreSQL disabled via SKIP_POSTGRES - using mock pool');
     poolInitialized = true;
+    pgAvailable = false;
     return mockPool as unknown as Pool;
   }
-  
+
   // Check if DATABASE_URL is set
   if (!process.env.DATABASE_URL) {
     console.warn('DATABASE_URL not set - PostgreSQL features will be unavailable');
     poolInitialized = true;
+    pgAvailable = false;
     return mockPool as unknown as Pool;
   }
-  
+
   try {
     _pool = new Pool({
       connectionString: process.env.DATABASE_URL,
@@ -78,19 +80,21 @@ const initPool = (): Pool => {
     _pool.on('remove', () => {
       logger.debug('Client removed from database pool');
     });
-    
+
     poolInitialized = true;
+    pgAvailable = true;
     return _pool;
   } catch (error) {
     console.error('Failed to create PostgreSQL pool:', error);
     poolInitialized = true;
+    pgAvailable = false;
     return mockPool as unknown as Pool;
   }
 };
 
 // Get or create the pool
 const getPool = (): Pool => {
-  if (SKIP_PG || (!pgAvailable && poolInitialized)) {
+  if (SKIP_PG || !process.env.DATABASE_URL) {
     return mockPool as unknown as Pool;
   }
   return initPool();
@@ -99,15 +103,12 @@ const getPool = (): Pool => {
 // Create a proxy pool object that lazily initializes the real pool
 const pool = new Proxy({} as Pool, {
   get(target, prop) {
-    if (!pgAvailable) {
-      const value = (mockPool as any)[prop];
-      if (typeof value === 'function') {
-        return value.bind(mockPool);
-      }
-      return value;
-    }
+    // Avoid being treated as a promise
+    if (prop === 'then') return undefined;
+
     const realPool = getPool();
     const value = (realPool as any)[prop];
+
     if (typeof value === 'function') {
       return value.bind(realPool);
     }
@@ -135,7 +136,7 @@ export const testConnection = async (): Promise<boolean> => {
 
 // Safe query wrapper that handles connection errors gracefully
 export const safeQuery = async (
-  queryText: string, 
+  queryText: string,
   params?: any[]
 ): Promise<{ rows: any[], error: Error | null }> => {
   if (!pgAvailable) {

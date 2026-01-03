@@ -9,7 +9,7 @@ import {
   Crown, Shield, Sparkles, TrendingUp
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { guestsAPI, guestLoyaltyAPI, documentsAPI } from '@/lib/api';
+import { guestAPI, guestLoyaltyAPI, documentsAPI } from '@/lib/api';
 import DocumentUploadModal from '@/components/modals/DocumentUploadModal';
 
 interface Guest {
@@ -86,7 +86,7 @@ export default function GuestProfilePage() {
     setLoading(true);
     try {
       const [guestRes, loyaltyRes, historyRes] = await Promise.all([
-        guestsAPI.getGuest(guestId),
+        guestAPI.getGuest(guestId),
         guestLoyaltyAPI.getLoyalty(guestId),
         guestLoyaltyAPI.getHistory(guestId),
       ]);

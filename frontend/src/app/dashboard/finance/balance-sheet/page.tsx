@@ -5,7 +5,8 @@ import { UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { financeAPI } from '@/lib/api';
-import { Scale, RefreshCw, Download, Building2 } from 'lucide-react';
+import { Scale, RefreshCw, Download, Building2, Calendar } from 'lucide-react';
+import { BranchSelector } from '@/components/finance/BranchSelector';
 
 interface BalanceSheetData {
   as_of_date: string;
@@ -24,26 +25,22 @@ interface Branch { id: number; name: string; }
 export default function BalanceSheetPage() {
   const [data, setData] = useState<BalanceSheetData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
+  const [asOfDate, setAsOfDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const fetchBranches = useCallback(async () => {
-    try {
-      const response = await financeAPI.getBranches();
-      if (response.success && Array.isArray(response.data)) setBranches(response.data);
-    } catch (error) { console.error('Error:', error); }
-  }, []);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await financeAPI.getBalanceSheet({ branch_id: selectedBranch || undefined });
+      const response = await financeAPI.getBalanceSheet({
+        branch_id: selectedBranch || undefined,
+        as_of_date: asOfDate
+      });
       if (response.success && response.data) setData(response.data);
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, [selectedBranch]);
+  }, [selectedBranch, asOfDate]);
 
-  useEffect(() => { fetchBranches(); }, [fetchBranches]);
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const LineItem = ({ label, amount, indent = false, bold = false }: { label: string; amount: number; indent?: boolean; bold?: boolean }) => (
@@ -73,14 +70,19 @@ export default function BalanceSheetPage() {
               <p className="text-sm text-gray-500 mt-1">Statement of financial position</p>
             </div>
             <div className="flex items-center gap-3">
-              <select
-                value={selectedBranch || ''}
-                onChange={(e) => setSelectedBranch(e.target.value ? Number(e.target.value) : null)}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"
-              >
-                <option value="">All Branches</option>
-                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
+              <BranchSelector
+                selectedBranch={selectedBranch}
+                onBranchChange={setSelectedBranch}
+              />
+              <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-lg px-3 py-1.5">
+                <Calendar className="h-4 w-4 text-stone-400" />
+                <input
+                  type="date"
+                  value={asOfDate}
+                  onChange={(e) => setAsOfDate(e.target.value)}
+                  className="text-[13px] text-stone-600 bg-transparent border-none focus:ring-0 p-0 w-[110px]"
+                />
+              </div>
               <button onClick={fetchData} disabled={isLoading} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               </button>
@@ -119,7 +121,7 @@ export default function BalanceSheetPage() {
                   <LineItem label="Inventory" amount={data.current_assets?.inventory || 0} indent />
                   <LineItem label="Prepaid Expenses" amount={data.current_assets?.prepaid_expenses || 0} indent />
                   <SectionTotal label="Total Current Assets" amount={data.current_assets?.total || 0} />
-                  
+
                   <div className="py-3 border-b border-gray-100 mt-2">
                     <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Fixed Assets</p>
                   </div>
@@ -146,18 +148,18 @@ export default function BalanceSheetPage() {
                   <LineItem label="Accrued Expenses" amount={data.current_liabilities?.accrued_expenses || 0} indent />
                   <LineItem label="Short-term Debt" amount={data.current_liabilities?.short_term_debt || 0} indent />
                   <SectionTotal label="Total Current Liabilities" amount={data.current_liabilities?.total || 0} />
-                  
+
                   <div className="py-3 border-b border-gray-100 mt-2">
                     <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Long-term Liabilities</p>
                   </div>
                   <LineItem label="Long-term Debt" amount={data.long_term_liabilities?.long_term_debt || 0} indent />
                   <SectionTotal label="Total Long-term Liabilities" amount={data.long_term_liabilities?.total || 0} />
-                  
+
                   <div className="flex justify-between py-3 bg-gray-50 -mx-5 px-5 font-medium border-t border-gray-100">
                     <span className="text-gray-900">Total Liabilities</span>
                     <span className="font-semibold text-gray-900">KES {(data.total_liabilities || 0).toLocaleString()}</span>
                   </div>
-                  
+
                   <div className="py-3 border-b border-gray-100 mt-2">
                     <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Shareholders' Equity</p>
                   </div>
@@ -174,8 +176,8 @@ export default function BalanceSheetPage() {
               {/* Balance Check */}
               <div className={`p-4 rounded-lg text-center ${Math.abs((data.total_assets || 0) - (data.total_liabilities_equity || 0)) < 1 ? 'bg-gray-100' : 'bg-gray-200'}`}>
                 <p className="text-sm font-medium text-gray-700">
-                  {Math.abs((data.total_assets || 0) - (data.total_liabilities_equity || 0)) < 1 
-                    ? '✓ Balance Sheet is balanced' 
+                  {Math.abs((data.total_assets || 0) - (data.total_liabilities_equity || 0)) < 1
+                    ? '✓ Balance Sheet is balanced'
                     : '⚠ Balance Sheet has a discrepancy'}
                 </p>
               </div>

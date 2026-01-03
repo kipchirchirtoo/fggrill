@@ -12,7 +12,7 @@ export const getTables = async (
 ): Promise<void> => {
   try {
     const { branch_id, section_id, status } = req.query;
-    
+
     let query = supabase
       .from('restaurant_tables')
       .select(`
@@ -24,15 +24,16 @@ export const getTables = async (
         )
       `)
       .eq('is_active', true);
-    
-    if (branch_id) query = query.eq('branch_id', branch_id);
+
+    const branchId = req.user?.branch_id || req.query.branch_id;
+    if (branchId) query = query.eq('branch_id', branchId);
     if (section_id) query = query.eq('section_id', section_id);
     if (status) query = query.eq('status', status);
-    
+
     const { data: tables, error } = await query.order('table_number');
-    
+
     if (error) throw error;
-    
+
     res.status(200).json({
       success: true,
       count: tables?.length || 0,
@@ -65,9 +66,9 @@ export const getTableById = async (
       `)
       .eq('id', req.params.id)
       .single();
-    
+
     if (error) throw error;
-    
+
     if (!table) {
       res.status(404).json({
         success: false,
@@ -75,7 +76,7 @@ export const getTableById = async (
       });
       return;
     }
-    
+
     res.status(200).json({
       success: true,
       data: table
@@ -103,11 +104,11 @@ export const createTable = async (
       positionY,
       notes
     } = req.body;
-    
+
     const { data: table, error } = await supabase
       .from('restaurant_tables')
       .insert([{
-        branch_id: branchId,
+        branch_id: req.user?.branch_id || branchId,
         section_id: sectionId,
         table_number: tableNumber,
         capacity,
@@ -118,14 +119,14 @@ export const createTable = async (
       }])
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     res.status(201).json({
       success: true,
       data: table
     });
-    
+
     logger.info(`New table created: ${tableNumber}`);
   } catch (error) {
     next(error);
@@ -150,7 +151,7 @@ export const updateTable = async (
       notes,
       isActive
     } = req.body;
-    
+
     const { data: table, error } = await supabase
       .from('restaurant_tables')
       .update({
@@ -166,14 +167,14 @@ export const updateTable = async (
       .eq('id', req.params.id)
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     res.status(200).json({
       success: true,
       data: table
     });
-    
+
     logger.info(`Table updated: ${tableNumber}`);
   } catch (error) {
     next(error);
@@ -190,7 +191,7 @@ export const updateTableStatus = async (
 ): Promise<void> => {
   try {
     const { status } = req.body;
-    
+
     const { data: table, error } = await supabase
       .from('restaurant_tables')
       .update({
@@ -200,14 +201,14 @@ export const updateTableStatus = async (
       .eq('id', req.params.id)
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     res.status(200).json({
       success: true,
       data: table
     });
-    
+
     logger.info(`Table ${table.table_number} status updated to ${status}`);
   } catch (error) {
     next(error);
@@ -225,7 +226,7 @@ export const assignServer = async (
   try {
     const { serverId } = req.body;
     const tableId = req.params.id;
-    
+
     // End any existing assignments for this table
     await supabase
       .from('restaurant_table_assignments')
@@ -235,7 +236,7 @@ export const assignServer = async (
       })
       .eq('table_id', tableId)
       .eq('is_active', true);
-    
+
     // Create new assignment
     const { data: assignment, error } = await supabase
       .from('restaurant_table_assignments')
@@ -250,14 +251,14 @@ export const assignServer = async (
         server:staff_profiles(*)
       `)
       .single();
-    
+
     if (error) throw error;
-    
+
     res.status(201).json({
       success: true,
       data: assignment
     });
-    
+
     logger.info(`Server assigned to table ${tableId}`);
   } catch (error) {
     next(error);
@@ -274,7 +275,7 @@ export const getFloorPlan = async (
 ): Promise<void> => {
   try {
     const { branch_id } = req.query;
-    
+
     let query = supabase
       .from('restaurant_tables')
       .select(`
@@ -282,15 +283,15 @@ export const getFloorPlan = async (
         section:restaurant_sections(*)
       `)
       .eq('is_active', true);
-    
+
     if (branch_id) {
       query = query.eq('branch_id', branch_id);
     }
-    
+
     const { data: tables, error } = await query;
-    
+
     if (error) throw error;
-    
+
     // Group by section
     const floorPlan = tables?.reduce((acc: any, table: any) => {
       const sectionId = table.section_id || 'unassigned';
@@ -303,7 +304,7 @@ export const getFloorPlan = async (
       acc[sectionId].tables.push(table);
       return acc;
     }, {});
-    
+
     res.status(200).json({
       success: true,
       data: floorPlan
@@ -323,7 +324,7 @@ export const updateFloorPlan = async (
 ): Promise<void> => {
   try {
     const { tables } = req.body; // Array of {id, positionX, positionY}
-    
+
     const updates = tables.map(async (table: any) => {
       return supabase
         .from('restaurant_tables')
@@ -334,14 +335,14 @@ export const updateFloorPlan = async (
         })
         .eq('id', table.id);
     });
-    
+
     await Promise.all(updates);
-    
+
     res.status(200).json({
       success: true,
       message: 'Floor plan updated successfully'
     });
-    
+
     logger.info(`Floor plan updated for ${tables.length} tables`);
   } catch (error) {
     next(error);
@@ -358,20 +359,20 @@ export const getTableStats = async (
 ): Promise<void> => {
   try {
     const { branch_id } = req.query;
-    
+
     let query = supabase
       .from('restaurant_tables')
       .select('status, capacity')
       .eq('is_active', true);
-    
+
     if (branch_id) {
       query = query.eq('branch_id', branch_id);
     }
-    
+
     const { data: tables, error } = await query;
-    
+
     if (error) throw error;
-    
+
     const stats = {
       total: tables?.length || 0,
       available: tables?.filter(t => t.status === 'available').length || 0,
@@ -382,7 +383,7 @@ export const getTableStats = async (
       totalCapacity: tables?.reduce((sum, t) => sum + (t.capacity || 0), 0) || 0,
       availableCapacity: tables?.filter(t => t.status === 'available').reduce((sum, t) => sum + (t.capacity || 0), 0) || 0
     };
-    
+
     res.status(200).json({
       success: true,
       data: stats

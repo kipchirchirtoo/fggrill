@@ -56,11 +56,11 @@ function StockRequestsPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  
+
   // Request details modal
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<StockRequest | null>(null);
-  
+
   // Stats
   const [stats, setStats] = useState({
     pending: 0,
@@ -69,36 +69,36 @@ function StockRequestsPageContent() {
     fulfilled: 0,
     total: 0
   });
-  
+
   // Fetch requests when branch changes
   useEffect(() => {
     if (activeBranchId) {
       fetchRequests();
     }
   }, [activeBranchId]);
-  
+
   // Apply filters when search or status changes
   useEffect(() => {
     applyFilters();
   }, [requests, searchTerm, statusFilter]);
-  
+
   const fetchRequests = async () => {
     if (!activeBranchId) return;
-    
+
     setIsLoading(true);
     try {
       const response = await branchOperationsAPI.getStockRequests(undefined, activeBranchId);
-      
+
       if (response.success) {
         const requestData = response.data || [];
         setRequests(requestData);
-        
+
         // Update stats
         const newStats = {
-          pending: requestData.filter((r: StockRequest) => r.status === 'pending').length,
-          approved: requestData.filter((r: StockRequest) => r.status === 'approved').length,
-          rejected: requestData.filter((r: StockRequest) => r.status === 'rejected').length,
-          fulfilled: requestData.filter((r: StockRequest) => r.status === 'fulfilled').length,
+          pending: requestData.filter((r: StockRequest) => r.status.toUpperCase() === 'PENDING' || r.status.toUpperCase() === 'UNDER_REVIEW').length,
+          approved: requestData.filter((r: StockRequest) => r.status.toUpperCase() === 'APPROVED' || r.status.toUpperCase() === 'PARTIALLY_APPROVED' || r.status.toUpperCase() === 'DISPATCHED').length,
+          rejected: requestData.filter((r: StockRequest) => r.status.toUpperCase() === 'REJECTED').length,
+          fulfilled: requestData.filter((r: StockRequest) => r.status.toUpperCase() === 'DELIVERED' || r.status.toUpperCase() === 'FULFILLED').length,
           total: requestData.length
         };
         setStats(newStats);
@@ -112,48 +112,62 @@ function StockRequestsPageContent() {
       setIsLoading(false);
     }
   };
-  
+
   const applyFilters = () => {
     let filtered = [...requests];
-    
+
     // Apply status filter
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(request => request.status === statusFilter);
+      if (statusFilter === 'PENDING') {
+        filtered = filtered.filter(request => request.status.toUpperCase() === 'PENDING' || request.status.toUpperCase() === 'UNDER_REVIEW');
+      } else if (statusFilter === 'APPROVED') {
+        filtered = filtered.filter(request => request.status.toUpperCase() === 'APPROVED' || request.status.toUpperCase() === 'PARTIALLY_APPROVED' || request.status.toUpperCase() === 'DISPATCHED');
+      } else if (statusFilter === 'DELIVERED') {
+        filtered = filtered.filter(request => request.status.toUpperCase() === 'DELIVERED' || request.status.toUpperCase() === 'FULFILLED');
+      } else {
+        filtered = filtered.filter(request => request.status.toUpperCase() === statusFilter.toUpperCase());
+      }
     }
-    
+
     // Apply search filter
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
-      filtered = filtered.filter(request => 
+      filtered = filtered.filter(request =>
         request.request_number.toLowerCase().includes(searchLower)
       );
     }
-    
+
     setFilteredRequests(filtered);
   };
-  
+
   const viewRequestDetails = (request: StockRequest) => {
     setSelectedRequest(request);
     setIsDetailsModalOpen(true);
   };
-  
+
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'pending':
+    const s = status.toUpperCase();
+    switch (s) {
+      case 'PENDING':
+      case 'UNDER_REVIEW':
         return <IOSBadge className="bg-yellow-100 text-yellow-700">Pending</IOSBadge>;
-      case 'approved':
+      case 'APPROVED':
+      case 'PARTIALLY_APPROVED':
         return <IOSBadge className="bg-blue-100 text-blue-700">Approved</IOSBadge>;
-      case 'rejected':
+      case 'REJECTED':
         return <IOSBadge className="bg-red-100 text-red-700">Rejected</IOSBadge>;
-      case 'fulfilled':
+      case 'DELIVERED':
+      case 'FULFILLED':
         return <IOSBadge className="bg-green-100 text-green-700">Fulfilled</IOSBadge>;
-      case 'dispatched':
+      case 'DISPATCHED':
         return <IOSBadge className="bg-purple-100 text-purple-700">Dispatched</IOSBadge>;
+      case 'CANCELLED':
+        return <IOSBadge className="bg-gray-100 text-gray-700">Cancelled</IOSBadge>;
       default:
         return <IOSBadge className="bg-gray-100 text-gray-700">{status}</IOSBadge>;
     }
   };
-  
+
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
       case 'urgent':
@@ -168,7 +182,7 @@ function StockRequestsPageContent() {
         return <IOSBadge className="bg-gray-100 text-gray-700">{priority}</IOSBadge>;
     }
   };
-  
+
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
@@ -206,25 +220,25 @@ function StockRequestsPageContent() {
               <p className="text-sm text-gray-500">Total</p>
               <p className="text-lg font-bold">{stats.total}</p>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <Clock className="h-5 w-5 text-yellow-600 mb-2" />
               <p className="text-sm text-gray-500">Pending</p>
               <p className="text-lg font-bold text-yellow-600">{stats.pending}</p>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <Check className="h-5 w-5 text-blue-600 mb-2" />
               <p className="text-sm text-gray-500">Approved</p>
               <p className="text-lg font-bold text-blue-600">{stats.approved}</p>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <X className="h-5 w-5 text-red-600 mb-2" />
               <p className="text-sm text-gray-500">Rejected</p>
               <p className="text-lg font-bold text-red-600">{stats.rejected}</p>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <Send className="h-5 w-5 text-green-600 mb-2" />
               <p className="text-sm text-gray-500">Fulfilled</p>
@@ -236,15 +250,15 @@ function StockRequestsPageContent() {
           <IOSCard className="p-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="md:col-span-2 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                 <Input
                   placeholder="Search by request number..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-9"
                 />
               </div>
-              
+
               <div>
                 <select
                   value={statusFilter}
@@ -252,17 +266,17 @@ function StockRequestsPageContent() {
                   className="w-full h-10 px-3 rounded-ios-lg border border-gray-200"
                 >
                   <option value="all">All Statuses</option>
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                  <option value="fulfilled">Fulfilled</option>
-                  <option value="dispatched">Dispatched</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="APPROVED">Approved</option>
+                  <option value="REJECTED">Rejected</option>
+                  <option value="DELIVERED">Fulfilled</option>
+                  <option value="DISPATCHED">Dispatched</option>
                 </select>
               </div>
-              
+
               <div>
-                <IOSButton 
-                  onClick={fetchRequests} 
+                <IOSButton
+                  onClick={fetchRequests}
                   leftIcon={<RefreshCw />}
                   className="w-full"
                 >
@@ -347,14 +361,14 @@ function StockRequestsPageContent() {
             </div>
           </IOSCard>
         </div>
-        
+
         {/* Request Details Modal */}
         <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
           <DialogContent className="max-w-3xl">
             <DialogHeader>
               <DialogTitle>Stock Request Details</DialogTitle>
             </DialogHeader>
-            
+
             {selectedRequest && (
               <div className="space-y-6 mt-4">
                 {/* Request Header */}
@@ -376,7 +390,7 @@ function StockRequestsPageContent() {
                     {getPriorityBadge(selectedRequest.priority)}
                   </div>
                 </div>
-                
+
                 {/* Request Notes */}
                 {selectedRequest.reason && (
                   <div className="p-3 bg-gray-50 rounded-ios-lg">
@@ -384,7 +398,7 @@ function StockRequestsPageContent() {
                     <p className="text-sm text-gray-600">{selectedRequest.reason}</p>
                   </div>
                 )}
-                
+
                 {/* Items Table */}
                 <div>
                   <h3 className="font-medium mb-3">Requested Items</h3>
@@ -439,7 +453,7 @@ function StockRequestsPageContent() {
                     </tbody>
                   </table>
                 </div>
-                
+
                 <div className="flex justify-end space-x-3 pt-4 border-t">
                   <IOSButton
                     variant="secondary"

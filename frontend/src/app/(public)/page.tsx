@@ -57,25 +57,25 @@ export default function HomePage() {
   const router = useRouter();
   const bookingRef = useRef<HTMLDivElement>(null);
   const roomsRef = useRef<HTMLDivElement>(null);
-  
+
   // Form state
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
   const [adults, setAdults] = useState(2);
   const [children, setChildren] = useState(0);
-  
+
   // Results state
   const [availableRooms, setAvailableRooms] = useState<AvailableRoom[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  
+
   // Sticky booking bar
   const [isBookingSticky, setIsBookingSticky] = useState(false);
-  
+
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
-  
+
   // Room view modal state
   const [selectedRoom, setSelectedRoom] = useState<AvailableRoom | null>(null);
   const [roomViewOpen, setRoomViewOpen] = useState(false);
@@ -135,49 +135,46 @@ export default function HomePage() {
     setHasSearched(true);
 
     try {
-      // Try Python Room Service first (port 8003), fallback to Node.js backend
-      const ROOM_SERVICE_URL = process.env.NEXT_PUBLIC_ROOM_SERVICE_URL || 'http://localhost:8003';
+      // Use Node.js backend for room availability
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
       const totalGuests = adults + children;
-      
-      let response;
-      let usedPythonService = false;
-      
-      try {
-        // Try Python Room Service
-        response = await fetch(
-          `${ROOM_SERVICE_URL}/api/rooms/availability?check_in=${checkIn}&check_out=${checkOut}&guests=${totalGuests}`,
-          { signal: AbortSignal.timeout(5000) }
-        );
-        usedPythonService = true;
-      } catch {
-        // Fallback to Node.js backend
-        response = await fetch(
-          `${API_URL}/api/bookings/available?checkIn=${checkIn}&checkOut=${checkOut}&guests=${totalGuests}`
-        );
+
+      const response = await fetch(
+        `${API_URL}/api/bookings/available?checkIn=${checkIn}&checkOut=${checkOut}&guests=${totalGuests}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
       }
-      
+
       const data = await response.json();
-      
+
       if (data.success && data.data) {
-        // Normalize data from Python service
-        const normalizedRooms = data.data.map((room: any) => ({
-          id: room.id,
-          roomNumber: room.room_number || room.roomNumber,
-          type: room.type,
-          capacity: room.capacity,
-          pricePerNight: room.price_per_night || room.pricePerNight,
-          amenities: room.amenities || [],
-          floor: room.floor
-        }));
-        
+        // Normalize room data from backend
+        const normalizedRooms = data.data.map((room: any) => {
+          // Handle nested room_types data from Supabase join
+          const roomType = room.type || {};
+          // Use price_override if set, otherwise use room type's base_price
+          const price = room.price_override || roomType.base_price || 5000;
+          return {
+            id: room.id,
+            roomNumber: room.room_number || room.roomNumber,
+            type: typeof roomType === 'string' ? roomType : (roomType.name || 'Standard'),
+            capacity: roomType.max_occupancy || 2,
+            pricePerNight: price,
+            amenities: room.amenities || [],
+            floor: room.floor,
+            description: roomType.description || ''
+          };
+        });
+
         setAvailableRooms(normalizedRooms);
-        
+
         // Scroll to results
         setTimeout(() => {
           roomsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 300);
-        
+
         if (normalizedRooms.length === 0) {
           toast.info('No rooms available for selected dates');
         } else {
@@ -276,20 +273,20 @@ export default function HomePage() {
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm border-b border-stone-200">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Image src="/fglogo.png" alt="Logo" width={40} height={40} className="object-contain" priority />
+            <Image src="/fglogo.png" alt="Logo" width={40} height={40} className="object-contain" style={{ width: 'auto', height: 'auto' }} priority />
             <div>
               <span className="font-semibold text-stone-900 text-lg">Famous Gate</span>
               <span className="text-xs text-amber-600 block -mt-1 font-medium">HOTEL</span>
             </div>
           </div>
-          
+
           <nav className="hidden md:flex items-center gap-8">
             <a href="#about" className="text-sm text-stone-600 hover:text-stone-900 transition-colors">About</a>
             <a href="#rooms" className="text-sm text-stone-600 hover:text-stone-900 transition-colors">Rooms</a>
             <a href="#gallery" className="text-sm text-stone-600 hover:text-stone-900 transition-colors">Gallery</a>
             <a href="#contact" className="text-sm text-stone-600 hover:text-stone-900 transition-colors">Contact</a>
           </nav>
-          
+
           <button
             onClick={() => router.push('/login')}
             className="text-sm font-medium text-stone-700 hover:text-stone-900 transition-colors"
@@ -300,7 +297,7 @@ export default function HomePage() {
       </header>
 
       {/* ===================== HERO SECTION ===================== */}
-      <section className="relative h-screen">
+      <section className="relative h-screen" style={{ position: 'relative' }}>
         <Image
           src={galleryImages[0].src}
           alt="Famous Gate Hotel"
@@ -309,7 +306,7 @@ export default function HomePage() {
           className="object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-black/60" />
-        
+
         <div className="relative z-10 h-full flex flex-col items-center justify-center text-center px-6 pt-16">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -359,7 +356,7 @@ export default function HomePage() {
                   className="w-full h-12 px-4 bg-stone-50 border border-stone-200 rounded-lg text-stone-900 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all"
                 />
               </div>
-              
+
               {/* Check-out */}
               <div className="flex-1 w-full">
                 <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2">
@@ -373,7 +370,7 @@ export default function HomePage() {
                   className="w-full h-12 px-4 bg-stone-50 border border-stone-200 rounded-lg text-stone-900 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all"
                 />
               </div>
-              
+
               {/* Adults */}
               <div className="w-full lg:w-32">
                 <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2">
@@ -389,7 +386,7 @@ export default function HomePage() {
                   ))}
                 </select>
               </div>
-              
+
               {/* Children */}
               <div className="w-full lg:w-32">
                 <label className="block text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2">
@@ -405,7 +402,7 @@ export default function HomePage() {
                   ))}
                 </select>
               </div>
-              
+
               {/* Search Button */}
               <button
                 onClick={handleSearch}
@@ -511,7 +508,7 @@ export default function HomePage() {
                       Room {room.roomNumber || room.id.slice(-4)}
                     </div>
                   </div>
-                  
+
                   <div className="p-6">
                     <h3 className="text-xl font-semibold text-stone-900 mb-2">
                       {getRoomTypeName(room)}
@@ -522,7 +519,7 @@ export default function HomePage() {
                         Up to {room.capacity || 2} guests
                       </span>
                     </div>
-                    
+
                     <div className="flex items-center justify-between pt-4 border-t border-stone-100">
                       <div>
                         <span className="text-2xl font-bold text-stone-900">
@@ -579,10 +576,10 @@ export default function HomePage() {
                 A Place Where <br /><span className="italic">Comfort Meets Excellence</span>
               </h2>
               <p className="text-stone-600 text-lg leading-relaxed mb-8">
-                Famous Gate Hotel offers an exceptional blend of comfort, convenience, and warm Kenyan hospitality. 
+                Famous Gate Hotel offers an exceptional blend of comfort, convenience, and warm Kenyan hospitality.
                 With 6 branches strategically located across the region, we're always close to you.
               </p>
-              
+
               <div className="grid grid-cols-2 gap-6">
                 <div className="p-6 bg-white rounded-xl border border-stone-200">
                   <div className="text-3xl font-bold text-amber-500 mb-1">50+</div>
@@ -602,14 +599,14 @@ export default function HomePage() {
                 </div>
               </div>
             </motion.div>
-            
+
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
               className="relative"
             >
-              <div className="aspect-[4/5] rounded-2xl overflow-hidden shadow-2xl">
+              <div className="aspect-[4/5] rounded-2xl overflow-hidden shadow-2xl relative">
                 <Image
                   src={galleryImages[1].src}
                   alt="About Famous Gate"
@@ -648,7 +645,7 @@ export default function HomePage() {
               Premium <span className="italic">Amenities</span>
             </h2>
           </div>
-          
+
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {amenities.map((item, index) => (
               <motion.div
@@ -674,14 +671,14 @@ export default function HomePage() {
       <section id="gallery" className="py-32 bg-stone-50 overflow-hidden">
         <div className="max-w-7xl mx-auto px-6">
           {/* Section Header */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 40 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
             className="text-center mb-20"
           >
-            <motion.div 
+            <motion.div
               initial={{ width: 0 }}
               whileInView={{ width: 64 }}
               viewport={{ once: true }}
@@ -715,7 +712,7 @@ export default function HomePage() {
                   className="object-cover transition-transform duration-[1.2s] ease-out group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
@@ -878,7 +875,7 @@ export default function HomePage() {
           </div>
 
           {/* Gallery footer */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
@@ -907,7 +904,7 @@ export default function HomePage() {
               Our <span className="italic">Locations</span>
             </h2>
           </div>
-          
+
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {branches.map((branch, index) => (
               <motion.div
@@ -1079,11 +1076,10 @@ export default function HomePage() {
                 <button
                   key={index}
                   onClick={(e) => { e.stopPropagation(); setLightboxIndex(index); }}
-                  className={`relative w-12 h-12 md:w-16 md:h-16 rounded-lg overflow-hidden flex-shrink-0 transition-all duration-200 ${
-                    index === lightboxIndex 
-                      ? 'ring-2 ring-amber-500 scale-110' 
+                  className={`relative w-12 h-12 md:w-16 md:h-16 rounded-lg overflow-hidden flex-shrink-0 transition-all duration-200 ${index === lightboxIndex
+                      ? 'ring-2 ring-amber-500 scale-110'
                       : 'opacity-50 hover:opacity-100'
-                  }`}
+                    }`}
                 >
                   <Image
                     src={img.src}
@@ -1138,9 +1134,9 @@ export default function HomePage() {
                 {/* Images Gallery */}
                 <div className="mb-6">
                   {(() => {
-                    const images = selectedRoom.images || 
+                    const images = selectedRoom.images ||
                       (typeof selectedRoom.type === 'object' ? selectedRoom.type?.images : []);
-                    
+
                     return images && images.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {images.map((image: string, index: number) => (

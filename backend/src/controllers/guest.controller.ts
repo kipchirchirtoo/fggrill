@@ -14,19 +14,12 @@ export const getGuests = async (
 ): Promise<void> => {
   try {
     const search = req.query.search as string;
-    
-    if (search) {
-      const guests = await Guest.search(search);
-      res.status(200).json({
-        success: true,
-        count: guests.length,
-        data: guests
-      });
-      return;
-    }
-    
-    // Default to recent guests if no search (limit 20 from model)
-    const guests = await Guest.search('');
+    const branchId = req.query.branch_id ? parseInt(req.query.branch_id as string) : undefined;
+    const checkedInOnly = req.query.checked_in_only === 'true';
+
+    // Get guests with search and branch filtering
+    const guests = await Guest.search(search || '', branchId, checkedInOnly);
+
     res.status(200).json({
       success: true,
       count: guests.length,
@@ -47,7 +40,7 @@ export const getGuest = async (
 ): Promise<void> => {
   try {
     const guest = await Guest.findById(req.params.id);
-    
+
     if (!guest) {
       throw new AppError('Guest not found', 404);
     }
@@ -72,15 +65,17 @@ export const createGuest = async (
   try {
     const guest = new Guest(req.body);
     const savedGuest = await guest.save();
-    
+
     res.status(201).json({
       success: true,
       data: savedGuest
     });
-    
+
     logger.info(`New guest created: ${savedGuest.id}`);
-  } catch (error) {
-    next(new AppError('Failed to create guest', 500));
+  } catch (error: any) {
+    logger.error('Error creating guest:', error);
+    logger.error('Request body:', req.body);
+    next(new AppError(`Failed to create guest: ${error.message || JSON.stringify(error)}`, 500));
   }
 };
 
@@ -94,7 +89,7 @@ export const updateGuest = async (
 ): Promise<void> => {
   try {
     const existingGuest = await Guest.findById(req.params.id);
-    
+
     if (!existingGuest) {
       throw new AppError('Guest not found', 404);
     }
@@ -105,14 +100,14 @@ export const updateGuest = async (
       ...req.body,
       id: req.params.id // Ensure ID doesn't change
     });
-    
+
     const savedGuest = await updatedGuest.save();
 
     res.status(200).json({
       success: true,
       data: savedGuest
     });
-    
+
     logger.info(`Guest updated: ${savedGuest.id}`);
   } catch (error) {
     next(error);
@@ -129,7 +124,7 @@ export const deleteGuest = async (
 ): Promise<void> => {
   try {
     const guest = await Guest.findById(req.params.id);
-    
+
     if (!guest) {
       throw new AppError('Guest not found', 404);
     }
@@ -140,7 +135,7 @@ export const deleteGuest = async (
       success: true,
       data: {}
     });
-    
+
     logger.info(`Guest deleted: ${req.params.id}`);
   } catch (error) {
     next(error);
@@ -157,7 +152,7 @@ export const updateGuestPreferences = async (
 ): Promise<void> => {
   try {
     const guest = await Guest.findById(req.params.id);
-    
+
     if (!guest) {
       throw new AppError('Guest not found', 404);
     }
@@ -169,7 +164,7 @@ export const updateGuestPreferences = async (
       success: true,
       data: savedGuest.preferences
     });
-    
+
     logger.info(`Guest preferences updated: ${req.params.id}`);
   } catch (error) {
     next(error);
@@ -189,7 +184,7 @@ export const getGuestHistory = async (
 
     // Get all bookings for this guest
     const { data: bookings, error } = await supabase
-      .from('bookings')
+      .from('reservations')
       .select(`
         id,
         confirmation_number,
@@ -257,7 +252,7 @@ export const getGuestLoyalty = async (
 
     // Get stay statistics
     const { data: bookings } = await supabase
-      .from('bookings')
+      .from('reservations')
       .select('id, total_amount, check_in_date, check_out_date, status')
       .eq('guest_id', guestId)
       .eq('status', 'checked_out');
@@ -307,10 +302,10 @@ export const getGuestLoyalty = async (
 
     // Calculate points (10 points per 1000 KES spent)
     const points = Math.floor(totalSpent / 100);
-    const pointsToNextTier = tier === 'Platinum' ? 0 : 
+    const pointsToNextTier = tier === 'Platinum' ? 0 :
       tier === 'Gold' ? (500000 - totalSpent) / 100 :
-      tier === 'Silver' ? (200000 - totalSpent) / 100 :
-      (50000 - totalSpent) / 100;
+        tier === 'Silver' ? (200000 - totalSpent) / 100 :
+          (50000 - totalSpent) / 100;
 
     res.status(200).json({
       success: true,
@@ -393,10 +388,10 @@ export const getVIPGuests = async (
   try {
     // Get guests with highest total spend
     const { data: topGuests, error } = await supabase
-      .from('bookings')
+      .from('reservations')
       .select(`
         guest_id,
-        guest:guests(id, first_name, last_name, email, phone, vip_status),
+        guest:guests(id, first_name, last_name, email, phone, is_vip),
         total_amount
       `)
       .eq('status', 'checked_out')
@@ -408,7 +403,7 @@ export const getVIPGuests = async (
 
     // Aggregate by guest
     const guestSpending = new Map<string, { guest: any; totalSpent: number; stayCount: number }>();
-    
+
     (topGuests || []).forEach((booking: any) => {
       if (!booking.guest_id) return;
       const existing = guestSpending.get(booking.guest_id) || {
@@ -430,8 +425,8 @@ export const getVIPGuests = async (
         totalSpent: item.totalSpent,
         stayCount: item.stayCount,
         tier: item.totalSpent >= 500000 ? 'Platinum' :
-              item.totalSpent >= 200000 ? 'Gold' :
-              item.totalSpent >= 50000 ? 'Silver' : 'Bronze'
+          item.totalSpent >= 200000 ? 'Gold' :
+            item.totalSpent >= 50000 ? 'Silver' : 'Bronze'
       }));
 
     res.status(200).json({

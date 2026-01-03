@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import bcrypt from 'bcryptjs';
+import { Pool } from 'pg';
 
 // @desc    Get all users
 // @route   GET /api/users
@@ -14,14 +16,24 @@ export const getUsers = async (
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('*')
+      .select(`
+        *,
+        branch:branches!users_branch_id_fkey(id, name, code)
+      `)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
 
+    // Transform the data to include branch_name for frontend compatibility
+    const transformedData = data?.map(user => ({
+      ...user,
+      branch_name: user.branch?.name || null,
+      branch_code: user.branch?.code || null
+    }));
+
     res.status(200).json({
       success: true,
-      data
+      data: transformedData
     });
   } catch (error) {
     next(error);
@@ -80,184 +92,110 @@ export const createUser = async (
       return;
     }
 
-    // In development, use direct database insertion to bypass Supabase Auth issues
-    const isDev = process.env.NODE_ENV === 'development';
-    
-    if (isDev) {
-      logger.warn('Development mode: Attempting Supabase Auth with fallback to direct database insertion');
+    // Check if user already exists
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .single();
+
+    if (existingUser) {
+      res.status(400).json({
+        success: false,
+        message: 'User with this email already exists'
+      });
+      return;
+    }
+
+    // Use direct database insertion to create user in auth.users and public.users
+    // This bypasses Supabase Auth API issues while maintaining data integrity
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false }
+    });
+
+    try {
+      const userId = uuidv4();
+      const hashedPassword = await bcrypt.hash(password, 12);
+
+      // Start transaction
+      const client = await pool.connect();
       
       try {
-        // Try Supabase Auth first, even in dev mode
-        const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
-          email,
-          password,
-          email_confirm: true,
-          user_metadata: {
-            first_name: firstName,
-            last_name: lastName,
-            role
-          }
-        });
+        await client.query('BEGIN');
 
-        if (authError) throw authError;
-        if (!authUser.user) throw new Error('Failed to create auth user');
-
-        // Create user profile in public users table
-        const userProfile = {
-          id: authUser.user.id,
-          email,
+        // 1. Create user in auth.users table
+        await client.query(`
+          INSERT INTO auth.users (
+            id, instance_id, email, encrypted_password,
+            email_confirmed_at, aud, role,
+            raw_app_meta_data, raw_user_meta_data,
+            created_at, updated_at
+          )
+          VALUES (
+            $1, '00000000-0000-0000-0000-000000000000', $2, $3,
+            NOW(), 'authenticated', 'authenticated',
+            '{"provider": "email", "providers": ["email"]}',
+            $4,
+            NOW(), NOW()
+          )
+        `, [userId, email, hashedPassword, JSON.stringify({
           first_name: firstName,
-          last_name: lastName,
-          role,
-          branch_id: branchId || null,
-          phone_number: phoneNumber
-        };
+          last_name: lastName
+        })]);
 
-        const { data: profile, error: profileError } = await supabase
+        // 2. Update the public.users entry created by trigger with correct data
+        // The handle_new_user trigger creates a basic entry, we update it with full data
+        await client.query(`
+          UPDATE public.users SET
+            first_name = $1,
+            last_name = $2,
+            role = $3,
+            branch_id = $4,
+            phone_number = $5,
+            updated_at = NOW()
+          WHERE id = $6
+        `, [firstName, lastName, role, branchId || null, phoneNumber || null, userId]);
+
+        await client.query('COMMIT');
+
+        // Fetch the created user
+        const { data: profile, error: fetchError } = await supabase
           .from('users')
-          .insert([userProfile])
-          .select()
+          .select('*')
+          .eq('id', userId)
           .single();
 
-        if (profileError) {
-          // Rollback auth user if profile creation fails
-          await supabase.auth.admin.deleteUser(authUser.user.id);
-          throw profileError;
+        if (fetchError) {
+          throw fetchError;
         }
 
         res.status(201).json({
           success: true,
           data: profile,
-          message: 'User created successfully with Supabase Auth'
+          message: 'User created successfully'
         });
         
-        logger.info(`User created by admin (with auth): ${email} (${role})`);
-        return;
+        logger.info(`User created by admin: ${email} (${role})`);
 
-      } catch (devAuthError: any) {
-        logger.error('Supabase Auth failed in development mode:', devAuthError);
-        
-        // Fallback: Create user without auth (for development only)
-        logger.warn('Falling back to database-only user creation (no authentication)');
-        
-        // Generate a UUID for the user
-        const userId = uuidv4();
-        
-        // Create user profile directly in database
-        const userProfile = {
-          id: userId,
-          email,
-          first_name: firstName,
-          last_name: lastName,
-          role,
-          branch_id: branchId || null,
-          phone_number: phoneNumber
-        };
-
-        try {
-          // Try to create a minimal auth user first using raw SQL to bypass constraints
-          const { data: rawAuthUser, error: rawAuthError } = await supabase.rpc('create_dev_auth_user', {
-            user_id: userId,
-            user_email: email
-          });
-
-          if (rawAuthError) {
-            logger.warn('Could not create auth user via RPC, proceeding with profile only');
-          }
-
-          const { data: profile, error: profileError } = await supabase
-            .from('users')
-            .insert([userProfile])
-            .select()
-            .single();
-
-          if (profileError) throw profileError;
-
-          res.status(201).json({
-            success: true,
-            data: profile,
-            message: 'User created successfully (development mode - profile only, no authentication)',
-            warning: 'This user cannot log in as no auth record was created'
-          });
-          
-          logger.info(`User profile created (dev mode, no auth): ${email} (${role})`);
-          return;
-        } catch (dbError: any) {
-          logger.error('Database insertion also failed:', dbError);
-          
-          // Final fallback: Return success with explanation
-          res.status(200).json({
-            success: false,
-            message: 'User creation failed due to database constraints',
-            details: {
-              authError: devAuthError.message,
-              dbError: dbError.message,
-              explanation: 'The users table has a foreign key constraint to auth.users. In development, you may need to configure Supabase Auth settings or create users through the Supabase dashboard first.'
-            },
-            suggestion: 'Check Supabase Auth settings: disable email confirmation, enable manual user creation'
-          });
-        }
-      }
-    }
-
-    // Production mode: Use Supabase Auth
-    try {
-      // 1. Create user in Supabase Auth
-      const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: {
-          first_name: firstName,
-          last_name: lastName,
-          role
-        }
-      });
-
-      if (authError) throw authError;
-      if (!authUser.user) throw new Error('Failed to create auth user');
-
-      // 2. Create user profile in public users table
-      const userProfile = {
-        id: authUser.user.id,
-        email,
-        first_name: firstName,
-        last_name: lastName,
-        role,
-        branch_id: branchId || null,
-        phone_number: phoneNumber
-      };
-
-      const { data: profile, error: profileError } = await supabase
-        .from('users')
-        .insert([userProfile])
-        .select()
-        .single();
-
-      if (profileError) {
-        // Rollback auth user if profile creation fails
-        await supabase.auth.admin.deleteUser(authUser.user.id);
-        throw profileError;
+      } catch (txError) {
+        await client.query('ROLLBACK');
+        throw txError;
+      } finally {
+        client.release();
       }
 
-      res.status(201).json({
-        success: true,
-        data: profile
-      });
-      
-      logger.info(`User created by admin: ${email} (${role})`);
-    } catch (authError: any) {
-      // If Supabase Auth fails, provide helpful error message
-      logger.error('Supabase Auth error:', authError);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to create user authentication. Please check Supabase Auth configuration.',
-        details: authError.message,
-        suggestion: 'Ensure email confirmation is disabled for admin-created users in Supabase dashboard'
-      });
+    } finally {
+      await pool.end();
     }
-  } catch (error) {
-    next(error);
+
+  } catch (error: any) {
+    logger.error('Error creating user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create user',
+      details: error.message
+    });
   }
 };
 
@@ -270,18 +208,33 @@ export const updateUser = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const { password, ...userFields } = req.body;
+    
+    // Update user profile in public.users table
     const { data, error } = await supabase
       .from('users')
       .update({
-        ...req.body,
-        updated_at: new Date().toISOString(),
-        updated_by_id: req.user.id
+        ...userFields,
+        updated_at: new Date().toISOString()
       })
       .eq('id', req.params.id)
       .select()
       .single();
 
     if (error) throw error;
+
+    // Update password in Supabase Auth if provided
+    if (password) {
+      const { error: authError } = await supabase.auth.admin.updateUserById(
+        req.params.id,
+        { password }
+      );
+      
+      if (authError) {
+        console.error('Password update error:', authError);
+        // Don't fail the entire request if password update fails
+      }
+    }
 
     res.status(200).json({
       success: true,

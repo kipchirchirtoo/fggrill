@@ -257,6 +257,8 @@ class BrandedPDFGenerator:
             'staff_overview': self._generate_staff_overview_report,
             'compliance': self._generate_compliance_report,
             'branch_comparison': self._generate_branch_comparison_report,
+            'kpi_dashboard': self._generate_kpi_dashboard_report,
+            'employee_attendance': self._generate_attendance_report,
         }
         
         generator = generators.get(report_type, self._generate_generic_report)
@@ -285,19 +287,41 @@ class BrandedPDFGenerator:
         """Generate Daily Sales Report - matching bar business report style"""
         elements = []
         
-        date_range = f"{filters.get('start_date', 'N/A')} to {filters.get('end_date', 'N/A')}"
-        branch = filters.get('branch_name', 'All Branches')
+        # Fix date range - if start and end dates are the same, show single date
+        start_date = filters.get('start_date', 'N/A')
+        end_date = filters.get('end_date', 'N/A')
+        if start_date == end_date and start_date != 'N/A':
+            date_range = f"Date: {start_date}"
+        else:
+            date_range = f"Period: {start_date} to {end_date}"
+        
+        # Get branch name from filters, default to specific branch name if available
+        branch = filters.get('branch_name', 'Branch')
+        if branch == 'All Branches' and filters.get('branch_id'):
+            # Map branch ID to actual branch name
+            branch_names = {
+                1: 'Famous Gate Bomet (Central)',
+                2: 'Famous Gate Bomet Town', 
+                3: 'Famous Gate Kericho',
+                4: 'Famous Gate Kapsoit',
+                5: 'Famous Gate Mogogosiek',
+                6: 'Famous Gate Litein',
+                7: 'Famous Gate Grill'
+            }
+            branch_id = int(filters.get('branch_id', 0))
+            branch = branch_names.get(branch_id, f'Branch {branch_id}')
+        
         elements.extend(self._create_header("DAILY SALES REPORT", date_range, branch))
         
         # Summary section
         summary_data = [
             ['SALES SUMMARY', '', '', ''],
-            ['Total Revenue:', self._format_currency(data.get('total_revenue', 0)), 
-             'Total Transactions:', self._format_number(data.get('total_transactions', 0))],
-            ['Average Transaction:', self._format_currency(data.get('avg_transaction', 0)),
-             'Cash Sales:', self._format_currency(data.get('cash_sales', 0))],
-            ['Card Sales:', self._format_currency(data.get('card_sales', 0)),
-             'M-Pesa Sales:', self._format_currency(data.get('mpesa_sales', 0))],
+            ['Total Revenue:', self._format_currency(data.get('total_revenue') or 0), 
+             'Total Transactions:', self._format_number(data.get('total_transactions') or 0)],
+            ['Average Transaction:', self._format_currency(data.get('avg_transaction') or 0),
+             'Cash Sales:', self._format_currency(data.get('cash_sales') or 0)],
+            ['Card Sales:', self._format_currency(data.get('card_sales') or 0),
+             'M-Pesa Sales:', self._format_currency(data.get('mpesa_sales') or 0)],
         ]
         
         summary_table = Table(summary_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
@@ -322,18 +346,23 @@ class BrandedPDFGenerator:
         cat_headers = ['Category', 'Quantity', 'Total Sales', '% of Total']
         cat_data = [cat_headers]
         
-        total_rev = data.get('total_revenue', 1) or 1
-        for cat in data.get('categories', []):
-            pct = (cat.get('total', 0) / total_rev * 100) if total_rev > 0 else 0
-            cat_data.append([
-                cat.get('name', 'Unknown'),
-                self._format_number(cat.get('quantity', 0)),
-                self._format_currency(cat.get('total', 0)),
-                self._format_percent(pct)
-            ])
+        total_rev = data.get('total_revenue', 0)
+        categories = data.get('categories', [])
         
-        if len(cat_data) == 1:
-            cat_data.append(['No data available', '-', '-', '-'])
+        # Add debug info if no categories found
+        if not categories and total_rev == 0:
+            cat_data.append(['No sales data found for this branch/date', '-', '-', '-'])
+        elif not categories:
+            cat_data.append(['Sales found but no category breakdown', '-', self._format_currency(total_rev), '100%'])
+        else:
+            for cat in categories:
+                pct = ((cat.get('total') or 0) / total_rev * 100) if total_rev > 0 else 0
+                cat_data.append([
+                    cat.get('name') or 'Unknown',
+                    self._format_number(cat.get('quantity') or 0),
+                    self._format_currency(cat.get('total') or 0),
+                    self._format_percent(pct)
+                ])
         
         # Add total row
         cat_data.append(['TOTAL', '', self._format_currency(data.get('total_revenue', 0)), '100%'])
@@ -364,12 +393,12 @@ class BrandedPDFGenerator:
         # KPI Summary
         kpi_data = [
             ['KEY PERFORMANCE INDICATORS', '', '', ''],
-            ['Occupancy Rate:', self._format_percent(data.get('occupancy_rate', 0)),
-             'Total Rooms:', self._format_number(data.get('total_rooms', 0))],
-            ['Occupied Rooms:', self._format_number(data.get('occupied_rooms', 0)),
-             'Available Rooms:', self._format_number(data.get('available_rooms', 0))],
-            ['ADR (Avg Daily Rate):', self._format_currency(data.get('adr', 0)),
-             'RevPAR:', self._format_currency(data.get('revpar', 0))],
+            ['Occupancy Rate:', self._format_percent(data.get('occupancy_rate') or 0),
+             'Total Rooms:', self._format_number(data.get('total_rooms') or 0)],
+            ['Occupied Rooms:', self._format_number(data.get('occupied_rooms') or 0),
+             'Available Rooms:', self._format_number(data.get('available_rooms') or 0)],
+            ['ADR (Avg Daily Rate):', self._format_currency(data.get('adr') or 0),
+             'RevPAR:', self._format_currency(data.get('revpar') or 0)],
         ]
         
         kpi_table = Table(kpi_data, colWidths=[2*inch, 1.5*inch, 2*inch, 1.5*inch])
@@ -395,12 +424,12 @@ class BrandedPDFGenerator:
         
         for rt in data.get('room_types', []):
             rt_data.append([
-                rt.get('type', 'Unknown'),
-                self._format_number(rt.get('total', 0)),
-                self._format_number(rt.get('occupied', 0)),
-                self._format_number(rt.get('total', 0) - rt.get('occupied', 0)),
-                self._format_percent(rt.get('occupancy_pct', 0)),
-                self._format_currency(rt.get('revenue', 0))
+                rt.get('type') or 'Unknown',
+                self._format_number(rt.get('total') or 0),
+                self._format_number(rt.get('occupied') or 0),
+                self._format_number((rt.get('total') or 0) - (rt.get('occupied') or 0)),
+                self._format_percent(rt.get('occupancy_pct') or 0),
+                self._format_currency(rt.get('revenue') or 0)
             ])
         
         if len(rt_data) == 1:
@@ -432,21 +461,21 @@ class BrandedPDFGenerator:
         elements.append(Paragraph("<b>REVENUE</b>", self.styles['SectionHeader']))
         
         rev_data = [
-            ['Rooms', '', 'Lodging', '', self._format_currency(data.get('room_revenue', 0))],
+            ['Rooms', '', 'Lodging', '', self._format_currency(data.get('room_revenue') or 0)],
             ['', '', 'Cancellation / No-Show', '', self._format_currency(0)],
             ['', '', 'Other', '', self._format_currency(0)],
-            ['', '', '', 'Total Room Revenue', self._format_currency(data.get('room_revenue', 0))],
-            ['F&B', '', 'Food', '', self._format_currency(data.get('restaurant_revenue', 0))],
-            ['', '', 'Beverage', '', self._format_currency(data.get('bar_revenue', 0))],
+            ['', '', '', 'Total Room Revenue', self._format_currency(data.get('room_revenue') or 0)],
+            ['F&B', '', 'Food', '', self._format_currency(data.get('restaurant_revenue') or 0)],
+            ['', '', 'Beverage', '', self._format_currency(data.get('bar_revenue') or 0)],
             ['', '', 'Other', '', self._format_currency(0)],
-            ['', '', '', 'Total F&B Revenue', self._format_currency(data.get('restaurant_revenue', 0) + data.get('bar_revenue', 0))],
+            ['', '', '', 'Total F&B Revenue', self._format_currency((data.get('restaurant_revenue') or 0) + (data.get('bar_revenue') or 0))],
             ['Other Departments', '', 'Meetings & Events', '', self._format_currency(0)],
             ['', '', 'Spa', '', self._format_currency(0)],
             ['', '', 'Parking', '', self._format_currency(0)],
-            ['', '', 'Other', '', self._format_currency(data.get('other_revenue', 0))],
-            ['', '', '', 'Total Other Revenue', self._format_currency(data.get('other_revenue', 0))],
+            ['', '', 'Other', '', self._format_currency(data.get('other_revenue') or 0)],
+            ['', '', '', 'Total Other Revenue', self._format_currency(data.get('other_revenue') or 0)],
             ['', '', '', '', ''],
-            ['', '', '', 'TOTAL REVENUE', self._format_currency(data.get('total_revenue', 0))],
+            ['', '', '', 'TOTAL REVENUE', self._format_currency(data.get('total_revenue') or 0)],
         ]
         
         rev_table = Table(rev_data, colWidths=[1.5*inch, 0.5*inch, 2*inch, 1.5*inch, 1.5*inch])
@@ -472,17 +501,17 @@ class BrandedPDFGenerator:
         
         exp_data = [
             ['Category', 'Amount', '% of Total'],
-            ['Payroll & Benefits', self._format_currency(data.get('payroll_expense', 0)), 
-             self._format_percent(data.get('payroll_pct', 0))],
-            ['Utilities', self._format_currency(data.get('utilities_expense', 0)),
-             self._format_percent(data.get('utilities_pct', 0))],
-            ['Supplies', self._format_currency(data.get('supplies_expense', 0)),
-             self._format_percent(data.get('supplies_pct', 0))],
-            ['Maintenance', self._format_currency(data.get('maintenance_expense', 0)),
-             self._format_percent(data.get('maintenance_pct', 0))],
-            ['Other', self._format_currency(data.get('other_expense', 0)),
-             self._format_percent(data.get('other_exp_pct', 0))],
-            ['TOTAL EXPENSES', self._format_currency(data.get('total_expenses', 0)), '100%'],
+            ['Payroll & Benefits', self._format_currency(data.get('payroll_expense') or 0), 
+             self._format_percent(data.get('payroll_pct') or 0)],
+            ['Utilities', self._format_currency(data.get('utilities_expense') or 0),
+             self._format_percent(data.get('utilities_pct') or 0)],
+            ['Supplies', self._format_currency(data.get('supplies_expense') or 0),
+             self._format_percent(data.get('supplies_pct') or 0)],
+            ['Maintenance', self._format_currency(data.get('maintenance_expense') or 0),
+             self._format_percent(data.get('maintenance_pct') or 0)],
+            ['Other', self._format_currency(data.get('other_expense') or 0),
+             self._format_percent(data.get('other_exp_pct') or 0)],
+            ['TOTAL EXPENSES', self._format_currency(data.get('total_expenses') or 0), '100%'],
         ]
         
         exp_table = Table(exp_data, colWidths=[3*inch, 2*inch, 1.5*inch])
@@ -501,11 +530,11 @@ class BrandedPDFGenerator:
         
         # Net Profit
         profit_data = [
-            ['NET PROFIT/LOSS', self._format_currency(data.get('net_profit', 0)), 
-             self._format_percent(data.get('profit_margin', 0)) + ' margin']
+            ['NET PROFIT/LOSS', self._format_currency(data.get('net_profit') or 0), 
+             self._format_percent(data.get('profit_margin') or 0) + ' margin']
         ]
         profit_table = Table(profit_data, colWidths=[3*inch, 2*inch, 1.5*inch])
-        profit_color = HEADER_GREEN if data.get('net_profit', 0) >= 0 else colors.HexColor('#FFCDD2')
+        profit_color = HEADER_GREEN if (data.get('net_profit') or 0) >= 0 else colors.HexColor('#FFCDD2')
         profit_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, -1), profit_color),
             ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
@@ -532,10 +561,10 @@ class BrandedPDFGenerator:
         # Summary
         summary_data = [
             ['INVENTORY SUMMARY', '', '', ''],
-            ['Total Items:', self._format_number(data.get('total_items', 0)),
-             'Total Value:', self._format_currency(data.get('total_value', 0))],
-            ['Low Stock Items:', self._format_number(data.get('low_stock_count', 0)),
-             'Out of Stock:', self._format_number(data.get('out_of_stock', 0))],
+            ['Total Items:', self._format_number(data.get('total_items') or 0),
+             'Total Value:', self._format_currency(data.get('total_value') or 0)],
+            ['Low Stock Items:', self._format_number(data.get('low_stock_count') or 0),
+             'Out of Stock:', self._format_number(data.get('out_of_stock') or 0)],
         ]
         
         summary_table = Table(summary_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
@@ -560,8 +589,8 @@ class BrandedPDFGenerator:
         item_data = [headers]
         
         for item in data.get('items', [])[:30]:  # Limit to 30 items
-            qty = item.get('quantity', 0)
-            min_qty = item.get('min_quantity', 0)
+            qty = item.get('quantity') or 0
+            min_qty = item.get('min_quantity') or 0
             
             if qty == 0:
                 status = 'OUT OF STOCK'
@@ -571,13 +600,13 @@ class BrandedPDFGenerator:
                 status = 'OK'
             
             item_data.append([
-                str(item.get('code', ''))[:10],
-                str(item.get('name', ''))[:25],
-                str(item.get('category', ''))[:15],
+                str(item.get('code') or '')[:10],
+                str(item.get('name') or '')[:25],
+                str(item.get('category') or '')[:15],
                 self._format_number(qty),
                 self._format_number(min_qty),
-                str(item.get('unit', 'pcs'))[:5],
-                self._format_currency(item.get('value', 0)),
+                str(item.get('unit') or 'pcs')[:5],
+                self._format_currency(item.get('value') or 0),
                 status
             ])
         
@@ -610,10 +639,10 @@ class BrandedPDFGenerator:
         # Summary
         summary_data = [
             ['PERFORMANCE SUMMARY', '', '', ''],
-            ['Rooms Cleaned:', self._format_number(data.get('rooms_cleaned', 0)),
-             'Avg Time (mins):', f"{data.get('avg_time', 0):.1f}"],
-            ['Inspection Pass Rate:', self._format_percent(data.get('pass_rate', 0)),
-             'Complaints:', self._format_number(data.get('complaints', 0))],
+            ['Rooms Cleaned:', self._format_number(data.get('rooms_cleaned') or 0),
+             'Avg Time (mins):', f"{(data.get('avg_time') or 0):.1f}"],
+            ['Inspection Pass Rate:', self._format_percent(data.get('pass_rate') or 0),
+             'Complaints:', self._format_number(data.get('complaints') or 0)],
         ]
         
         summary_table = Table(summary_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
@@ -639,11 +668,11 @@ class BrandedPDFGenerator:
         
         for staff in data.get('staff', []):
             staff_data.append([
-                staff.get('name', 'Unknown'),
-                self._format_number(staff.get('rooms', 0)),
-                f"{staff.get('avg_time', 0):.1f}",
-                self._format_percent(staff.get('pass_rate', 0)),
-                f"{staff.get('rating', 0):.1f}/5"
+                staff.get('name') or 'Unknown',
+                self._format_number(staff.get('rooms') or 0),
+                f"{(staff.get('avg_time') or 0):.1f}",
+                self._format_percent(staff.get('pass_rate') or 0),
+                f"{(staff.get('rating') or 0):.1f}/5"
             ])
         
         if len(staff_data) == 1:
@@ -673,11 +702,11 @@ class BrandedPDFGenerator:
         # Summary
         summary_data = [
             ['MAINTENANCE SUMMARY', '', '', ''],
-            ['Total Requests:', self._format_number(data.get('total_requests', 0)),
-             'Completed:', self._format_number(data.get('completed', 0))],
-            ['Pending:', self._format_number(data.get('pending', 0)),
-             'In Progress:', self._format_number(data.get('in_progress', 0))],
-            ['Avg Resolution (hrs):', f"{data.get('avg_resolution', 0):.1f}", '', ''],
+            ['Total Requests:', self._format_number(data.get('total_requests') or 0),
+             'Completed:', self._format_number(data.get('completed') or 0)],
+            ['Pending:', self._format_number(data.get('pending') or 0),
+             'In Progress:', self._format_number(data.get('in_progress') or 0)],
+            ['Avg Resolution (hrs):', f"{(data.get('avg_resolution') or 0):.1f}", '', ''],
         ]
         
         summary_table = Table(summary_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
@@ -703,12 +732,12 @@ class BrandedPDFGenerator:
         
         for wo in data.get('work_orders', [])[:20]:
             wo_data.append([
-                wo.get('id', '')[:8],
-                str(wo.get('location', ''))[:15],
-                str(wo.get('issue', ''))[:30],
-                wo.get('priority', 'Normal'),
-                wo.get('status', 'Pending'),
-                wo.get('assigned_to', 'Unassigned')[:15]
+                wo.get('id') or ''[:8],
+                str(wo.get('location') or '')[:15],
+                str(wo.get('issue') or '')[:30],
+                wo.get('priority') or 'Normal',
+                wo.get('status') or 'Pending',
+                (wo.get('assigned_to') or 'Unassigned')[:15]
             ])
         
         if len(wo_data) == 1:
@@ -739,12 +768,12 @@ class BrandedPDFGenerator:
         # Summary
         summary_data = [
             ['PAYROLL SUMMARY', '', '', ''],
-            ['Total Gross Pay:', self._format_currency(data.get('total_gross', 0)),
-             'Total Deductions:', self._format_currency(data.get('total_deductions', 0))],
-            ['PAYE:', self._format_currency(data.get('paye', 0)),
-             'NHIF:', self._format_currency(data.get('nhif', 0))],
-            ['NSSF:', self._format_currency(data.get('nssf', 0)),
-             'Net Pay:', self._format_currency(data.get('total_net', 0))],
+            ['Total Gross Pay:', self._format_currency(data.get('total_gross') or 0),
+             'Total Deductions:', self._format_currency(data.get('total_deductions') or 0)],
+            ['PAYE:', self._format_currency(data.get('paye') or 0),
+             'NHIF:', self._format_currency(data.get('nhif') or 0)],
+            ['NSSF:', self._format_currency(data.get('nssf') or 0),
+             'Net Pay:', self._format_currency(data.get('total_net') or 0)],
         ]
         
         summary_table = Table(summary_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
@@ -770,12 +799,12 @@ class BrandedPDFGenerator:
         
         for emp in data.get('employees', []):
             emp_data.append([
-                emp.get('id', '')[:8],
-                emp.get('name', 'Unknown')[:20],
-                emp.get('department', 'N/A')[:15],
-                self._format_currency(emp.get('gross', 0)),
-                self._format_currency(emp.get('deductions', 0)),
-                self._format_currency(emp.get('net', 0))
+                emp.get('id') or ''[:8],
+                emp.get('name') or 'Unknown'[:20],
+                emp.get('department') or 'N/A'[:15],
+                self._format_currency(emp.get('gross') or 0),
+                self._format_currency(emp.get('deductions') or 0),
+                self._format_currency(emp.get('net') or 0)
             ])
         
         if len(emp_data) == 1:
@@ -784,9 +813,9 @@ class BrandedPDFGenerator:
         # Add totals
         emp_data.append([
             'TOTAL', '', '',
-            self._format_currency(data.get('total_gross', 0)),
-            self._format_currency(data.get('total_deductions', 0)),
-            self._format_currency(data.get('total_net', 0))
+            self._format_currency(data.get('total_gross') or 0),
+            self._format_currency(data.get('total_deductions') or 0),
+            self._format_currency(data.get('total_net') or 0)
         ])
         
         emp_table = Table(emp_data, colWidths=[0.8*inch, 1.8*inch, 1.2*inch, 1.2*inch, 1.2*inch, 1.2*inch])
@@ -810,18 +839,41 @@ class BrandedPDFGenerator:
         """Generate Restaurant Sales Report - matching bar business style"""
         elements = []
         
-        date_range = f"{filters.get('start_date', 'N/A')} to {filters.get('end_date', 'N/A')}"
-        elements.extend(self._create_header("RESTAURANT SALES REPORT", date_range))
+        # Fix date range - if start and end dates are the same, show single date
+        start_date = filters.get('start_date', 'N/A')
+        end_date = filters.get('end_date', 'N/A')
+        if start_date == end_date and start_date != 'N/A':
+            date_range = f"Date: {start_date}"
+        else:
+            date_range = f"Period: {start_date} to {end_date}"
+        
+        # Get branch name from filters, default to specific branch name if available
+        branch = filters.get('branch_name', 'Branch')
+        if branch == 'All Branches' and filters.get('branch_id'):
+            # Map branch ID to actual branch name
+            branch_names = {
+                1: 'Famous Gate Bomet (Central)',
+                2: 'Famous Gate Bomet Town', 
+                3: 'Famous Gate Kericho',
+                4: 'Famous Gate Kapsoit',
+                5: 'Famous Gate Mogogosiek',
+                6: 'Famous Gate Litein',
+                7: 'Famous Gate Grill'
+            }
+            branch_id = int(filters.get('branch_id', 0))
+            branch = branch_names.get(branch_id, f'Branch {branch_id}')
+        
+        elements.extend(self._create_header("RESTAURANT SALES REPORT", date_range, branch))
         
         # Summary
         summary_data = [
             ['SALES SUMMARY', '', '', ''],
-            ['Total Revenue:', self._format_currency(data.get('total_revenue', 0)),
-             'Total Orders:', self._format_number(data.get('total_orders', 0))],
-            ['Average Order:', self._format_currency(data.get('avg_order', 0)),
-             'Dine-In:', self._format_number(data.get('dine_in', 0))],
-            ['Room Service:', self._format_number(data.get('room_service', 0)),
-             'Takeaway:', self._format_number(data.get('takeaway', 0))],
+            ['Total Revenue:', self._format_currency(data.get('total_revenue') or 0),
+             'Total Orders:', self._format_number(data.get('total_orders') or 0)],
+            ['Average Order:', self._format_currency(data.get('avg_order') or 0),
+             'Dine-In:', self._format_number(data.get('dine_in') or 0)],
+            ['Room Service:', self._format_number(data.get('room_service') or 0),
+             'Takeaway:', self._format_number(data.get('takeaway') or 0)],
         ]
         
         summary_table = Table(summary_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
@@ -847,10 +899,10 @@ class BrandedPDFGenerator:
         
         for item in data.get('top_items', [])[:10]:
             item_data.append([
-                item.get('name', 'Unknown')[:30],
-                item.get('category', 'Other')[:15],
-                self._format_number(item.get('quantity', 0)),
-                self._format_currency(item.get('revenue', 0))
+                (item.get('name') or 'Unknown')[:30],
+                (item.get('category') or 'Other')[:15],
+                self._format_number(item.get('quantity') or 0),
+                self._format_currency(item.get('revenue') or 0)
             ])
         
         if len(item_data) == 1:
@@ -880,9 +932,9 @@ class BrandedPDFGenerator:
         # Summary
         summary_data = [
             ['SALES SUMMARY', '', '', ''],
-            ['Total Revenue:', self._format_currency(data.get('total_revenue', 0)),
-             'Total Orders:', self._format_number(data.get('total_orders', 0))],
-            ['Average Order:', self._format_currency(data.get('avg_order', 0)), '', ''],
+            ['Total Revenue:', self._format_currency(data.get('total_revenue') or 0),
+             'Total Orders:', self._format_number(data.get('total_orders') or 0)],
+            ['Average Order:', self._format_currency(data.get('avg_order') or 0), '', ''],
         ]
         
         summary_table = Table(summary_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
@@ -908,9 +960,9 @@ class BrandedPDFGenerator:
         
         for item in data.get('top_items', [])[:10]:
             item_data.append([
-                item.get('name', 'Unknown')[:30],
-                self._format_number(item.get('quantity', 0)),
-                self._format_currency(item.get('revenue', 0))
+                (item.get('name') or 'Unknown')[:30],
+                self._format_number(item.get('quantity') or 0),
+                self._format_currency(item.get('revenue') or 0)
             ])
         
         if len(item_data) == 1:
@@ -941,15 +993,15 @@ class BrandedPDFGenerator:
         supply_data = [headers]
         
         for item in data.get('supplies', []):
-            qty = item.get('quantity', 0)
-            reorder = item.get('reorder_level', 0)
+            qty = item.get('quantity') or 0
+            reorder = item.get('reorder_level') or 0
             status = 'LOW' if qty < reorder else 'OK'
             
             supply_data.append([
-                item.get('name', 'Unknown')[:25],
-                item.get('category', 'Other')[:15],
+                (item.get('name') or 'Unknown')[:25],
+                (item.get('category') or 'Other')[:15],
                 self._format_number(qty),
-                item.get('unit', 'pcs'),
+                (item.get('unit') or 'pcs'),
                 self._format_number(reorder),
                 status
             ])
@@ -1024,6 +1076,81 @@ class BrandedPDFGenerator:
             ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
         ]))
         elements.append(ops_table)
+        
+        return self._create_pdf(elements)
+
+    def _generate_attendance_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Staff Attendance Report"""
+        elements = []
+        
+        date_range = f"{filters.get('start_date', 'N/A')} to {filters.get('end_date', 'N/A')}"
+        branch = filters.get('branch_name', 'Branch')
+        elements.extend(self._create_header("STAFF ATTENDANCE REPORT", date_range, branch))
+        
+        # Summary Section
+        summary_data = [
+            ['ATTENDANCE SUMMARY', '', '', ''],
+            ['Total Staff:', self._format_number(data.get('total_staff') or 0),
+             'Total Hours:', f"{data.get('total_hours', 0):.1f}h"],
+            ['Present:', self._format_number(data.get('present_count') or 0),
+             'Late:', self._format_number(data.get('late_count') or 0)],
+            ['Absent:', self._format_number(data.get('absent_count') or 0),
+             'On Leave:', self._format_number(data.get('leave_count') or 0)],
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
+        summary_table.setStyle(TableStyle([
+            ('SPAN', (0, 0), (-1, 0)),
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 1), (2, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Detailed Records
+        elements.append(Paragraph("<b>DETAILED ATTENDANCE RECORDS</b>", self.styles['SectionHeader']))
+        
+        headers = ['Date', 'Employee Name', 'ID', 'Clock In', 'Clock Out', 'Status']
+        record_data = [headers]
+        
+        for record in data.get('records', []):
+            clock_in = record.get('clock_in')
+            clock_out = record.get('clock_out')
+            
+            # Format times
+            in_time = datetime.fromisoformat(clock_in.replace('Z', '+00:00')).strftime('%H:%M') if clock_in else '--:--'
+            out_time = datetime.fromisoformat(clock_out.replace('Z', '+00:00')).strftime('%H:%M') if clock_out else '--:--'
+            
+            record_data.append([
+                record.get('date', ''),
+                record.get('name', ''),
+                record.get('employee_id', ''),
+                in_time,
+                out_time,
+                record.get('status', '').upper()
+            ])
+            
+        if len(record_data) == 1:
+            record_data.append(['No records found', '-', '-', '-', '-', '-'])
+            
+        record_table = Table(record_data, colWidths=[1.2*inch, 2*inch, 1*inch, 1*inch, 1*inch, 1.3*inch])
+        record_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GREEN),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (3, 0), (5, -1), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(record_table)
         
         return self._create_pdf(elements)
 
@@ -1263,8 +1390,10 @@ class BrandedPDFGenerator:
         """Generate Branch Performance Report - Professional dashboard style matching provided templates"""
         elements = []
         
-        period = filters.get('period', 'This Period')
-        date_range = f"{filters.get('start_date', datetime.now().strftime('%d/%m/%Y'))} to {filters.get('end_date', datetime.now().strftime('%d/%m/%Y'))}"
+        period = filters.get('period') or 'This Period'
+        start_date = filters.get('start_date') or datetime.now().strftime('%d/%m/%Y')
+        end_date = filters.get('end_date') or datetime.now().strftime('%d/%m/%Y')
+        date_range = f"{start_date} to {end_date}"
         elements.extend(self._create_header("BRANCH PERFORMANCE REPORT", date_range))
         
         # Executive Summary Section - Green header like in template images
@@ -1282,11 +1411,11 @@ class BrandedPDFGenerator:
         elements.append(Spacer(1, 0.1*inch))
         
         # Summary metrics in 2x2 grid
-        total_revenue = data.get('total_revenue', 0)
-        total_orders = data.get('total_orders', 0)
-        avg_satisfaction = data.get('avg_satisfaction', 0)
-        best_performer = data.get('best_performer', 'N/A')
-        worst_performer = data.get('worst_performer', 'N/A')
+        total_revenue = data.get('total_revenue') or 0
+        total_orders = data.get('total_orders') or 0
+        avg_satisfaction = data.get('avg_satisfaction') or 0
+        best_performer = data.get('best_performer') or 'N/A'
+        worst_performer = data.get('worst_performer') or 'N/A'
         
         summary_data = [
             ['Total Revenue', self._format_currency(total_revenue), 'Total Orders', self._format_number(total_orders)],
@@ -1327,18 +1456,18 @@ class BrandedPDFGenerator:
         
         branches = data.get('branches', [])
         for branch in branches:
-            revenue_change = branch.get('revenue_change', 0)
+            revenue_change = branch.get('revenue_change') or 0
             change_str = f"+{revenue_change:.1f}%" if revenue_change >= 0 else f"{revenue_change:.1f}%"
             
             perf_data.append([
-                branch.get('branch_name', 'Unknown')[:12],
-                self._format_currency(branch.get('revenue', 0)),
+                branch.get('branch_name') or 'Unknown',
+                self._format_currency(branch.get('revenue') or 0),
                 change_str,
-                self._format_number(branch.get('orders', 0)),
-                self._format_currency(branch.get('avg_order_value', 0)),
-                f"{branch.get('customer_satisfaction', 0):.1f}",
-                f"{branch.get('staff_efficiency', 0)}%",
-                f"{branch.get('target_achievement', 0)}%"
+                self._format_number(branch.get('orders') or 0),
+                self._format_currency(branch.get('avg_order_value') or 0),
+                f"{(branch.get('customer_satisfaction') or 0):.1f}",
+                f"{branch.get('staff_efficiency') or 0}%",
+                f"{branch.get('target_achievement') or 0}%"
             ])
         
         if len(perf_data) == 1:
@@ -1416,16 +1545,16 @@ class BrandedPDFGenerator:
             # KPIs for this branch
             kpi_data = [
                 ['KPI', 'Value', 'Target', 'Status'],
-                ['Revenue', self._format_currency(branch.get('revenue', 0)), 
-                 self._format_currency(branch.get('revenue', 0) / (branch.get('target_achievement', 100) / 100) if branch.get('target_achievement', 0) > 0 else 0),
-                 'On Track' if branch.get('target_achievement', 0) >= 80 else 'Below Target'],
-                ['Orders', self._format_number(branch.get('orders', 0)), '-', 'Active'],
-                ['Customer Satisfaction', f"{branch.get('customer_satisfaction', 0):.1f}/5.0", '4.0/5.0',
-                 'Good' if branch.get('customer_satisfaction', 0) >= 4.0 else 'Needs Improvement'],
-                ['Staff Efficiency', f"{branch.get('staff_efficiency', 0)}%", '85%',
-                 'Good' if branch.get('staff_efficiency', 0) >= 85 else 'Needs Improvement'],
-                ['Inventory Turnover', f"{branch.get('inventory_turnover', 0)}x", '3x',
-                 'Good' if branch.get('inventory_turnover', 0) >= 3 else 'Low'],
+                ['Revenue', self._format_currency(branch.get('revenue') or 0), 
+                 self._format_currency((branch.get('revenue') or 0) / ((branch.get('target_achievement') or 100) / 100) if (branch.get('target_achievement') or 0) > 0 else 0),
+                 'On Track' if (branch.get('target_achievement') or 0) >= 80 else 'Below Target'],
+                ['Orders', self._format_number(branch.get('orders') or 0), '-', 'Active'],
+                ['Customer Satisfaction', f"{(branch.get('customer_satisfaction') or 0):.1f}/5.0", '4.0/5.0',
+                 'Good' if (branch.get('customer_satisfaction') or 0) >= 4.0 else 'Needs Improvement'],
+                ['Staff Efficiency', f"{branch.get('staff_efficiency') or 0}%", '85%',
+                 'Good' if (branch.get('staff_efficiency') or 0) >= 85 else 'Needs Improvement'],
+                ['Inventory Turnover', f"{branch.get('inventory_turnover') or 0}x", '3x',
+                 'Good' if (branch.get('inventory_turnover') or 0) >= 3 else 'Low'],
             ]
             
             kpi_table = Table(kpi_data, colWidths=[2*inch, 1.8*inch, 1.8*inch, 1.9*inch])
@@ -1480,11 +1609,11 @@ class BrandedPDFGenerator:
         # Generate recommendations based on data
         recommendations = []
         for branch in branches:
-            if branch.get('target_achievement', 0) < 80:
+            if (branch.get('target_achievement') or 0) < 80:
                 recommendations.append(f"• {branch.get('branch_name', 'Branch')}: Focus on increasing sales to meet targets")
-            if branch.get('customer_satisfaction', 0) < 4.0:
+            if (branch.get('customer_satisfaction') or 0) < 4.0:
                 recommendations.append(f"• {branch.get('branch_name', 'Branch')}: Improve customer service quality")
-            if branch.get('staff_efficiency', 0) < 85:
+            if (branch.get('staff_efficiency') or 0) < 85:
                 recommendations.append(f"• {branch.get('branch_name', 'Branch')}: Review staff scheduling and training")
         
         if not recommendations:
@@ -1528,11 +1657,11 @@ class BrandedPDFGenerator:
         summary_data = [
             ['Total Staff', 'Active', 'On Leave', 'Avg Performance', 'Avg Attendance'],
             [
-                str(data.get('total_staff', 0)),
-                str(data.get('active_staff', 0)),
-                str(data.get('on_leave', 0)),
-                f"{data.get('avg_performance', 0):.1f}%",
-                f"{data.get('avg_attendance', 0):.1f}%"
+                str(data.get('total_staff') or 0),
+                str(data.get('active_staff') or 0),
+                str(data.get('on_leave') or 0),
+                f"{(data.get('avg_performance') or 0):.1f}%",
+                f"{(data.get('avg_attendance') or 0):.1f}%"
             ]
         ]
         
@@ -1558,12 +1687,12 @@ class BrandedPDFGenerator:
             branch_data = [['Branch', 'Total Staff', 'Active', 'On Leave', 'Avg Performance', 'Avg Attendance']]
             for branch in branch_summaries:
                 branch_data.append([
-                    branch.get('branch_name', 'N/A'),
-                    str(branch.get('total_staff', 0)),
-                    str(branch.get('active', 0)),
-                    str(branch.get('on_leave', 0)),
-                    f"{branch.get('avg_performance', 0):.1f}%",
-                    f"{branch.get('avg_attendance', 0):.1f}%"
+                    branch.get('branch_name') or 'N/A',
+                    str(branch.get('total_staff') or 0),
+                    str(branch.get('active') or 0),
+                    str(branch.get('on_leave') or 0),
+                    f"{(branch.get('avg_performance') or 0):.1f}%",
+                    f"{(branch.get('avg_attendance') or 0):.1f}%"
                 ])
             
             branch_table = Table(branch_data, colWidths=[1.8*inch, 1*inch, 0.9*inch, 0.9*inch, 1.3*inch, 1.3*inch])
@@ -1590,12 +1719,12 @@ class BrandedPDFGenerator:
             performer_data = [['Name', 'Branch', 'Role', 'Performance', 'Attendance', 'Rating']]
             for staff in top_performers[:10]:
                 performer_data.append([
-                    staff.get('name', 'N/A'),
-                    staff.get('branch_name', 'N/A'),
-                    staff.get('role', 'N/A'),
-                    f"{staff.get('performance_score', 0):.1f}%",
-                    f"{staff.get('attendance_rate', 0):.1f}%",
-                    f"{staff.get('customer_rating', 0):.1f}/5"
+                    staff.get('name') or 'N/A',
+                    staff.get('branch_name') or 'N/A',
+                    staff.get('role') or 'N/A',
+                    f"{(staff.get('performance_score') or 0):.1f}%",
+                    f"{(staff.get('attendance_rate') or 0):.1f}%",
+                    f"{(staff.get('customer_rating') or 0):.1f}/5"
                 ])
             
             performer_table = Table(performer_data, colWidths=[1.5*inch, 1.3*inch, 1.2*inch, 1.1*inch, 1.1*inch, 0.9*inch])
@@ -1620,13 +1749,13 @@ class BrandedPDFGenerator:
             
             attention_data = [['Name', 'Branch', 'Role', 'Performance', 'Attendance', 'Issue']]
             for staff in needs_attention[:10]:
-                issue = 'Low Performance' if staff.get('performance_score', 100) < 70 else 'Low Attendance'
+                issue = 'Low Performance' if (staff.get('performance_score') if staff.get('performance_score') is not None else 100) < 70 else 'Low Attendance'
                 attention_data.append([
-                    staff.get('name', 'N/A'),
-                    staff.get('branch_name', 'N/A'),
-                    staff.get('role', 'N/A'),
-                    f"{staff.get('performance_score', 0):.1f}%",
-                    f"{staff.get('attendance_rate', 0):.1f}%",
+                    staff.get('name') or 'N/A',
+                    staff.get('branch_name') or 'N/A',
+                    staff.get('role') or 'N/A',
+                    f"{(staff.get('performance_score') or 0):.1f}%",
+                    f"{(staff.get('attendance_rate') or 0):.1f}%",
                     issue
                 ])
             
@@ -1674,17 +1803,17 @@ class BrandedPDFGenerator:
         # Executive Summary
         elements.append(Paragraph("COMPLIANCE OVERVIEW", self.styles['SectionHeader']))
         
-        compliance_rate = data.get('overall_compliance_rate', 0)
+        compliance_rate = data.get('overall_compliance_rate') or 0
         rate_color = self.HEADER_GREEN if compliance_rate >= 90 else (self.HEADER_YELLOW if compliance_rate >= 75 else HexColor('#DC2626'))
         
         summary_data = [
             ['Total Requirements', 'Compliant', 'Non-Compliant', 'Pending', 'Expired', 'Compliance Rate'],
             [
-                str(data.get('total_requirements', 0)),
-                str(data.get('compliant', 0)),
-                str(data.get('non_compliant', 0)),
-                str(data.get('pending', 0)),
-                str(data.get('expired', 0)),
+                str(data.get('total_requirements') or 0),
+                str(data.get('compliant') or 0),
+                str(data.get('non_compliant') or 0),
+                str(data.get('pending') or 0),
+                str(data.get('expired') or 0),
                 f"{compliance_rate:.1f}%"
             ]
         ]
@@ -1713,13 +1842,13 @@ class BrandedPDFGenerator:
             
             branch_data = [['Branch', 'Total', 'Compliant', 'Non-Compliant', 'Pending', 'Rate']]
             for branch in branch_summaries:
-                rate = branch.get('compliance_rate', 0)
+                rate = branch.get('compliance_rate') or 0
                 branch_data.append([
-                    branch.get('branch_name', 'N/A'),
-                    str(branch.get('total_requirements', 0)),
-                    str(branch.get('compliant', 0)),
-                    str(branch.get('non_compliant', 0)),
-                    str(branch.get('pending', 0)),
+                    branch.get('branch_name') or 'N/A',
+                    str(branch.get('total_requirements') or 0),
+                    str(branch.get('compliant') or 0),
+                    str(branch.get('non_compliant') or 0),
+                    str(branch.get('pending') or 0),
                     f"{rate:.1f}%"
                 ])
             
@@ -1884,15 +2013,21 @@ class BrandedPDFGenerator:
         elements = []
         
         # Add report header
-        self._add_report_header(elements, title)
+        elements.extend(self._create_header(title, period.capitalize()))
         
         # Add report metadata
         metadata = [
-            ('Report Date:', datetime.now().strftime('%d %b %Y, %H:%M')),
-            ('Period:', period.capitalize()),
-            ('Metric:', metric.replace('_', ' ').capitalize()),
+            [Paragraph("<b>Report Date:</b>", self.styles['Normal']), Paragraph(datetime.now().strftime('%d %b %Y, %H:%M'), self.styles['Normal'])],
+            [Paragraph("<b>Period:</b>", self.styles['Normal']), Paragraph(period.capitalize(), self.styles['Normal'])],
+            [Paragraph("<b>Metric:</b>", self.styles['Normal']), Paragraph(metric.replace('_', ' ').capitalize(), self.styles['Normal'])],
         ]
-        self._add_metadata_table(elements, metadata)
+        metadata_table = Table(metadata, colWidths=[1.5*inch, 4*inch])
+        metadata_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
+        elements.append(metadata_table)
+        elements.append(Spacer(1, 0.2*inch))
         
         # Prepare data for chart
         period_label = {
@@ -1909,50 +2044,51 @@ class BrandedPDFGenerator:
         }.get(metric, metric.replace('_', ' ').capitalize())
         
         # Sort branches by metric value (descending)
-        sorted_branches = sorted(branches, key=lambda x: x.get(metric, 0), reverse=True)
+        sorted_branches = sorted(branches, key=lambda x: x.get(metric) or 0, reverse=True)
         
         # Add summary text
         if branches:
-            best_branch = sorted_branches[0]['name']
-            best_value = sorted_branches[0].get(metric, 0)
+            best_branch = sorted_branches[0].get('name', 'Unknown')
+            best_value = sorted_branches[0].get(metric) or 0
             formatted_value = self._format_currency(best_value) if metric == 'revenue' else (
                 f"{best_value}%" if metric == 'occupancy' else str(best_value)
             )
             
             summary = f"Based on {metric_label} data for the selected {period}, {best_branch} is the top performing branch with a {metric_label} of {formatted_value}."
-            elements.append(self._create_paragraph(summary, self.styles['Normal'], 12))
+            elements.append(Paragraph(summary, self.styles['Normal']))
             
             # Add spacer
-            elements.append(self._create_spacer(0.2))
+            elements.append(Spacer(1, 0.2*inch))
         
         # Add comparison chart
         if branches:
             # Create data for chart
             chart_data = []
             chart_labels = []
-            max_value = max([b.get(metric, 0) for b in branches])
             
             for branch in sorted_branches:
-                chart_data.append(branch.get(metric, 0))
-                chart_labels.append(branch.get('name', 'Unknown'))
+                chart_data.append(branch.get(metric) or 0)
+                chart_labels.append(branch.get('name', 'Unknown')[:15]) # Truncate long names
             
             # Add horizontal bar chart
             chart_title = f"{period_label} {metric_label} by Branch"
             elements.append(self._create_horizontal_bar_chart(chart_data, chart_labels, chart_title))
         
         # Add spacer
-        elements.append(self._create_spacer(0.2))
+        elements.append(Spacer(1, 0.2*inch))
         
         # Add comparison table
         if branches:
             # Table data
             table_data = [
-                ['Branch', metric_label, 'Rank']
+                [Paragraph("<b>Branch</b>", self.styles['TableHeader']), 
+                 Paragraph(f"<b>{metric_label}</b>", self.styles['TableHeader']), 
+                 Paragraph("<b>Rank</b>", self.styles['TableHeader'])]
             ]
             
             for i, branch in enumerate(sorted_branches, 1):
                 branch_name = branch.get('name', 'Unknown')
-                value = branch.get(metric, 0)
+                value = branch.get(metric) or 0
                 
                 # Format based on metric type
                 if metric == 'revenue':
@@ -1962,41 +2098,157 @@ class BrandedPDFGenerator:
                 else:
                     formatted_value = str(value)
                     
-                table_data.append([branch_name, formatted_value, str(i)])
+                table_data.append([
+                    Paragraph(branch_name, self.styles['TableCell']), 
+                    Paragraph(formatted_value, self.styles['TableCell']), 
+                    Paragraph(str(i), self.styles['TableCell'])
+                ])
             
             # Create and add the table
-            elements.append(self._create_table(
-                table_data, 
-                colWidths=[250, 150, 80],
-                style=[
-                    ('BACKGROUND', (0, 0), (-1, 0), self.HEADER_GRAY),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-                    ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, 0), (-1, 0), 10),
-                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                    ('ALIGN', (1, 1), (1, -1), 'RIGHT'),
-                    ('ALIGN', (2, 1), (2, -1), 'CENTER'),
-                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                    ('FONTSIZE', (0, 1), (-1, -1), 9),
-                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-                ]
-            ))
+            comparison_table = Table(table_data, colWidths=[3.5*inch, 2.5*inch, 1*inch])
+            comparison_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), self.HEADER_GRAY),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, self.ROW_ALT]),
+            ]))
+            elements.append(comparison_table)
         
         # Add notes
-        elements.append(self._create_spacer(0.3))
-        elements.append(self._create_paragraph("Notes:", self.styles['Heading5']))
+        elements.append(Spacer(1, 0.3*inch))
+        elements.append(Paragraph("<b>Notes:</b>", self.styles['SectionHeader']))
         notes = [
             "This report provides a comparison of branch performance based on selected metrics.",
             f"The period shown is: {period_label}.",
             "Rankings are based on current data and may change over time.",
         ]
         for note in notes:
-            elements.append(self._create_paragraph(f"• {note}", self.styles['Normal'], 9))
+            elements.append(Paragraph(f"&bull; {note}", self.styles['Normal']))
         
         # Create the PDF
         return self._create_pdf(elements)
     
+    def _generate_kpi_dashboard_report(self, data: Dict, filters: Dict) -> str:
+        """Generate KPI Dashboard Report"""
+        # Implementation for KPI dashboard report
+        # For now, just use the generic report generator or a placeholder
+        return self._generate_generic_report(data, filters)
+
+    def generate_checkout_bill(self, data: Dict) -> str:
+        """Generate Guest Checkout Bill"""
+        elements = []
+        
+        # Custom Header for Bill
+        logo = self._get_logo(width=1.5*inch)
+        
+        # Company info
+        company_info = [
+            Paragraph("<b>FAMOUS GATE HOTEL & LOUNGE</b>", self.styles['Normal']),
+            Paragraph("P.O. Box 12345, Nairobi, Kenya", self.styles['SmallText']),
+            Paragraph("Tel: +254 700 123 456", self.styles['SmallText']),
+            Paragraph("Email: info@famousgate.co.ke", self.styles['SmallText']),
+        ]
+        
+        header_data = []
+        if logo:
+            header_data.append([logo, company_info])
+        else:
+            header_data.append([company_info, ''])
+            
+        header_table = Table(header_data, colWidths=[2*inch, 4*inch])
+        header_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+            ('ALIGN', (1, 0), (1, 0), 'LEFT'),
+        ]))
+        elements.append(header_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Bill Title
+        elements.append(Paragraph("<b>GUEST BILL / INVOICE</b>", 
+            ParagraphStyle('BillTitle', parent=self.styles['Heading1'], alignment=TA_CENTER, fontSize=16, spaceAfter=20)))
+        
+        # Guest Details Section
+        elements.append(Paragraph("<b>Check-Out Guest</b>", self.styles['Heading2']))
+        
+        guest_name = data.get('guest_name', '').upper()
+        guest_phone = data.get('guest_phone', '')
+        room_number = data.get('room_number', '')
+        nights = data.get('nights', 1)
+        
+        details_data = [
+            [Paragraph(f"<b>{guest_name}</b>", self.styles['Normal'])],
+            [Paragraph(f"{guest_phone}", self.styles['Normal'])],
+            [Spacer(1, 10)],
+            [Paragraph(f"Room {room_number}", self.styles['Normal'])],
+            [Spacer(1, 10)],
+            [Paragraph(f"{nights} nights", self.styles['Normal'])],
+        ]
+        
+        details_table = Table(details_data, colWidths=[6*inch])
+        details_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ]))
+        elements.append(details_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Financial Details
+        room_charges = data.get('room_charges', 0)
+        additional_charges = data.get('additional_charges', 0)
+        amount_paid = data.get('amount_paid', 0)
+        balance = data.get('balance', 0)
+        
+        fin_data = [
+            ['Room Charges', self._format_currency(room_charges)],
+            ['Additional Charges', self._format_currency(additional_charges)],
+            ['Amount Paid', f"-{self._format_currency(amount_paid)}"],
+            ['Balance', self._format_currency(balance)],
+        ]
+        
+        fin_table = Table(fin_data, colWidths=[4*inch, 2*inch])
+        fin_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('TEXTCOLOR', (0, 0), (-1, -1), FG_BLACK),
+            ('LINEBELOW', (0, 2), (-1, 2), 1, FG_BLACK), # Line before Balance
+            ('FONTNAME', (0, 3), (-1, 3), 'Helvetica-Bold'), # Bold Balance row
+            ('FONTSIZE', (0, 3), (-1, 3), 12),
+        ]))
+        elements.append(fin_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Outstanding Balance Warning
+        if balance > 0:
+            elements.append(Paragraph("<b>Outstanding balance must be settled</b>", 
+                ParagraphStyle('Warning', parent=self.styles['Normal'], textColor=FG_RED, alignment=TA_CENTER)))
+        
+        # Barcode for Cashier Scanning
+        elements.append(Spacer(1, 0.5*inch))
+        try:
+            # Import here to avoid circular imports if any
+            from barcode_generator.routes import barcode_service
+            
+            # Generate barcode for booking ID (or room number if booking ID not available, but booking ID is best)
+            # Assuming data has booking_id, if not use room_number as fallback
+            scan_code = data.get('booking_id', f"HTL-{room_number}")
+            
+            barcode_bytes = barcode_service.generate_barcode(scan_code, include_text=True)
+            barcode_img = Image(io.BytesIO(barcode_bytes), width=2.5*inch, height=0.8*inch)
+            elements.append(barcode_img)
+            elements.append(Paragraph("Scan at Cashier", self.styles['SmallText']))
+        except Exception as e:
+            print(f"Error adding barcode: {e}")
+            # Continue without barcode
+        
+        # Footer
+        elements.append(Spacer(1, 1*inch))
+        elements.append(Paragraph("Thank you for staying with us!", 
+            ParagraphStyle('FooterThanks', parent=self.styles['Normal'], alignment=TA_CENTER, fontName='Helvetica-Oblique')))
+            
+        return self._create_pdf(elements, filename=f"/tmp/Bill_{guest_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf")
+
     def _generate_generic_report(self, data: Dict, filters: Dict) -> str:
         """Generate a generic report for unknown types"""
         elements = []

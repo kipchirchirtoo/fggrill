@@ -11,26 +11,26 @@ export const getRooms = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    // Simplified query without complex joins to avoid database connection issues
     let query = supabase
       .from('rooms')
-      .select(`
-        *,
-        type:room_types!type_id(*)
-      `);
+      .select('*, type:room_types!type_id(*), guest:guests!current_guest(*)');
 
-    if (req.query.branch_id) {
-      query = query.eq('branch_id', req.query.branch_id);
+    const branchId = req.user?.branch_id || req.query.branch_id;
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
     }
 
     const { data: rooms, error } = await query;
 
     if (error) {
+      logger.error('Database error in getRooms:', error);
       throw error;
     }
 
     res.status(200).json({
       success: true,
-      data: rooms
+      data: rooms || []
     });
   } catch (error) {
     next(error);
@@ -121,7 +121,8 @@ export const createRoom = async (
           status,
           price_override: priceOverride,
           amenities,
-          image_url: imageUrl
+          image_url: imageUrl,
+          branch_id: req.user?.branch_id || req.body.branch_id
         }
       ])
       .select()

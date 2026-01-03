@@ -104,8 +104,8 @@ export async function initializeBranchStock(itemSku: string, branches: number[])
  * Update branch stock quantity
  */
 export async function updateBranchStock(
-  branchId: number, 
-  itemSku: string, 
+  branchId: number,
+  itemSku: string,
   quantityChange: number,
   movementType: string,
   userId: string,
@@ -236,14 +236,17 @@ export async function createStockRequest(
 }
 
 /**
- * Get stock requests for a branch
+ * Get stock requests for a branch (or all branches if branchId is null)
  */
-export async function getBranchRequests(branchId: number, status?: string) {
+export async function getBranchRequests(branchId: number | null, status?: string) {
   let query = supabase
     .from('stock_requests')
     .select('*')
-    .eq('requesting_branch_id', branchId)
     .order('created_at', { ascending: false });
+
+  if (branchId) {
+    query = query.eq('requesting_branch_id', branchId);
+  }
 
   if (status) {
     query = query.eq('status', status);
@@ -278,8 +281,20 @@ export async function getBranchRequests(branchId: number, status?: string) {
     reviewers = r || [];
   }
 
+  // Get branch details if fetching for all branches
+  let branches: any[] = [];
+  if (!branchId) {
+    const branchIds = [...new Set(requests.map(r => r.requesting_branch_id))];
+    const { data: b } = await supabase
+      .from('branches')
+      .select('id, name, code')
+      .in('id', branchIds);
+    branches = b || [];
+  }
+
   return requests.map(req => ({
     ...req,
+    branch_name: branchId ? undefined : branches.find(b => b.id === req.requesting_branch_id)?.name,
     items: (items || [])
       .filter(i => i.request_id === req.id)
       .map(i => ({
@@ -350,7 +365,7 @@ export async function approveStockRequest(
   // Update request
   const allApproved = approvedItems.every(i => i.status === 'APPROVED');
   const allRejected = approvedItems.every(i => i.status === 'REJECTED');
-  
+
   const newStatus = allRejected ? 'REJECTED' : allApproved ? 'APPROVED' : 'PARTIALLY_APPROVED';
 
   const { error: requestError } = await supabase
@@ -499,7 +514,7 @@ export async function dispatchItems(
       logger.error(`Error fetching dispatch ${dispatchId}:`, fetchError);
       throw new Error(`Dispatch not found or couldn't be accessed: ${fetchError.message}`);
     }
-    
+
     if (!dispatch) {
       throw new Error('Dispatch note not found');
     }
@@ -670,7 +685,7 @@ export async function getIncomingDispatches(branchId: number) {
     .from('dispatch_notes')
     .select('*')
     .eq('to_branch_id', branchId)
-    .in('status', ['IN_TRANSIT', 'DELIVERED'])
+    .in('status', ['IN_TRANSIT', 'DELIVERED', 'CONFIRMED', 'DISPUTED'])
     .order('dispatched_at', { ascending: false });
 
   if (error) throw error;

@@ -56,8 +56,8 @@ export default function GMStaffPage() {
 
           <IOSCard className="p-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input placeholder="Search staff..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
+              <Input placeholder="Search staff..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
             </div>
           </IOSCard>
 
@@ -78,7 +78,7 @@ export default function GMStaffPage() {
                       <p className="text-sm text-gray-500">{member.role}</p>
                       <div className="flex items-center gap-2 mt-2">
                         {member.branch_name && <span className="text-xs text-gray-400 flex items-center gap-1"><Building2 className="h-3 w-3" /> {member.branch_name}</span>}
-                        <IOSBadge variant={member.status === 'active' ? 'success' : 'neutral'}>{member.status}</IOSBadge>
+                        <IOSBadge color={member.status === 'active' ? 'success' : 'secondary'}>{member.status}</IOSBadge>
                       </div>
                     </div>
                   </div>

@@ -6,6 +6,8 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { financeAPI } from '@/lib/api';
 import { Receipt, RefreshCw, Download } from 'lucide-react';
+import { BranchSelector } from '@/components/finance/BranchSelector';
+import { DateRangeSelector, DateRangePreset } from '@/components/finance/DateRangeSelector';
 
 interface TaxData { vatCollected: number; vatPaid: number; netVat: number; withholdingTax: number; payeTax: number; totalTaxLiability: number; }
 
@@ -14,21 +16,29 @@ const defaultTaxData: TaxData = { vatCollected: 0, vatPaid: 0, netVat: 0, withho
 export default function TaxSummaryPage() {
   const [data, setData] = useState<TaxData>(defaultTaxData);
   const [isLoading, setIsLoading] = useState(true);
-  const [period, setPeriod] = useState<'month' | 'quarter' | 'year'>('month');
+  const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
+  const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [datePreset, setDatePreset] = useState<DateRangePreset>('month');
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await financeAPI.getTaxSummary();
+      const response = await financeAPI.getTaxSummary({
+        branch_id: selectedBranch || undefined,
+        startDate,
+        endDate
+      });
       if (response?.success && response.data) {
         setData({ ...defaultTaxData, ...response.data });
       } else if (response && !response.success) {
-        // Handle direct data response
         setData({ ...defaultTaxData, ...response });
+      } else {
+        setData(defaultTaxData);
       }
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, []);
+  }, [selectedBranch, startDate, endDate]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -42,13 +52,25 @@ export default function TaxSummaryPage() {
               <h1 className="text-2xl font-semibold text-gray-900">Tax Summary</h1>
               <p className="text-sm text-gray-500 mt-1">Tax obligations overview</p>
             </div>
-            <div className="flex gap-2">
-              {(['month', 'quarter', 'year'] as const).map((p) => (
-                <button key={p} onClick={() => setPeriod(p)} className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${period === p ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
-                  {p.charAt(0).toUpperCase() + p.slice(1)}
-                </button>
-              ))}
-              <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+            <div className="flex flex-wrap items-center gap-3">
+              <BranchSelector
+                selectedBranch={selectedBranch}
+                onBranchChange={setSelectedBranch}
+              />
+              <DateRangeSelector
+                startDate={startDate}
+                endDate={endDate}
+                onRangeChange={(start, end) => {
+                  setStartDate(start);
+                  setEndDate(end);
+                }}
+                preset={datePreset}
+                onPresetChange={setDatePreset}
+              />
+              <button onClick={fetchData} disabled={isLoading} className="p-2.5 text-stone-500 bg-white border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors">
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
+              <button className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
                 <Download className="h-4 w-4" />
                 Export
               </button>

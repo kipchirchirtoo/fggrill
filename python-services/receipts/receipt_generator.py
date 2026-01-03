@@ -15,6 +15,7 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, HRFlowable
 from reportlab.pdfgen import canvas
 from reportlab.graphics.shapes import Drawing, Line
+from reportlab.graphics.barcode import code128
 import base64
 
 
@@ -36,7 +37,7 @@ class ReceiptGenerator:
         width = 80 * mm
         # Dynamic height based on items
         item_count = len(receipt_data.get('items', []))
-        height = (180 + (item_count * 15)) * mm
+        height = (200 + (item_count * 15)) * mm
         
         c = canvas.Canvas(buffer, pagesize=(width, height))
         
@@ -80,7 +81,27 @@ class ReceiptGenerator:
         # === RECEIPT INFO ===
         c.setFont("Helvetica", 8)
         receipt_no = receipt_data.get('receipt_number', 'N/A')
-        date_str = receipt_data.get('date', datetime.now().strftime('%Y-%m-%d %H:%M'))
+        
+        # Handle date formatting - ensure it's a valid date string
+        date_input = receipt_data.get('date')
+        if date_input:
+            try:
+                # If it's already a formatted string, use it
+                if isinstance(date_input, str):
+                    # Try to parse and reformat to ensure consistency
+                    try:
+                        parsed_date = datetime.fromisoformat(date_input.replace('Z', '+00:00'))
+                        date_str = parsed_date.strftime('%m/%d/%Y, %I:%M:%S %p')
+                    except:
+                        # If parsing fails, use the string as-is if it looks valid
+                        date_str = date_input if date_input != 'Invalid Date' else datetime.now().strftime('%m/%d/%Y, %I:%M:%S %p')
+                else:
+                    # If it's a datetime object
+                    date_str = date_input.strftime('%m/%d/%Y, %I:%M:%S %p')
+            except:
+                date_str = datetime.now().strftime('%m/%d/%Y, %I:%M:%S %p')
+        else:
+            date_str = datetime.now().strftime('%m/%d/%Y, %I:%M:%S %p')
         
         c.drawString(5*mm, y, f"Receipt #: {receipt_no}")
         y -= 4 * mm
@@ -96,8 +117,11 @@ class ReceiptGenerator:
         if receipt_data.get('customer_name'):
             c.drawString(5*mm, y, f"Customer: {receipt_data['customer_name']}")
             y -= 4 * mm
-        if receipt_data.get('cashier_name'):
-            c.drawString(5*mm, y, f"Served by: {receipt_data['cashier_name']}")
+        if receipt_data.get('served_by'):
+            c.drawString(5*mm, y, f"Served by: {receipt_data['served_by']}")
+            y -= 4 * mm
+        elif receipt_data.get('cashier_name'):
+            c.drawString(5*mm, y, f"Cashier: {receipt_data['cashier_name']}")
             y -= 4 * mm
         
         y -= 3 * mm
@@ -220,6 +244,19 @@ class ReceiptGenerator:
         c.drawCentredString(center_x, y, "Please come again")
         y -= 4 * mm
         c.drawCentredString(center_x, y, self.company_email)
+        y -= 15 * mm
+        
+        # === BARCODE ===
+        barcode_value = receipt_data.get('receipt_number', 'N/A')
+        if barcode_value != 'N/A':
+            try:
+                barcode = code128.Code128(barcode_value, barHeight=10*mm, barWidth=0.3*mm)
+                barcode.drawOn(c, center_x - (barcode.width / 2), y)
+                y -= 5 * mm
+                c.setFont("Helvetica", 7)
+                c.drawCentredString(center_x, y, barcode_value)
+            except:
+                pass
         
         c.save()
         buffer.seek(0)

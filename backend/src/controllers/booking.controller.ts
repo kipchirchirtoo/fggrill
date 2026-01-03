@@ -6,6 +6,7 @@ import { RatePlan } from '../models/RatePlan';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { supabase } from '../config/database';
+import { bookingService, BookingRequest } from '../services/booking.service';
 
 // @desc    Get all bookings
 // @route   GET /api/bookings
@@ -20,9 +21,20 @@ export const getBookings = async (
     const limit = parseInt(req.query.limit as string) || 10;
     const startIndex = (page - 1) * limit;
 
+    const branchId = req.user?.branch_id || req.query.branch_id;
+
+    // Construct select string based on whether we need to filter by branch (which requires inner join on rooms)
+    let selectString = '*, guest:guests!guest_id(*)';
+    if (branchId) {
+      // Use inner join to filter by room's branch_id
+      selectString += ', room:rooms!room_id!inner(id, room_number, room_type, branch_id, status)';
+    } else {
+      selectString += ', room:rooms!room_id(id, room_number, room_type, branch_id, status)';
+    }
+
     let query = supabase
       .from('reservations')
-      .select('*, room:rooms(*), guest:guests(*)', { count: 'exact' })
+      .select(selectString, { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(startIndex, startIndex + limit - 1);
 
@@ -34,6 +46,9 @@ export const getBookings = async (
     }
     if (req.query.checkOut) {
       query = query.lte('check_out_date', req.query.checkOut);
+    }
+    if (branchId) {
+      query = query.eq('room.branch_id', branchId);
     }
 
     const { data: bookings, error, count } = await query;
@@ -78,153 +93,80 @@ export const getBooking = async (
   }
 };
 
-// @desc    Create new booking
+// @desc    Create new booking (Enhanced)
 // @route   POST /api/bookings
-// @access  Private
+// @access  Public/Private
 export const createBooking = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { roomId, roomTypeId, checkInDate, checkOutDate, adults, children, specialRequests, totalAmount, guestInfo } = req.body;
-    let { guestId } = req.body;
+    // Handle both roomId (specific room) and roomTypeId (any room of type)
+    let roomTypeId = req.body.roomTypeId || req.body.room_type_id;
+    let specificRoomId = req.body.roomId || req.body.room_id;
 
-    // 0. Handle Guest Creation (if public booking)
-    if (!guestId && guestInfo) {
-      const { firstName, lastName, email, phone, idNumber } = guestInfo;
+    // If roomId is provided, get the room type from the room
+    if (specificRoomId && !roomTypeId) {
+      const { data: room } = await supabase
+        .from('rooms')
+        .select('room_type_id')
+        .eq('id', specificRoomId)
+        .single();
 
-      // Check if guest exists
-      const { data: existingGuest, error: findError } = await supabase
-        .from('guests')
-        .select('id')
-        .or(`email.eq.${email},phone.eq.${phone}`)
-        .maybeSingle();
-
-      if (existingGuest) {
-        guestId = existingGuest.id;
+      if (room) {
+        roomTypeId = room.room_type_id;
       } else {
-        const newGuestPayload = {
-          first_name: firstName,
-          last_name: lastName,
-          email,
-          phone: phone
-          // id_number: idNumber
-        };
-
-        // Create new guest
-        const { data: newGuest, error: guestError } = await supabase
-          .from('guests')
-          .insert(newGuestPayload)
-          .select()
-          .single();
-
-        if (guestError) {
-          console.error('Guest creation failed:', guestError);
-          logger.error('Guest creation failed:', guestError);
-          throw new AppError('Failed to create guest record: ' + guestError.message, 500);
-        }
-        guestId = newGuest.id;
-        console.log('Created new guest:', guestId);
+        throw new AppError('Room not found', 404);
       }
     }
 
-    if (!guestId) {
-      throw new AppError('Guest information required', 400);
+    if (!roomTypeId) {
+      throw new AppError('Room type ID is required', 400);
     }
 
-    // 1. Check Availability
-    const { data: conflicts } = await supabase
-      .from('reservations')
-      .select('id')
-      .eq('room_id', roomId)
-      .not('status', 'in', `(${BookingStatus.CANCELLED},${BookingStatus.CHECKED_OUT})`)
-      .or(`check_in_date.lte.${checkOutDate},check_out_date.gt.${checkInDate}`);
-
-    if (conflicts && conflicts.length > 0) {
-      throw new AppError('Room is not available for selected dates', 400);
-    }
-
-    // 2. Calculate Pricing
-    const room = await Room.findById(roomId);
-    if (!room) throw new AppError('Room not found', 404);
-
-    let basePrice = room.basePrice || room.currentPrice || 0;
-
-    // Check Rate Plan
-    let finalPrice = basePrice;
-    let selectedRatePlanId: string | undefined;
-
-    if (req.body.rate_plan_id) {
-      const ratePlan = await RatePlan.findById(req.body.rate_plan_id);
-      if (ratePlan) {
-        selectedRatePlanId = ratePlan.id;
-        if (ratePlan.isPercentage) {
-          finalPrice = basePrice * ratePlan.multiplier;
-        } else if (ratePlan.fixedAmount) {
-          finalPrice = ratePlan.fixedAmount;
-        }
-      }
-    }
-
-    // Meal Plan Calculation
-    const mealPlanPrices: Record<string, number> = {
-      bed_breakfast: 0,
-      half_board: 1500,
-      full_board: 3000,
+    // Use enhanced booking service for complete flow
+    const bookingRequest: BookingRequest = {
+      guestId: req.body.guestId || req.body.guest_id,
+      guestInfo: {
+        firstName: req.body.guestInfo?.firstName || req.body.firstName,
+        lastName: req.body.guestInfo?.lastName || req.body.lastName,
+        email: req.body.guestInfo?.email || req.body.email,
+        phone: req.body.guestInfo?.phone || req.body.phone,
+        idType: req.body.guestInfo?.idType || req.body.idType || req.body.id_type,
+        idNumber: req.body.guestInfo?.idNumber || req.body.idNumber || req.body.id_number,
+        nationality: req.body.guestInfo?.nationality || req.body.nationality,
+        address: req.body.guestInfo?.address || req.body.address
+      },
+      roomId: specificRoomId, // Renamed from specificRoomId to roomId as per instruction
+      roomTypeId: roomTypeId,
+      checkInDate: req.body.checkInDate || req.body.check_in_date || req.body.check_in,
+      checkOutDate: req.body.checkOutDate || req.body.check_out_date || req.body.check_out,
+      adults: req.body.adults || 1,
+      children: req.body.children || 0,
+      infants: req.body.infants || 0,
+      mealPlan: req.body.mealPlan || req.body.meal_plan,
+      specialRequests: req.body.specialRequests || req.body.special_requests,
+      purpose: req.body.purpose,
+      paymentMethod: req.body.paymentMethod || 'card',
+      depositAmount: req.body.depositAmount || req.body.total_amount,
+      bookingSource: req.body.bookingSource || 'WEBSITE',
+      branchId: req.user?.branch_id || req.body.branchId || req.body.branch_id
     };
-    const mealPrice = mealPlanPrices[req.body.mealPlan] || 0;
 
-    const nights = Math.max(1, Math.ceil((new Date(checkOutDate).getTime() - new Date(checkInDate).getTime()) / (1000 * 60 * 60 * 24)));
-    const calculatedTotal = (finalPrice + mealPrice) * nights;
-
-    // 3. Create Booking
-    const booking = new Booking({
-      roomId,
-      roomTypeId,
-      checkInDate: new Date(checkInDate),
-      checkOutDate: new Date(checkOutDate),
-      guestId,
-      adults,
-      children,
-      specialRequests,
-      totalAmount: calculatedTotal,
-      status: BookingStatus.CONFIRMED,
-      createdBy: req.user?.id || null,
-      // Optional new fields if passed
-      roomRate: finalPrice,
-      ratePlanId: selectedRatePlanId,
-      mealPlan: req.body.mealPlan,
-      depositAmount: req.body.depositAmount,
-      paymentMethod: req.body.paymentMethod,
-      notes: req.body.notes,
-      branchId: req.body.branchId
-    });
-
-    const savedBooking = await booking.save();
-
-    // 3. Create Folio
-    const folio = new Folio({
-      reservationId: savedBooking.id,
-      guestId: guestId,
-      status: 'open'
-    });
-    // We need a save method on Folio, but I implemented it as insert in model?
-    // Let's fix Folio model usage here. I'll use supabase directly or update Folio model to have save().
-    // Folio model I created has no save() method! I need to fix that.
-    // For now, direct insert:
-    await supabase.from('folios').insert({
-      reservation_id: savedBooking.id,
-      guest_id: guestId,
-      status: 'open'
-    });
+    const booking = await bookingService.createBooking(bookingRequest);
 
     res.status(201).json({
       success: true,
-      data: savedBooking
+      message: 'Booking created successfully',
+      data: {
+        booking,
+        confirmationNumber: booking.confirmationNumber,
+        bookingId: booking.id
+      }
     });
 
-    logger.info(`New booking created: ${savedBooking.confirmationNumber}`);
+    logger.info(`New booking created: ${booking.confirmationNumber} by ${req.body.guestInfo?.email || 'system'}`);
   } catch (error) {
     next(error);
   }
@@ -266,30 +208,54 @@ export const checkInBooking = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const booking = await Booking.findById(req.params.id);
-    if (!booking) throw new AppError('Booking not found', 404);
+    const { id } = req.params;
+    const userId = req.user?.id;
 
-    if (booking.status !== BookingStatus.CONFIRMED) {
-      throw new AppError('Booking must be confirmed to check in', 400);
+    // 1. Get the booking
+    const { data: booking, error: fetchError } = await supabase
+      .from('reservations')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !booking) {
+      throw new AppError('Booking not found', 404);
     }
 
-    // Update booking status
-    booking.status = BookingStatus.CHECKED_IN;
-    booking.checkedInAt = new Date();
-    booking.checkedInBy = req.user?.id;
-    await booking.save();
+    if (booking.status !== 'confirmed') {
+      throw new AppError(`Booking must be confirmed to check in. Current status: ${booking.status}`, 400);
+    }
 
-    // Update room status
-    if (booking.roomId) {
-      const room = await Room.findById(booking.roomId);
-      if (room) {
-        room.status = RoomStatus.OCCUPIED;
-        room.currentGuest = booking.guestId; // Assuming room model uses guestId or name
-        await room.save();
+    // 2. Update booking status
+    const { data: updatedBooking, error: updateError } = await supabase
+      .from('reservations')
+      .update({
+        status: 'checked_in',
+        checked_in_at: new Date().toISOString(),
+        checked_in_by: userId,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    // 3. Update room status if room is assigned
+    if (booking.room_id) {
+      try {
+        await bookingService.updateRoomStatus(
+          booking.room_id,
+          RoomStatus.OCCUPIED,
+          userId,
+          `Room occupied via check-in for booking ${booking.confirmation_number}`
+        );
+      } catch (roomError) {
+        logger.error('Failed to update room status during check-in:', roomError);
       }
     }
 
-    res.status(200).json({ success: true, data: booking });
+    res.status(200).json({ success: true, data: updatedBooking });
   } catch (error) {
     next(error);
   }
@@ -304,30 +270,54 @@ export const checkOutBooking = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const booking = await Booking.findById(req.params.id);
-    if (!booking) throw new AppError('Booking not found', 404);
+    const { id } = req.params;
+    const userId = req.user?.id;
 
-    if (booking.status !== BookingStatus.CHECKED_IN) {
-      throw new AppError('Only checked-in bookings can be checked out', 400);
+    // 1. Get the booking
+    const { data: booking, error: fetchError } = await supabase
+      .from('reservations')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !booking) {
+      throw new AppError('Booking not found', 404);
     }
 
-    // Update booking status
-    booking.status = BookingStatus.CHECKED_OUT;
-    booking.checkedOutAt = new Date();
-    booking.checkedOutBy = req.user?.id;
-    await booking.save();
+    if (booking.status !== 'checked_in') {
+      throw new AppError(`Only checked-in bookings can be checked out. Current status: ${booking.status}`, 400);
+    }
 
-    // Update room status
-    if (booking.roomId) {
-      const room = await Room.findById(booking.roomId);
-      if (room) {
-        room.status = RoomStatus.CLEANING;
-        room.currentGuest = undefined;
-        await room.save();
+    // 2. Update booking status
+    const { data: updatedBooking, error: updateError } = await supabase
+      .from('reservations')
+      .update({
+        status: 'checked_out',
+        checked_out_at: new Date().toISOString(),
+        checked_out_by: userId,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    // 3. Update room status if room is assigned
+    if (booking.room_id) {
+      try {
+        await bookingService.updateRoomStatus(
+          booking.room_id,
+          RoomStatus.CLEANING,
+          userId,
+          `Room set to cleaning via check-out for booking ${booking.confirmation_number}`
+        );
+      } catch (roomError) {
+        logger.error('Failed to update room status during check-out:', roomError);
       }
     }
 
-    res.status(200).json({ success: true, data: booking });
+    res.status(200).json({ success: true, data: updatedBooking });
   } catch (error) {
     next(error);
   }
@@ -342,24 +332,60 @@ export const cancelBooking = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const booking = await Booking.findById(req.params.id);
-    if (!booking) throw new AppError('Booking not found', 404);
+    const { id } = req.params;
+    const userId = req.user?.id;
+    const { reason } = req.body;
 
-    booking.status = BookingStatus.CANCELLED;
-    booking.cancelledAt = new Date();
-    booking.cancelledBy = req.user?.id;
-    booking.cancellationReason = req.body.reason || 'User cancelled';
-    await booking.save();
+    // 1. Get the booking
+    const { data: booking, error: fetchError } = await supabase
+      .from('reservations')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    if (booking.roomId) {
-      const room = await Room.findById(booking.roomId);
-      if (room && room.status === RoomStatus.RESERVED) {
-        room.status = RoomStatus.AVAILABLE;
-        await room.save();
+    if (fetchError || !booking) {
+      throw new AppError('Booking not found', 404);
+    }
+
+    // 2. Update booking status
+    const { data: updatedBooking, error: updateError } = await supabase
+      .from('reservations')
+      .update({
+        status: 'cancelled',
+        cancelled_at: new Date().toISOString(),
+        cancelled_by: userId,
+        cancellation_reason: reason || 'User cancelled',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    // 3. Update room status if room is assigned and was reserved
+    if (booking.room_id) {
+      try {
+        const { data: room } = await supabase
+          .from('rooms')
+          .select('status')
+          .eq('id', booking.room_id)
+          .single();
+
+        if (room && room.status === RoomStatus.RESERVED) {
+          await bookingService.updateRoomStatus(
+            booking.room_id,
+            RoomStatus.AVAILABLE,
+            userId,
+            `Room released via cancellation for booking ${booking.confirmation_number}`
+          );
+        }
+      } catch (roomError) {
+        logger.error('Failed to update room status during cancellation:', roomError);
       }
     }
 
-    res.status(200).json({ success: true, data: booking });
+    res.status(200).json({ success: true, data: updatedBooking });
   } catch (error) {
     next(error);
   }
@@ -378,31 +404,189 @@ export const getAvailableRooms = async (
     if (!checkIn || !checkOut) throw new AppError('Dates required', 400);
 
     // Find booked room IDs
-    const { data: booked } = await supabase
+    const { data: booked, error: bookedError } = await supabase
       .from('reservations')
       .select('room_id')
-      .not('status', 'in', `(${BookingStatus.CANCELLED},${BookingStatus.CHECKED_OUT})`)
-      .or(`check_in_date.lte.${checkOut},check_out_date.gt.${checkIn}`);
+      .neq('status', 'cancelled')
+      .neq('status', 'checked_out')
+      .lt('check_in_date', checkOut as string)
+      .gt('check_out_date', checkIn as string);
 
-    const bookedIds = (booked || []).map(b => b.room_id);
+    if (bookedError) {
+      logger.error('Error fetching booked rooms:', bookedError);
+      // Continue with empty booked IDs if there's an error
+    }
+
+    const bookedIds = (booked || []).map(b => b.room_id).filter(Boolean);
 
     // Find available rooms
-    let query = supabase.from('rooms').select('*, type:room_types!type_id(*)');
+    // We also exclude rooms that are currently in maintenance or out of order
+    let query = supabase
+      .from('rooms')
+      .select('*, type:room_types!room_type_id(*)')
+      .neq('status', 'maintenance')
+      .neq('status', 'out_of_order');
 
     if (bookedIds.length > 0) {
-      query = query.not('id', 'in', `(${bookedIds.join(',')})`);
+      // Format array for Supabase filter: ("id1","id2")
+      const bookedIdsString = `(${bookedIds.map(id => `"${id}"`).join(',')})`;
+      query = query.not('id', 'in', bookedIdsString);
+    }
+
+    const branchId = req.user?.branch_id || req.query.branch_id;
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
     }
 
     const { data: rooms, error } = await query;
-    if (error) throw error;
+    if (error) {
+      logger.error('Error fetching available rooms:', error);
+      throw new AppError('Failed to fetch available rooms', 500);
+    }
 
-    res.status(200).json({ success: true, data: rooms });
+    // Calculate nights for the stay
+    const checkInDate = new Date(checkIn as string);
+    const checkOutDate = new Date(checkOut as string);
+    const nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    res.status(200).json({
+      success: true,
+      data: rooms || [],
+      nights: nights,
+      dates: {
+        checkIn: checkIn,
+        checkOut: checkOut
+      }
+    });
   } catch (error) {
     next(error);
   }
 };
 
-// Placeholder for payment processing - implementation moved to Folio/Payment controller
-export const processPayment = async (req: Request, res: Response, next: NextFunction) => {
-  res.status(501).json({ message: "Use Folio API for payments" });
+// @desc    Check room availability
+// @route   GET /api/bookings/check-availability
+// @access  Public
+export const checkAvailability = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { checkInDate, checkOutDate, roomTypeId, branchId } = req.query;
+
+    if (!checkInDate || !checkOutDate || !roomTypeId) {
+      throw new AppError('Check-in date, check-out date, and room type are required', 400);
+    }
+
+    const availability = await bookingService.checkAvailability(
+      checkInDate as string,
+      checkOutDate as string,
+      roomTypeId as string,
+      branchId as string
+    );
+
+    res.status(200).json({
+      success: true,
+      data: availability
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get pricing quote
+// @route   POST /api/bookings/quote
+// @access  Public
+export const getPricingQuote = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { checkInDate, checkOutDate, roomTypeId, adults, children, mealPlan, ratePlanId } = req.body;
+
+    if (!checkInDate || !checkOutDate || !roomTypeId) {
+      throw new AppError('Check-in date, check-out date, and room type are required', 400);
+    }
+
+    const pricing = await bookingService.calculatePricing(
+      checkInDate,
+      checkOutDate,
+      roomTypeId,
+      adults || 1,
+      children || 0,
+      mealPlan,
+      ratePlanId
+    );
+
+    res.status(200).json({
+      success: true,
+      data: pricing
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Modify booking
+// @route   PUT /api/bookings/:id/modify
+// @access  Private
+export const modifyBooking = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const bookingId = req.params.id;
+    const modifications = req.body;
+    const modifiedBy = req.user?.id;
+
+    const updatedBooking = await bookingService.modifyBooking(
+      bookingId,
+      modifications,
+      modifiedBy
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Booking modified successfully',
+      data: updatedBooking
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get booking by confirmation number (Guest Portal)
+// @route   GET /api/bookings/confirmation/:confirmationNumber
+// @access  Public
+export const getBookingByConfirmation = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { confirmationNumber } = req.params;
+    const { email } = req.query;
+
+    if (!email) {
+      throw new AppError('Email is required for verification', 400);
+    }
+
+    const booking = await bookingService.getBookingByConfirmation(
+      confirmationNumber,
+      email as string
+    );
+
+    if (!booking) {
+      throw new AppError('Booking not found or invalid credentials', 404);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: booking
+    });
+  } catch (error) {
+    next(error);
+  }
 };

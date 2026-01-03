@@ -7,7 +7,11 @@ import {
   checkInBooking,
   checkOutBooking,
   cancelBooking,
-  getAvailableRooms
+  getAvailableRooms,
+  checkAvailability,
+  getPricingQuote,
+  modifyBooking,
+  getBookingByConfirmation
 } from '../controllers/booking.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -16,6 +20,9 @@ const router = express.Router();
 
 // Public routes
 router.get('/available', getAvailableRooms);
+router.get('/check-availability', checkAvailability);
+router.post('/quote', getPricingQuote);
+router.get('/confirmation/:confirmationNumber', getBookingByConfirmation);
 router.post('/', createBooking);
 
 // Protected routes
@@ -42,6 +49,11 @@ router.put('/:id/check-out',
 router.put('/:id/cancel',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST]),
   cancelBooking
+);
+
+router.put('/:id/modify',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST]),
+  modifyBooking
 );
 
 export default router;

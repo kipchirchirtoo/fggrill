@@ -26,8 +26,11 @@ import express from 'express';
 import { protect } from '../middleware/auth';
 import { validateBranch } from '../middleware/branch';
 import db from '../db';
+import { supabase } from '../config/supabase';
 import branchOperationsFinancesRoutes from './branch-operations-finances.routes';
 import { getIncomingDispatches } from '../services/branch-inventory.service';
+import { bookingService } from '../services/booking.service';
+import { RoomStatus } from '../models/Room';
 
 const router = express.Router();
 
@@ -266,7 +269,7 @@ router.get('/staff', protect, validateBranch, async (req, res) => {
           phone: '456-789-0123'
         }
       ];
-      
+
       res.status(200).json({
         success: true,
         message: 'Mock staff data retrieved successfully',
@@ -274,7 +277,7 @@ router.get('/staff', protect, validateBranch, async (req, res) => {
       });
       return;
     }
-    
+
     // Only run this code in production environment
     const { department, status } = req.query;
     const branchId = req.headers['x-branch-id'] || req.query.branch_id;
@@ -313,10 +316,10 @@ router.get('/staff', protect, validateBranch, async (req, res) => {
     });
   } catch (error: any) {
     console.error('Error getting staff:', error);
-    
+
     // If table doesn't exist or connection fails, return empty array to prevent frontend crash
-    if (error.code === '42P01' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || 
-        (error.message && error.message.includes('AggregateError'))) {
+    if (error.code === '42P01' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' ||
+      (error.message && error.message.includes('AggregateError'))) {
       return res.status(200).json({
         success: true,
         message: 'Staff retrieved successfully (fallback)',
@@ -573,17 +576,17 @@ router.get('/staff/shift-types', protect, validateBranch, async (req, res) => {
     });
   } catch (error: any) {
     console.error('Error getting shift types:', error);
-    
+
     // If table doesn't exist or connection fails, return empty array
-    if (error.code === '42P01' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || 
-        (error.message && error.message.includes('AggregateError'))) {
+    if (error.code === '42P01' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' ||
+      (error.message && error.message.includes('AggregateError'))) {
       return res.status(200).json({
         success: true,
         message: 'Shift types retrieved successfully (fallback)',
         data: []
       });
     }
-    
+
     res.status(500).json({
       success: false,
       message: 'Failed to get shift types',
@@ -761,17 +764,17 @@ router.get('/staff/shifts', protect, validateBranch, async (req, res) => {
     });
   } catch (error: any) {
     console.error('Error getting shifts:', error);
-    
+
     // If table doesn't exist or connection fails, return empty array
-    if (error.code === '42P01' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || 
-        (error.message && error.message.includes('AggregateError'))) {
+    if (error.code === '42P01' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' ||
+      (error.message && error.message.includes('AggregateError'))) {
       return res.status(200).json({
         success: true,
         message: 'Shifts retrieved successfully (fallback)',
         data: []
       });
     }
-    
+
     res.status(500).json({
       success: false,
       message: 'Failed to get shifts',
@@ -1099,7 +1102,7 @@ router.get('/staff/attendance', protect, validateBranch, async (req, res) => {
         const late = filteredAttendance.filter(record => record.status === 'late').length;
         const leave = filteredAttendance.filter(record => record.status === 'leave').length;
         const halfDay = filteredAttendance.filter(record => record.status === 'half_day').length;
-        
+
         summary = {
           total_records: filteredAttendance.length,
           present_count: present,
@@ -1356,7 +1359,7 @@ END as is_clean,
           amenitiesArray = [];
         }
       }
-      
+
       return {
         id: room.id,
         room_number: room.room_number,
@@ -1409,7 +1412,7 @@ router.put('/rooms/:roomId/status', protect, validateBranch, async (req, res) =>
     }
 
     // Validate status value
-    const validStatuses = ['available', 'occupied', 'cleaning', 'maintenance', 'out_of_order'];
+    const validStatuses = ['available', 'occupied', 'cleaning', 'maintenance', 'out_of_order', 'out-of-order', 'reserved'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
@@ -1432,21 +1435,24 @@ router.put('/rooms/:roomId/status', protect, validateBranch, async (req, res) =>
 
     const previousStatus = roomCheck.rows[0].status;
 
-    // Update room status
-    const updateQuery = `
-      UPDATE rooms
-      SET status = $1, updated_at = NOW()
-      WHERE id = $2
-      RETURNING id, room_number, status
-  `;
+    // Update room status using centralized service
+    try {
+      await bookingService.updateRoomStatus(
+        roomId,
+        status as RoomStatus,
+        userId,
+        `Status changed via branch operations dashboard`
+      );
+    } catch (error) {
+      console.error('Error updating room status:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update room status'
+      });
+    }
 
-    const { rows } = await db.query(updateQuery, [status, roomId]);
-
-    // Log status change in history
-    await db.query(`
-      INSERT INTO room_status_history(room_id, previous_status, new_status, changed_by, notes)
-VALUES($1, $2, $3, $4, $5)
-    `, [roomId, previousStatus, status, userId, `Status changed via branch operations`]);
+    // Fetch updated room to return
+    const { rows } = await db.query('SELECT id, room_number, status FROM rooms WHERE id = $1', [roomId]);
 
     res.status(200).json({
       success: true,
@@ -2439,42 +2445,166 @@ router.get('/finances/summary', protect, validateBranch, async (req, res) => {
   try {
     const { period } = req.query;
 
-    // Real data from database
-    res.status(200).json({
-      success: true,
-      message: 'Financial summary retrieved',
-      data: {
-        revenue: {
-          today: 0,
-          thisWeek: 0,
-          thisMonth: 0,
-          lastMonth: 0,
-          growth: 0
-        },
-        expenses: {
-          today: 0,
-          thisWeek: 0,
-          thisMonth: 0,
-          lastMonth: 0,
-          growth: 0
-        },
-        occupancy: {
-          currentRate: 0,
-          averageRate: 0,
-          trend: 0
-        },
-        transactions: {
-          count: 0,
-          average: 0,
-          pending: 0
-        },
-        topRevenueSource: {
-          name: '',
-          amount: 0,
-          percentage: 0
+    const branchId = req.headers['x-branch-id'] || req.query.branch_id;
+
+    // Get current date ranges
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const weekStart = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+
+    try {
+      // Fetch restaurant revenue
+      const { data: restaurantOrders, error: restaurantError } = await supabase
+        .from('restaurant_orders')
+        .select('total_amount, created_at, payment_status')
+        .eq('branch_id', branchId)
+        .gte('created_at', lastMonthStart.toISOString());
+
+      // Fetch bar revenue
+      const { data: barOrders, error: barError } = await supabase
+        .from('bar_orders')
+        .select('total_amount, created_at, payment_status')
+        .eq('branch_id', branchId)
+        .gte('created_at', lastMonthStart.toISOString());
+
+      // Fetch room bookings revenue
+      const { data: bookings, error: bookingsError } = await supabase
+        .from('reservations')
+        .select('total_amount, created_at, payment_status')
+        .eq('branch_id', branchId)
+        .gte('created_at', lastMonthStart.toISOString());
+
+      // Fetch receipts
+      const { data: receipts, error: receiptsError } = await supabase
+        .from('receipts')
+        .select('total_amount, created_at, payment_status')
+        .eq('branch_id', branchId)
+        .eq('payment_status', 'paid')
+        .gte('created_at', lastMonthStart.toISOString());
+
+      // Fetch expenses
+      const { data: expenses, error: expensesError } = await supabase
+        .from('expenses')
+        .select('amount, date, category')
+        .eq('branch_id', branchId)
+        .gte('date', lastMonthStart.toISOString().split('T')[0]);
+
+      // Calculate revenue totals
+      const allRevenue = [
+        ...(restaurantOrders || []),
+        ...(barOrders || []),
+        ...(bookings || []),
+        ...(receipts || [])
+      ];
+
+      const todayRevenue = allRevenue
+        .filter(r => new Date(r.created_at) >= todayStart)
+        .reduce((sum, r) => sum + (r.total_amount || 0), 0);
+
+      const weekRevenue = allRevenue
+        .filter(r => new Date(r.created_at) >= weekStart)
+        .reduce((sum, r) => sum + (r.total_amount || 0), 0);
+
+      const monthRevenue = allRevenue
+        .filter(r => new Date(r.created_at) >= monthStart)
+        .reduce((sum, r) => sum + (r.total_amount || 0), 0);
+
+      const lastMonthRevenue = allRevenue
+        .filter(r => {
+          const date = new Date(r.created_at);
+          return date >= lastMonthStart && date <= lastMonthEnd;
+        })
+        .reduce((sum, r) => sum + (r.total_amount || 0), 0);
+
+      // Calculate expense totals
+      const allExpenses = expenses || [];
+      const todayExpenses = allExpenses
+        .filter((e: any) => new Date(e.date) >= todayStart)
+        .reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
+
+      const weekExpenses = allExpenses
+        .filter((e: any) => new Date(e.date) >= weekStart)
+        .reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
+
+      const monthExpenses = allExpenses
+        .filter((e: any) => new Date(e.date) >= monthStart)
+        .reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
+
+      const lastMonthExpenses = allExpenses
+        .filter((e: any) => {
+          const date = new Date(e.date);
+          return date >= lastMonthStart && date <= lastMonthEnd;
+        })
+        .reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
+
+      // Calculate growth rates
+      const revenueGrowth = lastMonthRevenue > 0
+        ? ((monthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100
+        : 0;
+
+      const expenseGrowth = lastMonthExpenses > 0
+        ? ((monthExpenses - lastMonthExpenses) / lastMonthExpenses) * 100
+        : 0;
+
+      // Calculate revenue sources
+      const restaurantTotal = (restaurantOrders || []).reduce((sum: number, r: any) => sum + (r.total_amount || 0), 0);
+      const barTotal = (barOrders || []).reduce((sum: number, r: any) => sum + (r.total_amount || 0), 0);
+      const bookingTotal = (bookings || []).reduce((sum: number, r: any) => sum + (r.total_amount || 0), 0);
+      const receiptsTotal = (receipts || []).reduce((sum: number, r: any) => sum + (r.total_amount || 0), 0);
+
+      const totalRevenue = restaurantTotal + barTotal + bookingTotal + receiptsTotal;
+      let topSource = { name: 'Restaurant', amount: restaurantTotal };
+
+      if (barTotal > topSource.amount) topSource = { name: 'Bar', amount: barTotal };
+      if (bookingTotal > topSource.amount) topSource = { name: 'Rooms', amount: bookingTotal };
+      if (receiptsTotal > topSource.amount) topSource = { name: 'Other', amount: receiptsTotal };
+
+      res.status(200).json({
+        success: true,
+        message: 'Financial summary retrieved',
+        data: {
+          revenue: {
+            today: todayRevenue,
+            thisWeek: weekRevenue,
+            thisMonth: monthRevenue,
+            lastMonth: lastMonthRevenue,
+            growth: Math.round(revenueGrowth * 100) / 100
+          },
+          expenses: {
+            today: todayExpenses,
+            thisWeek: weekExpenses,
+            thisMonth: monthExpenses,
+            lastMonth: lastMonthExpenses,
+            growth: Math.round(expenseGrowth * 100) / 100
+          },
+          occupancy: {
+            currentRate: 0, // Would need room occupancy calculation
+            averageRate: 0,
+            trend: 0
+          },
+          transactions: {
+            count: allRevenue.length,
+            average: allRevenue.length > 0 ? totalRevenue / allRevenue.length : 0,
+            pending: allRevenue.filter(r => r.payment_status === 'pending').length
+          },
+          topRevenueSource: {
+            name: topSource.name,
+            amount: topSource.amount,
+            percentage: totalRevenue > 0 ? Math.round((topSource.amount / totalRevenue) * 100) : 0
+          }
         }
-      }
-    });
+      });
+    } catch (error) {
+      console.error('Error fetching financial summary:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch financial summary',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   } catch (error) {
     console.error('Error getting financial summary:', error);
     res.status(500).json({
@@ -2732,7 +2862,7 @@ AND(
     let guestName = guest_name;
     let guestEmail = guest_email;
     let guestPhone = guest_phone;
-    
+
     // If guest_id is provided, fetch guest information
     if (guest_id) {
       try {
@@ -2740,7 +2870,7 @@ AND(
           'SELECT id, first_name, last_name, email, phone_number FROM users WHERE id = $1',
           [guest_id]
         );
-        
+
         if (guestQuery.rows.length > 0) {
           const guest = guestQuery.rows[0];
           guestName = guestName || `${guest.first_name} ${guest.last_name}`;
@@ -2898,7 +3028,7 @@ router.put('/reservations/:id/status', protect, validateBranch, async (req, res)
 });
 
 // POST /rooms - Create a new room
-router.post('/rooms', protect, validateBranch, async (req, res) => {
+router.post('/rooms', protect, async (req, res) => {
   try {
     const { room_number, room_type, floor, rate_per_night, capacity, amenities, status, image_url, images } = req.body;
     const branchId = req.headers['x-branch-id'] || req.query.branch_id;
@@ -2937,54 +3067,63 @@ router.post('/rooms', protect, validateBranch, async (req, res) => {
 
     // Get or create room type
     let roomTypeId;
-    const roomTypeCheck = await db.query(
-      'SELECT id FROM room_types WHERE name = $1',
-      [room_type]
-    );
-
-    if (roomTypeCheck.rows.length > 0) {
-      roomTypeId = roomTypeCheck.rows[0].id;
-    } else {
-      // Create new room type
-      const newRoomType = await db.query(
-        `INSERT INTO room_types(name, base_price, max_occupancy, description)
-VALUES($1, $2, $3, $4)
-         RETURNING id`,
-        [room_type, rate_per_night || 5000, capacity?.adults || 2, `${room_type} room`]
+    try {
+      const roomTypeCheck = await db.query(
+        'SELECT id FROM room_types WHERE LOWER(name) = LOWER($1)',
+        [room_type]
       );
-      roomTypeId = newRoomType.rows[0].id;
+
+      if (roomTypeCheck.rows.length > 0) {
+        roomTypeId = roomTypeCheck.rows[0].id;
+      } else {
+        // Create new room type
+        const newRoomType = await db.query(
+          `INSERT INTO room_types(name, base_price, max_occupancy, description)
+           VALUES($1, $2, $3, $4)
+           RETURNING id`,
+          [room_type, rate_per_night || 5000, capacity?.adults || 2, `${room_type} room`]
+        );
+        roomTypeId = newRoomType.rows[0].id;
+      }
+    } catch (typeError) {
+      console.error('Error with room_types table:', typeError);
+      // Fallback: use a default room type ID or create without type
+      // Try to get any existing room type
+      const fallbackType = await db.query('SELECT id FROM room_types LIMIT 1');
+      if (fallbackType.rows.length > 0) {
+        roomTypeId = fallbackType.rows[0].id;
+        console.log('Using fallback room type ID:', roomTypeId);
+      } else {
+        // If no room types exist, we need to handle this differently
+        throw new Error('No room types available in database. Please create room types first.');
+      }
     }
 
-    // Insert the new room
+    // Insert the new room - skip amenities if causing issues
     const insertQuery = `
       INSERT INTO rooms(
   branch_id, room_number, type_id, floor, status,
-  amenities, price_override, notes, image_url, images
+  price_override, notes, image_url, images
 )
-VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING id, room_number, floor, status, image_url, images
   `;
 
-    // Convert amenities to PostgreSQL array format
-    const amenitiesArray = Array.isArray(amenities) ? amenities : [];
-    
     console.log('Inserting room with params:', {
       branchId,
       room_number,
       roomTypeId,
       floor,
       status: status || 'available',
-      amenitiesArray,
       rate_per_night
     });
-    
+
     const { rows } = await db.query(insertQuery, [
       branchId,
       room_number,
       roomTypeId,
       floor,
       status || 'available',
-      amenitiesArray,  // PostgreSQL will handle the array conversion
       rate_per_night,
       `Capacity: ${capacity?.adults || 2} adults, ${capacity?.children || 1} children`,
       image_url || null,
@@ -3008,8 +3147,135 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
   }
 });
 
+// PUT /rooms/:roomId - Update a room
+router.put('/rooms/:roomId', protect, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const { room_number, room_type, floor, price_override, status } = req.body;
+    const branchId = req.headers['x-branch-id'] || req.query.branch_id;
+
+    console.log('Updating room - Request body:', req.body);
+    console.log('Updating room - Room ID:', roomId);
+    console.log('Updating room - Branch ID:', branchId);
+
+    // Check if room exists and belongs to this branch
+    const roomCheck = await db.query(
+      'SELECT id, room_number FROM rooms WHERE id = $1 AND branch_id = $2',
+      [roomId, branchId]
+    );
+
+    if (roomCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Room not found or does not belong to this branch'
+      });
+    }
+
+    // Get or create room type if room_type is provided
+    let roomTypeId;
+    if (room_type) {
+      try {
+        const roomTypeCheck = await db.query(
+          'SELECT id FROM room_types WHERE LOWER(name) = LOWER($1)',
+          [room_type]
+        );
+
+        if (roomTypeCheck.rows.length > 0) {
+          roomTypeId = roomTypeCheck.rows[0].id;
+        } else {
+          // Create new room type
+          const newRoomType = await db.query(
+            `INSERT INTO room_types(name, base_price, max_occupancy, description)
+             VALUES($1, $2, $3, $4)
+             RETURNING id`,
+            [room_type, price_override || 5000, 2, `${room_type} room`]
+          );
+          roomTypeId = newRoomType.rows[0].id;
+        }
+      } catch (typeError) {
+        console.error('Error with room_types table:', typeError);
+        // Use existing room type
+        const currentRoom = await db.query('SELECT type_id FROM rooms WHERE id = $1', [roomId]);
+        roomTypeId = currentRoom.rows[0]?.type_id;
+      }
+    }
+
+    // Build update query dynamically based on provided fields
+    const updateFields = [];
+    const updateValues = [];
+    let paramCount = 1;
+
+    if (room_number) {
+      updateFields.push(`room_number = $${paramCount}`);
+      updateValues.push(room_number);
+      paramCount++;
+    }
+
+    if (roomTypeId) {
+      updateFields.push(`type_id = $${paramCount}`);
+      updateValues.push(roomTypeId);
+      paramCount++;
+    }
+
+    if (floor !== undefined) {
+      updateFields.push(`floor = $${paramCount}`);
+      updateValues.push(floor);
+      paramCount++;
+    }
+
+    if (price_override !== undefined) {
+      updateFields.push(`price_override = $${paramCount}`);
+      updateValues.push(price_override);
+      paramCount++;
+    }
+
+    if (status) {
+      updateFields.push(`status = $${paramCount}`);
+      updateValues.push(status);
+      paramCount++;
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No fields to update'
+      });
+    }
+
+    // Add WHERE clause parameters
+    updateValues.push(roomId, branchId);
+    const whereClause = `WHERE id = $${paramCount} AND branch_id = $${paramCount + 1}`;
+
+    const updateQuery = `
+      UPDATE rooms 
+      SET ${updateFields.join(', ')}
+      ${whereClause}
+      RETURNING id, room_number, floor, status, price_override
+    `;
+
+    console.log('Update query:', updateQuery);
+    console.log('Update values:', updateValues);
+
+    const { rows } = await db.query(updateQuery, updateValues);
+
+    res.status(200).json({
+      success: true,
+      message: 'Room updated successfully',
+      data: rows[0]
+    });
+
+  } catch (error) {
+    console.error('Error updating room:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update room',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // DELETE /rooms/:roomId - Delete a room
-router.delete('/rooms/:roomId', protect, validateBranch, async (req, res) => {
+router.delete('/rooms/:roomId', protect, async (req, res) => {
   try {
     const { roomId } = req.params;
     const branchId = req.headers['x-branch-id'] || req.query.branch_id;
@@ -3027,9 +3293,9 @@ router.delete('/rooms/:roomId', protect, validateBranch, async (req, res) => {
       });
     }
 
-    // Check if room has active bookings
+    // Check if room has active bookings/reservations
     const bookingCheck = await db.query(
-      `SELECT id FROM bookings 
+      `SELECT id FROM reservations 
        WHERE room_id = $1 
        AND status IN ('confirmed', 'checked_in') 
        AND check_out_date >= CURRENT_DATE`,

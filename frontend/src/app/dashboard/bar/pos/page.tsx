@@ -4,22 +4,32 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
-import { Button } from "@/components/ui/minimal/button";
 import { Input } from '@/components/ui/input';
-import { restaurantAPI } from '@/lib/api';
-import { ShoppingCart, Plus, Minus, X, Search, Wine, Beer, Coffee, GlassWater } from 'lucide-react';
+import { barAPI } from '@/lib/api';
+import { useBranch } from '@/lib/branch-context';
+import { ShoppingCart, Plus, Minus, X, Search, Wine } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import Image from 'next/image';
 
-interface MenuItem { id: string; name: string; price: number; category_id: string; category_name?: string; is_available: boolean; }
-interface CartItem extends MenuItem { quantity: number; }
+interface Drink {
+  id: string;
+  name: string;
+  price: number;
+  category_id: string;
+  category_name?: string;
+  is_available: boolean;
+  unit?: string;
+  image_url?: string;
+}
+interface CartItem extends Drink { quantity: number; }
 interface Category { id: string; name: string; }
 
 export default function BarPOSPage() {
   const { user } = useAuth();
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const { activeBranchId } = useBranch();
+  const [drinks, setDrinks] = useState<Drink[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -31,29 +41,34 @@ export default function BarPOSPage() {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [itemsRes, categoriesRes] = await Promise.all([
-        restaurantAPI.getMenuItems(undefined, undefined, true),
-        restaurantAPI.getCategories(),
+      const [drinksRes, categoriesRes] = await Promise.all([
+        barAPI.getDrinks(),
+        barAPI.getCategories(),
       ]);
-      if (itemsRes.success) setMenuItems(itemsRes.data || []);
+      if (drinksRes.success) {
+        const availableDrinks = (drinksRes.data || []).filter((d: Drink) => d.is_available !== false);
+        setDrinks(availableDrinks);
+      }
       if (categoriesRes.success) setCategories(categoriesRes.data || []);
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
-  const filteredItems = menuItems.filter((item) => {
-    const matchesSearch = item.name?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || item.category_id === selectedCategory;
-    return matchesSearch && matchesCategory && item.is_available;
+  const filteredDrinks = drinks.filter((drink) => {
+    const matchesSearch = drink.name?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = selectedCategory === 'all' || drink.category_id === selectedCategory;
+    return matchesSearch && matchesCategory;
   });
 
-  const addToCart = (item: MenuItem) => {
+  const addToCart = (drink: Drink) => {
     setCart((prev) => {
-      const existing = prev.find((i) => i.id === item.id);
-      if (existing) return prev.map((i) => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { ...item, quantity: 1 }];
+      const existing = prev.find((i) => i.id === drink.id);
+      if (existing) return prev.map((i) => i.id === drink.id ? { ...i, quantity: i.quantity + 1 } : i);
+      return [...prev, { ...drink, quantity: 1 }];
     });
   };
 
@@ -70,22 +85,76 @@ export default function BarPOSPage() {
   const removeFromCart = (itemId: string) => setCart((prev) => prev.filter((i) => i.id !== itemId));
   const clearCart = () => { setCart([]); setTableNumber(''); };
 
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax = Math.round(subtotal * 0.16);
-  const total = subtotal + tax;
+  // VAT is INCLUDED in menu prices (16%) - calculate breakdown for display only
+  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = Math.round(total / 1.16);
+  const tax = total - subtotal;
 
-  const handleSubmitOrder = async () => {
+  const handleGenerateBill = async () => {
     if (cart.length === 0) { toast.error('Cart is empty'); return; }
     setIsSubmitting(true);
     try {
-      await restaurantAPI.createOrder({
-        order_type: 'dine_in',
-        table_number: tableNumber || undefined,
-        items: cart.map((item) => ({ menu_item_id: item.id, quantity: item.quantity })),
-        subtotal, tax, total,
+      // 1. Create Order (Completed immediately)
+      const orderRes = await barAPI.createOrder({
+        branch_id: activeBranchId,
+        order_type: 'bar',
+        seat_number: tableNumber || undefined,
+        items: cart.map((item) => ({
+          drink_id: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity
+        })),
+        payment_method: 'cash',
+        status: 'completed' // Mark as completed immediately
       });
-      toast.success('Order placed!');
-      clearCart();
+
+      if (orderRes.success) {
+        toast.success('Order placed!');
+
+        // 2. Generate Receipt
+        try {
+          // Import receiptsAPI dynamically if needed or assume it's available in imports
+          // We need to add receiptsAPI to imports first, but for now let's assume it's there or we'll add it
+          const { receiptsAPI } = require('@/lib/api');
+
+          const receiptData = {
+            receipt_type: 'sale',
+            receipt_number: orderRes.data.order_number || orderRes.data.id.substring(0, 8),
+            date: new Date().toISOString(),
+            table_number: tableNumber,
+            items: cart.map(item => ({
+              name: item.name,
+              quantity: item.quantity,
+              unit_price: item.price,
+              total: item.price * item.quantity
+            })),
+            total_amount: total,
+            payment_method: 'Cash'
+          };
+
+          const receiptRes = await receiptsAPI.generateReceipt(receiptData);
+
+          if (receiptRes.success && receiptRes.data?.pdf_base64) {
+            // Open PDF in new window
+            const pdfWindow = window.open("");
+            if (pdfWindow) {
+              pdfWindow.document.write(
+                `<iframe width='100%' height='100%' src='data:application/pdf;base64,${receiptRes.data.pdf_base64}'></iframe>`
+              );
+            } else {
+              toast.error('Pop-up blocked. Cannot show receipt.');
+            }
+          } else {
+            toast.error('Failed to generate receipt');
+          }
+        } catch (receiptError) {
+          console.error('Receipt generation failed:', receiptError);
+          toast.error('Order saved but receipt generation failed');
+        }
+
+        clearCart();
+      }
     } catch (error: any) { toast.error(error.message || 'Failed to place order'); }
     finally { setIsSubmitting(false); }
   };
@@ -97,8 +166,8 @@ export default function BarPOSPage() {
           <div className="flex-1 flex flex-col">
             <div className="mb-4 space-y-3">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input placeholder="Search drinks..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
+                <Input placeholder="Search drinks..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
               </div>
               <div className="flex gap-2 overflow-x-auto pb-2">
                 <IOSButton size="sm" variant={selectedCategory === 'all' ? 'primary' : 'secondary'} onClick={() => setSelectedCategory('all')}>All</IOSButton>
@@ -112,13 +181,24 @@ export default function BarPOSPage() {
                 <div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#007AFF]" /></div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {filteredItems.map((item) => (
-                    <IOSCard key={item.id} className="p-3 cursor-pointer hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition active:scale-95" onClick={() => addToCart(item)}>
-                      <div className="h-16 bg-gradient-to-br from-purple-100 to-pink-100 rounded-ios-lg mb-2 flex items-center justify-center">
-                        <Wine className="h-8 w-8 text-purple-500" />
+                  {filteredDrinks.map((drink) => (
+                    <IOSCard key={drink.id} className="p-3 cursor-pointer hover:shadow-md transition active:scale-95" onClick={() => addToCart(drink)}>
+                      <div className="h-24 bg-gradient-to-br from-amber-100 to-orange-100 rounded-ios-lg mb-2 flex items-center justify-center overflow-hidden relative">
+                        {drink.image_url ? (
+                          <Image
+                            src={drink.image_url}
+                            alt={drink.name}
+                            fill
+                            className="object-cover"
+                            sizes="(max-width: 768px) 50vw, 33vw"
+                            priority={true}
+                          />
+                        ) : (
+                          <Wine className="h-8 w-8 text-amber-600" />
+                        )}
                       </div>
-                      <p className="font-medium text-sm truncate">{item.name}</p>
-                      <p className="text-[#007AFF] font-bold">KES {item.price?.toLocaleString()}</p>
+                      <p className="font-medium text-sm truncate">{drink.name}</p>
+                      <p className="text-amber-600 font-bold">KES {drink.price?.toLocaleString()}</p>
                     </IOSCard>
                   ))}
                 </div>
@@ -126,45 +206,48 @@ export default function BarPOSPage() {
             </div>
           </div>
 
-          <IOSCard className="w-96 flex flex-col">
-            <div className="p-4 border-b">
-              <h2 className="font-bold text-lg flex items-center gap-2"><ShoppingCart className="h-5 w-5" /> Order</h2>
-              <Input placeholder="Table Number (optional)" value={tableNumber} onChange={(e) => setTableNumber(e.target.value)} className="mt-3" />
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              {cart.length === 0 ? (
-                <div className="text-center py-8 text-gray-400"><ShoppingCart className="h-12 w-12 mx-auto mb-2" /><p>Cart is empty</p></div>
-              ) : (
-                <div className="space-y-3">
-                  {cart.map((item) => (
-                    <div key={item.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-ios-lg">
-                      <div className="flex-1">
-                        <p className="font-medium text-sm">{item.name}</p>
-                        <p className="text-[#007AFF] text-sm">KES {(item.price * item.quantity).toLocaleString()}</p>
+          <div className="w-96 flex flex-col gap-4">
+            {/* Cart */}
+            <IOSCard className="flex-1 flex flex-col min-h-0">
+              <div className="p-4 border-b">
+                <h2 className="font-bold text-lg flex items-center gap-2"><ShoppingCart className="h-5 w-5" /> Order</h2>
+                <Input placeholder="Seat Number (optional)" value={tableNumber} onChange={(e) => setTableNumber(e.target.value)} className="mt-3" />
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                {cart.length === 0 ? (
+                  <div className="text-center py-8 text-gray-400"><ShoppingCart className="h-12 w-12 mx-auto mb-2" /><p>Cart is empty</p></div>
+                ) : (
+                  <div className="space-y-3">
+                    {cart.map((item) => (
+                      <div key={item.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-ios-lg">
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">{item.name}</p>
+                          <p className="text-amber-600 text-sm">KES {(item.price * item.quantity).toLocaleString()}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <IOSButton size="sm" variant="secondary" onClick={() => updateQuantity(item.id, -1)}><Minus className="h-3 w-3" /></IOSButton>
+                          <span className="w-6 text-center font-medium">{item.quantity}</span>
+                          <IOSButton size="sm" variant="secondary" onClick={() => updateQuantity(item.id, 1)}><Plus className="h-3 w-3" /></IOSButton>
+                          <IOSButton size="sm" variant="destructive" onClick={() => removeFromCart(item.id)}><X className="h-3 w-3" /></IOSButton>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <IOSButton size="sm" variant="secondary" onClick={() => updateQuantity(item.id, -1)}><Minus className="h-3 w-3" /></IOSButton>
-                        <span className="w-6 text-center font-medium">{item.quantity}</span>
-                        <IOSButton size="sm" variant="secondary" onClick={() => updateQuantity(item.id, 1)}><Plus className="h-3 w-3" /></IOSButton>
-                        <IOSButton size="sm" variant="destructive" onClick={() => removeFromCart(item.id)}><X className="h-3 w-3" /></IOSButton>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="p-4 border-t space-y-3">
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between text-gray-600"><span>Subtotal (excl. VAT)</span><span>KES {subtotal.toLocaleString()}</span></div>
+                  <div className="flex justify-between text-gray-600"><span>VAT (16% incl.)</span><span>KES {tax.toLocaleString()}</span></div>
+                  <div className="flex justify-between font-bold text-lg pt-2 border-t"><span>Total</span><span>KES {total.toLocaleString()}</span></div>
                 </div>
-              )}
-            </div>
-            <div className="p-4 border-t space-y-3">
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between"><span>Subtotal</span><span>KES {subtotal.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span>Tax (16%)</span><span>KES {tax.toLocaleString()}</span></div>
-                <div className="flex justify-between font-bold text-lg pt-2 border-t"><span>Total</span><span>KES {total.toLocaleString()}</span></div>
+                <div className="flex gap-2">
+                  <IOSButton variant="secondary" onClick={clearCart} className="flex-1" disabled={cart.length === 0}>Clear</IOSButton>
+                  <IOSButton onClick={handleGenerateBill} className="flex-1" disabled={cart.length === 0 || isSubmitting}>{isSubmitting ? 'Generating...' : 'Generate Bill'}</IOSButton>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <IOSButton variant="secondary" onClick={clearCart} className="flex-1" disabled={cart.length === 0}>Clear</IOSButton>
-                <IOSButton onClick={handleSubmitOrder} className="flex-1" disabled={cart.length === 0 || isSubmitting}>{isSubmitting ? 'Placing...' : 'Place Order'}</IOSButton>
-              </div>
-            </div>
-          </IOSCard>
+            </IOSCard>
+          </div>
         </div>
       </DashboardLayout>
     </ProtectedRoute>

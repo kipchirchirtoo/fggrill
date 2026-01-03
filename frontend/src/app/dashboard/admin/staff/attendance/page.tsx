@@ -65,7 +65,7 @@ export default function AdminAttendancePage() {
                       <td className="p-3 flex items-center gap-2"><User className="h-4 w-4 text-gray-400" /> {record.staff_name}</td>
                       <td className="p-3">{record.check_in || '-'}</td>
                       <td className="p-3">{record.check_out || '-'}</td>
-                      <td className="p-3 text-center"><IOSBadge variant={record.status === 'present' ? 'success' : record.status === 'absent' ? 'error' : 'warning'}>{record.status}</IOSBadge></td>
+                      <td className="p-3 text-center"><IOSBadge color={record.status === 'present' ? 'success' : record.status === 'absent' ? 'danger' : 'warning'}>{record.status}</IOSBadge></td>
                     </tr>
                   ))}
                 </tbody>

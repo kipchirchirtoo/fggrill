@@ -215,7 +215,8 @@ export function ReportsPageComponent({
       setScheduledReports(reports);
     } catch (error) {
       console.error('Error fetching scheduled reports:', error);
-      toast.error('Failed to fetch scheduled reports');
+      // Don't show error toast - reports service may not be running
+      setScheduledReports([]);
     } finally {
       setIsLoading(false);
     }

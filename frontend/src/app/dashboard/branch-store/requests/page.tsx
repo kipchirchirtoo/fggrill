@@ -20,10 +20,15 @@ interface StockItem { id: string; sku: string; item_code: string; name: string; 
 interface RequestItem { item_sku: string; name: string; requested_quantity: number; current_stock: number; unit: string; }
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
-  pending: { label: 'Pending', color: 'text-yellow-700', bg: 'bg-yellow-100' },
-  approved: { label: 'Approved', color: 'text-blue-700', bg: 'bg-blue-100' },
-  fulfilled: { label: 'Fulfilled', color: 'text-green-700', bg: 'bg-green-100' },
-  rejected: { label: 'Rejected', color: 'text-red-700', bg: 'bg-red-100' },
+  PENDING: { label: 'Pending', color: 'text-yellow-700', bg: 'bg-yellow-100' },
+  UNDER_REVIEW: { label: 'Reviewing', color: 'text-orange-700', bg: 'bg-orange-100' },
+  APPROVED: { label: 'Approved', color: 'text-blue-700', bg: 'bg-blue-100' },
+  PARTIALLY_APPROVED: { label: 'Partial', color: 'text-blue-600', bg: 'bg-blue-50' },
+  DISPATCHED: { label: 'Dispatched', color: 'text-purple-700', bg: 'bg-purple-100' },
+  DELIVERED: { label: 'Fulfilled', color: 'text-green-700', bg: 'bg-green-100' },
+  FULFILLED: { label: 'Fulfilled', color: 'text-green-700', bg: 'bg-green-100' },
+  REJECTED: { label: 'Rejected', color: 'text-red-700', bg: 'bg-red-100' },
+  CANCELLED: { label: 'Cancelled', color: 'text-gray-700', bg: 'bg-gray-100' },
 };
 
 export default function BranchRequestsPage() {
@@ -31,7 +36,7 @@ export default function BranchRequestsPage() {
   const [requests, setRequests] = useState<StockRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  
+
   // New Request Modal State
   const [showNewRequestModal, setShowNewRequestModal] = useState(false);
   const [availableItems, setAvailableItems] = useState<StockItem[]>([]);
@@ -46,15 +51,18 @@ export default function BranchRequestsPage() {
     try {
       const response = await storeAPI.getBranchRequests();
       if (response.success) {
-        const data = response.data || [];
-        setRequests(statusFilter === 'all' ? data : data.filter((r: StockRequest) => r.status === statusFilter));
+        const data = (response.data || []).map((r: any) => ({
+          ...r,
+          status: r.status.toUpperCase()
+        }));
+        setRequests(data);
       }
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, [statusFilter]);
+  }, []);
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
-  
+
   // Fetch available items when modal opens
   const openNewRequestModal = async () => {
     setShowNewRequestModal(true);
@@ -67,7 +75,7 @@ export default function BranchRequestsPage() {
       console.error('Error fetching items:', error);
     }
   };
-  
+
   const addItemToRequest = (item: StockItem) => {
     const sku = item.sku || item.item_code;
     if (selectedItems.find(i => i.item_sku === sku)) {
@@ -82,23 +90,23 @@ export default function BranchRequestsPage() {
       unit: item.unit || 'pcs'
     }]);
   };
-  
+
   const removeItemFromRequest = (sku: string) => {
     setSelectedItems(selectedItems.filter(i => i.item_sku !== sku));
   };
-  
+
   const updateItemQuantity = (sku: string, quantity: number) => {
-    setSelectedItems(selectedItems.map(i => 
+    setSelectedItems(selectedItems.map(i =>
       i.item_sku === sku ? { ...i, requested_quantity: quantity } : i
     ));
   };
-  
+
   const handleSubmitRequest = async () => {
     if (selectedItems.length === 0) {
       toast.error('Please add at least one item');
       return;
     }
-    
+
     setIsSubmitting(true);
     try {
       await storeAPI.createStockRequest({
@@ -122,14 +130,24 @@ export default function BranchRequestsPage() {
       setIsSubmitting(false);
     }
   };
-  
-  const filteredAvailableItems = availableItems.filter(item => 
+
+  const filteredAvailableItems = availableItems.filter(item =>
     item.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.item_code?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const stats = { pending: requests.filter(r => r.status === 'pending').length, approved: requests.filter(r => r.status === 'approved').length };
+  const stats = {
+    pending: requests.filter(r => r.status === 'PENDING' || r.status === 'UNDER_REVIEW').length,
+    approved: requests.filter(r => r.status === 'APPROVED' || r.status === 'PARTIALLY_APPROVED' || r.status === 'DISPATCHED').length
+  };
+
+  const filteredRequests = requests.filter((request: StockRequest) => {
+    if (statusFilter === 'all') return true;
+    if (statusFilter === 'PENDING') return request.status === 'PENDING' || request.status === 'UNDER_REVIEW';
+    if (statusFilter === 'APPROVED') return request.status === 'APPROVED' || request.status === 'PARTIALLY_APPROVED' || request.status === 'DISPATCHED';
+    return request.status === statusFilter;
+  });
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_MANAGER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
@@ -149,7 +167,7 @@ export default function BranchRequestsPage() {
           </div>
 
           <div className="flex gap-2">
-            {['all', 'pending', 'approved', 'fulfilled', 'rejected'].map((status) => (
+            {['all', 'PENDING', 'APPROVED', 'DISPATCHED', 'DELIVERED', 'REJECTED'].map((status) => (
               <IOSButton key={status} variant={statusFilter === status ? 'primary' : 'secondary'} size="sm" onClick={() => setStatusFilter(status)}>
                 {status === 'all' ? 'All' : statusConfig[status]?.label || status}
               </IOSButton>
@@ -158,12 +176,12 @@ export default function BranchRequestsPage() {
 
           {isLoading ? (
             <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
-          ) : requests.length === 0 ? (
+          ) : filteredRequests.length === 0 ? (
             <IOSCard className="p-12 text-center"><ShoppingCart className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No requests</p></IOSCard>
           ) : (
             <div className="space-y-3">
-              {requests.map((request) => {
-                const status = statusConfig[request.status] || statusConfig.pending;
+              {filteredRequests.map((request: StockRequest) => {
+                const status = statusConfig[request.status] || statusConfig.PENDING;
                 return (
                   <IOSCard key={request.id} className="p-4">
                     <div className="flex items-center justify-between">
@@ -185,14 +203,14 @@ export default function BranchRequestsPage() {
             </div>
           )}
         </div>
-        
+
         {/* New Request Modal */}
         <Dialog open={showNewRequestModal} onOpenChange={setShowNewRequestModal}>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
             <DialogHeader>
               <DialogTitle>New Stock Request</DialogTitle>
             </DialogHeader>
-            
+
             <div className="flex-1 overflow-y-auto space-y-4 mt-4">
               {/* Selected Items */}
               {selectedItems.length > 0 && (
@@ -223,22 +241,22 @@ export default function BranchRequestsPage() {
                   </div>
                 </div>
               )}
-              
+
               {/* Priority & Reason */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium">Priority</label>
                   <div className="flex gap-2 mt-1">
-                    <IOSButton 
-                      size="sm" 
+                    <IOSButton
+                      size="sm"
                       variant={priority === 'normal' ? 'primary' : 'secondary'}
                       onClick={() => setPriority('normal')}
                       className="flex-1"
                     >
                       Normal
                     </IOSButton>
-                    <IOSButton 
-                      size="sm" 
+                    <IOSButton
+                      size="sm"
                       variant={priority === 'urgent' ? 'destructive' : 'secondary'}
                       onClick={() => setPriority('urgent')}
                       className="flex-1"
@@ -258,20 +276,20 @@ export default function BranchRequestsPage() {
                   />
                 </div>
               </div>
-              
+
               {/* Search Available Items */}
               <div>
                 <label className="text-sm font-medium mb-2 block">Add Items to Request</label>
                 <div className="relative mb-3">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                   <Input
                     placeholder="Search items by name or SKU..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                    className="pl-9"
                   />
                 </div>
-                
+
                 <div className="border rounded-ios-lg max-h-60 overflow-y-auto">
                   {filteredAvailableItems.length === 0 ? (
                     <div className="p-4 text-center text-gray-500">No items found</div>
@@ -281,8 +299,8 @@ export default function BranchRequestsPage() {
                         const isLow = item.quantity <= item.min_quantity;
                         const isSelected = selectedItems.some(i => i.item_sku === (item.sku || item.item_code));
                         return (
-                          <div 
-                            key={item.id} 
+                          <div
+                            key={item.id}
                             className={`p-3 flex items-center justify-between hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
                             onClick={() => !isSelected && addItemToRequest(item)}
                           >
@@ -311,14 +329,14 @@ export default function BranchRequestsPage() {
                 </div>
               </div>
             </div>
-            
+
             {/* Footer */}
             <div className="flex gap-3 pt-4 border-t mt-4">
               <IOSButton variant="secondary" onClick={() => setShowNewRequestModal(false)} className="flex-1">
                 Cancel
               </IOSButton>
-              <IOSButton 
-                onClick={handleSubmitRequest} 
+              <IOSButton
+                onClick={handleSubmitRequest}
                 disabled={selectedItems.length === 0 || isSubmitting}
                 className="flex-1"
               >

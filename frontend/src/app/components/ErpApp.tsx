@@ -570,11 +570,11 @@ function POSModule() {
           <h2 className="text-2xl font-bold text-slate-800">Point of Sale</h2>
           <div className="flex space-x-2">
             <div className="relative">
-              <Icons.Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+              <Icons.Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 pointer-events-none text-slate-400" />
               <input
                 type="text"
                 placeholder="Search products..."
-                className="w-64 rounded-ios-lg border-slate-200 pl-10 focus:border-indigo-500 focus:ring-indigo-500"
+                className="w-64 rounded-ios-lg border-slate-200 pl-9 focus:border-indigo-500 focus:ring-indigo-500"
               />
             </div>
           </div>
@@ -854,13 +854,13 @@ function InventoryModule() {
 
       <div className="flex space-x-4">
         <div className="relative flex-1">
-          <Icons.Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+          <Icons.Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 pointer-events-none text-slate-400" />
           <input
             type="text"
             placeholder="Search products..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="w-full rounded-ios-lg border-slate-200 pl-10 focus:border-indigo-500 focus:ring-indigo-500"
+            className="w-full rounded-ios-lg border-slate-200 pl-9 focus:border-indigo-500 focus:ring-indigo-500"
           />
         </div>
         <select
@@ -1055,13 +1055,13 @@ function HRModule() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-slate-800">HR & Payroll</h2>
         <div className="relative">
-          <Icons.Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+          <Icons.Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 pointer-events-none text-slate-400" />
           <input
             type="text"
             placeholder="Search employees..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="w-64 rounded-ios-lg border-slate-200 pl-10 focus:border-indigo-500 focus:ring-indigo-500"
+            className="w-64 rounded-ios-lg border-slate-200 pl-9 focus:border-indigo-500 focus:ring-indigo-500"
           />
         </div>
       </div>

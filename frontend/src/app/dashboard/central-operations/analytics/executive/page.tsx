@@ -70,7 +70,7 @@ function ExecutiveContent() {
       // Fallback to Node backend
       if (!result || !result.success) {
         const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-        const token = localStorage.getItem('auth_token') || 'demo-token';
+        const token = localStorage.getItem('token');
         const res = await fetch(`${API_BASE}/api/central-operations/analytics/executive?period=${selectedPeriod}`, { 
           headers: { 'Authorization': `Bearer ${token}` } 
         });

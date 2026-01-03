@@ -83,7 +83,7 @@ function PerformanceContent() {
   const fetchPerformanceData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('auth_token') || 'demo-token';
+      const token = localStorage.getItem('token');
       const response = await fetch(
         `${API_BASE}/api/central-operations/branch-oversight/performance?period=${dateRange}`,
         {

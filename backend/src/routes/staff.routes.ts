@@ -9,7 +9,8 @@ import {
   processPayroll,
   submitPerformanceReview,
   getAttendance,
-  recordAttendance,
+  clockIn,
+  clockOut,
   getAttendanceSummary,
   getLeaveRequests,
   createLeaveRequest,
@@ -28,27 +29,18 @@ router.get('/roles', getRoles);
 // Protected routes
 router.use(protect);
 
-// Admin and Manager routes
+// Admin, Manager, Restaurant staff, and POS Kitchen routes (POS needs to access waiters for order assignment)
 router.get('/',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RESTAURANT, UserRole.POS_KITCHEN, UserRole.KITCHEN]),
   getStaff
 );
 
 router.post('/',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]),
   createStaffMember
 );
 
-router.get('/:id',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]),
-  getStaffMember
-);
-
-router.put('/:id',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
-  updateStaffMember
-);
-
+// Specific paths MUST come before parameterized routes like /:id
 router.post('/schedule',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]),
   createStaffSchedule
@@ -66,12 +58,23 @@ router.post('/payroll',
 );
 
 // Attendance routes
-router.route('/attendance')
-  .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), getAttendance)
-  .post(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST]), recordAttendance);
+router.get('/attendance',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]),
+  getAttendance
+);
+
+router.post('/attendance/clock-in',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]),
+  clockIn
+);
+
+router.post('/attendance/clock-out',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]),
+  clockOut
+);
 
 router.get('/attendance/summary',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]),
   getAttendanceSummary
 );
 
@@ -79,6 +82,17 @@ router.get('/attendance/summary',
 router.route('/leave')
   .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), getLeaveRequests)
   .post(protect, createLeaveRequest);
+
+// Parameterized routes
+router.get('/:id',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]),
+  getStaffMember
+);
+
+router.put('/:id',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]),
+  updateStaffMember
+);
 
 router.put('/leave/:id',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),

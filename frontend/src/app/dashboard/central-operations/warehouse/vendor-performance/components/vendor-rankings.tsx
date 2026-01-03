@@ -1,7 +1,7 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Medal, TrendingUp, TrendingDown, Award } from 'lucide-react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, 
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
   Cell
 } from 'recharts';
@@ -14,10 +14,10 @@ interface VendorRankingsProps {
   selectedCategory: string | null;
 }
 
-export default function VendorRankings({ 
-  vendors, 
+export default function VendorRankings({
+  vendors,
   categories,
-  isLoading, 
+  isLoading,
   onSelectCategory,
   selectedCategory
 }: VendorRankingsProps) {
@@ -32,58 +32,58 @@ export default function VendorRankings({
       quality: vendor.quality_score || 0,
       price: vendor.price_score || 0,
     }));
-  
+
   // Get category stats
   const getCategoryStats = () => {
     const stats: Record<string, { count: number, avg: number }> = {};
-    
+
     vendors.forEach(vendor => {
       if (!vendor.category) return;
-      
+
       if (!stats[vendor.category]) {
         stats[vendor.category] = { count: 0, avg: 0 };
       }
-      
+
       stats[vendor.category].count += 1;
       stats[vendor.category].avg += (vendor.overall_score || 0);
     });
-    
+
     // Calculate averages
     Object.keys(stats).forEach(category => {
       stats[category].avg = stats[category].avg / stats[category].count;
     });
-    
+
     return Object.entries(stats)
       .map(([category, data]) => ({ category, count: data.count, avg: data.avg }))
       .sort((a, b) => b.avg - a.avg);
   };
-  
+
   const categoryStats = getCategoryStats();
-  
+
   // Calculate average scores
   const calculateAverages = () => {
     if (!vendors.length) return { overall: 0, delivery: 0, quality: 0, price: 0 };
-    
+
     let overall = 0;
     let delivery = 0;
     let quality = 0;
     let price = 0;
     let count = 0;
-    
+
     vendors.forEach(vendor => {
       if (selectedCategory && vendor.category !== selectedCategory) {
         return;
       }
-      
+
       overall += (vendor.overall_score || 0);
       delivery += (vendor.on_time_delivery_score || 0);
       quality += (vendor.quality_score || 0);
       price += (vendor.price_score || 0);
       count++;
     });
-    
+
     if (count === 0) return { overall: 0, delivery: 0, quality: 0, price: 0 };
-    
+
     return {
       overall: overall / count,
       delivery: delivery / count,
@@ -91,9 +91,9 @@ export default function VendorRankings({
       price: price / count
     };
   };
-  
+
   const averages = calculateAverages();
-  
+
   // Bar colors
   const getBarColor = (score: number) => {
     if (score >= 90) return '#10B981';
@@ -101,21 +101,21 @@ export default function VendorRankings({
     if (score >= 60) return '#F59E0B';
     return '#EF4444';
   };
-  
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-col md:flex-row gap-6 items-start">
         <div className="w-full md:w-64">
           <h3 className="text-lg font-medium mb-4">Filter by Category</h3>
           <Select
-            value={selectedCategory || ''}
-            onValueChange={(value) => onSelectCategory(value || null)}
+            value={selectedCategory || 'ALL'}
+            onValueChange={(value) => onSelectCategory(value === 'ALL' ? null : value)}
           >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="All Categories" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Categories</SelectItem>
+              <SelectItem value="ALL">All Categories</SelectItem>
               {categories.map((category) => (
                 <SelectItem key={category} value={category}>
                   {category}
@@ -123,7 +123,7 @@ export default function VendorRankings({
               ))}
             </SelectContent>
           </Select>
-          
+
           <div className="mt-6">
             <h3 className="text-lg font-medium mb-4">Performance by Category</h3>
             {isLoading ? (
@@ -133,7 +133,7 @@ export default function VendorRankings({
             ) : (
               <div className="space-y-4">
                 {categoryStats.map((stat, index) => (
-                  <div 
+                  <div
                     key={stat.category}
                     className="p-4 border rounded-lg bg-white hover:bg-gray-50 cursor-pointer"
                     onClick={() => onSelectCategory(stat.category)}
@@ -165,7 +165,7 @@ export default function VendorRankings({
             )}
           </div>
         </div>
-        
+
         <div className="flex-1 space-y-6">
           <div>
             <h3 className="text-lg font-medium mb-4">Average Vendor Performance</h3>
@@ -187,19 +187,18 @@ export default function VendorRankings({
                   </div>
                   <div className="mt-2">
                     <div className="h-2 bg-gray-100 rounded-full">
-                      <div 
-                        className={`h-2 rounded-full ${
-                          averages.overall >= 90 ? 'bg-green-500' :
-                          averages.overall >= 75 ? 'bg-blue-500' :
-                          averages.overall >= 60 ? 'bg-yellow-500' :
-                          'bg-red-500'
-                        }`} 
+                      <div
+                        className={`h-2 rounded-full ${averages.overall >= 90 ? 'bg-green-500' :
+                            averages.overall >= 75 ? 'bg-blue-500' :
+                              averages.overall >= 60 ? 'bg-yellow-500' :
+                                'bg-red-500'
+                          }`}
                         style={{ width: `${averages.overall}%` }}
                       ></div>
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="bg-white p-4 rounded-lg border">
                   <div className="flex justify-between">
                     <div>
@@ -212,19 +211,18 @@ export default function VendorRankings({
                   </div>
                   <div className="mt-2">
                     <div className="h-2 bg-gray-100 rounded-full">
-                      <div 
-                        className={`h-2 rounded-full ${
-                          averages.delivery >= 90 ? 'bg-green-500' :
-                          averages.delivery >= 75 ? 'bg-blue-500' :
-                          averages.delivery >= 60 ? 'bg-yellow-500' :
-                          'bg-red-500'
-                        }`} 
+                      <div
+                        className={`h-2 rounded-full ${averages.delivery >= 90 ? 'bg-green-500' :
+                            averages.delivery >= 75 ? 'bg-blue-500' :
+                              averages.delivery >= 60 ? 'bg-yellow-500' :
+                                'bg-red-500'
+                          }`}
                         style={{ width: `${averages.delivery}%` }}
                       ></div>
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="bg-white p-4 rounded-lg border">
                   <div className="flex justify-between">
                     <div>
@@ -237,19 +235,18 @@ export default function VendorRankings({
                   </div>
                   <div className="mt-2">
                     <div className="h-2 bg-gray-100 rounded-full">
-                      <div 
-                        className={`h-2 rounded-full ${
-                          averages.quality >= 90 ? 'bg-green-500' :
-                          averages.quality >= 75 ? 'bg-blue-500' :
-                          averages.quality >= 60 ? 'bg-yellow-500' :
-                          'bg-red-500'
-                        }`} 
+                      <div
+                        className={`h-2 rounded-full ${averages.quality >= 90 ? 'bg-green-500' :
+                            averages.quality >= 75 ? 'bg-blue-500' :
+                              averages.quality >= 60 ? 'bg-yellow-500' :
+                                'bg-red-500'
+                          }`}
                         style={{ width: `${averages.quality}%` }}
                       ></div>
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="bg-white p-4 rounded-lg border">
                   <div className="flex justify-between">
                     <div>
@@ -262,13 +259,12 @@ export default function VendorRankings({
                   </div>
                   <div className="mt-2">
                     <div className="h-2 bg-gray-100 rounded-full">
-                      <div 
-                        className={`h-2 rounded-full ${
-                          averages.price >= 90 ? 'bg-green-500' :
-                          averages.price >= 75 ? 'bg-blue-500' :
-                          averages.price >= 60 ? 'bg-yellow-500' :
-                          'bg-red-500'
-                        }`} 
+                      <div
+                        className={`h-2 rounded-full ${averages.price >= 90 ? 'bg-green-500' :
+                            averages.price >= 75 ? 'bg-blue-500' :
+                              averages.price >= 60 ? 'bg-yellow-500' :
+                                'bg-red-500'
+                          }`}
                         style={{ width: `${averages.price}%` }}
                       ></div>
                     </div>
@@ -277,7 +273,7 @@ export default function VendorRankings({
               </div>
             )}
           </div>
-          
+
           <div className="bg-white p-6 border rounded-lg">
             <h3 className="text-lg font-medium mb-4">Top Performing Vendors</h3>
             {isLoading ? (
@@ -298,13 +294,13 @@ export default function VendorRankings({
                   >
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                     <XAxis type="number" domain={[0, 100]} />
-                    <YAxis 
-                      dataKey="name" 
-                      type="category" 
+                    <YAxis
+                      dataKey="name"
+                      type="category"
                       width={150}
                       tick={{ fontSize: 12 }}
                     />
-                    <Tooltip 
+                    <Tooltip
                       formatter={(value) => [`${value}`, 'Score']}
                     />
                     <Legend />

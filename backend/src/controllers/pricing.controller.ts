@@ -11,17 +11,26 @@ export const getPricingQuote = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { checkIn, checkOut, roomTypeId, guests } = req.body;
+    const {
+      checkIn, checkOut, check_in, check_out,
+      roomTypeId, room_type_id, roomType,
+      guests, adults
+    } = req.body;
 
-    if (!checkIn || !checkOut || !roomTypeId) {
-      throw new AppError('Missing required fields', 400);
+    const checkInDate = checkIn || check_in;
+    const checkOutDate = checkOut || check_out;
+    const roomTypeValue = roomTypeId || room_type_id || roomType;
+    const guestCount = guests || adults || 1;
+
+    if (!checkInDate || !checkOutDate || !roomTypeValue) {
+      throw new AppError(`Missing required fields. Received: checkIn=${checkInDate}, checkOut=${checkOutDate}, roomType=${roomTypeValue}`, 400);
     }
 
     const quote = await calculateDynamicRate({
-      check_in: checkIn,
-      check_out: checkOut,
-      room_type_id: roomTypeId,
-      guests: guests || 1
+      check_in: checkInDate,
+      check_out: checkOutDate,
+      room_type_id: roomTypeValue,
+      guests: guestCount
     });
 
     if (!quote) {

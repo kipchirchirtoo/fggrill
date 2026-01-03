@@ -50,7 +50,6 @@ function FacilitiesManagerDashboardContent() {
   });
   const [isLoading, setIsLoading] = useState(true);
   
-  // Dummy task and work order data for UI demonstration
   const [recentTasks, setRecentTasks] = useState<any[]>([]);
   const [recentWorkOrders, setRecentWorkOrders] = useState<any[]>([]);
 
@@ -76,18 +75,9 @@ function FacilitiesManagerDashboardContent() {
       console.error('Error fetching facilities dashboard data:', error);
       toast.error('Failed to load dashboard data');
       
-      // Set some dummy data for demonstration
-      setRecentTasks([
-        { id: '1', room_number: '101', task_type: 'Cleaning', priority: 'high', assigned_to: 'Jane Smith', status: 'pending' },
-        { id: '2', room_number: '203', task_type: 'Turndown', priority: 'normal', assigned_to: 'John Doe', status: 'in_progress' },
-        { id: '3', room_number: '305', task_type: 'Deep Clean', priority: 'normal', assigned_to: 'Alice Brown', status: 'completed' }
-      ]);
-      
-      setRecentWorkOrders([
-        { id: '1', location: 'Room 105', issue: 'Leaking faucet', priority: 'medium', assigned_to: 'Mike Johnson', status: 'open' },
-        { id: '2', location: 'Lobby', issue: 'AC not working', priority: 'high', assigned_to: 'Robert Garcia', status: 'in_progress' },
-        { id: '3', location: 'Kitchen', issue: 'Faulty refrigerator', priority: 'high', assigned_to: 'Robert Garcia', status: 'completed' }
-      ]);
+      // Show empty state on error
+      setRecentTasks([]);
+      setRecentWorkOrders([]);
     } finally {
       setIsLoading(false);
     }

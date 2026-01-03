@@ -9,7 +9,7 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { toast } from 'sonner';
 import {
   BarChart3, LineChart, Loader2, RefreshCw,
-  DollarSign, Box, CalendarDays, Building2, 
+  DollarSign, Box, CalendarDays, Building2,
   Users, TrendingUp, TrendingDown, Percent
 } from 'lucide-react';
 import { BranchPageWrapper } from '@/components/branch/branch-page-wrapper';
@@ -21,8 +21,8 @@ import { Label } from '@/components/ui/label';
 import mlForecastingAPI from '@/lib/ml-forecasting-api';
 
 // Mock data for chart visualization
-import { 
-  LineChart as Chart, Line, XAxis, YAxis, CartesianGrid, 
+import {
+  LineChart as Chart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, AreaChart, Area,
   BarChart, Bar, Cell
 } from 'recharts';
@@ -66,17 +66,15 @@ function MLForecastingContent() {
   const [selectedBranchId, setSelectedBranchId] = useState<number | undefined>(
     activeBranch?.id ? Number(activeBranch.id) : undefined
   );
-  const [selectedCategory, setSelectedCategory] = useState<number | undefined>(undefined);
-  
+  const [selectedCategory, setSelectedCategory] = useState<string | number | undefined>(undefined);
+
   // Category options for inventory forecast
   const categories = [
-    { id: 1, name: 'Food Items' },
-    { id: 2, name: 'Beverages' },
-    { id: 3, name: 'Kitchen Supplies' },
-    { id: 4, name: 'Cleaning Supplies' },
-    { id: 5, name: 'Room Amenities' }
+    { id: 'Food & Beverage', name: 'Food & Beverage' },
+    { id: 'Housekeeping', name: 'Housekeeping' },
+    { id: 'Kitchen Supplies', name: 'Kitchen Supplies' }
   ];
-  
+
   // Department options for budget forecast
   const departments = [
     { id: 1, name: 'Kitchen' },
@@ -89,16 +87,16 @@ function MLForecastingContent() {
   const fetchForecastData = useCallback(async () => {
     setIsLoading(true);
     setForecastData([]);
-    
+
     try {
       let response;
-      
+
       switch (activeTab) {
         case 'sales':
           response = await mlForecastingAPI.getSalesForecast(selectedBranchId, forecastDays);
           break;
         case 'inventory':
-          response = await mlForecastingAPI.getInventoryForecast(selectedCategory, forecastDays);
+          response = await mlForecastingAPI.getInventoryForecast(selectedCategory as string, forecastDays);
           break;
         case 'occupancy':
           response = await mlForecastingAPI.getOccupancyForecast(selectedBranchId, forecastDays);
@@ -107,20 +105,20 @@ function MLForecastingContent() {
           // Convert days to months for budget forecast
           const forecastMonths = Math.max(1, Math.ceil(forecastDays / 30));
           response = await mlForecastingAPI.getBudgetForecast(
-            selectedCategory, // Using category state for department selection
+            selectedCategory as number, // Using category state for department selection
             forecastMonths
           );
           break;
         default:
           throw new Error('Invalid forecast type');
       }
-      
+
       if (response.success && response.data) {
         setForecastData(response.data.forecast || []);
         setConfidenceLevel(response.data.confidence_level || 0);
         setMetrics(response.data.metrics || {});
         setMethodology(response.data.methodology || '');
-        
+
         toast.success(`${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} forecast generated successfully`);
       } else {
         toast.error(response.message || 'Failed to generate forecast');
@@ -132,7 +130,7 @@ function MLForecastingContent() {
       setIsLoading(false);
     }
   }, [activeTab, selectedBranchId, selectedCategory, forecastDays]);
-  
+
   // When tab changes, reset form and data
   useEffect(() => {
     setForecastData([]);
@@ -140,7 +138,7 @@ function MLForecastingContent() {
     setConfidenceLevel(0);
     setMetrics({});
   }, [activeTab]);
-  
+
   // Get tab icon
   const getTabIcon = (tab: string) => {
     switch (tab) {
@@ -156,7 +154,7 @@ function MLForecastingContent() {
         return <BarChart3 className="h-4 w-4" />;
     }
   };
-  
+
   // Format value based on tab
   const formatValue = (value: number) => {
     switch (activeTab) {
@@ -172,7 +170,7 @@ function MLForecastingContent() {
         return value.toLocaleString();
     }
   };
-  
+
   return (
     <ProtectedRoute allowedRoles={[
       UserRole.SUPER_ADMIN,
@@ -186,8 +184,8 @@ function MLForecastingContent() {
         requireBranchContext={false}
         actionButton={
           <div className="flex space-x-2">
-            <IOSButton 
-              variant="secondary" 
+            <IOSButton
+              variant="secondary"
               onClick={fetchForecastData}
               disabled={isLoading}
               leftIcon={isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -216,18 +214,18 @@ function MLForecastingContent() {
                   </TabsTrigger>
                 </TabsList>
               </div>
-              
+
               <div className="p-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {/* Left Column - Filters */}
                   <div className="space-y-4">
                     <h3 className="text-lg font-medium">Forecast Settings</h3>
-                    
+
                     {/* Time Range */}
                     <div>
                       <Label>Time Range</Label>
-                      <Select 
-                        value={forecastDays.toString()} 
+                      <Select
+                        value={forecastDays.toString()}
                         onValueChange={(value) => setForecastDays(Number(value))}
                       >
                         <SelectTrigger>
@@ -242,20 +240,20 @@ function MLForecastingContent() {
                         </SelectContent>
                       </Select>
                     </div>
-                    
+
                     {/* Branch Selection - Show only for branch-specific forecasts */}
                     {(activeTab === 'sales' || activeTab === 'occupancy') && (
                       <div>
                         <Label>Branch</Label>
-                        <Select 
-                          value={selectedBranchId?.toString() || ''} 
-                          onValueChange={(value) => setSelectedBranchId(value ? Number(value) : undefined)}
+                        <Select
+                          value={selectedBranchId?.toString() || 'ALL'}
+                          onValueChange={(value) => setSelectedBranchId(value === 'ALL' ? undefined : Number(value))}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder="Select branch" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">All Branches</SelectItem>
+                            <SelectItem value="ALL">All Branches</SelectItem>
                             {Array.isArray(branches) && branches.map((branch) => (
                               <SelectItem key={branch.id} value={branch.id.toString()}>
                                 {branch.name}
@@ -265,22 +263,22 @@ function MLForecastingContent() {
                         </Select>
                       </div>
                     )}
-                    
+
                     {/* Category Selection - Show only for inventory forecast */}
                     {activeTab === 'inventory' && (
                       <div>
                         <Label>Category</Label>
-                        <Select 
-                          value={selectedCategory?.toString() || ''} 
-                          onValueChange={(value) => setSelectedCategory(value ? Number(value) : undefined)}
+                        <Select
+                          value={selectedCategory?.toString() || 'ALL'}
+                          onValueChange={(value) => setSelectedCategory(value === 'ALL' ? undefined : value)}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder="Select category" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">All Categories</SelectItem>
+                            <SelectItem value="ALL">All Categories</SelectItem>
                             {categories.map((category) => (
-                              <SelectItem key={category.id} value={category.id.toString()}>
+                              <SelectItem key={category.id} value={category.id}>
                                 {category.name}
                               </SelectItem>
                             ))}
@@ -288,20 +286,20 @@ function MLForecastingContent() {
                         </Select>
                       </div>
                     )}
-                    
+
                     {/* Department Selection - Show only for budget forecast */}
                     {activeTab === 'budget' && (
                       <div>
                         <Label>Department</Label>
-                        <Select 
-                          value={selectedCategory?.toString() || ''} 
-                          onValueChange={(value) => setSelectedCategory(value ? Number(value) : undefined)}
+                        <Select
+                          value={selectedCategory?.toString() || 'ALL'}
+                          onValueChange={(value) => setSelectedCategory(value === 'ALL' ? undefined : Number(value))}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder="Select department" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">All Departments</SelectItem>
+                            <SelectItem value="ALL">All Departments</SelectItem>
                             {departments.map((dept) => (
                               <SelectItem key={dept.id} value={dept.id.toString()}>
                                 {dept.name}
@@ -311,7 +309,7 @@ function MLForecastingContent() {
                         </Select>
                       </div>
                     )}
-                    
+
                     <div className="mt-8">
                       {forecastData.length > 0 && (
                         <div className="space-y-3">
@@ -319,35 +317,35 @@ function MLForecastingContent() {
                             <span className="text-sm text-gray-500">Confidence Level</span>
                             <span className="text-sm font-medium">{confidenceLevel}%</span>
                           </div>
-                          
+
                           <div className="h-2 bg-gray-100 rounded-full">
-                            <div 
-                              className="h-full bg-green-500 rounded-full" 
+                            <div
+                              className="h-full bg-green-500 rounded-full"
                               style={{ width: `${confidenceLevel}%` }}
                             ></div>
                           </div>
-                          
+
                           {metrics.mape !== undefined && (
                             <div className="flex items-center justify-between">
                               <span className="text-sm text-gray-500">Error Rate (MAPE)</span>
                               <span className="text-sm font-medium">{metrics.mape * 100}%</span>
                             </div>
                           )}
-                          
+
                           {metrics.accuracy !== undefined && (
                             <div className="flex items-center justify-between">
                               <span className="text-sm text-gray-500">Model Accuracy</span>
                               <span className="text-sm font-medium">{(metrics.accuracy * 100).toFixed(1)}%</span>
                             </div>
                           )}
-                          
+
                           {metrics.expected_occupancy_rate !== undefined && (
                             <div className="flex items-center justify-between">
                               <span className="text-sm text-gray-500">Expected Occupancy</span>
                               <span className="text-sm font-medium">{metrics.expected_occupancy_rate.toFixed(1)}%</span>
                             </div>
                           )}
-                          
+
                           <div className="pt-3 text-xs text-gray-500">
                             <p>Methodology: {methodology}</p>
                           </div>
@@ -355,7 +353,7 @@ function MLForecastingContent() {
                       )}
                     </div>
                   </div>
-                  
+
                   {/* Right Column - Chart and Data */}
                   <div className="md:col-span-2 space-y-4">
                     {forecastData.length === 0 ? (
@@ -385,19 +383,19 @@ function MLForecastingContent() {
                               {forecastDays}-day forecast with {confidenceLevel}% confidence level
                             </p>
                           </div>
-                          
+
                           {/* Chart */}
                           <div className="p-4 h-80">
                             <ResponsiveContainer width="100%" height="100%">
                               {activeTab === 'budget' ? (
                                 <BarChart data={forecastData}>
                                   <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                                  <XAxis 
-                                    dataKey="month" 
+                                  <XAxis
+                                    dataKey="month"
                                     tick={{ fontSize: 12 }}
                                   />
                                   <YAxis tick={{ fontSize: 12 }} />
-                                  <Tooltip 
+                                  <Tooltip
                                     formatter={(value) => [`${formatValue(Number(value))}`, 'Forecast']}
                                   />
                                   <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
@@ -406,13 +404,13 @@ function MLForecastingContent() {
                               ) : (
                                 <AreaChart data={forecastData}>
                                   <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-                                  <XAxis 
-                                    dataKey="date" 
+                                  <XAxis
+                                    dataKey="date"
                                     tick={{ fontSize: 12 }}
                                     tickFormatter={(value) => new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                                   />
                                   <YAxis tick={{ fontSize: 12 }} />
-                                  <Tooltip 
+                                  <Tooltip
                                     formatter={(value) => [`${formatValue(Number(value))}`, 'Forecast']}
                                     labelFormatter={(label) => new Date(label).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                                   />
@@ -428,7 +426,7 @@ function MLForecastingContent() {
                             </ResponsiveContainer>
                           </div>
                         </div>
-                        
+
                         {/* Key Insights */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           {activeTab === 'sales' && (
@@ -446,7 +444,7 @@ function MLForecastingContent() {
                                   </div>
                                 </div>
                               </IOSCard>
-                              
+
                               <IOSCard className="p-4">
                                 <div className="flex justify-between">
                                   <div>
@@ -460,7 +458,7 @@ function MLForecastingContent() {
                                   </div>
                                 </div>
                               </IOSCard>
-                              
+
                               <IOSCard className="p-4">
                                 <div className="flex justify-between">
                                   <div>
@@ -476,7 +474,7 @@ function MLForecastingContent() {
                               </IOSCard>
                             </>
                           )}
-                          
+
                           {activeTab === 'occupancy' && (
                             <>
                               <IOSCard className="p-4">
@@ -492,7 +490,7 @@ function MLForecastingContent() {
                                   </div>
                                 </div>
                               </IOSCard>
-                              
+
                               <IOSCard className="p-4">
                                 <div className="flex justify-between">
                                   <div>
@@ -506,7 +504,7 @@ function MLForecastingContent() {
                                   </div>
                                 </div>
                               </IOSCard>
-                              
+
                               <IOSCard className="p-4">
                                 <div className="flex justify-between">
                                   <div>
@@ -522,7 +520,7 @@ function MLForecastingContent() {
                               </IOSCard>
                             </>
                           )}
-                          
+
                           {activeTab === 'inventory' && (
                             <>
                               <IOSCard className="p-4">
@@ -538,7 +536,7 @@ function MLForecastingContent() {
                                   </div>
                                 </div>
                               </IOSCard>
-                              
+
                               <IOSCard className="p-4">
                                 <div className="flex justify-between">
                                   <div>
@@ -552,7 +550,7 @@ function MLForecastingContent() {
                                   </div>
                                 </div>
                               </IOSCard>
-                              
+
                               <IOSCard className="p-4">
                                 <div className="flex justify-between">
                                   <div>
@@ -568,7 +566,7 @@ function MLForecastingContent() {
                               </IOSCard>
                             </>
                           )}
-                          
+
                           {activeTab === 'budget' && (
                             <>
                               <IOSCard className="p-4">
@@ -584,7 +582,7 @@ function MLForecastingContent() {
                                   </div>
                                 </div>
                               </IOSCard>
-                              
+
                               <IOSCard className="p-4">
                                 <div className="flex justify-between">
                                   <div>
@@ -598,7 +596,7 @@ function MLForecastingContent() {
                                   </div>
                                 </div>
                               </IOSCard>
-                              
+
                               <IOSCard className="p-4">
                                 <div className="flex justify-between">
                                   <div>
@@ -625,7 +623,7 @@ function MLForecastingContent() {
               </div>
             </Tabs>
           </IOSCard>
-          
+
           {/* Help Card */}
           <Alert>
             <AlertTitle className="flex items-center gap-2">
@@ -634,12 +632,12 @@ function MLForecastingContent() {
             </AlertTitle>
             <AlertDescription>
               <p className="mt-2 text-sm">
-                This forecasting tool uses machine learning algorithms to analyze historical data and generate predictions. 
-                The system uses time series analysis with seasonal adjustments to provide accurate forecasts for sales, 
+                This forecasting tool uses machine learning algorithms to analyze historical data and generate predictions.
+                The system uses time series analysis with seasonal adjustments to provide accurate forecasts for sales,
                 inventory demand, occupancy rates, and budget planning.
               </p>
               <p className="mt-2 text-sm">
-                Confidence levels indicate the statistical reliability of the forecast, while error rates (MAPE) 
+                Confidence levels indicate the statistical reliability of the forecast, while error rates (MAPE)
                 show the average percentage difference between predictions and actual values from historical data.
               </p>
             </AlertDescription>

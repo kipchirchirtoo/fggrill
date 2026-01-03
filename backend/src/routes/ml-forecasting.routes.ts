@@ -23,12 +23,12 @@ router.get(
   async (req, res) => {
     try {
       const { branch_id, days } = req.query;
-      
+
       const forecast = await mlForecastingService.generateSalesForecast(
         branch_id ? Number(branch_id) : undefined,
         days ? Number(days) : 30
       );
-      
+
       res.json(forecast);
     } catch (error) {
       logger.error('Error generating sales forecast:', error);
@@ -56,13 +56,13 @@ router.get(
   ]),
   async (req, res) => {
     try {
-      const { category_id, days } = req.query;
-      
+      const { category, days } = req.query;
+
       const forecast = await mlForecastingService.generateInventoryDemandForecast(
-        category_id ? Number(category_id) : undefined,
+        category ? String(category) : undefined,
         days ? Number(days) : 30
       );
-      
+
       res.json(forecast);
     } catch (error) {
       logger.error('Error generating inventory forecast:', error);
@@ -91,12 +91,12 @@ router.get(
   async (req, res) => {
     try {
       const { branch_id, days } = req.query;
-      
+
       const forecast = await mlForecastingService.generateOccupancyForecast(
         branch_id ? Number(branch_id) : undefined,
         days ? Number(days) : 30
       );
-      
+
       res.json(forecast);
     } catch (error) {
       logger.error('Error generating occupancy forecast:', error);
@@ -125,12 +125,12 @@ router.get(
   async (req, res) => {
     try {
       const { department_id, months } = req.query;
-      
+
       const forecast = await mlForecastingService.generateBudgetForecast(
         department_id ? Number(department_id) : undefined,
         months ? Number(months) : 3
       );
-      
+
       res.json(forecast);
     } catch (error) {
       logger.error('Error generating budget forecast:', error);

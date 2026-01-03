@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { maintenanceAPI } from '@/lib/api';
-import { Wrench, RefreshCw, Clock, CheckCircle, AlertTriangle, Plus, MapPin } from 'lucide-react';
+import { Wrench, RefreshCw, Clock, CheckCircle, AlertTriangle, Plus, MapPin, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -23,17 +24,26 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
 
 export default function BranchMaintenancePage() {
   const { user } = useAuth();
+  const { activeBranchId, activeBranch } = useBranch();
   const [requests, setRequests] = useState<Request[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Use active branch from context, fallback to user's branch
+  const currentBranchId = activeBranchId || user?.branch_id;
+
   const fetchRequests = useCallback(async () => {
+    if (!currentBranchId) {
+      setRequests([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
-      const response = await maintenanceAPI.getRequests(user?.branch_id || undefined);
+      const response = await maintenanceAPI.getRequests(currentBranchId);
       if (response.success) setRequests(response.data || []);
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, [user?.branch_id]);
+  }, [currentBranchId]);
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
@@ -45,7 +55,13 @@ export default function BranchMaintenancePage() {
       <DashboardLayout>
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div><h1 className="text-2xl font-bold text-gray-900">Maintenance</h1><p className="text-gray-500">Repair requests</p></div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Maintenance</h1>
+              <p className="text-gray-500 flex items-center gap-1">
+                <Building2 className="h-3.5 w-3.5" />
+                {activeBranch?.name || 'Select a branch'}
+              </p>
+            </div>
             <IOSButton variant="secondary" onClick={fetchRequests} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 

@@ -161,7 +161,7 @@ export default function StockRequestsPage() {
             {(['all', 'pending', 'approved', 'rejected'] as const).map((f) => (
               <IOSButton
                 key={f}
-                variant={filter === f ? 'default' : 'outline'}
+                variant={filter === f ? 'primary' : 'outline'}
                 size="sm"
                 onClick={() => setFilter(f)}
               >

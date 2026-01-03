@@ -9,11 +9,14 @@ import { Input } from '@/components/ui/input';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/date-utils';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { 
+  User, Phone, CreditCard, CheckCircle, Clock, XCircle, 
+  RefreshCw, Plus, Truck, Edit, Trash2, Save 
+} from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 

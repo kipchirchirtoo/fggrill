@@ -9,25 +9,28 @@ import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { restaurantAPI } from '@/lib/api';
+import { barAPI } from '@/lib/api';
+import { useBranch } from '@/lib/branch-context';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { RefreshCw, Plus, CreditCard, DollarSign, Check, User } from 'lucide-react';
 
 interface Tab {
   id: string;
-  tab_number: string;
+  tab_number?: string;
   customer_name: string;
-  table_number?: string;
+  phone?: string;
   status: 'open' | 'closed';
-  total: number;
-  items_count: number;
+  total_amount: number;
+  items?: any[];
   created_at: string;
   closed_at?: string;
 }
 
 export default function BarTabsPage() {
   const { user } = useAuth();
+  const { activeBranchId } = useBranch();
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'closed'>('open');
@@ -39,41 +42,27 @@ export default function BarTabsPage() {
   const fetchTabs = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await restaurantAPI.getOrders();
+      const response = await barAPI.getTabs(activeBranchId || undefined);
       if (response.success) {
-        // Transform orders to tabs format
-        const tabsData = (response.data || []).map((order: any) => ({
-          id: order.id,
-          tab_number: order.order_number,
-          customer_name: order.customer_name || 'Guest',
-          table_number: order.table_number,
-          status: order.status === 'completed' ? 'closed' : 'open',
-          total: order.total || 0,
-          items_count: order.items?.length || 0,
-          created_at: order.created_at,
-          closed_at: order.completed_at,
-        }));
-        setTabs(tabsData);
+        setTabs(response.data || []);
       }
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, []);
+  }, [activeBranchId]);
 
   useEffect(() => { fetchTabs(); }, [fetchTabs]);
 
   const filteredTabs = tabs.filter((tab) => statusFilter === 'all' || tab.status === statusFilter);
   const openTabs = tabs.filter(t => t.status === 'open');
-  const totalOpen = openTabs.reduce((sum, t) => sum + t.total, 0);
+  const totalOpen = openTabs.reduce((sum, t) => sum + (t.total_amount || 0), 0);
 
   const handleCreateTab = async () => {
     if (!newTabData.customer_name) { toast.error('Enter customer name'); return; }
     try {
-      await restaurantAPI.createOrder({
-        order_type: 'dine_in',
+      await barAPI.createTab({
         customer_name: newTabData.customer_name,
-        table_number: newTabData.table_number || undefined,
-        items: [],
-        subtotal: 0, tax: 0, total: 0,
+        phone: newTabData.table_number || undefined,
+        branch_id: activeBranchId,
       });
       toast.success('Tab opened');
       setNewTabModalOpen(false);
@@ -85,7 +74,7 @@ export default function BarTabsPage() {
   const handleCloseTab = async () => {
     if (!selectedTab) return;
     try {
-      await restaurantAPI.updateOrderStatus(selectedTab.id, 'completed');
+      await barAPI.closeTab(selectedTab.id, 'cash');
       toast.success('Tab closed');
       setCloseTabModalOpen(false);
       fetchTabs();
@@ -142,14 +131,14 @@ export default function BarTabsPage() {
                     <div>
                       <p className="font-bold">#{tab.tab_number}</p>
                       <p className="text-sm text-gray-500 flex items-center gap-1"><User className="h-3 w-3" /> {tab.customer_name}</p>
-                      {tab.table_number && <p className="text-sm text-gray-500">Table {tab.table_number}</p>}
+                      {tab.phone && <p className="text-sm text-gray-500">Phone: {tab.phone}</p>}
                     </div>
-                    <IOSBadge variant={tab.status === 'open' ? 'info' : 'success'}>{tab.status}</IOSBadge>
+                    <IOSBadge color={tab.status === 'open' ? 'info' : 'success'}>{tab.status}</IOSBadge>
                   </div>
                   <div className="flex items-center justify-between pt-3 border-t">
                     <div>
-                      <p className="text-xl font-bold">KES {tab.total.toLocaleString()}</p>
-                      <p className="text-xs text-gray-500">{tab.items_count} items</p>
+                      <p className="text-xl font-bold">KES {(tab.total_amount || 0).toLocaleString()}</p>
+                      <p className="text-xs text-gray-500">{tab.items?.length || 0} items</p>
                     </div>
                     {tab.status === 'open' && (
                       <IOSButton size="sm" onClick={() => { setSelectedTab(tab); setCloseTabModalOpen(true); }}>
@@ -185,7 +174,7 @@ export default function BarTabsPage() {
                 <div className="p-4 bg-gray-50 rounded-ios-lg">
                   <p className="font-bold">Tab #{selectedTab.tab_number}</p>
                   <p className="text-gray-500">{selectedTab.customer_name}</p>
-                  <p className="text-2xl font-bold mt-2">KES {selectedTab.total.toLocaleString()}</p>
+                  <p className="text-2xl font-bold mt-2">KES {(selectedTab.total_amount || 0).toLocaleString()}</p>
                 </div>
                 <div className="flex gap-3">
                   <IOSButton variant="secondary" onClick={() => setCloseTabModalOpen(false)} className="flex-1">Cancel</IOSButton>

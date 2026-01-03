@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/minimal/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { financeAPI } from '@/lib/api';
-import { PieChart, RefreshCw, Plus, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
+import { PieChart, RefreshCw, Plus, DollarSign, TrendingUp, TrendingDown, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -21,6 +21,10 @@ export default function AdminBudgetsPage() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [selectedBudget, setSelectedBudget] = useState<Budget | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({ name: '', category: 'operations', allocated: 0, period: 'monthly' });
 
   const fetchBudgets = useCallback(async () => {
@@ -34,14 +38,52 @@ export default function AdminBudgetsPage() {
 
   useEffect(() => { fetchBudgets(); }, [fetchBudgets]);
 
+  const resetForm = () => setFormData({ name: '', category: 'operations', allocated: 0, period: 'monthly' });
+
   const handleAddBudget = async () => {
     if (!formData.name || !formData.allocated) { toast.error('Fill required fields'); return; }
+    setIsSubmitting(true);
     try {
       await financeAPI.createBudget(formData);
       toast.success('Budget created');
       setAddModalOpen(false);
+      resetForm();
       fetchBudgets();
     } catch (error: any) { toast.error(error.message || 'Failed'); }
+    finally { setIsSubmitting(false); }
+  };
+
+  const openEditModal = (budget: Budget) => {
+    setSelectedBudget(budget);
+    setFormData({ name: budget.name, category: budget.category, allocated: budget.allocated, period: budget.period });
+    setEditModalOpen(true);
+  };
+
+  const handleUpdateBudget = async () => {
+    if (!selectedBudget || !formData.name) { toast.error('Fill required fields'); return; }
+    setIsSubmitting(true);
+    try {
+      await financeAPI.updateBudget(selectedBudget.id, formData);
+      toast.success('Budget updated');
+      setEditModalOpen(false);
+      setSelectedBudget(null);
+      resetForm();
+      fetchBudgets();
+    } catch (error: any) { toast.error(error.message || 'Failed'); }
+    finally { setIsSubmitting(false); }
+  };
+
+  const handleDeleteBudget = async () => {
+    if (!selectedBudget) return;
+    setIsSubmitting(true);
+    try {
+      await financeAPI.deleteBudget(selectedBudget.id);
+      toast.success('Budget deleted');
+      setDeleteConfirmOpen(false);
+      setSelectedBudget(null);
+      fetchBudgets();
+    } catch (error: any) { toast.error(error.message || 'Failed'); }
+    finally { setIsSubmitting(false); }
   };
 
   const totalAllocated = budgets.reduce((sum, b) => sum + (b.allocated || 0), 0);
@@ -87,6 +129,10 @@ export default function AdminBudgetsPage() {
                       <span>Spent: KES {budget.spent?.toLocaleString()}</span>
                       <span>Budget: KES {budget.allocated?.toLocaleString()}</span>
                     </div>
+                    <div className="flex gap-2 mt-3">
+                      <IOSButton size="sm" variant="secondary" className="flex-1" onClick={() => openEditModal(budget)} leftIcon={<Edit2 className="h-3 w-3" />}>Edit</IOSButton>
+                      <IOSButton size="sm" variant="destructive" onClick={() => { setSelectedBudget(budget); setDeleteConfirmOpen(true); }}><Trash2 className="h-3 w-3" /></IOSButton>
+                    </div>
                   </IOSCard>
                 );
               })}
@@ -117,7 +163,52 @@ export default function AdminBudgetsPage() {
               </div>
               <div className="flex gap-3">
                 <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                <IOSButton onClick={handleAddBudget} className="flex-1">Create</IOSButton>
+                <IOSButton onClick={handleAddBudget} disabled={isSubmitting} className="flex-1">{isSubmitting ? 'Creating...' : 'Create'}</IOSButton>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Modal */}
+        <Dialog open={editModalOpen} onOpenChange={(open) => { setEditModalOpen(open); if (!open) setSelectedBudget(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader><DialogTitle>Edit Budget</DialogTitle></DialogHeader>
+            <div className="space-y-4 mt-4">
+              <div><label className="text-sm font-medium">Name *</label><Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} /></div>
+              <div><label className="text-sm font-medium">Category</label>
+                <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full p-2 border rounded-ios-lg">
+                  <option value="operations">Operations</option>
+                  <option value="marketing">Marketing</option>
+                  <option value="maintenance">Maintenance</option>
+                  <option value="supplies">Supplies</option>
+                </select>
+              </div>
+              <div><label className="text-sm font-medium">Allocated Amount *</label><Input type="number" value={formData.allocated} onChange={(e) => setFormData({ ...formData, allocated: parseFloat(e.target.value) || 0 })} /></div>
+              <div><label className="text-sm font-medium">Period</label>
+                <select value={formData.period} onChange={(e) => setFormData({ ...formData, period: e.target.value })} className="w-full p-2 border rounded-ios-lg">
+                  <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+              </div>
+              <div className="flex gap-3">
+                <IOSButton variant="secondary" onClick={() => setEditModalOpen(false)} className="flex-1">Cancel</IOSButton>
+                <IOSButton onClick={handleUpdateBudget} disabled={isSubmitting} className="flex-1">{isSubmitting ? 'Updating...' : 'Update'}</IOSButton>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation */}
+        <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle className="text-red-600">Delete Budget</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <p className="text-stone-600">Are you sure you want to delete this budget?</p>
+              {selectedBudget && <div className="p-3 bg-stone-50 rounded-lg"><p className="font-medium">{selectedBudget.name}</p><p className="text-sm text-stone-500">KES {selectedBudget.allocated?.toLocaleString()}</p></div>}
+              <div className="flex gap-2">
+                <IOSButton variant="secondary" className="flex-1" onClick={() => setDeleteConfirmOpen(false)}>Cancel</IOSButton>
+                <IOSButton variant="destructive" className="flex-1" onClick={handleDeleteBudget} disabled={isSubmitting}>{isSubmitting ? 'Deleting...' : 'Delete'}</IOSButton>
               </div>
             </div>
           </DialogContent>

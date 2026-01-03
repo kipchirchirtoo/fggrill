@@ -16,10 +16,15 @@ import { IOSCard } from '@/components/ui/ios-card';
 interface StockRequest { id: string; request_number: string; status: string; priority: string; items_count: number; created_at: string; }
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
-  pending: { label: 'Pending', color: 'text-yellow-700', bg: 'bg-yellow-100' },
-  approved: { label: 'Approved', color: 'text-blue-700', bg: 'bg-blue-100' },
-  fulfilled: { label: 'Fulfilled', color: 'text-green-700', bg: 'bg-green-100' },
-  rejected: { label: 'Rejected', color: 'text-red-700', bg: 'bg-red-100' },
+  PENDING: { label: 'Pending', color: 'text-yellow-700', bg: 'bg-yellow-100' },
+  UNDER_REVIEW: { label: 'Reviewing', color: 'text-orange-700', bg: 'bg-orange-100' },
+  APPROVED: { label: 'Approved', color: 'text-blue-700', bg: 'bg-blue-100' },
+  PARTIALLY_APPROVED: { label: 'Partial', color: 'text-blue-600', bg: 'bg-blue-50' },
+  DISPATCHED: { label: 'Dispatched', color: 'text-purple-700', bg: 'bg-purple-100' },
+  DELIVERED: { label: 'Fulfilled', color: 'text-green-700', bg: 'bg-green-100' },
+  FULFILLED: { label: 'Fulfilled', color: 'text-green-700', bg: 'bg-green-100' },
+  REJECTED: { label: 'Rejected', color: 'text-red-700', bg: 'bg-red-100' },
+  CANCELLED: { label: 'Cancelled', color: 'text-gray-700', bg: 'bg-gray-100' },
 };
 
 export default function BranchRequestsPage() {
@@ -32,14 +37,41 @@ export default function BranchRequestsPage() {
     setIsLoading(true);
     try {
       const response = await storeAPI.getBranchRequests();
-      if (response.success) setRequests(response.data || []);
-    } catch (error) { console.error('Error:', error); }
-    finally { setIsLoading(false); }
-  }, [statusFilter]);
+      if (response.success && Array.isArray(response.data)) {
+        // Map backend response to StockRequest interface
+        const mappedRequests: StockRequest[] = response.data.map((record: any) => ({
+          id: record.id,
+          request_number: record.request_number,
+          status: record.status.toUpperCase(),
+          priority: record.priority,
+          items_count: record.items ? record.items.length : 0,
+          created_at: record.created_at
+        }));
+        setRequests(mappedRequests);
+      } else {
+        setRequests([]);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      setRequests([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []); // Fetch all once or on refresh
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
-  const stats = { pending: requests.filter(r => r.status === 'pending').length, approved: requests.filter(r => r.status === 'approved').length };
+  const stats = {
+    pending: requests.filter(r => r.status === 'PENDING' || r.status === 'UNDER_REVIEW').length,
+    approved: requests.filter(r => r.status === 'APPROVED' || r.status === 'PARTIALLY_APPROVED' || r.status === 'DISPATCHED').length
+  };
+
+  const filteredRequests = requests.filter(request => {
+    if (statusFilter === 'all') return true;
+    if (statusFilter === 'PENDING') return request.status === 'PENDING' || request.status === 'UNDER_REVIEW';
+    if (statusFilter === 'APPROVED') return request.status === 'APPROVED' || request.status === 'PARTIALLY_APPROVED' || request.status === 'DISPATCHED';
+    return request.status === statusFilter;
+  });
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN, UserRole.CENTRAL_STOREKEEPER]}>
@@ -59,7 +91,7 @@ export default function BranchRequestsPage() {
           </div>
 
           <div className="flex gap-2">
-            {['all', 'pending', 'approved', 'fulfilled', 'rejected'].map((status) => (
+            {['all', 'PENDING', 'APPROVED', 'DISPATCHED', 'DELIVERED', 'REJECTED'].map((status) => (
               <IOSButton key={status} variant={statusFilter === status ? 'primary' : 'secondary'} size="sm" onClick={() => setStatusFilter(status)}>
                 {status === 'all' ? 'All' : statusConfig[status]?.label || status}
               </IOSButton>
@@ -68,12 +100,12 @@ export default function BranchRequestsPage() {
 
           {isLoading ? (
             <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
-          ) : requests.length === 0 ? (
+          ) : filteredRequests.length === 0 ? (
             <IOSCard className="p-12 text-center"><ShoppingCart className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No requests</p></IOSCard>
           ) : (
             <div className="space-y-3">
-              {requests.map((request) => {
-                const status = statusConfig[request.status] || statusConfig.pending;
+              {filteredRequests.map((request) => {
+                const status = statusConfig[request.status] || statusConfig.PENDING;
                 return (
                   <IOSCard key={request.id} className="p-4">
                     <div className="flex items-center justify-between">

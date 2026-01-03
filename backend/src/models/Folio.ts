@@ -19,7 +19,7 @@ export interface IFolio {
   reservationId: string;
   guestId: string;
   status: 'open' | 'closed' | 'posted';
-  
+
   // Billing
   roomCharges: number;
   foodCharges: number;
@@ -28,12 +28,12 @@ export interface IFolio {
   totalCharges: number;
   totalPayments: number;
   balance: number;
-  
+
   // Status
   settled: boolean;
   settledAt?: Date;
   notes?: string;
-  
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,7 +44,7 @@ export class Folio implements IFolio {
   reservationId: string;
   guestId: string;
   status: 'open' | 'closed' | 'posted';
-  
+
   roomCharges: number;
   foodCharges: number;
   beverageCharges: number;
@@ -52,11 +52,11 @@ export class Folio implements IFolio {
   totalCharges: number;
   totalPayments: number;
   balance: number;
-  
+
   settled: boolean;
   settledAt?: Date;
   notes?: string;
-  
+
   createdAt: Date;
   updatedAt: Date;
 
@@ -66,7 +66,7 @@ export class Folio implements IFolio {
     this.reservationId = data.reservationId || '';
     this.guestId = data.guestId || '';
     this.status = data.status || 'open';
-    
+
     this.roomCharges = data.roomCharges || 0;
     this.foodCharges = data.foodCharges || 0;
     this.beverageCharges = data.beverageCharges || 0;
@@ -74,11 +74,11 @@ export class Folio implements IFolio {
     this.totalCharges = data.totalCharges || 0;
     this.totalPayments = data.totalPayments || 0;
     this.balance = data.balance || 0;
-    
+
     this.settled = data.settled || false;
     this.settledAt = data.settledAt;
     this.notes = data.notes;
-    
+
     this.createdAt = data.createdAt || new Date();
     this.updatedAt = data.updatedAt || new Date();
   }
@@ -164,10 +164,10 @@ export class Folio implements IFolio {
       .single();
 
     if (error) throw error;
-    
+
     // Update folio totals (trigger handles this in DB, but good to refresh)
     await this.refresh();
-    
+
     return {
       id: data.id,
       folioId: data.folio_id,
@@ -189,7 +189,7 @@ export class Folio implements IFolio {
       .single();
 
     if (error || !data) throw error;
-    
+
     const refreshed = Folio.fromDatabase(data);
     this.totalCharges = refreshed.totalCharges;
     this.totalPayments = refreshed.totalPayments;
@@ -201,12 +201,20 @@ export class Folio implements IFolio {
   static fromDatabase(data: any): Folio {
     return new Folio({
       id: data.id,
+      folioNumber: data.folio_number,
       reservationId: data.reservation_id,
       guestId: data.guest_id,
       status: data.status,
+      roomCharges: data.room_charges,
+      foodCharges: data.food_charges,
+      beverageCharges: data.beverage_charges,
+      otherCharges: data.other_charges,
       totalCharges: data.total_charges,
       totalPayments: data.total_payments,
       balance: data.balance,
+      settled: data.settled,
+      settledAt: data.settled_at ? new Date(data.settled_at) : undefined,
+      notes: data.notes,
       createdAt: new Date(data.created_at),
       updatedAt: new Date(data.updated_at)
     });

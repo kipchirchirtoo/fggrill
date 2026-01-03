@@ -367,3 +367,15 @@ def get_branches():
     except Exception as e:
         logger.error(f"Get branches error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/anomalies', methods=['GET'])
+def get_anomalies():
+    """Get financial anomalies"""
+    try:
+        branch_id = request.args.get('branch_id', type=int)
+        data = finance_service.get_anomalies(branch_id)
+        return jsonify({'success': True, 'data': data})
+    except Exception as e:
+        logger.error(f"Anomalies error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500

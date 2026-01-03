@@ -6,6 +6,8 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { financeAPI } from '@/lib/api';
 import { TrendingUp, TrendingDown, RefreshCw, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { BranchSelector } from '@/components/finance/BranchSelector';
+import { DateRangeSelector, DateRangePreset } from '@/components/finance/DateRangeSelector';
 
 interface CashFlowData { period: string; inflow: number; outflow: number; net: number; }
 interface Branch { id: number; name: string; }
@@ -14,21 +16,20 @@ export default function CashFlowPage() {
   const [data, setData] = useState<CashFlowData[]>([]);
   const [summary, setSummary] = useState({ totalInflow: 0, totalOutflow: 0, netCashFlow: 0 });
   const [isLoading, setIsLoading] = useState(true);
-  const [period, setPeriod] = useState<'week' | 'month' | 'quarter'>('month');
-  const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
+  const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [datePreset, setDatePreset] = useState<DateRangePreset>('month');
 
-  const fetchBranches = useCallback(async () => {
-    try {
-      const response = await financeAPI.getBranches();
-      if (response.success && Array.isArray(response.data)) setBranches(response.data);
-    } catch (error) { console.error('Error:', error); }
-  }, []);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await financeAPI.getCashFlow({ branch_id: selectedBranch || undefined });
+      const response = await financeAPI.getCashFlow({
+        branch_id: selectedBranch || undefined,
+        startDate,
+        endDate
+      });
       if (response.success) {
         setData(Array.isArray(response.data?.periods) ? response.data.periods : []);
         const summaryData = response.data?.summary || {};
@@ -40,9 +41,8 @@ export default function CashFlowPage() {
       }
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, [selectedBranch]);
+  }, [selectedBranch, startDate, endDate]);
 
-  useEffect(() => { fetchBranches(); }, [fetchBranches]);
   useEffect(() => { fetchData(); }, [fetchData]);
 
   return (
@@ -55,21 +55,22 @@ export default function CashFlowPage() {
               <h1 className="text-2xl font-semibold text-gray-900">Cash Flow Statement</h1>
               <p className="text-sm text-gray-500 mt-1">Track money in and out</p>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <select
-                value={selectedBranch || ''}
-                onChange={(e) => setSelectedBranch(e.target.value ? Number(e.target.value) : null)}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"
-              >
-                <option value="">All Branches</option>
-                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-              {(['week', 'month', 'quarter'] as const).map((p) => (
-                <button key={p} onClick={() => setPeriod(p)} className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${period === p ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
-                  {p.charAt(0).toUpperCase() + p.slice(1)}
-                </button>
-              ))}
-              <button onClick={fetchData} disabled={isLoading} className="p-2 text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+            <div className="flex flex-wrap items-center gap-3">
+              <BranchSelector
+                selectedBranch={selectedBranch}
+                onBranchChange={setSelectedBranch}
+              />
+              <DateRangeSelector
+                startDate={startDate}
+                endDate={endDate}
+                onRangeChange={(start, end) => {
+                  setStartDate(start);
+                  setEndDate(end);
+                }}
+                preset={datePreset}
+                onPresetChange={setDatePreset}
+              />
+              <button onClick={fetchData} disabled={isLoading} className="p-2.5 text-stone-500 bg-white border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors">
                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               </button>
             </div>

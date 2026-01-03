@@ -14,7 +14,6 @@ import { useAuth, UserRole } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { BranchSelector } from '@/components/dashboard/BranchSelector';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
@@ -84,40 +83,26 @@ interface Notification {
 export default function ReceptionDashboard(): JSX.Element {
   const { user } = useAuth();
   const { activeBranchId } = useBranch();
-  
+
   // Modal states
   const [showCheckInModal, setShowCheckInModal] = useState(false);
   const [showCheckOutModal, setShowCheckOutModal] = useState(false);
-  const [showRoomServiceModal, setShowRoomServiceModal] = useState(false);
-  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
-  const [showEventModal, setShowEventModal] = useState(false);
   const [showReservationModal, setShowReservationModal] = useState(false);
 
   // State
   const [isLoading, setIsLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFloor, setSelectedFloor] = useState<number | null>(null);
-  
+
   // Data states
   const [rooms, setRooms] = useState<Room[]>([]);
   const [todayArrivals, setTodayArrivals] = useState<Arrival[]>([]);
   const [todayDepartures, setTodayDepartures] = useState<Departure[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [stats, setStats] = useState({
-    totalRooms: 0,
     available: 0,
     occupied: 0,
-    cleaning: 0,
-    reserved: 0,
-    maintenance: 0,
-    occupancyRate: 0,
-    todayCheckIns: 0,
-    todayCheckOuts: 0,
     expectedArrivals: 0,
     expectedDepartures: 0,
-    pendingPayments: 0,
-    vipGuests: 0
   });
 
   // Real-time clock
@@ -130,16 +115,16 @@ export default function ReceptionDashboard(): JSX.Element {
   const fetchDashboardData = useCallback(async () => {
     setIsLoading(true);
     const branchId = activeBranchId || undefined;
-    
+
     try {
       const [bookingsRes, roomsRes] = await Promise.allSettled([
-        bookingsAPI.getBookings({ branch_id: branchId }),
-        roomsAPI.getRooms(branchId)
+        bookingsAPI.getBookings({ branch_id: branchId, limit: 100 }),
+        roomsAPI.getRooms(branchId ? { branch_id: branchId } : undefined)
       ]);
 
       const bookingsData = bookingsRes.status === 'fulfilled' ? bookingsRes.value?.data || [] : [];
-      const roomsData = roomsRes.status === 'fulfilled' ? (roomsRes.value?.rooms || roomsRes.value?.data || []) : [];
-      
+      const roomsData = roomsRes.status === 'fulfilled' ? (roomsRes.value?.data || roomsRes.value?.rooms || []) : [];
+
       // Process rooms
       const processedRooms: Room[] = roomsData.map((r: any) => ({
         id: r.id,
@@ -147,68 +132,46 @@ export default function ReceptionDashboard(): JSX.Element {
         type: r.type?.name || r.type || 'Standard',
         status: (r.status?.toLowerCase() || 'available') as any,
         floor: r.floor_number || r.floor || Math.ceil(parseInt(r.room_number || '100') / 100),
-        guest_name: r.current_guest ? 'Occupied' : undefined, // We need to fetch guest details if current_guest is an ID
-        check_out_date: r.check_out // If available
+        guest_name: r.guest ? `${r.guest.first_name} ${r.guest.last_name}` : (r.current_guest ? 'Occupied' : undefined),
+        check_out_date: r.check_out
       }));
       setRooms(processedRooms);
 
-      // Calculate stats
-      const available = processedRooms.filter(r => r.status === 'available').length;
-      const occupied = processedRooms.filter(r => r.status === 'occupied').length;
-      const cleaning = processedRooms.filter(r => r.status === 'cleaning').length;
-      const reserved = processedRooms.filter(r => r.status === 'reserved').length;
-      const maintenance = processedRooms.filter(r => r.status === 'maintenance').length;
-      
-      const checkIns = bookingsData.filter((b: any) => b.status === 'checked_in').length;
-      const checkOuts = bookingsData.filter((b: any) => b.status === 'checked_out').length;
-      const arrivals = bookingsData.filter((b: any) => b.status === 'confirmed').length;
-      const vips = bookingsData.filter((b: any) => b.guest?.is_vip).length;
+      const today = new Date().toISOString().split('T')[0];
+
+      // Filter bookings for stats
+      const arrivalsList = bookingsData.filter((b: any) => b.status === 'confirmed' && b.check_in_date && b.check_in_date.startsWith(today));
+      const departuresList = bookingsData.filter((b: any) => b.status === 'checked_in' && b.check_out_date && b.check_out_date.startsWith(today));
 
       setStats({
-        totalRooms: processedRooms.length || 0,
-        available,
-        occupied,
-        cleaning,
-        reserved,
-        maintenance,
-        occupancyRate: processedRooms.length > 0 ? Math.round((occupied / processedRooms.length) * 100) : 0,
-        todayCheckIns: checkIns,
-        todayCheckOuts: checkOuts,
-        expectedArrivals: arrivals,
-        expectedDepartures: 0, // Need logic for expected departures based on checkout date
-        pendingPayments: 0, // Need financial API integration
-        vipGuests: vips
+        available: processedRooms.filter(r => r.status === 'available').length,
+        occupied: processedRooms.filter(r => r.status === 'occupied').length,
+        expectedArrivals: arrivalsList.length,
+        expectedDepartures: departuresList.length,
       });
 
-      // Set arrivals (Confirmed bookings for today)
-      const today = new Date().toISOString().split('T')[0];
-      setTodayArrivals(bookingsData
-        .filter((b: any) => b.status === 'confirmed' && b.check_in_date && b.check_in_date.startsWith(today))
-        .map((b: any) => ({
-          id: b.id,
-          guest_name: b.guest ? `${b.guest.first_name} ${b.guest.last_name}` : 'Guest',
-          room_number: b.room ? b.room.room_number : 'Unassigned',
-          room_type: b.room_type ? b.room_type.name : 'Standard',
-          check_in_time: new Date(b.check_in_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          guests: (b.adults || 0) + (b.children || 0),
-          is_vip: b.guest?.is_vip || false,
-          special_requests: b.special_requests,
-          phone: b.guest?.phone
-        })));
+      // Set arrivals
+      setTodayArrivals(arrivalsList.map((b: any) => ({
+        id: b.id,
+        guest_name: b.guest ? `${b.guest.first_name} ${b.guest.last_name}` : 'Guest',
+        room_number: b.room ? b.room.room_number : 'Unassigned',
+        room_type: b.room_type ? b.room_type.name : 'Standard',
+        check_in_time: new Date(b.check_in_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        guests: (b.adults || 0) + (b.children || 0),
+        is_vip: b.guest?.is_vip || false,
+        special_requests: b.special_requests,
+        phone: b.guest?.phone
+      })));
 
-      // Set departures (Checked in bookings with checkout today)
-      setTodayDepartures(bookingsData
-        .filter((b: any) => b.status === 'checked_in' && b.check_out_date && b.check_out_date.startsWith(today))
-        .map((b: any) => ({
-          id: b.id,
-          guest_name: b.guest ? `${b.guest.first_name} ${b.guest.last_name}` : 'Guest',
-          room_number: b.room ? b.room.room_number : '-',
-          check_out_time: new Date(b.check_out_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          balance: 0, // Need folio balance
-          room_status: 'Occupied'
-        })));
-
-      setNotifications([]);
+      // Set departures
+      setTodayDepartures(departuresList.map((b: any) => ({
+        id: b.id,
+        guest_name: b.guest ? `${b.guest.first_name} ${b.guest.last_name}` : 'Guest',
+        room_number: b.room ? b.room.room_number : '-',
+        check_out_time: new Date(b.check_out_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        balance: b.total_amount - (b.deposit_amount || 0),
+        room_status: 'Occupied'
+      })));
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -220,466 +183,188 @@ export default function ReceptionDashboard(): JSX.Element {
 
   useEffect(() => {
     fetchDashboardData();
-    const interval = setInterval(fetchDashboardData, 60000); // Refresh every minute
-    // Realtime subscription for instant updates
-    const unsubscribe = subscribeToReceptionRealtime(() => {
-      // Debounce quick bursts
-      fetchDashboardData();
-    });
-    return () => {
-      clearInterval(interval);
-      if (unsubscribe) unsubscribe();
-    };
+    const interval = setInterval(fetchDashboardData, 60000);
+    return () => clearInterval(interval);
   }, [fetchDashboardData]);
 
-  // Helper functions
-  const getTimeGreeting = () => {
-    const hour = currentTime.getHours();
-    if (hour < 12) return { text: 'Good Morning', icon: Sun, color: 'text-[#3C3C43]' };
-    if (hour < 17) return { text: 'Good Afternoon', icon: CloudSun, color: 'text-[#3C3C43]' };
-    return { text: 'Good Evening', icon: Moon, color: 'text-[#3C3C43]' };
-  };
-
-  const greeting = getTimeGreeting();
-  const GreetingIcon = greeting.icon;
-
-  const getRoomStatusColor = (status: string) => {
-    return 'bg-[#3C3C43]';
-  };
-
-  const getRoomStatusBg = (status: string) => {
-    return 'bg-[#F2F2F7] border-[rgba(60,60,67,0.12)] hover:bg-[#FAFAFA]';
-  };
-
-  const getNotificationIcon = (type: string) => {
-    return <Bell className="h-4 w-4 text-[#3C3C43]" />;
-  };
-
-  const floors = [...new Set(rooms.map(r => r.floor))].sort((a, b) => a - b);
-  const filteredRooms = rooms.filter(r => 
-    (!selectedFloor || r.floor === selectedFloor) &&
-    (!searchQuery || r.room_number.includes(searchQuery) || r.guest_name?.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredRooms = rooms.filter(r =>
+    !searchQuery || r.room_number.includes(searchQuery) || r.guest_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.RECEPTIONIST, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
-        <div className="space-y-6">
-          {/* Header Section */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <motion.div 
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className="p-3 bg-[#F2F2F7] rounded-2xl shadow-none 0_1px_3px_rgba(0,0,0,0.04)]"
-              >
-                <Home className="h-8 w-8 text-[#3C3C43]" />
-              </motion.div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-bold text-gray-900">Front Desk</h1>
-                  <IOSBadge variant="light" color="secondary" className="border-[rgba(60,60,67,0.12)] text-[#3C3C43]">
-                    <Sparkles className="h-3 w-3 mr-1" /> Live
-                  </IOSBadge>
-                </div>
-                <div className="flex items-center gap-3 mt-1">
-                  <GreetingIcon className={`h-4 w-4 ${greeting.color}`} />
-                  <span className="text-gray-600">{greeting.text}, {user?.firstName}!</span>
-                  <span className="text-gray-400">|</span>
-                  <Clock className="h-4 w-4 text-gray-400" />
-                  <span className="font-mono text-gray-600">
-                    {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                  <span className="text-gray-400">|</span>
-                  <span className="text-gray-500 text-sm">
-                    {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-                  </span>
-                </div>
-              </div>
+        <div className="space-y-6 max-w-[1600px] mx-auto">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-stone-900">Front Desk Dashboard</h1>
+              <p className="text-stone-500 text-sm">
+                {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} • {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+              </p>
             </div>
             <div className="flex items-center gap-3">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
                 <Input
                   placeholder="Search room or guest..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 w-64"
+                  className="pl-9 w-64 bg-white border-stone-200"
                 />
               </div>
-              <IOSButton onClick={fetchDashboardData} variant="ghost" size="sm">
-                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              </IOSButton>
-              <IOSButton onClick={() => setShowReservationModal(true)} className="bg-[#3C3C43] hover:bg-[#000000] text-white" leftIcon={<PlusCircle />}>
-                New Booking
+              <IOSButton onClick={() => setShowReservationModal(true)} className="bg-[#3C3C43] hover:bg-[#000000] text-white">
+                <PlusCircle className="h-4 w-4 mr-2" /> New Booking
               </IOSButton>
             </div>
           </div>
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-              <IOSCard className="p-4 bg-[#FFFFFF] border-[rgba(60,60,67,0.12)] rounded-2xl">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[#8E8E93] text-sm">Available</p>
-                    <p className="text-3xl font-bold mt-1 text-[#000000]">{stats.available}</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-[#F2F2F7]">
-                    <Bed className="h-6 w-6 text-[#3C3C43]" />
-                  </div>
-                </div>
-              </IOSCard>
-            </motion.div>
-
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-              <IOSCard className="p-4 bg-[#FFFFFF] border-[rgba(60,60,67,0.12)] rounded-2xl">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[#8E8E93] text-sm">Occupied</p>
-                    <p className="text-3xl font-bold mt-1 text-[#000000]">{stats.occupied}</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-[#F2F2F7]">
-                    <UserCheck className="h-6 w-6 text-[#3C3C43]" />
-                  </div>
-                </div>
-              </IOSCard>
-            </motion.div>
-
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-              <IOSCard className="p-4 bg-[#FFFFFF] border-[rgba(60,60,67,0.12)] rounded-2xl">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[#8E8E93] text-sm">Arrivals</p>
-                    <p className="text-3xl font-bold mt-1 text-[#000000]">{stats.expectedArrivals}</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-[#F2F2F7]">
-                    <LogIn className="h-6 w-6 text-[#3C3C43]" />
-                  </div>
-                </div>
-              </IOSCard>
-            </motion.div>
-
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-              <IOSCard className="p-4 bg-[#FFFFFF] border-[rgba(60,60,67,0.12)] rounded-2xl">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[#8E8E93] text-sm">Departures</p>
-                    <p className="text-3xl font-bold mt-1 text-[#000000]">{stats.expectedDepartures}</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-[#F2F2F7]">
-                    <LogOut className="h-6 w-6 text-[#3C3C43]" />
-                  </div>
-                </div>
-              </IOSCard>
-            </motion.div>
-
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-              <IOSCard className="p-4 bg-[#FFFFFF] border-[rgba(60,60,67,0.12)] rounded-2xl">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[#8E8E93] text-sm">Occupancy</p>
-                    <p className="text-3xl font-bold mt-1 text-[#000000]">{stats.occupancyRate}%</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-[#F2F2F7]">
-                    <TrendingUp className="h-6 w-6 text-[#3C3C43]" />
-                  </div>
-                </div>
-              </IOSCard>
-            </motion.div>
-
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
-              <IOSCard className="p-4 bg-[#FFFFFF] border-[rgba(60,60,67,0.12)] rounded-2xl">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[#8E8E93] text-sm">VIP Guests</p>
-                    <p className="text-3xl font-bold mt-1 text-[#000000]">{stats.vipGuests}</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-[#F2F2F7]">
-                    <Star className="h-6 w-6 text-[#3C3C43]" />
-                  </div>
-                </div>
-              </IOSCard>
-            </motion.div>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+          {/* Stats Bar */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { label: 'Check-In', icon: LogIn, action: () => setShowCheckInModal(true) },
-              { label: 'Check-Out', icon: LogOut, action: () => setShowCheckOutModal(true) },
-              { label: 'Room Service', icon: Utensils, action: () => setShowRoomServiceModal(true) },
-              { label: 'Invoice', icon: DollarSign, action: () => setShowInvoiceModal(true) },
-              { label: 'Rooms', icon: Key, link: '/dashboard/reception/rooms' },
-              { label: 'Guests', icon: Users, link: '/dashboard/reception/guests' },
-              { label: 'Bookings', icon: Calendar, link: '/dashboard/reception/reservations' },
-              { label: 'Events', icon: Sparkles, action: () => setShowEventModal(true) }
-            ].map((item, idx) => (
-              <motion.div key={item.label} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 * idx }}>
-                {item.link ? (
-                  <Link href={item.link}>
-                    <IOSCard className="p-4 cursor-pointer transition-all bg-[#FFFFFF] border-[rgba(60,60,67,0.12)] hover:bg-[#FAFAFA] rounded-xl">
-                      <div className="text-center">
-                        <item.icon className="h-6 w-6 mx-auto mb-2 text-[#3C3C43]" />
-                        <p className="text-sm font-medium text-[#000000]">{item.label}</p>
-                      </div>
-                    </IOSCard>
-                  </Link>
-                ) : (
-                  <IOSCard 
-                    className="p-4 cursor-pointer transition-all bg-[#FFFFFF] border-[rgba(60,60,67,0.12)] hover:bg-[#FAFAFA] rounded-xl"
-                    onClick={item.action}
-                  >
-                    <div className="text-center">
-                      <item.icon className="h-6 w-6 mx-auto mb-2 text-[#3C3C43]" />
-                      <p className="text-sm font-medium text-[#000000]">{item.label}</p>
-                    </div>
-                  </IOSCard>
-                )}
-              </motion.div>
+              { label: 'Available Rooms', value: stats.available, icon: Bed, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+              { label: 'Occupied Rooms', value: stats.occupied, icon: UserCheck, color: 'text-blue-600', bg: 'bg-blue-50' },
+              { label: 'Today Arrivals', value: stats.expectedArrivals, icon: LogIn, color: 'text-amber-600', bg: 'bg-amber-50' },
+              { label: 'Today Departures', value: stats.expectedDepartures, icon: LogOut, color: 'text-rose-600', bg: 'bg-rose-50' },
+            ].map((stat) => (
+              <IOSCard key={stat.label} className="p-4 border-none shadow-sm bg-white">
+                <div className="flex items-center gap-4">
+                  <div className={`p-3 rounded-xl ${stat.bg}`}>
+                    <stat.icon className={`h-6 w-6 ${stat.color}`} />
+                  </div>
+                  <div>
+                    <p className="text-sm text-stone-500 font-medium">{stat.label}</p>
+                    <p className="text-2xl font-bold text-stone-900">{stat.value}</p>
+                  </div>
+                </div>
+              </IOSCard>
             ))}
           </div>
 
-          {/* Main Content Grid */}
+          {/* Main Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Room Grid */}
-            <IOSCard className="lg:col-span-2 p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold font-sf-pro-display flex items-center gap-2">
-                  <Bed className="h-5 w-5 text-[#3C3C43]" />
-                  Room Status
+            {/* Room Status Table */}
+            <div className="lg:col-span-2 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-stone-900 flex items-center gap-2">
+                  <Layout className="h-5 w-5" /> Room Status
                 </h2>
-                <div className="flex items-center gap-2">
-                  <select 
-                    className="text-sm border rounded-ios-lg px-3 py-1.5"
-                    value={selectedFloor || ''}
-                    onChange={(e) => setSelectedFloor(e.target.value ? parseInt(e.target.value) : null)}
-                  >
-                    <option value="">All Floors</option>
-                    {floors.map(f => <option key={f} value={f}>Floor {f}</option>)}
-                  </select>
+                <Link href="/dashboard/reception/rooms" className="text-sm text-blue-600 hover:underline">View All Rooms</Link>
+              </div>
+              <IOSCard className="overflow-hidden border-none shadow-sm bg-white">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-stone-50 border-b border-stone-100">
+                      <tr>
+                        <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">Room</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">Type</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">Status</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">Guest</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">Checkout</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-50">
+                      {filteredRooms.slice(0, 10).map((room) => (
+                        <tr key={room.id} className="hover:bg-stone-50 transition-colors">
+                          <td className="px-4 py-3 font-bold text-stone-900">{room.room_number}</td>
+                          <td className="px-4 py-3 text-sm text-stone-600">{typeof room.type === 'string' ? room.type : room.type.name}</td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                              ${room.status === 'available' ? 'bg-emerald-50 text-emerald-700' :
+                                room.status === 'occupied' ? 'bg-blue-50 text-blue-700' :
+                                  room.status === 'cleaning' ? 'bg-amber-50 text-amber-700' :
+                                    'bg-stone-50 text-stone-700'}`}>
+                              {room.status.charAt(0).toUpperCase() + room.status.slice(1)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-stone-900">{room.guest_name || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-stone-500">
+                            {room.check_out_date ? new Date(room.check_out_date).toLocaleDateString() : '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </IOSCard>
+            </div>
+
+            {/* Arrivals & Departures */}
+            <div className="space-y-6">
+              {/* Arrivals */}
+              <div className="space-y-4">
+                <h2 className="text-lg font-bold text-stone-900 flex items-center gap-2">
+                  <LogIn className="h-5 w-5" /> Today's Arrivals
+                </h2>
+                <div className="space-y-3">
+                  {todayArrivals.length === 0 ? (
+                    <div className="p-8 text-center bg-stone-50 rounded-2xl border-2 border-dashed border-stone-200">
+                      <p className="text-stone-500 text-sm">No arrivals today</p>
+                    </div>
+                  ) : todayArrivals.slice(0, 5).map((arrival) => (
+                    <IOSCard key={arrival.id} className="p-3 border-none shadow-sm bg-white hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center text-stone-700 font-bold">
+                            {arrival.guest_name.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="font-bold text-stone-900 text-sm">{arrival.guest_name}</p>
+                            <p className="text-xs text-stone-500">Room {arrival.room_number} • {arrival.room_type}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs font-bold text-stone-900">{arrival.check_in_time}</p>
+                          <Link href="/dashboard/reception/checkin">
+                            <button className="text-[10px] text-blue-600 font-bold uppercase mt-1">Check In</button>
+                          </Link>
+                        </div>
+                      </div>
+                    </IOSCard>
+                  ))}
                 </div>
               </div>
 
-              {/* Legend */}
-              <div className="flex flex-wrap gap-4 mb-4 text-sm">
-                {[
-                  { status: 'available', label: 'Available', count: stats.available },
-                  { status: 'occupied', label: 'Occupied', count: stats.occupied },
-                  { status: 'cleaning', label: 'Cleaning', count: stats.cleaning },
-                  { status: 'reserved', label: 'Reserved', count: stats.reserved },
-                  { status: 'maintenance', label: 'Maintenance', count: stats.maintenance }
-                ].map(item => (
-                  <div key={item.status} className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${getRoomStatusColor(item.status)}`} />
-                    <span className="text-gray-600">{item.label}</span>
-                    <IOSBadge variant="light" color="secondary" className="text-xs">{item.count}</IOSBadge>
-                  </div>
-                ))}
-              </div>
-
-              {/* Room Grid */}
-              <div className="grid grid-cols-5 md:grid-cols-8 lg:grid-cols-10 gap-2 max-h-80 overflow-y-auto">
-                {filteredRooms.length > 0 ? filteredRooms.map(room => (
-                  <motion.div
-                    key={room.id}
-                    whileHover={{ scale: 1.05 }}
-                    className={`p-2 rounded-ios-lg border-2 cursor-pointer transition-all ${getRoomStatusBg(room.status)}`}
-                    title={room.guest_name ? `${room.guest_name}` : room.status}
-                  >
-                    <div className="text-center">
-                      <p className="font-bold text-sm">{room.room_number}</p>
-                      <p className="text-xs text-gray-500">{getRoomTypeText(room.type)}</p>
-                    </div>
-                  </motion.div>
-                )) : (
-                  <div className="col-span-full text-center py-8 text-gray-500">
-                    <Bed className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-                    <p>No rooms found</p>
-                  </div>
-                )}
-              </div>
-            </IOSCard>
-
-            {/* Notifications Panel */}
-            <IOSCard className="p-5">
-              <h2 className="text-lg font-semibold font-sf-pro-display flex items-center gap-2 mb-4">
-                <Bell className="h-5 w-5 text-[#3C3C43]" />
-                Live Updates
-                <IOSBadge className="bg-[#F2F2F7]0 text-white ml-auto">{notifications.length}</IOSBadge>
-              </h2>
-              <div className="space-y-3 max-h-80 overflow-y-auto">
-                <AnimatePresence>
-                  {notifications.map((notif, idx) => (
-                    <motion.div
-                      key={notif.id}
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: idx * 0.1 }}
-                      className={`p-3 rounded-ios-lg border ${
-                        notif.type === 'vip' ? 'bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]' :
-                        notif.type === 'warning' ? 'bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]' :
-                        notif.type === 'success' ? 'bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]' :
-                        'bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]'
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        {getNotificationIcon(notif.type)}
-                        <div className="flex-1">
-                          <p className="text-sm">{notif.message}</p>
-                          <p className="text-xs text-gray-400 mt-1">{notif.time}</p>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-            </IOSCard>
-          </div>
-
-          {/* Arrivals & Departures */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Today's Arrivals */}
-            <IOSCard className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold font-sf-pro-display flex items-center gap-2">
-                  <LogIn className="h-5 w-5 text-[#3C3C43]" />
-                  Today's Arrivals
+              {/* Departures */}
+              <div className="space-y-4">
+                <h2 className="text-lg font-bold text-stone-900 flex items-center gap-2">
+                  <LogOut className="h-5 w-5" /> Today's Departures
                 </h2>
-                <IOSBadge variant="light" color="secondary" className="bg-[#F2F2F7] text-[#3C3C43]">{todayArrivals.length} guests</IOSBadge>
-              </div>
-              <div className="space-y-3 max-h-72 overflow-y-auto">
-                {todayArrivals.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <LogIn className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-                    <p>No arrivals scheduled today</p>
-                  </div>
-                ) : todayArrivals.map((arrival, idx) => (
-                  <motion.div
-                    key={arrival.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.05 }}
-                    className="p-3 bg-gray-50 rounded-ios-lg hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-full ${arrival.is_vip ? 'bg-[#F2F2F7]' : 'bg-[#F2F2F7]'}`}>
-                          {arrival.is_vip ? <Star className="h-4 w-4 text-[#3C3C43]" /> : <Users className="h-4 w-4 text-[#3C3C43]" />}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">{arrival.guest_name}</p>
-                            {arrival.is_vip && <IOSBadge className="bg-[#F2F2F7] text-white text-xs">VIP</IOSBadge>}
+                <div className="space-y-3">
+                  {todayDepartures.length === 0 ? (
+                    <div className="p-8 text-center bg-stone-50 rounded-2xl border-2 border-dashed border-stone-200">
+                      <p className="text-stone-500 text-sm">No departures today</p>
+                    </div>
+                  ) : todayDepartures.slice(0, 5).map((departure) => (
+                    <IOSCard key={departure.id} className="p-3 border-none shadow-sm bg-white hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center text-stone-700 font-bold">
+                            {departure.guest_name.charAt(0)}
                           </div>
-                          <p className="text-sm text-gray-500">Room {arrival.room_number} • {arrival.room_type} • {arrival.guests} guest{arrival.guests > 1 ? 's' : ''}</p>
+                          <div>
+                            <p className="font-bold text-stone-900 text-sm">{departure.guest_name}</p>
+                            <p className="text-xs text-stone-500">Room {departure.room_number}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs font-bold text-stone-900">{departure.check_out_time}</p>
+                          <Link href="/dashboard/reception/checkin">
+                            <button className="text-[10px] text-rose-600 font-bold uppercase mt-1">Check Out</button>
+                          </Link>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-medium text-[#3C3C43]">{arrival.check_in_time}</p>
-                        <IOSButton size="sm" className="mt-1 h-7" onClick={() => setShowCheckInModal(true)}>
-                          Check In
-                        </IOSButton>
-                      </div>
-                    </div>
-                    {arrival.special_requests && (
-                      <div className="mt-2 p-2 bg-[#F2F2F7] rounded text-xs text-[#3C3C43]">
-                        <span className="font-medium">Note:</span> {arrival.special_requests}
-                      </div>
-                    )}
-                  </motion.div>
-                ))}
-              </div>
-            </IOSCard>
-
-            {/* Today's Departures */}
-            <IOSCard className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold font-sf-pro-display flex items-center gap-2">
-                  <LogOut className="h-5 w-5 text-[#3C3C43]" />
-                  Today's Departures
-                </h2>
-                <IOSBadge variant="light" color="secondary" className="bg-[#F2F2F7] text-[#3C3C43]">{todayDepartures.length} guests</IOSBadge>
-              </div>
-              <div className="space-y-3 max-h-72 overflow-y-auto">
-                {todayDepartures.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <LogOut className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-                    <p>No departures scheduled today</p>
-                  </div>
-                ) : todayDepartures.map((departure, idx) => (
-                  <motion.div
-                    key={departure.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.05 }}
-                    className="p-3 bg-gray-50 rounded-ios-lg hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-full bg-[#F2F2F7]">
-                          <Key className="h-4 w-4 text-[#3C3C43]" />
-                        </div>
-                        <div>
-                          <p className="font-medium">{departure.guest_name}</p>
-                          <p className="text-sm text-gray-500">Room {departure.room_number}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-[#3C3C43]">{departure.check_out_time}</p>
-                        {departure.balance > 0 && (
-                          <p className="text-xs text-[#8E8E93]0">Balance: KES {departure.balance.toLocaleString()}</p>
-                        )}
-                        <IOSButton size="sm" variant="secondary" className="mt-1 h-7" onClick={() => setShowCheckOutModal(true)}>
-                          Check Out
-                        </IOSButton>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </IOSCard>
-          </div>
-
-          {/* Footer Quick Links */}
-          <IOSCard className="p-4 bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <Zap className="h-5 w-5 text-[#3C3C43]" />
-                <span className="font-medium text-[#3C3C43]">Quick Links</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Link href="/dashboard/reception/rooms">
-                  <IOSButton variant="secondary" size="sm" className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]" leftIcon={<Bed />}>
-                    All Rooms
-                  </IOSButton>
-                </Link>
-                <Link href="/dashboard/reception/guests">
-                  <IOSButton variant="secondary" size="sm" className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]" leftIcon={<Users />}>
-                    Guest List
-                  </IOSButton>
-                </Link>
-                <Link href="/dashboard/reception/reservations">
-                  <IOSButton variant="secondary" size="sm" className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]" leftIcon={<Calendar />}>
-                    Reservations
-                  </IOSButton>
-                </Link>
-                <Link href="/dashboard/housekeeping">
-                  <IOSButton variant="secondary" size="sm" className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]" leftIcon={<Home />}>
-                    Housekeeping
-                  </IOSButton>
-                </Link>
+                    </IOSCard>
+                  ))}
+                </div>
               </div>
             </div>
-          </IOSCard>
+          </div>
         </div>
 
         {/* Modals */}
         <CheckInModal isOpen={showCheckInModal} onClose={() => setShowCheckInModal(false)} />
         <CheckOutModal isOpen={showCheckOutModal} onClose={() => setShowCheckOutModal(false)} />
-        <RoomServiceModal isOpen={showRoomServiceModal} onClose={() => setShowRoomServiceModal(false)} />
-        <InvoiceModal isOpen={showInvoiceModal} onClose={() => setShowInvoiceModal(false)} />
-        <EventModal isOpen={showEventModal} onClose={() => setShowEventModal(false)} />
         <ReservationModal isOpen={showReservationModal} onClose={() => setShowReservationModal(false)} />
       </DashboardLayout>
     </ProtectedRoute>

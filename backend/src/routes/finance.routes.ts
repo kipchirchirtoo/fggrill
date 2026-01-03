@@ -22,6 +22,7 @@ import {
 } from '../controllers/finance.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
+import { supabase } from '../config/database';
 
 const router = express.Router();
 
@@ -302,14 +303,12 @@ router.get('/branches',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_MANAGER]),
   async (req, res) => {
     try {
-      const { createClient } = require('@supabase/supabase-js');
-      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
       const { data, error } = await supabase.from('branches').select('id, name, code');
       if (error) throw error;
       res.json({ success: true, data: data || [] });
     } catch (error: any) {
       console.error('Get branches error:', error.message);
-      res.json({ success: true, data: [] });
+      res.status(500).json({ success: false, error: error.message });
     }
   }
 );

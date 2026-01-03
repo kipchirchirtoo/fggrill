@@ -17,22 +17,51 @@ from reports.excel_generator import ExcelReportGenerator
 from reports.data_fetcher import DataFetcher
 from reports.branded_pdf_generator import BrandedPDFGenerator
 from reports.database_fetcher import DatabaseFetcher
+from reports.kpi_dashboard_generator import KPIDashboardGenerator
+from reports.kpi_fetcher import add_kpi_dashboard_method
+
+# Initialize KPI dashboard functionality
+add_kpi_dashboard_method()
 from report_scheduler import ReportScheduler, SchedulerDaemon
 from receipts.routes import receipts_bp
 from finance.routes import finance_bp
 from accounting.routes import accounting_bp, audit_bp
 from restaurant_inventory.routes import restaurant_inventory_bp
 from budget_analytics import BudgetAnalytics
+from portals.employee_service import employee_portal_bp
+from portals.guest_service import guest_portal_bp
+
+# Import new consolidated blueprints
+from email_automation.routes import email_automation_bp, start_email_scheduler
+from template_generator.routes import template_generator_bp
+from barcode_generator.routes import barcode_generator_bp
+from analytics.routes import analytics_bp
+from pricing_engine.routes import pricing_bp
+from communication_hub.routes import communication_bp
+from room_service.routes import room_bp
+from attendance.routes import attendance_bp
 
 app = Flask(__name__)
 CORS(app, origins=['http://localhost:3000', 'http://localhost:3001', '*'])
 
-# Register blueprints
+# Register existing blueprints
 app.register_blueprint(receipts_bp)
 app.register_blueprint(finance_bp)
 app.register_blueprint(accounting_bp)
 app.register_blueprint(audit_bp)
 app.register_blueprint(restaurant_inventory_bp)
+app.register_blueprint(employee_portal_bp)
+app.register_blueprint(guest_portal_bp)
+
+# Register new consolidated blueprints
+app.register_blueprint(email_automation_bp)
+app.register_blueprint(template_generator_bp)
+app.register_blueprint(barcode_generator_bp)
+app.register_blueprint(analytics_bp, url_prefix='/api/analytics')
+app.register_blueprint(pricing_bp, url_prefix='/api/pricing')
+app.register_blueprint(communication_bp, url_prefix='/api/communications')
+app.register_blueprint(room_bp, url_prefix='/api/rooms')
+app.register_blueprint(attendance_bp, url_prefix='/api/attendance')
 
 # Configure logging
 logging.basicConfig(
@@ -78,7 +107,7 @@ def generate_branded_pdf_report():
         use_real_data = data.get('useRealData', True)
         passed_data = data.get('data')  # Data passed directly from frontend
         
-        logger.info(f"Generating branded PDF report: {report_type}")
+        logger.info(f"Generating branded PDF report: {report_type} with filters: {filters}")
         
         # Use passed data if available and useRealData is false
         if passed_data and not use_real_data:
@@ -87,6 +116,8 @@ def generate_branded_pdf_report():
             report_data = database_fetcher.fetch_report_data(report_type, filters)
         else:
             report_data = data_fetcher.fetch_report_data(report_type, filters)
+        
+        logger.info(f"Report data generated: {report_data}")
         
         # Generate branded PDF
         pdf_file = branded_pdf_generator.generate_report(report_type, report_data, filters)
@@ -99,6 +130,47 @@ def generate_branded_pdf_report():
         )
     except Exception as e:
         logger.error(f"Error generating branded PDF report: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# Initialize Anomaly Detector
+from finance.anomaly_detector import PaymentAnomalyDetector
+anomaly_detector = PaymentAnomalyDetector()
+
+@app.route('/api/finance/verify-anomaly', methods=['POST'])
+def verify_payment_anomaly():
+    """Analyze payment for anomalies using ML"""
+    try:
+        data = request.get_json()
+        logger.info(f"Analyzing payment anomaly for amount: {data.get('amount')}")
+        
+        result = anomaly_detector.detect_anomaly(data)
+        
+        return jsonify({
+            'success': True,
+            'data': result
+        })
+    except Exception as e:
+        logger.error(f"Error analyzing payment anomaly: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/reports/generate/checkout-bill', methods=['POST'])
+def generate_checkout_bill():
+    """Generate Guest Checkout Bill PDF"""
+    try:
+        data = request.get_json()
+        logger.info(f"Generating checkout bill for guest: {data.get('guest_name')}")
+        
+        # Generate PDF
+        pdf_file = branded_pdf_generator.generate_checkout_bill(data)
+        
+        return send_file(
+            pdf_file,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'Bill_{data.get("guest_name", "Guest").replace(" ", "_")}.pdf'
+        )
+    except Exception as e:
+        logger.error(f"Error generating checkout bill: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/reports/generate/pdf', methods=['POST'])
@@ -638,9 +710,9 @@ def generate_forecast():
         logger.info(f"Generating {forecast_type} forecast for branch {branch_id}, {periods} periods")
         
         # Fetch historical data from database
-        if database_fetcher.supabase:
+        if database_fetcher.client:
             # Get historical revenue data
-            result = database_fetcher.supabase.rpc('get_daily_revenue', {
+            result = database_fetcher.client.rpc('get_daily_revenue', {
                 'p_branch_id': branch_id,
                 'p_days': 90
             }).execute()
@@ -649,7 +721,7 @@ def generate_forecast():
                 historical_data = pd.DataFrame(result.data)
             else:
                 # Fallback: fetch from restaurant_orders
-                result = database_fetcher.supabase.table('restaurant_orders').select(
+                result = database_fetcher.client.table('restaurant_orders').select(
                     'created_at, total_amount'
                 ).gte('created_at', (datetime.now() - timedelta(days=90)).isoformat()).execute()
                 
@@ -764,9 +836,9 @@ def analyze_kpis():
         
         insights = []
         
-        if database_fetcher.supabase:
+        if database_fetcher.client:
             # Get revenue data
-            result = database_fetcher.supabase.table('restaurant_orders').select(
+            result = database_fetcher.client.table('restaurant_orders').select(
                 'total_amount, created_at'
             ).gte('created_at', (datetime.now() - timedelta(days=period)).isoformat()).execute()
             
@@ -836,7 +908,7 @@ def get_analytics_trends():
         
         try:
             # Get restaurant orders
-            query = database_fetcher.supabase.table('restaurant_orders').select(
+            query = database_fetcher.client.table('restaurant_orders').select(
                 'id, total_amount, created_at, status'
             ).gte('created_at', start_date.isoformat()).lte('created_at', end_date.isoformat())
             
@@ -868,7 +940,7 @@ def get_analytics_trends():
                 category_revenue['Restaurant'] = float(df['total_amount'].sum())
             
             # Get bar orders
-            bar_query = database_fetcher.supabase.table('bar_orders').select(
+            bar_query = database_fetcher.client.table('bar_orders').select(
                 'id, total_amount, created_at'
             ).gte('created_at', start_date.isoformat()).lte('created_at', end_date.isoformat())
             
@@ -884,7 +956,7 @@ def get_analytics_trends():
                 category_revenue['Bar'] = float(bar_df['total_amount'].sum())
             
             # Get bookings for room revenue
-            booking_query = database_fetcher.supabase.table('bookings').select(
+            booking_query = database_fetcher.client.table('bookings').select(
                 'id, total_amount, created_at'
             ).gte('created_at', start_date.isoformat()).lte('created_at', end_date.isoformat())
             
@@ -899,7 +971,7 @@ def get_analytics_trends():
                 category_revenue['Room Service'] = float(booking_df['total_amount'].sum())
             
             # Get previous period data for comparison
-            prev_query = database_fetcher.supabase.table('restaurant_orders').select(
+            prev_query = database_fetcher.client.table('restaurant_orders').select(
                 'total_amount'
             ).gte('created_at', prev_start.isoformat()).lt('created_at', start_date.isoformat())
             
@@ -985,14 +1057,14 @@ def get_executive_dashboard():
         
         try:
             # Get branches data
-            branch_result = database_fetcher.supabase.table('branches').select('*').execute()
+            branch_result = database_fetcher.client.table('branches').select('*').execute()
             
             if branch_result.data:
                 for branch in branch_result.data:
                     branch_id = branch.get('id')
                     
                     # Get revenue for this branch
-                    branch_revenue_query = database_fetcher.supabase.table('restaurant_orders').select(
+                    branch_revenue_query = database_fetcher.client.table('restaurant_orders').select(
                         'total_amount, id'
                     ).eq('branch_id', branch_id).gte('created_at', start_date.isoformat())
                     
@@ -1016,11 +1088,11 @@ def get_executive_dashboard():
                     total_orders += branch_orders
             
             # Get staff count
-            staff_result = database_fetcher.supabase.table('staff_profiles').select('id', count='exact').execute()
+            staff_result = database_fetcher.client.table('staff_profiles').select('id', count='exact').execute()
             staff_count = staff_result.count if hasattr(staff_result, 'count') and staff_result.count else len(staff_result.data) if staff_result.data else 0
             
             # Get previous period revenue
-            prev_query = database_fetcher.supabase.table('restaurant_orders').select(
+            prev_query = database_fetcher.client.table('restaurant_orders').select(
                 'total_amount'
             ).gte('created_at', prev_start.isoformat()).lt('created_at', start_date.isoformat())
             
@@ -1134,7 +1206,7 @@ def export_analytics():
         start_date = end_date - timedelta(days=period)
         
         # Get trend data
-        query = database_fetcher.supabase.table('restaurant_orders').select(
+        query = database_fetcher.client.table('restaurant_orders').select(
             'id, total_amount, created_at'
         ).gte('created_at', start_date.isoformat())
         
@@ -1195,5 +1267,10 @@ if __name__ == '__main__':
         scheduler_thread = scheduler_daemon.run_in_background()
         logger.info("Report scheduler daemon started in background")
     
-    logger.info(f"Starting Famous Gate Report Service on port {port}")
+    # Start email automation scheduler
+    start_email_scheduler()
+    logger.info("Email automation scheduler started")
+    
+    logger.info(f"Starting Famous Gate Unified Python Service on port {port}")
+    logger.info("Services: Reports, Finance, Accounting, Receipts, Email, Templates, Barcodes, Portals")
     app.run(host='0.0.0.0', port=port, debug=os.getenv('FLASK_ENV') == 'development')

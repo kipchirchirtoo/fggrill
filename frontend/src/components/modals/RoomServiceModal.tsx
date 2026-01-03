@@ -179,7 +179,7 @@ export function RoomServiceModal({ isOpen, onClose, prefilledRoom, guestName }: 
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Search menu items..."
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-ios-lg"
+                  className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-ios-lg"
                 />
               </div>
             </div>

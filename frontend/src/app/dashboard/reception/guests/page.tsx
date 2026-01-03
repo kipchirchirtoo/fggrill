@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { guestAPI, bookingsAPI } from '@/lib/api';
-import { 
+import { guestAPI, bookingsAPI, fetchAPI } from '@/lib/api';
+import {
   Users, Search, Plus, RefreshCw, Edit2, Trash2, Eye, Phone, Mail,
   User, Calendar, MapPin, CreditCard, Star, History, MoreVertical,
   CheckCircle, XCircle, Clock, FileText, Building2
@@ -21,23 +21,23 @@ import { IOSCard } from '@/components/ui/ios-card';
 
 interface Guest {
   id: string;
-  first_name: string;
-  last_name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
-  id_type?: string;
-  id_number?: string;
+  idType?: string;
+  idNumber?: string;
   nationality?: string;
   address?: string;
   city?: string;
   country?: string;
-  date_of_birth?: string;
-  vip_status?: boolean;
+  dateOfBirth?: string;
+  isVip?: boolean;
   notes?: string;
-  total_stays?: number;
-  total_spent?: number;
-  created_at: string;
-  last_stay?: string;
+  totalStays?: number;
+  totalSpent?: number;
+  createdAt: string;
+  lastStay?: string;
 }
 
 interface GuestFormData {
@@ -90,18 +90,18 @@ function GuestFormModal({
   useEffect(() => {
     if (guest) {
       setFormData({
-        first_name: guest.first_name || '',
-        last_name: guest.last_name || '',
+        first_name: guest.firstName || '',
+        last_name: guest.lastName || '',
         email: guest.email || '',
         phone: guest.phone || '',
-        id_type: guest.id_type || 'national_id',
-        id_number: guest.id_number || '',
+        id_type: guest.idType || 'national_id',
+        id_number: guest.idNumber || '',
         nationality: guest.nationality || 'Kenyan',
         address: guest.address || '',
         city: guest.city || '',
         country: guest.country || 'Kenya',
-        date_of_birth: guest.date_of_birth || '',
-        vip_status: guest.vip_status || false,
+        date_of_birth: guest.dateOfBirth || '',
+        vip_status: guest.isVip || false,
         notes: guest.notes || '',
       });
     } else {
@@ -256,17 +256,17 @@ function GuestFormModal({
                 onChange={(e) => setFormData({ ...formData, vip_status: e.target.checked })}
                 className="w-4 h-4"
               />
-              <Star className="h-4 w-4 text-yellow-500" />
+              <Star className="h-4 w-4 text-[#3C3C43]" />
               <span className="text-sm font-medium">VIP Guest</span>
             </label>
           </div>
         </div>
 
         <div className="flex gap-3 mt-6">
-          <IOSButton variant="outline" onClick={onClose} className="flex-1">
+          <IOSButton variant="outline" onClick={onClose} className="flex-1 border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]">
             Cancel
           </IOSButton>
-          <IOSButton onClick={handleSubmit} disabled={isSubmitting} className="flex-1">
+          <IOSButton onClick={handleSubmit} disabled={isSubmitting} className="flex-1 bg-[#3C3C43] hover:bg-[#000000] text-white">
             {isSubmitting ? 'Saving...' : guest ? 'Update Guest' : 'Register Guest'}
           </IOSButton>
         </div>
@@ -298,15 +298,19 @@ function GuestDetailsModal({
     if (!guest) return;
     setIsLoading(true);
     try {
-      const response = await bookingsAPI.getBookings();
-      if (response.success) {
-        const guestBookings = (response.data || []).filter(
-          (b: any) => b.guest_id === guest.id
+      // Use bookingsAPI to get all bookings and filter by guest_id
+      const allBookingsResponse = await bookingsAPI.getBookings();
+      if (allBookingsResponse.success) {
+        const guestBookings = (allBookingsResponse.data || []).filter(
+          (b: any) => b.guest_id === guest.id || b.guestId === guest.id
         );
         setBookings(guestBookings);
+      } else {
+        setBookings([]);
       }
     } catch (error) {
       console.error('Error fetching bookings:', error);
+      setBookings([]);
     } finally {
       setIsLoading(false);
     }
@@ -321,7 +325,7 @@ function GuestDetailsModal({
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
             Guest Profile
-            {guest.vip_status && (
+            {guest.isVip && (
               <IOSBadge variant="light" color="warning" className="ml-2">
                 <Star className="h-3 w-3 mr-1" /> VIP
               </IOSBadge>
@@ -332,12 +336,14 @@ function GuestDetailsModal({
         <div className="space-y-6 mt-4">
           {/* Basic Info */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl">
-              <h3 className="text-xl font-bold">{guest.first_name} {guest.last_name}</h3>
-              <div className="flex gap-4 mt-2 text-sm text-gray-600">
-                <span className="flex items-center gap-1">
-                  <Phone className="h-4 w-4" /> {guest.phone}
-                </span>
+            <div className="col-span-2 p-4 bg-[#F2F2F7] rounded-xl border border-[rgba(60,60,67,0.12)]">
+              <h3 className="text-xl font-bold text-[#000000]">{guest.firstName} {guest.lastName}</h3>
+              <div className="flex gap-4 mt-2 text-sm text-[#3C3C43]">
+                {guest.phone && (
+                  <span className="flex items-center gap-1">
+                    <Phone className="h-4 w-4" /> {guest.phone}
+                  </span>
+                )}
                 {guest.email && (
                   <span className="flex items-center gap-1">
                     <Mail className="h-4 w-4" /> {guest.email}
@@ -348,11 +354,11 @@ function GuestDetailsModal({
 
             <div className="p-3 bg-gray-50 rounded-ios-lg">
               <p className="text-xs text-gray-500">ID Type</p>
-              <p className="font-medium capitalize">{guest.id_type?.replace('_', ' ') || '-'}</p>
+              <p className="font-medium capitalize">{guest.idType?.replace('_', ' ') || '-'}</p>
             </div>
             <div className="p-3 bg-gray-50 rounded-ios-lg">
               <p className="text-xs text-gray-500">ID Number</p>
-              <p className="font-medium">{guest.id_number || '-'}</p>
+              <p className="font-medium">{guest.idNumber || '-'}</p>
             </div>
             <div className="p-3 bg-gray-50 rounded-ios-lg">
               <p className="text-xs text-gray-500">Nationality</p>
@@ -360,7 +366,7 @@ function GuestDetailsModal({
             </div>
             <div className="p-3 bg-gray-50 rounded-ios-lg">
               <p className="text-xs text-gray-500">Total Stays</p>
-              <p className="font-medium">{guest.total_stays || 0}</p>
+              <p className="font-medium">{guest.totalStays || 0}</p>
             </div>
           </div>
 
@@ -376,9 +382,9 @@ function GuestDetailsModal({
 
           {/* Notes */}
           {guest.notes && (
-            <div className="p-4 bg-yellow-50 rounded-ios-lg border border-yellow-200">
-              <p className="text-sm font-medium text-yellow-800 mb-1">Notes</p>
-              <p className="text-yellow-700">{guest.notes}</p>
+            <div className="p-4 bg-[#F2F2F7] rounded-ios-lg border border-[rgba(60,60,67,0.12)]">
+              <p className="text-sm font-medium text-[#3C3C43] mb-1">Notes</p>
+              <p className="text-[#3C3C43]">{guest.notes}</p>
             </div>
           )}
 
@@ -401,7 +407,7 @@ function GuestDetailsModal({
                         {new Date(booking.check_in).toLocaleDateString()} - {new Date(booking.check_out).toLocaleDateString()}
                       </p>
                     </div>
-                    <IOSBadge variant={booking.status === 'completed' ? 'success' : 'default'}>
+                    <IOSBadge color={booking.status === 'completed' ? 'success' : 'secondary'}>
                       {booking.status}
                     </IOSBadge>
                   </div>
@@ -430,7 +436,7 @@ export default function GuestsPage() {
   const fetchGuests = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await guestAPI.getGuests(searchQuery || undefined);
+      const response = await guestAPI.getGuests(searchQuery || undefined, user?.branch_id || undefined);
       if (response.success) {
         setGuests(response.data || []);
       }
@@ -451,12 +457,12 @@ export default function GuestsPage() {
   };
 
   const filteredGuests = guests.filter((guest) => {
-    if (filterVIP !== null && guest.vip_status !== filterVIP) return false;
+    if (filterVIP !== null && guest.isVip !== filterVIP) return false;
     return true;
   });
 
   const handleDelete = async (guest: Guest) => {
-    if (!confirm(`Delete guest ${guest.first_name} ${guest.last_name}?`)) return;
+    if (!confirm(`Delete guest ${guest.firstName} ${guest.lastName}?`)) return;
     try {
       await guestAPI.deleteGuest(guest.id);
       toast.success('Guest deleted');
@@ -492,41 +498,39 @@ export default function GuestsPage() {
               <p className="text-gray-500">Manage guest profiles and history</p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="outline" onClick={fetchGuests} leftIcon={<RefreshCw />}>Refresh
+              <IOSButton variant="outline" onClick={fetchGuests} leftIcon={<RefreshCw />} className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]">Refresh
               </IOSButton>
-              <IOSButton onClick={openNew} leftIcon={<Plus />}>New Guest
+              <IOSButton onClick={openNew} leftIcon={<Plus />} className="bg-[#3C3C43] hover:bg-[#000000] text-white">New Guest
               </IOSButton>
             </div>
           </div>
 
           {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <IOSCard className="p-4">
-              <p className="text-sm text-gray-500">Total Guests</p>
-              <p className="text-2xl font-bold">{guests.length}</p>
-            </IOSCard>
-            <IOSCard className="p-4">
-              <p className="text-sm text-gray-500">VIP Guests</p>
-              <p className="text-2xl font-bold text-yellow-600">
-                {guests.filter(g => g.vip_status).length}
-              </p>
-            </IOSCard>
-            <IOSCard className="p-4">
-              <p className="text-sm text-gray-500">New This Month</p>
-              <p className="text-2xl font-bold text-[#34C759]">
-                {guests.filter(g => {
-                  const created = new Date(g.created_at);
+            {[
+              { label: 'Total Guests', value: guests.length, icon: Users, color: 'text-gray-600', bg: 'bg-gray-50' },
+              { label: 'VIP Guests', value: guests.filter(g => g.isVip).length, icon: Star, color: 'text-amber-600', bg: 'bg-amber-50' },
+              {
+                label: 'New This Month', value: guests.filter(g => {
+                  const created = new Date(g.createdAt);
                   const now = new Date();
                   return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
-                }).length}
-              </p>
-            </IOSCard>
-            <IOSCard className="p-4">
-              <p className="text-sm text-gray-500">Returning Guests</p>
-              <p className="text-2xl font-bold text-[#007AFF]">
-                {guests.filter(g => (g.total_stays || 0) > 1).length}
-              </p>
-            </IOSCard>
+                }).length, icon: User, color: 'text-blue-600', bg: 'bg-blue-50'
+              },
+              { label: 'Returning Guests', value: guests.filter(g => (g.totalStays || 0) > 1).length, icon: History, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+            ].map((stat) => (
+              <IOSCard key={stat.label} className="p-4 border-none shadow-sm bg-white">
+                <div className="flex items-center gap-4">
+                  <div className={`p-3 rounded-xl ${stat.bg}`}>
+                    <stat.icon className={`h-6 w-6 ${stat.color}`} />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 font-medium">{stat.label}</p>
+                    <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                  </div>
+                </div>
+              </IOSCard>
+            ))}
           </div>
 
           {/* Search & Filters */}
@@ -534,34 +538,35 @@ export default function GuestsPage() {
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1 flex gap-2">
                 <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                   <Input
                     placeholder="Search by name, phone, email, or ID..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                    className="pl-10"
+                    className="pl-9"
                   />
                 </div>
-                <IOSButton onClick={handleSearch}>Search</IOSButton>
+                <IOSButton onClick={handleSearch} className="bg-[#3C3C43] hover:bg-[#000000] text-white">Search</IOSButton>
               </div>
               <div className="flex gap-2">
                 <IOSButton
-                  variant={filterVIP === null ? 'default' : 'outline'}
+                  className={filterVIP === null ? 'bg-[#3C3C43] text-white' : 'border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]'}
                   size="sm"
                   onClick={() => setFilterVIP(null)}
                 >
                   All
                 </IOSButton>
                 <IOSButton
-                  variant={filterVIP === true ? 'default' : 'outline'}
+                  className={filterVIP === true ? 'bg-[#3C3C43] text-white' : 'border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]'}
                   size="sm"
                   onClick={() => setFilterVIP(true)}
+                  leftIcon={<Star className="h-3 w-3" />}
                 >
-                  <Star className="h-3 w-3 mr-1" /> VIP
+                  VIP
                 </IOSButton>
                 <IOSButton
-                  variant={filterVIP === false ? 'default' : 'outline'}
+                  className={filterVIP === false ? 'bg-[#3C3C43] text-white' : 'border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]'}
                   size="sm"
                   onClick={() => setFilterVIP(false)}
                 >
@@ -580,21 +585,21 @@ export default function GuestsPage() {
             <IOSCard className="p-12 text-center">
               <Users className="h-12 w-12 mx-auto text-gray-300 mb-4" />
               <p className="text-gray-500">No guests found</p>
-              <IOSButton onClick={openNew} className="mt-4" leftIcon={<Plus />}>Register New Guest
+              <IOSButton onClick={openNew} className="mt-4 bg-[#3C3C43] hover:bg-[#000000] text-white" leftIcon={<Plus />}>Register New Guest
               </IOSButton>
             </IOSCard>
           ) : (
             <IOSCard className="overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-gray-50 border-b">
+                  <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      <th className="text-left p-4 font-medium text-gray-700">Guest</th>
-                      <th className="text-left p-4 font-medium text-gray-700">Contact</th>
-                      <th className="text-left p-4 font-medium text-gray-700">ID</th>
-                      <th className="text-left p-4 font-medium text-gray-700">Stays</th>
-                      <th className="text-left p-4 font-medium text-gray-700">Status</th>
-                      <th className="text-right p-4 font-medium text-gray-700">Actions</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Guest</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Contact</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">ID</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Stays</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -602,28 +607,28 @@ export default function GuestsPage() {
                       <tr key={guest.id} className="hover:bg-gray-50">
                         <td className="p-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-medium">
-                              {(guest.first_name || 'G')[0]}{(guest.last_name || 'U')[0]}
+                            <div className="w-10 h-10 rounded-full bg-[#3C3C43] flex items-center justify-center text-white font-medium">
+                              {(guest.firstName || 'G')[0]}{(guest.lastName || 'U')[0]}
                             </div>
                             <div>
-                              <p className="font-medium">{guest.first_name} {guest.last_name}</p>
+                              <p className="font-medium">{guest.firstName} {guest.lastName}</p>
                               <p className="text-sm text-gray-500">{guest.nationality || 'N/A'}</p>
                             </div>
                           </div>
                         </td>
                         <td className="p-4">
-                          <p className="text-sm">{guest.phone}</p>
+                          <p className="text-sm">{guest.phone || '-'}</p>
                           <p className="text-sm text-gray-500">{guest.email || '-'}</p>
                         </td>
                         <td className="p-4">
-                          <p className="text-sm capitalize">{guest.id_type?.replace('_', ' ') || '-'}</p>
-                          <p className="text-sm text-gray-500">{guest.id_number || '-'}</p>
+                          <p className="text-sm capitalize">{guest.idType?.replace('_', ' ') || '-'}</p>
+                          <p className="text-sm text-gray-500">{guest.idNumber || '-'}</p>
                         </td>
                         <td className="p-4">
-                          <p className="font-medium">{guest.total_stays || 0}</p>
+                          <p className="font-medium">{guest.totalStays || 0}</p>
                         </td>
                         <td className="p-4">
-                          {guest.vip_status && (
+                          {guest.isVip && (
                             <IOSBadge variant="light" color="warning">
                               <Star className="h-3 w-3 mr-1" /> VIP
                             </IOSBadge>
@@ -631,13 +636,13 @@ export default function GuestsPage() {
                         </td>
                         <td className="p-4">
                           <div className="flex justify-end gap-2">
-                            <IOSButton size="sm" variant="outline" onClick={() => openDetails(guest)}>
+                            <IOSButton size="sm" variant="outline" onClick={() => openDetails(guest)} className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]">
                               <Eye className="h-4 w-4" />
                             </IOSButton>
-                            <IOSButton size="sm" variant="outline" onClick={() => openEdit(guest)}>
+                            <IOSButton size="sm" variant="outline" onClick={() => openEdit(guest)} className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]">
                               <Edit2 className="h-4 w-4" />
                             </IOSButton>
-                            <IOSButton size="sm" variant="outline" className="text-[#FF3B30]" onClick={() => handleDelete(guest)}>
+                            <IOSButton size="sm" variant="outline" className="text-[#3C3C43] border-[rgba(60,60,67,0.12)] hover:bg-[#F2F2F7]" onClick={() => handleDelete(guest)}>
                               <Trash2 className="h-4 w-4" />
                             </IOSButton>
                           </div>

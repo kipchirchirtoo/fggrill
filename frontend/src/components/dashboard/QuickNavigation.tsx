@@ -24,11 +24,18 @@ const navigationItems: NavItem[] = [
     roles: [UserRole.RECEPTIONIST, UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]
   },
   { 
-    href: '/dashboard/restaurant', 
-    label: 'Restaurant', 
+    href: '/dashboard/pos-kitchen', 
+    label: 'POS System', 
     icon: UtensilsCrossed, 
     color: 'bg-orange-50 text-orange-600',
-    roles: [UserRole.RESTAURANT, UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]
+    roles: [UserRole.RESTAURANT, UserRole.POS_KITCHEN, UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]
+  },
+  { 
+    href: '/dashboard/kitchen', 
+    label: 'Kitchen', 
+    icon: UtensilsCrossed, 
+    color: 'bg-red-50 text-red-600',
+    roles: [UserRole.RESTAURANT, UserRole.POS_KITCHEN, UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]
   },
   { 
     href: '/dashboard/bar', 

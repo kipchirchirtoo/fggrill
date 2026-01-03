@@ -44,23 +44,33 @@ export default function HousekeepingSchedulingPage() {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [staffRes] = await Promise.all([
+      const dateStr = selectedDate.toISOString().split('T')[0];
+      const endDateStr = selectedDate.toISOString().split('T')[0];
+      
+      const [staffRes, schedulesRes] = await Promise.all([
         housekeepingAPI.getStaff(),
+        housekeepingAPI.getSchedules(dateStr, endDateStr),
       ]);
 
       if (staffRes.success) {
         setStaff(staffRes.data || []);
-        // Generate mock schedules based on staff
-        const mockSchedules: Schedule[] = (staffRes.data || []).map((s: any, i: number) => ({
-          id: `sched-${i}`,
-          staff_id: s.id,
-          staff_name: `${s.first_name} ${s.last_name}`,
-          date: selectedDate.toISOString().split('T')[0],
-          shift: ['morning', 'afternoon', 'night'][i % 3] as any,
-          floor: (i % 3) + 1,
-          status: 'scheduled',
+      }
+      
+      if (schedulesRes.success && schedulesRes.data?.length > 0) {
+        // Map API response to Schedule interface
+        const mappedSchedules = schedulesRes.data.map((s: any) => ({
+          id: s.id,
+          staff_id: s.staff_id,
+          staff_name: s.staff_name || `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+          date: s.date,
+          shift: s.shift || 'morning',
+          floor: s.floor,
+          rooms: s.rooms,
+          status: s.status || 'scheduled',
         }));
-        setSchedules(mockSchedules);
+        setSchedules(mappedSchedules);
+      } else {
+        setSchedules([]);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -175,7 +185,7 @@ export default function HousekeepingSchedulingPage() {
                               </p>
                             )}
                           </div>
-                          <IOSBadge variant={schedule.status === 'checked_in' ? 'success' : 'neutral'}>
+                          <IOSBadge className={schedule.status === 'checked_in' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>
                             {schedule.status}
                           </IOSBadge>
                         </div>

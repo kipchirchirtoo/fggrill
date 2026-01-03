@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
@@ -9,7 +10,7 @@ import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
 import { bookingsAPI } from '@/lib/api';
-import { Calendar, RefreshCw, Search, User, Bed, Clock, Plus, CheckSquare, LogOut } from 'lucide-react';
+import { Calendar, RefreshCw, Search, User, Bed, Clock, Plus, CheckSquare, LogOut, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -26,15 +27,26 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
 
 export default function BranchReservationsPage() {
   const { user } = useAuth();
+  const { activeBranchId, activeBranch } = useBranch();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+
+  // Use active branch from context, fallback to user's branch
+  const currentBranchId = activeBranchId || user?.branch_id;
 
   const fetchBookings = useCallback(async () => {
+    if (!currentBranchId) {
+      setBookings([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
-      const response = await bookingsAPI.getBookings();
+      const response = await bookingsAPI.getBookings({ branch_id: currentBranchId });
       
       if (response.success) {
         // Ensure data is an array before setting state
@@ -47,7 +59,7 @@ export default function BranchReservationsPage() {
       }
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, []);
+  }, [currentBranchId]);
   
   const handleCreateBooking = () => {
     // Redirect to booking creation form
@@ -107,8 +119,8 @@ export default function BranchReservationsPage() {
           <IOSCard className="p-4">
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
+                <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
               </div>
               <div className="flex gap-2 flex-wrap">
                 {['all', 'pending', 'confirmed', 'checked_in'].map((status) => (
@@ -149,12 +161,23 @@ export default function BranchReservationsPage() {
                     
                     {/* Action Buttons */}
                     <div className="flex gap-2 mt-3">
+                      <IOSButton 
+                        variant="secondary" 
+                        size="sm" 
+                        className="flex-1" 
+                        onClick={() => {
+                          setSelectedBooking(booking);
+                          setShowDetailsModal(true);
+                        }}
+                      >
+                        View Details
+                      </IOSButton>
+                      
                       {booking.status === 'confirmed' && (
                         <>
                           <IOSButton 
                             variant="secondary" 
                             size="sm" 
-                            className="flex-1" 
                             leftIcon={<CheckSquare />}
                             onClick={() => handleCheckIn(booking.id)}
                           >
@@ -163,7 +186,7 @@ export default function BranchReservationsPage() {
                           <IOSButton 
                             variant="secondary" 
                             size="sm" 
-                            className="flex-none bg-red-50 hover:bg-red-100 text-red-600" 
+                            className="bg-red-50 hover:bg-red-100 text-red-600" 
                             onClick={() => handleCancelBooking(booking.id)}
                           >
                             Cancel
@@ -175,22 +198,10 @@ export default function BranchReservationsPage() {
                         <IOSButton 
                           variant="secondary" 
                           size="sm" 
-                          className="flex-1" 
                           leftIcon={<LogOut />}
                           onClick={() => handleCheckOut(booking.id)}
                         >
                           Check Out
-                        </IOSButton>
-                      )}
-                      
-                      {(booking.status === 'checked_out' || booking.status === 'cancelled') && (
-                        <IOSButton 
-                          variant="secondary" 
-                          size="sm" 
-                          className="flex-1" 
-                          disabled
-                        >
-                          No Actions Available
                         </IOSButton>
                       )}
                     </div>
@@ -200,6 +211,109 @@ export default function BranchReservationsPage() {
             </div>
           )}
         </div>
+
+        {/* Details Modal */}
+        {showDetailsModal && selectedBooking && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowDetailsModal(false)}>
+            <div className="bg-white rounded-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold">Booking Details</h2>
+                <button onClick={() => setShowDetailsModal(false)} className="text-gray-400 hover:text-gray-600">
+                  ✕
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="flex items-center justify-between pb-4 border-b">
+                  <div>
+                    <p className="text-sm text-gray-500">Booking ID</p>
+                    <p className="font-semibold">{selectedBooking.id}</p>
+                  </div>
+                  <IOSBadge className={`${statusConfig[selectedBooking.status]?.bg || 'bg-gray-100'} ${statusConfig[selectedBooking.status]?.color || 'text-gray-700'}`}>
+                    {statusConfig[selectedBooking.status]?.label || selectedBooking.status}
+                  </IOSBadge>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-500">Guest Name</p>
+                  <p className="font-semibold text-lg">{selectedBooking.guest_name}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Room Number</p>
+                    <p className="font-semibold">{selectedBooking.room_number}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Nights</p>
+                    <p className="font-semibold">{selectedBooking.nights}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Check-In</p>
+                    <p className="font-semibold">{new Date(selectedBooking.check_in).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Check-Out</p>
+                    <p className="font-semibold">{new Date(selectedBooking.check_out).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}</p>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-500">Total Amount</span>
+                    <span className="text-2xl font-bold text-green-600">KES {(selectedBooking.total || 0).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-4">
+                  <IOSButton variant="secondary" className="flex-1" onClick={() => setShowDetailsModal(false)}>
+                    Close
+                  </IOSButton>
+                  
+                  {selectedBooking.status === 'confirmed' && (
+                    <>
+                      <IOSButton 
+                        className="flex-1" 
+                        onClick={() => {
+                          handleCheckIn(selectedBooking.id);
+                          setShowDetailsModal(false);
+                        }}
+                        leftIcon={<CheckSquare />}
+                      >
+                        Check In
+                      </IOSButton>
+                      <IOSButton 
+                        variant="destructive"
+                        onClick={() => {
+                          handleCancelBooking(selectedBooking.id);
+                          setShowDetailsModal(false);
+                        }}
+                      >
+                        Cancel
+                      </IOSButton>
+                    </>
+                  )}
+                  
+                  {selectedBooking.status === 'checked_in' && (
+                    <IOSButton 
+                      className="flex-1" 
+                      onClick={() => {
+                        handleCheckOut(selectedBooking.id);
+                        setShowDetailsModal(false);
+                      }}
+                      leftIcon={<LogOut />}
+                    >
+                      Check Out
+                    </IOSButton>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </DashboardLayout>
     </ProtectedRoute>
   );

@@ -4,7 +4,6 @@ export { GuestModal } from './GuestModals';
 export { ReportIssueModal, UpdateRoomStatusModal, InspectionModeModal, TaskDetailsModal } from './HousekeepingModals';
 export { MenuItemModal, OrderModal } from './RestaurantModals';
 export { NotificationModal } from './NotificationModal';
-export { SearchModal } from './SearchModal';
 export { CheckInModal } from './CheckInModal';
 export { CheckOutModal } from './CheckOutModal';
 export { RoomServiceModal } from './RoomServiceModal';

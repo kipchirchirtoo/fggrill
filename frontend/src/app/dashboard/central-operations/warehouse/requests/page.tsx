@@ -10,31 +10,40 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { centralOperationsAPI } from '@/lib/branch-api';
 import { toast } from 'sonner';
-import { 
-  ClipboardList, Search, Filter, RefreshCw, 
-  ArrowRight, FileCheck, XOctagon, AlertTriangle, 
+import {
+  ClipboardList, Search, Filter, RefreshCw,
+  ArrowRight, FileCheck, XOctagon, AlertTriangle,
   TruckIcon, Clock
 } from 'lucide-react';
 import { BranchPageWrapper } from '@/components/branch/branch-page-wrapper';
 import { format } from 'date-fns';
+import { DispatchModal } from '@/components/dispatch/DispatchModal';
 
 // Request type
 interface RequestItem {
-  sku: string;
-  name: string;
-  quantity: number;
-  unit: string;
+  id: string;
+  item_sku: string;
+  item_name?: string;
+  requested_quantity: number;
+  approved_quantity?: number;
+  unit?: string;
+  item?: {
+    item_name?: string;
+    unit?: string;
+  };
 }
 
 interface WarehouseRequest {
   id: string;
-  branch_id: number;
-  branch_name: string;
-  status: string;
-  priority: string;
-  requested_by: string;
+  request_number: string;
+  requesting_branch_id: number;
+  branch_name?: string;
+  request_type: 'REPLENISHMENT' | 'SPECIAL_ORDER' | 'EMERGENCY';
+  status: 'PENDING' | 'REVIEWED' | 'APPROVED' | 'PARTIALLY_APPROVED' | 'DISPATCHED' | 'RECEIVED' | 'CANCELLED' | 'REJECTED';
+  priority: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+  reason?: string;
+  needed_by_date?: string;
   items: RequestItem[];
-  notes: string;
   created_at: string;
   updated_at: string;
 }
@@ -49,6 +58,8 @@ function WarehouseRequestsContent() {
   const [selectedBranch, setSelectedBranch] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedPriority, setSelectedPriority] = useState('all');
+  const [dispatchModalOpen, setDispatchModalOpen] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<WarehouseRequest | null>(null);
   const [requestDetails, setRequestDetails] = useState<WarehouseRequest | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [isReviewing, setIsReviewing] = useState(false);
@@ -67,7 +78,7 @@ function WarehouseRequestsContent() {
     setIsLoading(true);
     try {
       const response = await centralOperationsAPI.getAllRequests();
-      
+
       if (response.success) {
         setRequests(response.data || []);
       } else {
@@ -85,33 +96,33 @@ function WarehouseRequestsContent() {
 
   const filterRequests = () => {
     let filtered = [...requests];
-    
+
     // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(request => 
-        request.id.toLowerCase().includes(query) || 
+      filtered = filtered.filter(request =>
+        request.request_number.toLowerCase().includes(query) ||
         request.branch_name?.toLowerCase().includes(query) ||
-        request.requested_by.toLowerCase().includes(query) ||
-        request.items.some(item => item.name.toLowerCase().includes(query) || item.sku.toLowerCase().includes(query))
+        (request.reason && request.reason.toLowerCase().includes(query)) ||
+        request.items.some(item => (item.item_name && item.item_name.toLowerCase().includes(query)) || item.item_sku.toLowerCase().includes(query))
       );
     }
-    
+
     // Filter by branch
     if (selectedBranch !== 'all') {
-      filtered = filtered.filter(request => request.branch_id === parseInt(selectedBranch));
+      filtered = filtered.filter(request => request.requesting_branch_id === parseInt(selectedBranch));
     }
-    
+
     // Filter by status
     if (selectedStatus !== 'all') {
       filtered = filtered.filter(request => request.status === selectedStatus);
     }
-    
+
     // Filter by priority
     if (selectedPriority !== 'all') {
       filtered = filtered.filter(request => request.priority === selectedPriority);
     }
-    
+
     setFilteredRequests(filtered);
   };
 
@@ -120,78 +131,77 @@ function WarehouseRequestsContent() {
     setShowDetailsModal(true);
   };
 
-  const handleReview = async (id: string, status: 'approved' | 'rejected', notes: string = '') => {
+  const handleReview = async (id: string, action: 'approve' | 'reject', notes: string = '') => {
     setIsReviewing(true);
     try {
-      const response = await centralOperationsAPI.reviewRequest(id, { status, notes });
-      
+      let response;
+      if (action === 'approve') {
+        response = await centralOperationsAPI.approveRequest(id, { notes });
+      } else {
+        response = await centralOperationsAPI.rejectRequest(id, { notes });
+      }
+
       if (response.success) {
-        toast.success(`Request ${status === 'approved' ? 'approved' : 'rejected'} successfully`);
+        toast.success(`Request ${action === 'approve' ? 'approved' : 'rejected'} successfully`);
         setShowDetailsModal(false);
         fetchRequests();
       } else {
-        toast.error(response.message || `Failed to ${status} request`);
+        toast.error(response.message || `Failed to ${action} request`);
       }
     } catch (error) {
-      console.error(`Error ${status}ing request:`, error);
-      toast.error(`Failed to ${status} request`);
+      console.error(`Error ${action}ing request:`, error);
+      toast.error(`Failed to ${action} request`);
     } finally {
       setIsReviewing(false);
     }
   };
 
-  const handleCreateDispatch = async (request: WarehouseRequest) => {
-    try {
-      const response = await centralOperationsAPI.createDispatch({ request_id: request.id });
-      
-      if (response.success) {
-        toast.success('Dispatch created successfully');
-        // Navigate to dispatches page
-        window.location.href = '/dashboard/central-operations/warehouse/dispatches';
-      } else {
-        toast.error(response.message || 'Failed to create dispatch');
-      }
-    } catch (error) {
-      console.error('Error creating dispatch:', error);
-      toast.error('Failed to create dispatch');
-    }
+  const handleCreateDispatch = (request: WarehouseRequest) => {
+    setSelectedRequest(request);
+    setDispatchModalOpen(true);
+  };
+
+  const handleDispatchSuccess = () => {
+    fetchRequests();
+    // Navigate to dispatches page
+    window.location.href = '/dashboard/central-operations/warehouse/dispatches';
   };
 
   const getBadgeColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'warning';
-      case 'approved': return 'success';
-      case 'rejected': return 'danger';
+      case 'PENDING': return 'warning';
+      case 'REVIEWED': return 'info';
+      case 'APPROVED': return 'success';
+      case 'PARTIALLY_APPROVED': return 'success';
+      case 'DISPATCHED': return 'info';
+      case 'RECEIVED': return 'success';
+      case 'CANCELLED': return 'secondary';
+      case 'REJECTED': return 'danger';
       default: return 'secondary';
     }
   };
 
   const getPriorityBadgeColor = (priority: string) => {
     switch (priority) {
-      case 'high': return 'danger';
-      case 'medium': return 'warning';
-      case 'normal': return 'info';
-      case 'low': return 'secondary';
+      case 'URGENT': return 'danger';
+      case 'HIGH': return 'warning';
+      case 'NORMAL': return 'info';
+      case 'LOW': return 'secondary';
       default: return 'secondary';
     }
   };
 
   return (
-    <ProtectedRoute allowedRoles={[
-      UserRole.SUPER_ADMIN,
-      UserRole.GENERAL_MANAGER,
-      UserRole.CENTRAL_OPERATIONS_MANAGER,
-      UserRole.CENTRAL_STOREKEEPER
-    ]}>
+    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.CENTRAL_OPERATIONS_MANAGER, UserRole.CENTRAL_STOREKEEPER]}>
       <BranchAwareDashboardLayout
         title="Warehouse Requests"
         subtitle="Manage inventory requests from branches"
         requireBranchContext={false}
         actionButton={
           <div className="flex space-x-2">
-            <IOSButton 
-              variant="secondary" 
-              onClick={fetchRequests} 
+            <IOSButton
+              variant="secondary"
+              onClick={fetchRequests}
               leftIcon={<RefreshCw className="h-4 w-4" />}
             >
               Refresh
@@ -213,7 +223,7 @@ function WarehouseRequestsContent() {
                 </div>
               </div>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <div className="flex items-center space-x-3">
                 <div className="p-2 bg-gray-100 rounded-lg">
@@ -221,11 +231,11 @@ function WarehouseRequestsContent() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Pending</p>
-                  <p className="text-lg font-semibold">{filteredRequests.filter(r => r.status === 'pending').length}</p>
+                  <p className="text-lg font-semibold">{filteredRequests.filter(r => r.status === 'PENDING').length}</p>
                 </div>
               </div>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <div className="flex items-center space-x-3">
                 <div className="p-2 bg-gray-100 rounded-lg">
@@ -233,11 +243,11 @@ function WarehouseRequestsContent() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Approved</p>
-                  <p className="text-lg font-semibold">{filteredRequests.filter(r => r.status === 'approved').length}</p>
+                  <p className="text-lg font-semibold">{filteredRequests.filter(r => ['APPROVED', 'PARTIALLY_APPROVED'].includes(r.status)).length}</p>
                 </div>
               </div>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <div className="flex items-center space-x-3">
                 <div className="p-2 bg-gray-100 rounded-lg">
@@ -245,7 +255,7 @@ function WarehouseRequestsContent() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Rejected</p>
-                  <p className="text-lg font-semibold">{filteredRequests.filter(r => r.status === 'rejected').length}</p>
+                  <p className="text-lg font-semibold">{filteredRequests.filter(r => r.status === 'REJECTED').length}</p>
                 </div>
               </div>
             </IOSCard>
@@ -255,7 +265,7 @@ function WarehouseRequestsContent() {
           <IOSCard className="p-4">
             <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search by ID, branch, or requested by"
@@ -264,10 +274,10 @@ function WarehouseRequestsContent() {
                   className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-ios-lg text-sm"
                 />
               </div>
-              
+
               <div className="flex space-x-4">
                 <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                   <select
                     value={selectedBranch}
                     onChange={(e) => setSelectedBranch(e.target.value)}
@@ -281,33 +291,37 @@ function WarehouseRequestsContent() {
                     ))}
                   </select>
                 </div>
-                
+
                 <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                   <select
                     value={selectedStatus}
                     onChange={(e) => setSelectedStatus(e.target.value)}
                     className="pl-9 pr-4 py-2 border border-gray-200 rounded-ios-lg text-sm appearance-none bg-white"
                   >
                     <option value="all">All Statuses</option>
-                    <option value="pending">Pending</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="REVIEWED">Reviewed</option>
+                    <option value="APPROVED">Approved</option>
+                    <option value="DISPATCHED">Dispatched</option>
+                    <option value="RECEIVED">Received</option>
+                    <option value="CANCELLED">Cancelled</option>
+                    <option value="REJECTED">Rejected</option>
                   </select>
                 </div>
-                
+
                 <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                   <select
                     value={selectedPriority}
                     onChange={(e) => setSelectedPriority(e.target.value)}
                     className="pl-9 pr-4 py-2 border border-gray-200 rounded-ios-lg text-sm appearance-none bg-white"
                   >
                     <option value="all">All Priorities</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="normal">Normal</option>
-                    <option value="low">Low</option>
+                    <option value="URGENT">Urgent</option>
+                    <option value="HIGH">High</option>
+                    <option value="NORMAL">Normal</option>
+                    <option value="LOW">Low</option>
                   </select>
                 </div>
               </div>
@@ -320,12 +334,12 @@ function WarehouseRequestsContent() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b bg-gray-50">
-                    <th className="text-left p-4 text-sm font-medium text-gray-600">Request ID</th>
+                    <th className="text-left p-4 text-sm font-medium text-gray-600">Request #</th>
                     <th className="text-left p-4 text-sm font-medium text-gray-600">Branch</th>
-                    <th className="text-left p-4 text-sm font-medium text-gray-600">Date</th>
+                    <th className="text-left p-4 text-sm font-medium text-gray-600">Needed By</th>
                     <th className="text-center p-4 text-sm font-medium text-gray-600">Status</th>
                     <th className="text-center p-4 text-sm font-medium text-gray-600">Priority</th>
-                    <th className="text-left p-4 text-sm font-medium text-gray-600">Requested By</th>
+                    <th className="text-center p-4 text-sm font-medium text-gray-600">Items</th>
                     <th className="text-center p-4 text-sm font-medium text-gray-600">Actions</th>
                   </tr>
                 </thead>
@@ -351,57 +365,57 @@ function WarehouseRequestsContent() {
                   ) : (
                     filteredRequests.map((request) => (
                       <tr key={request.id} className="border-b hover:bg-gray-50">
-                        <td className="p-4 text-sm font-medium">{request.id}</td>
+                        <td className="p-4 text-sm font-medium">{request.request_number}</td>
                         <td className="p-4 text-sm">{request.branch_name}</td>
                         <td className="p-4 text-sm">{
-                          new Date(request.created_at).toLocaleDateString('en-US', {
+                          request.needed_by_date ? new Date(request.needed_by_date).toLocaleDateString('en-US', {
                             year: 'numeric',
                             month: 'short',
                             day: 'numeric'
-                          })
+                          }) : '-'
                         }</td>
                         <td className="p-4 text-center">
                           <IOSBadge color={getBadgeColor(request.status)}>
-                            {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                            {request.status.replace('_', ' ')}
                           </IOSBadge>
                         </td>
                         <td className="p-4 text-center">
                           <IOSBadge color={getPriorityBadgeColor(request.priority)}>
-                            {request.priority.charAt(0).toUpperCase() + request.priority.slice(1)}
+                            {request.priority}
                           </IOSBadge>
                         </td>
-                        <td className="p-4 text-sm">{request.requested_by}</td>
+                        <td className="p-4 text-center text-sm">{request.items?.length || 0}</td>
                         <td className="p-4 text-center">
                           <div className="flex justify-center space-x-2">
-                            <IOSButton 
-                              variant="ghost" 
+                            <IOSButton
+                              variant="ghost"
                               size="sm"
                               onClick={() => handleViewDetails(request)}
                             >
                               View
                             </IOSButton>
-                            {request.status === 'pending' && (
+                            {request.status === 'PENDING' && (
                               <>
-                                <IOSButton 
+                                <IOSButton
                                   variant="ghost"
                                   color="success"
                                   size="sm"
-                                  onClick={() => handleReview(request.id, 'approved')}
+                                  onClick={() => handleReview(request.id, 'approve')}
                                 >
                                   Approve
                                 </IOSButton>
-                                <IOSButton 
+                                <IOSButton
                                   variant="ghost"
                                   color="danger"
                                   size="sm"
-                                  onClick={() => handleReview(request.id, 'rejected')}
+                                  onClick={() => handleReview(request.id, 'reject')}
                                 >
                                   Reject
                                 </IOSButton>
                               </>
                             )}
-                            {request.status === 'approved' && (
-                              <IOSButton 
+                            {['APPROVED', 'PARTIALLY_APPROVED'].includes(request.status) && (
+                              <IOSButton
                                 variant="ghost"
                                 color="primary"
                                 size="sm"
@@ -429,13 +443,13 @@ function WarehouseRequestsContent() {
               <div className="p-6 space-y-4">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h2 className="text-xl font-bold">Request Details: {requestDetails.id}</h2>
+                    <h2 className="text-xl font-bold">Request: {requestDetails.request_number}</h2>
                     <div className="flex space-x-2 mt-1">
                       <IOSBadge color={getBadgeColor(requestDetails.status)}>
-                        {requestDetails.status.charAt(0).toUpperCase() + requestDetails.status.slice(1)}
+                        {requestDetails.status.replace('_', ' ')}
                       </IOSBadge>
                       <IOSBadge color={getPriorityBadgeColor(requestDetails.priority)}>
-                        {requestDetails.priority.charAt(0).toUpperCase() + requestDetails.priority.slice(1)}
+                        {requestDetails.priority}
                       </IOSBadge>
                     </div>
                   </div>
@@ -447,11 +461,11 @@ function WarehouseRequestsContent() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-gray-500">Branch</p>
-                    <p className="font-medium">{requestDetails.branch_name}</p>
+                    <p className="font-medium">{requestDetails.branch_name || `Branch ID: ${requestDetails.requesting_branch_id}`}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Requested By</p>
-                    <p className="font-medium">{requestDetails.requested_by}</p>
+                    <p className="text-sm text-gray-500">Request Type</p>
+                    <p className="font-medium">{requestDetails.request_type}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Date Requested</p>
@@ -478,11 +492,10 @@ function WarehouseRequestsContent() {
                     </p>
                   </div>
                 </div>
-                
-                {requestDetails.notes && (
+                {requestDetails.reason && (
                   <div>
-                    <p className="text-sm text-gray-500">Notes</p>
-                    <p className="p-2 bg-gray-50 rounded-ios-lg mt-1">{requestDetails.notes}</p>
+                    <p className="text-sm text-gray-500">Reason / Notes</p>
+                    <p className="p-2 bg-gray-50 rounded-ios-lg mt-1">{requestDetails.reason}</p>
                   </div>
                 )}
 
@@ -493,36 +506,38 @@ function WarehouseRequestsContent() {
                       <tr className="border-b bg-gray-50">
                         <th className="text-left p-2 text-sm font-medium text-gray-600">SKU</th>
                         <th className="text-left p-2 text-sm font-medium text-gray-600">Item</th>
-                        <th className="text-center p-2 text-sm font-medium text-gray-600">Quantity</th>
+                        <th className="text-center p-2 text-sm font-medium text-gray-600">Requested</th>
+                        <th className="text-center p-2 text-sm font-medium text-gray-600">Approved</th>
                         <th className="text-center p-2 text-sm font-medium text-gray-600">Unit</th>
                       </tr>
                     </thead>
                     <tbody>
                       {requestDetails.items.map((item, index) => (
                         <tr key={index} className="border-b">
-                          <td className="p-2 text-sm">{item.sku}</td>
-                          <td className="p-2 text-sm">{item.name}</td>
-                          <td className="p-2 text-sm text-center">{item.quantity}</td>
-                          <td className="p-2 text-sm text-center">{item.unit}</td>
+                          <td className="p-2 text-sm">{item.item_sku}</td>
+                          <td className="p-2 text-sm">{item.item?.item_name || item.item_name || '-'}</td>
+                          <td className="p-2 text-sm text-center">{item.requested_quantity}</td>
+                          <td className="p-2 text-sm text-center">{item.approved_quantity ?? '-'}</td>
+                          <td className="p-2 text-sm text-center">{item.item?.unit || item.unit || '-'}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
 
-                {requestDetails.status === 'pending' && (
+                {requestDetails.status === 'PENDING' && (
                   <div className="flex justify-end space-x-3 pt-4">
-                    <IOSButton 
-                      variant="secondary" 
+                    <IOSButton
+                      variant="secondary"
                       color="danger"
-                      onClick={() => handleReview(requestDetails.id, 'rejected')}
+                      onClick={() => handleReview(requestDetails.id, 'reject')}
                       disabled={isReviewing}
                     >
                       Reject
                     </IOSButton>
-                    <IOSButton 
+                    <IOSButton
                       variant="primary"
-                      onClick={() => handleReview(requestDetails.id, 'approved')}
+                      onClick={() => handleReview(requestDetails.id, 'approve')}
                       disabled={isReviewing}
                     >
                       Approve
@@ -530,9 +545,9 @@ function WarehouseRequestsContent() {
                   </div>
                 )}
 
-                {requestDetails.status === 'approved' && (
+                {['APPROVED', 'PARTIALLY_APPROVED'].includes(requestDetails.status) && (
                   <div className="flex justify-end space-x-3 pt-4">
-                    <IOSButton 
+                    <IOSButton
                       variant="primary"
                       leftIcon={<TruckIcon className="h-4 w-4" />}
                       onClick={() => {
@@ -549,6 +564,17 @@ function WarehouseRequestsContent() {
           </div>
         )}
       </BranchAwareDashboardLayout>
+
+      {/* Dispatch Modal */}
+      {selectedRequest && (
+        <DispatchModal
+          isOpen={dispatchModalOpen}
+          onClose={() => setDispatchModalOpen(false)}
+          requestId={selectedRequest.id}
+          requestNumber={selectedRequest.request_number}
+          onSuccess={handleDispatchSuccess}
+        />
+      )}
     </ProtectedRoute>
   );
 }

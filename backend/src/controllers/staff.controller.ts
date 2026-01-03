@@ -9,18 +9,18 @@ const generateStrongPassword = (): string => {
   const length = 12;
   const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
   let password = '';
-  
+
   // Ensure at least one character from each category
   password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)]; // Uppercase
   password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)]; // Lowercase
   password += '0123456789'[Math.floor(Math.random() * 10)]; // Number
   password += '!@#$%^&*'[Math.floor(Math.random() * 8)]; // Special char
-  
+
   // Fill remaining length
   for (let i = 4; i < length; i++) {
     password += charset[Math.floor(Math.random() * charset.length)];
   }
-  
+
   // Shuffle the password
   return password.split('').sort(() => Math.random() - 0.5).join('');
 };
@@ -88,11 +88,17 @@ export const getStaff = async (
       .range(startIndex, startIndex + limit - 1);
 
     // Add filters
+    if (req.query.branch_id) {
+      query = query.eq('branch_id', req.query.branch_id);
+    }
     if (req.query.department) {
       query = query.eq('department', req.query.department);
     }
     if (req.query.status) {
       query = query.eq('status', req.query.status);
+    }
+    if (req.query.role) {
+      query = query.eq('role', req.query.role);
     }
     if (req.query.search) {
       const search = req.query.search as string;
@@ -200,65 +206,248 @@ export const createStaffMember = async (
 
     // Generate strong password
     const generatedPassword = generateStrongPassword();
-    
-    // Create user in Supabase Auth
-    const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
-      email,
-      password: generatedPassword,
-      email_confirm: true,
-      user_metadata: {
-        first_name: firstName,
-        last_name: lastName,
-        role: role
-      }
-    });
 
-    if (authError) {
-      throw authError;
-    }
-
-    if (!authUser.user) {
-      throw new Error('Failed to create user account');
-    }
-
-    // Create user profile in users table
-    const { data: userProfile, error: userError } = await supabase
+    // Check if user with email already exists
+    const { data: existingUser } = await supabase
       .from('users')
-      .insert([{
-        id: authUser.user.id,
-        email,
-        first_name: firstName,
-        last_name: lastName,
-        phone_number: phone,
-        role: role,
-        created_at: new Date().toISOString()
-      }])
-      .select()
+      .select('id')
+      .eq('email', email)
       .single();
 
-    if (userError) {
-      // If user profile creation fails, delete the auth user
-      await supabase.auth.admin.deleteUser(authUser.user.id);
-      throw userError;
+    let userId: string;
+
+    if (existingUser) {
+      // User already exists, use their ID
+      userId = existingUser.id;
+    } else {
+      // Map staff role to user role enum
+      // The users table has a limited set of roles, so we map detailed staff roles to basic user roles
+      const userRoleMap: { [key: string]: string } = {
+        // Management
+        'super_admin': 'super_admin',
+        'general_manager': 'manager',
+        'branch_manager': 'manager',
+        'restaurant_manager': 'manager',
+        // Sometimes department-like values may be sent
+        'management': 'manager',
+
+        // Front Office
+        'receptionist': 'receptionist',
+        'front_desk_supervisor': 'receptionist',
+        'concierge': 'receptionist',
+        'bell_captain': 'receptionist',
+        'bellhop': 'receptionist',
+        // Department-like aliases
+        'front_office': 'receptionist',
+        'reception': 'receptionist',
+
+        // Housekeeping
+        'housekeeping': 'housekeeping',
+        'housekeeping_supervisor': 'housekeeping',
+        'room_attendant': 'housekeeping',
+        'laundry_attendant': 'housekeeping',
+
+        // Restaurant & Kitchen
+        'restaurant': 'restaurant',
+        'head_chef': 'restaurant',
+        'sous_chef': 'restaurant',
+        'line_cook': 'restaurant',
+        'prep_cook': 'restaurant',
+        'waiter': 'restaurant',
+        'waitress': 'restaurant',
+        'head_waiter': 'restaurant',
+        'bartender': 'restaurant',
+        'barista': 'restaurant',
+        'food_runner': 'restaurant',
+        'host': 'restaurant',
+        'hostess': 'restaurant',
+        'sommelier': 'restaurant',
+        'kitchen_helper': 'restaurant',
+        'dishwasher': 'restaurant',
+
+        // Maintenance
+        'maintenance': 'maintenance',
+        'maintenance_supervisor': 'maintenance',
+        'electrician': 'maintenance',
+        'plumber': 'maintenance',
+        'hvac_technician': 'maintenance',
+        'carpenter': 'maintenance',
+        'painter': 'maintenance',
+        'groundskeeper': 'maintenance',
+        // Department-like alias
+        'security': 'maintenance',
+
+        // Security
+        'security_guard': 'maintenance',
+        'night_auditor': 'receptionist',
+
+        // Finance & Admin
+        'accountant': 'accountant',
+        'auditor': 'accountant',
+        'hr_manager': 'accountant',
+        'payroll_clerk': 'accountant',
+        // Department-like alias
+        'finance': 'accountant',
+
+        // Inventory
+        'central_storekeeper': 'accountant',
+        'branch_storekeeper': 'accountant',
+        'inventory_clerk': 'accountant',
+        'purchasing_manager': 'accountant'
+      };
+
+      const normalizedRole = String(role || '').toLowerCase();
+      let userRole = userRoleMap[normalizedRole];
+      // Fallback heuristics
+      if (!userRole) {
+        if (normalizedRole.includes('manager')) userRole = 'manager';
+        else if (normalizedRole.includes('housekeep')) userRole = 'housekeeping';
+        else if (normalizedRole.includes('maint')) userRole = 'maintenance';
+        else if (normalizedRole.includes('front') || normalizedRole.includes('recept')) userRole = 'receptionist';
+        else if (normalizedRole.includes('account') || normalizedRole.includes('finance')) userRole = 'accountant';
+        else userRole = 'restaurant';
+      }
+
+      logger.debug?.('createStaffMember role mapping', { incomingRole: role, normalizedRole, mappedUserRole: userRole, department });
+
+      // Generate UUID for the user using Node's crypto module
+      const newUserId = crypto.randomUUID();
+
+      // Create user directly in users table (skip Supabase Auth for now)
+      const { data: newUser, error: userError } = await supabase
+        .from('users')
+        .insert([{
+          id: newUserId,
+          email,
+          first_name: firstName,
+          last_name: lastName,
+          phone_number: phone,
+          role: userRole,
+          department: department,
+          created_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (userError) {
+        logger.error('Error creating user:', userError);
+        logger.error('User insert payload:', { id: newUserId, email, userRole, department });
+        throw new Error('Database error creating new user');
+      }
+
+      if (!newUser) {
+        throw new Error('Failed to create user account');
+      }
+
+      userId = newUser.id;
     }
 
+    // Map role to valid department for staff_profiles table
+    // The staff_profiles table only allows: housekeeping, restaurant, reception, maintenance, finance, management
+    const departmentMap: { [key: string]: string } = {
+      // Management roles
+      'super_admin': 'management',
+      'general_manager': 'management',
+      'branch_manager': 'management',
+      'restaurant_manager': 'management',
+      'management': 'management',
+
+      // Restaurant & Kitchen roles
+      'restaurant': 'restaurant',
+      'head_chef': 'restaurant',
+      'sous_chef': 'restaurant',
+      'line_cook': 'restaurant',
+      'prep_cook': 'restaurant',
+      'waiter': 'restaurant',
+      'waitress': 'restaurant',
+      'head_waiter': 'restaurant',
+      'bartender': 'restaurant',
+      'barista': 'restaurant',
+      'food_runner': 'restaurant',
+      'host': 'restaurant',
+      'hostess': 'restaurant',
+      'sommelier': 'restaurant',
+      'kitchen_helper': 'restaurant',
+      'dishwasher': 'restaurant',
+
+      // Housekeeping roles
+      'housekeeping': 'housekeeping',
+      'housekeeping_supervisor': 'housekeeping',
+      'room_attendant': 'housekeeping',
+      'laundry_attendant': 'housekeeping',
+
+      // Reception roles
+      'receptionist': 'reception',
+      'front_desk_supervisor': 'reception',
+      'concierge': 'reception',
+      'bell_captain': 'reception',
+      'bellhop': 'reception',
+      'front_office': 'reception',
+      'reception': 'reception',
+      'night_auditor': 'reception',
+
+      // Maintenance roles
+      'maintenance': 'maintenance',
+      'maintenance_supervisor': 'maintenance',
+      'electrician': 'maintenance',
+      'plumber': 'maintenance',
+      'hvac_technician': 'maintenance',
+      'carpenter': 'maintenance',
+      'painter': 'maintenance',
+      'groundskeeper': 'maintenance',
+      'security_guard': 'maintenance',
+      'security': 'maintenance',
+
+      // Finance roles
+      'accountant': 'finance',
+      'auditor': 'finance',
+      'hr_manager': 'finance',
+      'payroll_clerk': 'finance',
+      'finance': 'finance',
+      'central_storekeeper': 'finance',
+      'branch_storekeeper': 'finance',
+      'inventory_clerk': 'finance',
+      'purchasing_manager': 'finance'
+    };
+
+    const normalizedRole = String(role || '').toLowerCase();
+    let validDepartment = departmentMap[normalizedRole];
+
+    // Fallback heuristics for department
+    if (!validDepartment) {
+      if (normalizedRole.includes('manager') || normalizedRole.includes('admin')) validDepartment = 'management';
+      else if (normalizedRole.includes('housekeep') || normalizedRole.includes('clean')) validDepartment = 'housekeeping';
+      else if (normalizedRole.includes('maint') || normalizedRole.includes('repair')) validDepartment = 'maintenance';
+      else if (normalizedRole.includes('front') || normalizedRole.includes('recept') || normalizedRole.includes('desk')) validDepartment = 'reception';
+      else if (normalizedRole.includes('account') || normalizedRole.includes('finance') || normalizedRole.includes('store')) validDepartment = 'finance';
+      else validDepartment = 'restaurant'; // Default fallback
+    }
+
+    logger.debug?.('createStaffMember department mapping', { incomingRole: role, normalizedRole, mappedDepartment: validDepartment });
+
     // Create staff profile
+    const staffData: any = {
+      user_id: userId,
+      role,
+      department: validDepartment,
+      shift: shift || 'morning',
+      salary: salary ? parseFloat(salary) : 0,
+      start_date: startDate || new Date().toISOString().split('T')[0],
+      id_number: idNumber || 'STAFF-' + Date.now(),
+      emergency_contact: emergencyContact,
+      address,
+      status: 'active',
+      created_at: new Date().toISOString()
+    };
+
+    // Add branch_id if provided
+    if (branchId) {
+      staffData.branch_id = parseInt(branchId);
+    }
+
     const { data: staffProfile, error: staffError } = await supabase
       .from('staff_profiles')
-      .insert([{
-        user_id: authUser.user.id,
-        role,
-        department,
-        shift: shift || 'morning',
-        salary: salary ? parseFloat(salary) : null,
-        start_date: startDate || new Date().toISOString().split('T')[0],
-        id_number: idNumber,
-        emergency_contact: emergencyContact,
-        address,
-        branch_id: branchId ? parseInt(branchId) : null,
-        status: 'active',
-        created_at: new Date().toISOString()
-      }])
+      .insert([staffData])
       .select(`
         *,
         user:users!user_id(
@@ -273,10 +462,12 @@ export const createStaffMember = async (
       .single();
 
     if (staffError) {
-      // If staff profile creation fails, clean up
-      await supabase.auth.admin.deleteUser(authUser.user.id);
-      await supabase.from('users').delete().eq('id', authUser.user.id);
-      throw staffError;
+      // If staff profile creation fails, clean up the user if we just created them
+      if (!existingUser) {
+        await supabase.from('users').delete().eq('id', userId);
+      }
+      logger.error('Error creating staff profile:', staffError);
+      throw new Error('Failed to create staff profile');
     }
 
     res.status(201).json({
@@ -556,14 +747,16 @@ export const getAttendance = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { staff_id, startDate, endDate, status } = req.query;
+    const { staff_id, branch_id, date, startDate, endDate, status } = req.query;
 
     let query = supabase
       .from('staff_attendance')
       .select(`
         *,
-        staff:staff_profiles(
+        staff:staff_profiles!inner(
           id,
+          branch_id,
+          id_number,
           user:users!user_id(id, first_name, last_name, email)
         )
       `)
@@ -573,16 +766,23 @@ export const getAttendance = async (
       query = query.eq('staff_id', staff_id);
     }
 
+    if (branch_id) {
+      query = query.eq('staff.branch_id', branch_id);
+    }
+
     if (status) {
       query = query.eq('status', status);
     }
 
-    if (startDate) {
-      query = query.gte('attendance_date', startDate);
-    }
-
-    if (endDate) {
-      query = query.lte('attendance_date', endDate);
+    if (date) {
+      query = query.eq('attendance_date', date);
+    } else {
+      if (startDate) {
+        query = query.gte('attendance_date', startDate);
+      }
+      if (endDate) {
+        query = query.lte('attendance_date', endDate);
+      }
     }
 
     const { data, error } = await query;
@@ -599,40 +799,107 @@ export const getAttendance = async (
   }
 };
 
-// @desc    Record attendance (clock in/out)
-// @route   POST /api/staff/attendance
+// @desc    Clock in staff member
+// @route   POST /api/staff/attendance/clock-in
 // @access  Private
-export const recordAttendance = async (
+export const clockIn = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { staff_id, attendance_date, clock_in, clock_out, status, shift_type, notes } = req.body;
+    const { staff_id, notes } = req.body;
+    const attendance_date = new Date().toISOString().split('T')[0];
+    const clock_in = new Date().toISOString();
+
+    // Check if there's an open shift for this staff member
+    const { data: openShift, error: checkError } = await supabase
+      .from('staff_attendance')
+      .select('id')
+      .eq('staff_id', staff_id)
+      .is('clock_out', null)
+      .maybeSingle();
+
+    if (checkError) throw checkError;
+    if (openShift) {
+      res.status(400).json({
+        success: false,
+        message: 'Staff member is already clocked in'
+      });
+      return;
+    }
 
     const attendance = {
       staff_id,
-      attendance_date: attendance_date || new Date().toISOString().split('T')[0],
+      attendance_date,
       clock_in,
-      clock_out,
-      status: status || 'present',
-      shift_type,
+      status: 'present',
       notes,
       created_at: new Date().toISOString()
     };
 
-    // Upsert attendance record (update if exists for same staff_id and date)
     const { data, error } = await supabase
       .from('staff_attendance')
-      .upsert(attendance, { onConflict: 'staff_id,attendance_date' })
+      .insert(attendance)
       .select()
       .single();
 
     if (error) throw error;
 
-    logger.info(`Attendance recorded for staff ${staff_id} on ${attendance_date}`);
-
     res.status(201).json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Clock out staff member
+// @route   POST /api/staff/attendance/clock-out
+// @access  Private
+export const clockOut = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { staff_id, notes } = req.body;
+    const clock_out = new Date().toISOString();
+
+    // Find the latest open shift
+    const { data: openShift, error: findError } = await supabase
+      .from('staff_attendance')
+      .select('*')
+      .eq('staff_id', staff_id)
+      .is('clock_out', null)
+      .order('clock_in', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (findError) throw findError;
+    if (!openShift) {
+      res.status(400).json({
+        success: false,
+        message: 'No active clock-in found for this staff member'
+      });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('staff_attendance')
+      .update({
+        clock_out,
+        notes: notes || openShift.notes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', openShift.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(200).json({
       success: true,
       data
     });

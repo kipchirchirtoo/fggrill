@@ -10,7 +10,7 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { maintenanceAPI } from '@/lib/api';
-import { Wrench, Plus, RefreshCw, Search, Clock, CheckCircle, Play, MapPin } from 'lucide-react';
+import { Wrench, Plus, RefreshCw, Search, Clock, CheckCircle, Play, MapPin, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -31,6 +31,10 @@ export default function MaintenanceOrdersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<WorkOrder | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [formData, setFormData] = useState({ title: '', description: '', location: '', priority: 'normal' });
 
   const fetchOrders = useCallback(async () => {
@@ -65,6 +69,42 @@ export default function MaintenanceOrdersPage() {
     } catch (error: any) { toast.error(error.message || 'Failed'); }
   };
 
+  const openEditModal = (order: WorkOrder) => {
+    setSelectedOrder(order);
+    setFormData({ title: order.title, description: order.description || '', location: order.location, priority: order.priority });
+    setEditModalOpen(true);
+  };
+
+  const handleEditOrder = async () => {
+    if (!selectedOrder || !formData.title || !formData.location) { toast.error('Fill required fields'); return; }
+    try {
+      await maintenanceAPI.updateRequest(selectedOrder.id, formData);
+      toast.success('Work order updated');
+      setEditModalOpen(false);
+      setSelectedOrder(null);
+      setFormData({ title: '', description: '', location: '', priority: 'normal' });
+      fetchOrders();
+    } catch (error: any) { toast.error(error.message || 'Failed'); }
+  };
+
+  const handleDeleteOrder = async () => {
+    if (!selectedOrder) return;
+    setIsDeleting(true);
+    try {
+      await maintenanceAPI.deleteRequest(selectedOrder.id);
+      toast.success('Work order deleted');
+      setDeleteConfirmOpen(false);
+      setSelectedOrder(null);
+      fetchOrders();
+    } catch (error: any) { toast.error(error.message || 'Failed'); }
+    finally { setIsDeleting(false); }
+  };
+
+  const confirmDeleteOrder = (order: WorkOrder) => {
+    setSelectedOrder(order);
+    setDeleteConfirmOpen(true);
+  };
+
   const priorityColors: Record<string, string> = { urgent: 'bg-[#FF3B30]', high: 'bg-orange-500', normal: 'bg-[#007AFF]', low: 'bg-[#8E8E93]' };
 
   return (
@@ -82,8 +122,8 @@ export default function MaintenanceOrdersPage() {
           <IOSCard className="p-4">
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
+                <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
               </div>
               <div className="flex gap-2">
                 {['all', 'pending', 'in_progress', 'completed'].map((status) => (
@@ -118,6 +158,8 @@ export default function MaintenanceOrdersPage() {
                         <IOSBadge className={`${status.bg} ${status.color}`}>{status.label}</IOSBadge>
                         {order.status === 'pending' && <IOSButton size="sm" onClick={() => handleUpdateStatus(order.id, 'in_progress')} leftIcon={<Play />}> Start</IOSButton>}
                         {order.status === 'in_progress' && <IOSButton size="sm" onClick={() => handleUpdateStatus(order.id, 'completed')} leftIcon={<CheckCircle />}> Done</IOSButton>}
+                        <IOSButton size="sm" variant="outline" onClick={() => openEditModal(order)}><Edit2 className="h-4 w-4" /></IOSButton>
+                        <IOSButton size="sm" variant="destructive" onClick={() => confirmDeleteOrder(order)}><Trash2 className="h-4 w-4" /></IOSButton>
                       </div>
                     </div>
                   </IOSCard>
@@ -142,6 +184,48 @@ export default function MaintenanceOrdersPage() {
               <div className="flex gap-3">
                 <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
                 <IOSButton onClick={handleCreateOrder} className="flex-1">Create</IOSButton>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Modal */}
+        <Dialog open={editModalOpen} onOpenChange={(open) => { setEditModalOpen(open); if (!open) setSelectedOrder(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader><DialogTitle className="flex items-center gap-2"><Edit2 className="h-5 w-5" /> Edit Work Order</DialogTitle></DialogHeader>
+            <div className="space-y-4 mt-4">
+              <div><label className="text-sm font-medium">Title *</label><Input value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} /></div>
+              <div><label className="text-sm font-medium">Location *</label><Input value={formData.location} onChange={(e) => setFormData({ ...formData, location: e.target.value })} /></div>
+              <div><label className="text-sm font-medium">Priority</label>
+                <select value={formData.priority} onChange={(e) => setFormData({ ...formData, priority: e.target.value })} className="w-full p-2 border rounded-ios-lg">
+                  {priorityOptions.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+                </select>
+              </div>
+              <div><label className="text-sm font-medium">Description</label><textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full p-2 border rounded-ios-lg" rows={3} /></div>
+              <div className="flex gap-3">
+                <IOSButton variant="secondary" onClick={() => setEditModalOpen(false)} className="flex-1">Cancel</IOSButton>
+                <IOSButton onClick={handleEditOrder} className="flex-1">Update</IOSButton>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation */}
+        <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle className="flex items-center gap-2 text-red-600"><Trash2 className="h-5 w-5" /> Delete Work Order</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <p className="text-stone-600">Are you sure you want to delete this work order?</p>
+              {selectedOrder && (
+                <div className="p-3 bg-stone-50 rounded-lg">
+                  <p className="font-medium">{selectedOrder.title}</p>
+                  <p className="text-sm text-stone-500">{selectedOrder.location}</p>
+                </div>
+              )}
+              <p className="text-sm text-stone-500">This action cannot be undone.</p>
+              <div className="flex gap-2 pt-2">
+                <IOSButton variant="secondary" className="flex-1" onClick={() => { setDeleteConfirmOpen(false); setSelectedOrder(null); }}>Cancel</IOSButton>
+                <IOSButton className="flex-1" onClick={handleDeleteOrder} disabled={isDeleting} variant="destructive">{isDeleting ? 'Deleting...' : 'Delete'}</IOSButton>
               </div>
             </div>
           </DialogContent>

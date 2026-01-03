@@ -53,6 +53,8 @@ class DatabaseFetcher:
                 'arrivals_departures': self._fetch_arrivals_departures,
                 'expense': self._fetch_expenses,
                 'bar_sales': self._fetch_bar_sales,
+                'kpi_dashboard': self._fetch_kpi_dashboard,
+                'employee_attendance': self._fetch_employee_attendance,
             }
             
             fetcher = fetchers.get(report_type)
@@ -67,8 +69,13 @@ class DatabaseFetcher:
 
     def _parse_dates(self, filters: Dict) -> tuple:
         """Parse date filters"""
-        start_date = filters.get('start_date', datetime.now().strftime('%Y-%m-%d'))
-        end_date = filters.get('end_date', datetime.now().strftime('%Y-%m-%d'))
+        # Default to today if no dates provided
+        today = datetime.now().strftime('%Y-%m-%d')
+        start_date = filters.get('start_date', today)
+        end_date = filters.get('end_date', today)
+        
+        # Log the dates being used for debugging
+        logger.info(f"Parsing dates - start: {start_date}, end: {end_date}, branch_id: {filters.get('branch_id')}")
         return start_date, end_date
 
     def _fetch_daily_sales(self, filters: Dict) -> Dict[str, Any]:
@@ -91,61 +98,94 @@ class DatabaseFetcher:
             return data
         
         try:
-            # Fetch restaurant orders
+            # Fetch restaurant orders (Only paid or partial)
             query = self.client.table('restaurant_orders').select('*')
             query = query.gte('created_at', f'{start_date}T00:00:00')
             query = query.lte('created_at', f'{end_date}T23:59:59')
+            query = query.in_('payment_status', ['paid', 'partial'])
             if branch_id:
-                query = query.eq('branch_id', branch_id)
+                query = query.eq('branch_id', int(branch_id))
             
             restaurant_orders = query.execute()
             
-            # Fetch bar orders
+            # Fetch bar orders (Only paid or partial)
             bar_query = self.client.table('bar_orders').select('*')
             bar_query = bar_query.gte('created_at', f'{start_date}T00:00:00')
             bar_query = bar_query.lte('created_at', f'{end_date}T23:59:59')
+            bar_query = bar_query.in_('payment_status', ['paid', 'partial'])
             if branch_id:
-                bar_query = bar_query.eq('branch_id', branch_id)
+                bar_query = bar_query.eq('branch_id', int(branch_id))
             
             bar_orders = bar_query.execute()
             
-            # Fetch room bookings payments
+            # Fetch room bookings payments (Only confirmed/checked_in with payment)
             booking_query = self.client.table('bookings').select('*')
             booking_query = booking_query.gte('created_at', f'{start_date}T00:00:00')
             booking_query = booking_query.lte('created_at', f'{end_date}T23:59:59')
+            booking_query = booking_query.in_('payment_status', ['paid', 'partial'])
             if branch_id:
-                booking_query = booking_query.eq('branch_id', branch_id)
+                booking_query = booking_query.eq('branch_id', int(branch_id))
             
             bookings = booking_query.execute()
             
-            # Calculate totals
-            restaurant_total = sum(o.get('total', 0) or 0 for o in (restaurant_orders.data or []))
-            bar_total = sum(o.get('total', 0) or 0 for o in (bar_orders.data or []))
-            booking_total = sum(b.get('total_amount', 0) or 0 for b in (bookings.data or []))
+            # Fetch receipts for additional revenue tracking
+            # Note: receipts table has branch_id as UUID, need to convert from integer
+            receipts_query = self.client.table('receipts').select('*')
+            receipts_query = receipts_query.gte('created_at', f'{start_date}T00:00:00')
+            receipts_query = receipts_query.lte('created_at', f'{end_date}T23:59:59')
+            receipts_query = receipts_query.eq('payment_status', 'paid')
+            # Skip receipts filtering by branch for now due to UUID/integer mismatch
+            # TODO: Fix receipts table branch_id schema or mapping
             
-            data['total_revenue'] = restaurant_total + bar_total + booking_total
-            data['total_transactions'] = len(restaurant_orders.data or []) + len(bar_orders.data or []) + len(bookings.data or [])
+            receipts = receipts_query.execute()
+            
+            # Calculate totals - use correct column names
+            # For partial payments, we should ideally sum the actual payments, 
+            # but the current schema stores total_amount on the order.
+            # To be accurate, we should fetch from 'payments' table where status='completed'.
+            
+            # Fetch actual completed payments for the period
+            payments_query = self.client.table('payments').select('*')\
+                .gte('created_at', f'{start_date}T00:00:00')\
+                .lte('created_at', f'{end_date}T23:59:59')\
+                .eq('status', 'completed')
+            
+            actual_payments = payments_query.execute()
+            
+            # Sum by category from payments table
+            restaurant_total = sum(p.get('amount', 0) for p in (actual_payments.data or []) if p.get('restaurant_order_id'))
+            booking_total = sum(p.get('amount', 0) for p in (actual_payments.data or []) if p.get('booking_id'))
+            # Bar orders might be linked differently or not yet in payments table
+            # If bar orders are not in payments table, we fallback to bar_orders table
+            bar_total = sum(o.get('total_amount', 0) or 0 for o in (bar_orders.data or []))
+            receipts_total = sum(r.get('total_amount', 0) or 0 for r in (receipts.data or []))
+            
+            # Log the data for debugging
+            logger.info(f"Daily sales calculation (Verified Only) - Restaurant: {restaurant_total}, Bar: {bar_total}, Bookings: {booking_total}, Receipts: {receipts_total}")
+            
+            data['total_revenue'] = restaurant_total + bar_total + booking_total + receipts_total
+            data['total_transactions'] = len(actual_payments.data or []) + len(bar_orders.data or []) + len(receipts.data or [])
             
             if data['total_transactions'] > 0:
                 data['avg_transaction'] = data['total_revenue'] / data['total_transactions']
             
-            # Payment method breakdown
-            all_orders = (restaurant_orders.data or []) + (bar_orders.data or [])
-            for order in all_orders:
-                payment = order.get('payment_method', '').lower()
-                amount = order.get('total', 0) or 0
-                if 'cash' in payment:
+            # Payment method breakdown from verified payments
+            for p in (actual_payments.data or []):
+                method = p.get('payment_method', '').lower()
+                amount = p.get('amount', 0) or 0
+                if 'cash' in method:
                     data['cash_sales'] += amount
-                elif 'card' in payment:
+                elif 'card' in method:
                     data['card_sales'] += amount
-                elif 'mpesa' in payment or 'm-pesa' in payment:
+                elif 'mpesa' in method or 'm-pesa' in method:
                     data['mpesa_sales'] += amount
             
             # Categories
             data['categories'] = [
-                {'name': 'Restaurant', 'quantity': len(restaurant_orders.data or []), 'total': restaurant_total},
+                {'name': 'Restaurant', 'quantity': len([p for p in (actual_payments.data or []) if p.get('restaurant_order_id')]), 'total': restaurant_total},
                 {'name': 'Bar & Lounge', 'quantity': len(bar_orders.data or []), 'total': bar_total},
-                {'name': 'Room Bookings', 'quantity': len(bookings.data or []), 'total': booking_total},
+                {'name': 'Room Bookings', 'quantity': len([p for p in (actual_payments.data or []) if p.get('booking_id')]), 'total': booking_total},
+                {'name': 'Other Sales', 'quantity': len(receipts.data or []), 'total': receipts_total},
             ]
             
         except Exception as e:
@@ -271,22 +311,22 @@ class DatabaseFetcher:
             data['room_revenue'] = sum(b.get('total_amount', 0) or 0 for b in (bookings.data or []))
             
             # Revenue from restaurant
-            restaurant_query = self.client.table('restaurant_orders').select('total')\
+            restaurant_query = self.client.table('restaurant_orders').select('total_amount')\
                 .gte('created_at', f'{start_date}T00:00:00')\
                 .lte('created_at', f'{end_date}T23:59:59')
             if branch_id:
                 restaurant_query = restaurant_query.eq('branch_id', branch_id)
             restaurant = restaurant_query.execute()
-            data['restaurant_revenue'] = sum(o.get('total', 0) or 0 for o in (restaurant.data or []))
+            data['restaurant_revenue'] = sum(o.get('total_amount', 0) or 0 for o in (restaurant.data or []))
             
             # Revenue from bar
-            bar_query = self.client.table('bar_orders').select('total')\
+            bar_query = self.client.table('bar_orders').select('total_amount')\
                 .gte('created_at', f'{start_date}T00:00:00')\
                 .lte('created_at', f'{end_date}T23:59:59')
             if branch_id:
                 bar_query = bar_query.eq('branch_id', branch_id)
             bar = bar_query.execute()
-            data['bar_revenue'] = sum(o.get('total', 0) or 0 for o in (bar.data or []))
+            data['bar_revenue'] = sum(o.get('total_amount', 0) or 0 for o in (bar.data or []))
             
             # Calculate total revenue
             data['total_revenue'] = data['room_revenue'] + data['restaurant_revenue'] + data['bar_revenue']
@@ -553,6 +593,12 @@ class DatabaseFetcher:
             return data
         
         try:
+            # Fetch attendance records for the period
+            attendance = self.client.table('staff_attendance').select('staff_id, attendance_date, status')\
+                .gte('attendance_date', start_date)\
+                .lte('attendance_date', end_date).execute()
+            attendance_data = attendance.data or []
+
             # Fetch payroll records
             payroll = self.client.table('payroll').select('*, employee:users(full_name, department)')\
                 .gte('pay_date', start_date)\
@@ -575,13 +621,20 @@ class DatabaseFetcher:
                 data['total_net'] += net
                 
                 employee = record.get('employee', {})
+                staff_id = record.get('staff_id')
+                
+                # Get attendance summary for this employee in this period
+                emp_att = [r for r in attendance_data if r.get('staff_id') == staff_id]
+                days_present = len(set([r.get('attendance_date') for r in emp_att if r.get('status') in ['present', 'late']]))
+                
                 data['employees'].append({
                     'id': record.get('employee_id', '')[:8] if record.get('employee_id') else '',
                     'name': employee.get('full_name', 'Unknown') if employee else 'Unknown',
                     'department': employee.get('department', 'N/A') if employee else 'N/A',
                     'gross': gross,
                     'deductions': deductions,
-                    'net': net
+                    'net': net,
+                    'days_present': days_present
                 })
             
         except Exception as e:
@@ -608,19 +661,41 @@ class DatabaseFetcher:
             return data
         
         try:
-            query = self.client.table('restaurant_orders').select('*, items:restaurant_order_items(*)')
-            query = query.gte('created_at', f'{start_date}T00:00:00')
-            query = query.lte('created_at', f'{end_date}T23:59:59')
+            # First get orders
+            orders_query = self.client.table('restaurant_orders').select('*')
+            orders_query = orders_query.gte('created_at', f'{start_date}T00:00:00')
+            orders_query = orders_query.lte('created_at', f'{end_date}T23:59:59')
             if branch_id:
-                query = query.eq('branch_id', branch_id)
+                orders_query = orders_query.eq('branch_id', int(branch_id))
             
-            orders = query.execute()
-            
+            orders = orders_query.execute()
             data['total_orders'] = len(orders.data or [])
+            
+            # Get order IDs for fetching items
+            order_ids = [order['id'] for order in (orders.data or [])]
+            
+            if not order_ids:
+                return data
+            
+            # Get order items
+            items_query = self.client.table('restaurant_order_items').select('*').in_('order_id', order_ids)
+            items_result = items_query.execute()
+            
+            # Get all unique menu item IDs
+            menu_item_ids = list(set([item.get('menu_item_id') for item in (items_result.data or []) if item.get('menu_item_id')]))
+            
+            # Fetch menu items separately
+            menu_items = {}
+            if menu_item_ids:
+                menu_query = self.client.table('restaurant_menu_items').select('*').in_('id', menu_item_ids)
+                menu_result = menu_query.execute()
+                
+                for menu_item in (menu_result.data or []):
+                    menu_items[menu_item['id']] = menu_item
             
             item_sales = {}
             for order in (orders.data or []):
-                total = order.get('total', 0) or 0
+                total = order.get('total_amount', 0) or 0
                 data['total_revenue'] += total
                 
                 order_type = (order.get('order_type', '') or '').lower()
@@ -630,17 +705,24 @@ class DatabaseFetcher:
                     data['room_service'] += 1
                 else:
                     data['takeaway'] += 1
+            
+            # Process items to get menu names
+            for item in (items_result.data or []):
+                menu_item_id = item.get('menu_item_id')
+                menu_item = menu_items.get(menu_item_id, {})
+                item_name = menu_item.get('name', f'Item ID {menu_item_id}' if menu_item_id else 'Unknown Item')
                 
-                # Track item sales
-                for item in (order.get('items', []) or []):
-                    item_name = item.get('name', item.get('item_name', 'Unknown'))
-                    qty = item.get('quantity', 1)
-                    price = item.get('price', 0) or item.get('unit_price', 0) or 0
-                    
-                    if item_name not in item_sales:
-                        item_sales[item_name] = {'quantity': 0, 'revenue': 0, 'category': item.get('category', 'Other')}
-                    item_sales[item_name]['quantity'] += qty
-                    item_sales[item_name]['revenue'] += qty * price
+                qty = item.get('quantity', 1)
+                price = item.get('unit_price', 0) or 0
+                
+                if item_name not in item_sales:
+                    item_sales[item_name] = {
+                        'quantity': 0, 
+                        'revenue': 0, 
+                        'category': menu_item.get('category_id', 'Other')
+                    }
+                item_sales[item_name]['quantity'] += qty
+                item_sales[item_name]['revenue'] += qty * price
             
             if data['total_orders'] > 0:
                 data['avg_order'] = data['total_revenue'] / data['total_orders']
@@ -724,9 +806,122 @@ class DatabaseFetcher:
             if total_rooms > 0:
                 data['occupancy'] = round((occupied / total_rooms) * 100)
             
+            # Get currently clocked in staff
+            attendance_query = self.client.table('staff_attendance')\
+                .select('*, staff:staff_profiles(*, user:users(*))')\
+                .eq('attendance_date', date)\
+                .is_('clock_out', 'null')\
+                .execute()
+            
+            data['clocked_in_staff'] = [
+                {
+                    'name': f"{r['staff']['user']['first_name']} {r['staff']['user']['last_name']}",
+                    'time': r['clock_in']
+                } for r in (attendance_query.data or [])
+            ]
+            
         except Exception as e:
             logger.error(f"Error fetching manager duty data: {e}")
         
+        return data
+
+    def _fetch_employee_attendance(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch employee attendance data"""
+        start_date, end_date = self._parse_dates(filters)
+        branch_id = filters.get('branch_id')
+        
+        data = {
+            'total_staff': 0,
+            'present_count': 0,
+            'late_count': 0,
+            'absent_count': 0,
+            'leave_count': 0,
+            'total_hours': 0,
+            'records': []
+        }
+        
+        if not self.client:
+            return data
+            
+        try:
+            # Fetch attendance records with staff and user info
+            query = self.client.table('staff_attendance').select('*, staff:staff_profiles(*, user:users(*))')
+            query = query.gte('attendance_date', start_date)
+            query = query.lte('attendance_date', end_date)
+            
+            # Filter by branch if provided
+            # Note: We need to filter by staff_profiles.branch_id
+            # Supabase JS client doesn't support deep filtering easily in select, 
+            # but we can filter after fetching or use a view/RPC
+            
+            result = query.execute()
+            
+            all_records = result.data or []
+            
+            # Filter by branch manually if needed
+            if branch_id:
+                all_records = [r for r in all_records if r.get('staff', {}).get('branch_id') == int(branch_id)]
+            
+            # Group by staff_id
+            staff_data = {}
+            for record in all_records:
+                staff_id = record.get('staff_id')
+                if staff_id not in staff_data:
+                    staff_data[staff_id] = {
+                        'records': [],
+                        'total_seconds': 0,
+                        'status': 'absent',
+                        'staff': record.get('staff', {})
+                    }
+                
+                staff_data[staff_id]['records'].append(record)
+                
+                # Calculate hours for this shift
+                if record.get('clock_in') and record.get('clock_out'):
+                    try:
+                        clock_in = datetime.fromisoformat(record['clock_in'].replace('Z', '+00:00'))
+                        clock_out = datetime.fromisoformat(record['clock_out'].replace('Z', '+00:00'))
+                        staff_data[staff_id]['total_seconds'] += (clock_out - clock_in).total_seconds()
+                    except:
+                        pass
+                
+                # Update status (if any shift is present/late, mark as such)
+                current_status = record.get('status', 'absent')
+                if current_status in ['present', 'late']:
+                    staff_data[staff_id]['status'] = current_status
+
+            data['total_staff'] = len(staff_data)
+            
+            total_seconds = 0
+            for staff_id, s_info in staff_data.items():
+                status = s_info['status']
+                if status == 'present': data['present_count'] += 1
+                elif status == 'late': data['late_count'] += 1
+                elif status == 'absent': data['absent_count'] += 1
+                elif status == 'leave': data['leave_count'] += 1
+                
+                total_seconds += s_info['total_seconds']
+                
+                staff = s_info['staff']
+                user = staff.get('user', {})
+                
+                # For the detailed records, we still list individual shifts
+                for record in s_info['records']:
+                    data['records'].append({
+                        'date': record.get('attendance_date'),
+                        'name': f"{user.get('first_name', '')} {user.get('last_name', '')}",
+                        'employee_id': staff.get('id_number', ''),
+                        'clock_in': record.get('clock_in'),
+                        'clock_out': record.get('clock_out'),
+                        'status': record.get('status', 'absent'),
+                        'notes': record.get('notes', '')
+                    })
+            
+            data['total_hours'] = round(total_seconds / 3600, 2)
+            
+        except Exception as e:
+            logger.error(f"Error fetching attendance data: {e}")
+            
         return data
 
     def _fetch_reservation(self, filters: Dict) -> Dict[str, Any]:
@@ -915,6 +1110,51 @@ class DatabaseFetcher:
         except Exception as e:
             logger.error(f"Error fetching expenses: {e}")
         
+        return data
+
+    def _fetch_kpi_dashboard(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch KPI dashboard data"""
+        start_date, end_date = self._parse_dates(filters)
+        branch_id = filters.get('branch_id')
+        
+        data = {
+            'revenue': 0,
+            'occupancy': 0,
+            'attendance_rate': 0,
+            'punctuality_rate': 0,
+            'total_staff': 0,
+            'present_staff': 0,
+            'late_staff': 0,
+            'revenue_by_source': {},
+            'daily_stats': []
+        }
+        
+        if not self.client:
+            return data
+            
+        try:
+            # 1. Revenue
+            sales = self._fetch_daily_sales(filters)
+            data['revenue'] = sales.get('total_revenue', 0)
+            
+            # 2. Occupancy
+            occ = self._fetch_occupancy(filters)
+            data['occupancy'] = occ.get('occupancy_rate', 0)
+            
+            # 3. Attendance
+            att = self._fetch_employee_attendance(filters)
+            data['total_staff'] = att.get('total_staff', 0)
+            data['present_staff'] = att.get('present_count', 0)
+            data['late_staff'] = att.get('late_count', 0)
+            
+            if data['total_staff'] > 0:
+                data['attendance_rate'] = round((data['present_staff'] / data['total_staff']) * 100, 1)
+                if data['present_staff'] > 0:
+                    data['punctuality_rate'] = round(((data['present_staff'] - data['late_staff']) / data['present_staff']) * 100, 1)
+
+        except Exception as e:
+            logger.error(f"Error fetching KPI dashboard: {e}")
+            
         return data
 
     def _fetch_bar_sales(self, filters: Dict) -> Dict[str, Any]:

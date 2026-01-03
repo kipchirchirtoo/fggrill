@@ -6,6 +6,9 @@ import { HousekeepingTask } from '../models/HousekeepingTask';
 import { MaintenanceTask } from '../models/MaintenanceTask';
 import { InventoryItem } from '../models/Inventory';
 import { logger } from '../utils/logger';
+import axios from 'axios';
+
+const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
 
 // @desc    Get occupancy report
 // @route   GET /api/reports/occupancy
@@ -21,7 +24,7 @@ export const getOccupancyReport = async (
 
     // Get all bookings in date range
     const { data: bookings, error: bookingsError } = await supabase
-      .from('bookings')
+      .from('reservations')
       .select('*')
       .or(`check_in.gte.${startDate.toISOString()},check_out.lte.${endDate.toISOString()}`);
 
@@ -84,7 +87,7 @@ export const getRevenueReport = async (
 
     // Get all bookings in date range
     const { data: bookings, error: bookingsError } = await supabase
-      .from('bookings')
+      .from('reservations')
       .select('*')
       .gte('created_at', startDate.toISOString())
       .lte('created_at', endDate.toISOString());
@@ -156,16 +159,16 @@ export const getHousekeepingReport = async (
     // Calculate metrics
     const completedTasks = (tasks || []).filter((task: any) => task.status === 'completed');
     const tasksWithTime = (tasks || []).filter((task: any) => task.completed_at && task.started_at);
-    
+
     const metrics = {
       totalTasks: tasks?.length || 0,
       completedTasks: completedTasks.length,
-      averageCompletionTime: tasksWithTime.length > 0 
+      averageCompletionTime: tasksWithTime.length > 0
         ? tasksWithTime.reduce((sum: number, task: any) => {
-            const completed = new Date(task.completed_at).getTime();
-            const started = new Date(task.started_at).getTime();
-            return sum + (completed - started) / (1000 * 60); // in minutes
-          }, 0) / tasksWithTime.length
+          const completed = new Date(task.completed_at).getTime();
+          const started = new Date(task.started_at).getTime();
+          return sum + (completed - started) / (1000 * 60); // in minutes
+        }, 0) / tasksWithTime.length
         : 0,
       staffPerformance: (tasks || []).reduce((acc: any, task: any) => {
         if (task.assigned_to) {
@@ -221,7 +224,7 @@ export const getMaintenanceReport = async (
 
     // Calculate metrics
     const tasksWithTime = (tasks || []).filter((task: any) => task.completed_at && task.started_at);
-    
+
     const metrics = {
       totalTasks: tasks?.length || 0,
       byType: (tasks || []).reduce((acc: any, task: any) => {
@@ -234,10 +237,10 @@ export const getMaintenanceReport = async (
       }, {}),
       averageResolutionTime: tasksWithTime.length > 0
         ? tasksWithTime.reduce((sum: number, task: any) => {
-            const completed = new Date(task.completed_at).getTime();
-            const started = new Date(task.started_at).getTime();
-            return sum + (completed - started) / (1000 * 60); // in minutes
-          }, 0) / tasksWithTime.length
+          const completed = new Date(task.completed_at).getTime();
+          const started = new Date(task.started_at).getTime();
+          return sum + (completed - started) / (1000 * 60); // in minutes
+        }, 0) / tasksWithTime.length
         : 0,
       totalCost: (tasks || []).reduce((sum: number, task: any) => sum + (task.total_cost || 0), 0)
     };
@@ -313,7 +316,7 @@ export const getDashboardReport = async (
 
     // Get recent bookings
     const { data: bookings, error: bookingsError } = await supabase
-      .from('bookings')
+      .from('reservations')
       .select('*')
       .gte('created_at', thirtyDaysAgo.toISOString());
 
@@ -375,7 +378,7 @@ export const getDashboardReport = async (
 // Helper function to calculate current occupancy
 const calculateCurrentOccupancy = async (): Promise<number> => {
   const today = new Date();
-  
+
   const { data: rooms, error: roomsError } = await supabase
     .from('rooms')
     .select('*');
@@ -533,10 +536,101 @@ export const generateReport = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    res.status(200).json({
-      success: true,
-      message: 'Report generation started'
+    const { id } = req.params;
+    const { format = 'pdf' } = req.body;
+
+    // Get report details from database
+    const { data: report, error } = await supabase
+      .from('reports')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error || !report) {
+      res.status(404).json({ success: false, message: 'Report not found' });
+      return;
+    }
+
+    const endpoint = format === 'pdf'
+      ? '/api/reports/generate/branded-pdf'
+      : '/api/reports/generate/excel';
+
+    const response = await axios.post(`${PYTHON_SERVICE_URL}${endpoint}`, {
+      reportType: report.type || 'generic',
+      filters: report.parameters || {},
+      useRealData: true
+    }, {
+      responseType: 'arraybuffer'
     });
+
+    const contentType = format === 'pdf'
+      ? 'application/pdf'
+      : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+    const extension = format === 'pdf' ? 'pdf' : 'xlsx';
+    const filename = `FG_${report.name || 'Report'}_${new Date().toISOString().split('T')[0]}.${extension}`;
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.send(response.data);
+
+    logger.info(`Report generated from DB: ${id} (${format})`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Export report directly
+// @route   POST /api/reports/export
+// @access  Private
+export const exportReport = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { reportType, format, filters, data } = req.body;
+    logger.info(`Exporting report: ${reportType} (${format})`);
+
+    const endpoint = format === 'pdf'
+      ? '/api/reports/generate/branded-pdf'
+      : '/api/reports/generate/excel';
+
+    try {
+      const response = await axios.post(`${PYTHON_SERVICE_URL}${endpoint}`, {
+        reportType,
+        filters,
+        data,
+        useRealData: !data
+      }, {
+        responseType: 'arraybuffer'
+      });
+
+      const contentType = format === 'pdf'
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+      const extension = format === 'pdf' ? 'pdf' : 'xlsx';
+      const filename = `FG_${reportType}_${new Date().toISOString().split('T')[0]}.${extension}`;
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+      res.send(response.data);
+
+      logger.info(`Report exported successfully: ${reportType} (${format})`);
+    } catch (axiosError: any) {
+      if (axiosError.response) {
+        const errorData = Buffer.from(axiosError.response.data).toString();
+        logger.error(`Python service error (${axiosError.response.status}): ${errorData}`);
+        res.status(axiosError.response.status).json({
+          success: false,
+          message: `Python service error: ${errorData}`
+        });
+      } else {
+        logger.error(`Axios error: ${axiosError.message}`);
+        throw axiosError;
+      }
+    }
   } catch (error) {
     next(error);
   }

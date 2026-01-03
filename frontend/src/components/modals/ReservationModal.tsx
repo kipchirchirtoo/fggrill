@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { bookingsAPI, guestAPI, roomsAPI } from '@/lib/api';
+import { useBranch } from '@/lib/branch-context';
 
 interface ReservationModalProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ interface ReservationData {
 }
 
 export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JSX.Element | null {
+  const { activeBranchId } = useBranch();
   const [isLoading, setIsLoading] = useState(false);
   const [roomTypes, setRoomTypes] = useState<any[]>([]);
   const [guestSearchTerm, setGuestSearchTerm] = useState('');
@@ -170,7 +172,8 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JS
         guestId: guestId,
         adults: reservationData.adults,
         children: reservationData.children,
-        specialRequests: reservationData.specialRequests
+        specialRequests: reservationData.specialRequests,
+        branchId: activeBranchId
       });
       
       toast.success('Reservation created successfully!');

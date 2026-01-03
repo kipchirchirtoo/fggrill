@@ -8,11 +8,11 @@ import { useBranch } from '@/lib/branch-context';
 import { cn } from '@/lib/utils';
 import {
   Building2, Package, Users, Bed, ChevronDown, Warehouse, BarChart3,
-  DollarSign, Settings, ClipboardList, Truck, CalendarClock, 
+  DollarSign, Settings, ClipboardList, Truck, CalendarClock,
   Building, Wrench, Brush, CheckCircle, FileSpreadsheet, ShieldCheck,
   Home, ArrowDownUp, LifeBuoy, Calendar, Store, TrendingUp, LineChart, Award,
   UserCheck, Utensils, Wine, Receipt, CreditCard, PieChart, FileText,
-  BookOpen, ChefHat, ShoppingCart, Wallet, Scale, AlertCircle
+  BookOpen, ChefHat, ShoppingCart, Wallet, Scale, AlertCircle, UtensilsCrossed, Trash2, Clock
 } from 'lucide-react';
 
 interface NavItemProps {
@@ -25,17 +25,17 @@ interface NavItemProps {
 
 function NavItem({ href, icon: Icon, label, active, onClick }: NavItemProps) {
   return (
-    <Link 
-      href={href} 
+    <Link
+      href={href}
       onClick={onClick}
       className={cn(
-        "flex items-center py-2 px-3 rounded-md text-sm font-medium",
-        active 
-          ? "bg-gray-100 text-gray-900" 
-          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+        "flex items-center gap-3 py-2 px-3 rounded-lg text-[13px] font-medium transition-colors",
+        active
+          ? "bg-amber-50 text-amber-700"
+          : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
       )}
     >
-      <Icon className="mr-3 h-4 w-4 flex-shrink-0" />
+      <Icon className="h-4 w-4 flex-shrink-0" />
       <span>{label}</span>
     </Link>
   );
@@ -50,22 +50,22 @@ interface NavGroupProps {
 
 function NavGroup({ label, icon: Icon, children, defaultOpen = false }: NavGroupProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
-  
+
   return (
-    <div className="space-y-1">
+    <div className="space-y-0.5">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between py-2 px-3 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-md"
+        className="flex w-full items-center justify-between py-2 px-3 text-[13px] font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900 rounded-lg transition-colors"
       >
-        <div className="flex items-center">
-          <Icon className="mr-3 h-4 w-4 flex-shrink-0" />
+        <div className="flex items-center gap-3">
+          <Icon className="h-4 w-4 flex-shrink-0" />
           <span>{label}</span>
         </div>
-        <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-3.5 w-3.5 text-stone-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
-      
+
       {isOpen && (
-        <div className="ml-6 space-y-1 border-l border-gray-200 pl-3">
+        <div className="ml-4 space-y-0.5 border-l border-stone-200 pl-3 py-1">
           {children}
         </div>
       )}
@@ -77,11 +77,11 @@ export function ConsolidatedNav() {
   const { user } = useAuth();
   const { activeBranchId } = useBranch();
   const pathname = usePathname();
-  
+
   if (!user) return null;
-  
+
   // Define navigation items based on user role
-  
+
   // Branch Operations Manager Navigation
   const branchOperationsNav = (
     <>
@@ -91,7 +91,7 @@ export function ConsolidatedNav() {
         label="Overview"
         active={pathname === '/dashboard/branch-operations'}
       />
-      
+
       <NavGroup label="Inventory" icon={Package} defaultOpen>
         <NavItem
           href="/dashboard/branch-operations/inventory"
@@ -118,7 +118,7 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/branch-operations/inventory/stock-takes'}
         />
       </NavGroup>
-      
+
       <NavGroup label="Staff" icon={Users}>
         <NavItem
           href="/dashboard/branch-operations/staff"
@@ -139,7 +139,7 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/branch-operations/staff/attendance'}
         />
       </NavGroup>
-      
+
       <NavGroup label="Operations" icon={Building}>
         <NavItem
           href="/dashboard/branch-operations/operations/reservations"
@@ -160,7 +160,7 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/branch-operations/operations/requests'}
         />
       </NavGroup>
-      
+
       <NavGroup label="Finance" icon={DollarSign}>
         <NavItem
           href="/dashboard/branch-operations/financials/budget"
@@ -181,7 +181,7 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/branch-operations/financials/reports'}
         />
       </NavGroup>
-      
+
       <NavItem
         href="/dashboard/branch-operations/communications"
         icon={LifeBuoy}
@@ -190,7 +190,7 @@ export function ConsolidatedNav() {
       />
     </>
   );
-  
+
   // Central Operations Manager Navigation
   const centralOperationsNav = (
     <>
@@ -200,7 +200,7 @@ export function ConsolidatedNav() {
         label="Overview"
         active={pathname === '/dashboard/central-operations'}
       />
-      
+
       <NavGroup label="Warehouse" icon={Warehouse} defaultOpen>
         <NavItem
           href="/dashboard/central-operations/warehouse/inventory"
@@ -239,7 +239,7 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/central-operations/warehouse/vendor-performance'}
         />
       </NavGroup>
-      
+
       <NavGroup label="Branch Oversight" icon={Building}>
         <NavItem
           href="/dashboard/central-operations/branch-oversight/comparison"
@@ -266,7 +266,7 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/central-operations/branch-oversight/compliance'}
         />
       </NavGroup>
-      
+
       <NavGroup label="Strategic Planning" icon={BarChart3}>
         <NavItem
           href="/dashboard/central-operations/strategic-planning/budgets"
@@ -293,7 +293,7 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/central-operations/strategic-planning/procurement'}
         />
       </NavGroup>
-      
+
       <NavGroup label="Analytics" icon={BarChart3}>
         <NavItem
           href="/dashboard/central-operations/analytics/reports"
@@ -313,10 +313,16 @@ export function ConsolidatedNav() {
           label="Executive Dashboard"
           active={pathname === '/dashboard/central-operations/analytics/executive'}
         />
+        <NavItem
+          href="/dashboard/central-operations/wastage"
+          icon={Trash2}
+          label="Wastage Overview"
+          active={pathname === '/dashboard/central-operations/wastage'}
+        />
       </NavGroup>
     </>
   );
-  
+
   // Facilities Manager Navigation
   const facilitiesNav = (
     <>
@@ -326,7 +332,7 @@ export function ConsolidatedNav() {
         label="Overview"
         active={pathname === '/dashboard/facilities'}
       />
-      
+
       <NavGroup label="Housekeeping" icon={Brush} defaultOpen>
         <NavItem
           href="/dashboard/facilities/housekeeping/tasks"
@@ -347,7 +353,7 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/facilities/housekeeping/lost-found'}
         />
       </NavGroup>
-      
+
       <NavGroup label="Maintenance" icon={Wrench}>
         <NavItem
           href="/dashboard/facilities/maintenance/work-orders"
@@ -368,28 +374,28 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/facilities/maintenance/schedule'}
         />
       </NavGroup>
-      
+
       <NavItem
         href="/dashboard/facilities/rooms"
         icon={Bed}
         label="Room Status"
         active={pathname === '/dashboard/facilities/rooms'}
       />
-      
+
       <NavItem
         href="/dashboard/facilities/inventory"
         icon={Package}
         label="Supplies & Inventory"
         active={pathname === '/dashboard/facilities/inventory'}
       />
-      
+
       <NavItem
         href="/dashboard/facilities/staff-management"
         icon={Users}
         label="Staff Management"
         active={pathname === '/dashboard/facilities/staff-management'}
       />
-      
+
       <NavItem
         href="/dashboard/facilities/quality-compliance"
         icon={ShieldCheck}
@@ -398,7 +404,7 @@ export function ConsolidatedNav() {
       />
     </>
   );
-  
+
   // Admin Navigation
   const adminNav = (
     <>
@@ -409,14 +415,26 @@ export function ConsolidatedNav() {
         active={pathname === '/dashboard/admin'}
       />
       <NavItem
+        href="/dashboard/admin/wastage"
+        icon={Trash2}
+        label="Wastage Analytics"
+        active={pathname === '/dashboard/admin/wastage'}
+      />
+      <NavItem
         href="/dashboard/admin/system/roles/migration"
         icon={ArrowDownUp}
         label="Role Migration"
         active={pathname === '/dashboard/admin/system/roles/migration'}
       />
+      <NavItem
+        href="/dashboard/cashier"
+        icon={CreditCard}
+        label="Cashier Station"
+        active={pathname === '/dashboard/cashier'}
+      />
     </>
   );
-  
+
   // Reception Navigation
   const receptionNav = (
     <>
@@ -426,7 +444,7 @@ export function ConsolidatedNav() {
         label="Overview"
         active={pathname === '/dashboard/reception'}
       />
-      
+
       <NavGroup label="Front Desk" icon={UserCheck} defaultOpen>
         <NavItem
           href="/dashboard/reception/checkin"
@@ -447,71 +465,113 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/reception/guests'}
         />
       </NavGroup>
-      
+
       <NavItem
         href="/dashboard/reception/rooms"
         icon={Bed}
         label="Rooms"
         active={pathname === '/dashboard/reception/rooms'}
       />
-      
+
       <NavItem
         href="/dashboard/reception/housekeeping"
         icon={Brush}
         label="Housekeeping"
         active={pathname === '/dashboard/reception/housekeeping'}
       />
+
+      <NavItem
+        href="/dashboard/cashier"
+        icon={CreditCard}
+        label="Cashier Station"
+        active={pathname === '/dashboard/cashier'}
+      />
     </>
   );
-  
-  // Restaurant Navigation
+
+
+  // Restaurant Navigation (uses POS-Kitchen dashboard)
   const restaurantNav = (
     <>
       <NavItem
-        href="/dashboard/restaurant"
-        icon={Utensils}
+        href="/dashboard/pos-kitchen"
+        icon={UtensilsCrossed}
         label="Overview"
-        active={pathname === '/dashboard/restaurant'}
+        active={pathname === '/dashboard/pos-kitchen' && !pathname.includes('?tab=')}
       />
-      
+
       <NavGroup label="Operations" icon={ChefHat} defaultOpen>
         <NavItem
-          href="/dashboard/restaurant/orders"
-          icon={ClipboardList}
-          label="Orders"
-          active={pathname === '/dashboard/restaurant/orders'}
+          href="/dashboard/pos-kitchen?tab=pos"
+          icon={ShoppingCart}
+          label="POS System"
+          active={pathname === '/dashboard/pos-kitchen' && pathname.includes('tab=pos')}
         />
         <NavItem
-          href="/dashboard/restaurant/kitchen"
+          href="/dashboard/kitchen"
           icon={ChefHat}
           label="Kitchen"
-          active={pathname === '/dashboard/restaurant/kitchen'}
-        />
-        <NavItem
-          href="/dashboard/restaurant/pos"
-          icon={CreditCard}
-          label="POS"
-          active={pathname === '/dashboard/restaurant/pos'}
+          active={pathname === '/dashboard/kitchen'}
         />
       </NavGroup>
-      
-      <NavItem
-        href="/dashboard/restaurant/menu"
-        icon={BookOpen}
-        label="Menu"
-        active={pathname === '/dashboard/restaurant/menu'}
-      />
-      
-      <NavItem
-        href="/dashboard/restaurant/inventory"
-        icon={Package}
-        label="Inventory"
-        active={pathname === '/dashboard/restaurant/inventory'}
-      />
     </>
   );
-  
-  // Bar Navigation
+
+  // POS Kitchen Navigation
+  const posKitchenNav = (
+    <>
+      <NavItem
+        href="/dashboard/pos-kitchen"
+        icon={UtensilsCrossed}
+        label="Overview"
+        active={pathname === '/dashboard/pos-kitchen' && !pathname.includes('?tab=')}
+      />
+
+      <NavGroup label="POS Operations" icon={ShoppingCart} defaultOpen>
+        <NavItem
+          href="/dashboard/pos-kitchen?tab=pos"
+          icon={ShoppingCart}
+          label="Take Orders"
+          active={pathname === '/dashboard/pos-kitchen' && pathname.includes('tab=pos')}
+        />
+        <NavItem
+          href="/dashboard/pos-kitchen?tab=recent"
+          icon={Clock}
+          label="Recent Orders"
+          active={pathname === '/dashboard/pos-kitchen' && pathname.includes('tab=recent')}
+        />
+      </NavGroup>
+    </>
+  );
+
+  // Kitchen Navigation
+  const kitchenNav = (
+    <>
+      <NavItem
+        href="/dashboard/kitchen"
+        icon={ChefHat}
+        label="Kitchen Display"
+        active={pathname === '/dashboard/kitchen' && !pathname.includes('?tab=')}
+      />
+
+      <NavGroup label="Operations" icon={ChefHat} defaultOpen>
+        <NavItem
+          href="/dashboard/kitchen?tab=kitchen"
+          icon={ChefHat}
+          label="Active Orders"
+          active={pathname === '/dashboard/kitchen' && pathname.includes('tab=kitchen')}
+        />
+        <NavItem
+          href="/dashboard/kitchen?tab=wastage"
+          icon={AlertCircle}
+          label="Wastage Recording"
+          active={pathname === '/dashboard/kitchen' && pathname.includes('tab=wastage')}
+        />
+      </NavGroup>
+    </>
+  );
+
+  // Bar/Bartender Navigation
   const barNav = (
     <>
       <NavItem
@@ -520,44 +580,32 @@ export function ConsolidatedNav() {
         label="Overview"
         active={pathname === '/dashboard/bar'}
       />
-      
-      <NavGroup label="Operations" icon={ShoppingCart} defaultOpen>
-        <NavItem
-          href="/dashboard/bar/orders"
-          icon={ClipboardList}
-          label="Orders"
-          active={pathname === '/dashboard/bar/orders'}
-        />
+
+      <NavGroup label="Orders" icon={ShoppingCart} defaultOpen>
         <NavItem
           href="/dashboard/bar/pos"
           icon={CreditCard}
-          label="POS"
+          label="New Order (POS)"
           active={pathname === '/dashboard/bar/pos'}
+        />
+        <NavItem
+          href="/dashboard/bar/orders"
+          icon={ClipboardList}
+          label="All Orders"
+          active={pathname === '/dashboard/bar/orders'}
         />
         <NavItem
           href="/dashboard/bar/tabs"
           icon={Receipt}
-          label="Tabs"
+          label="Customer Tabs"
           active={pathname === '/dashboard/bar/tabs'}
         />
       </NavGroup>
-      
-      <NavItem
-        href="/dashboard/bar/menu"
-        icon={BookOpen}
-        label="Menu"
-        active={pathname === '/dashboard/bar/menu'}
-      />
-      
-      <NavItem
-        href="/dashboard/bar/inventory"
-        icon={Package}
-        label="Inventory"
-        active={pathname === '/dashboard/bar/inventory'}
-      />
+
+
     </>
   );
-  
+
   // Finance/Accountant Navigation
   const financeNav = (
     <>
@@ -567,7 +615,7 @@ export function ConsolidatedNav() {
         label="Overview"
         active={pathname === '/dashboard/finance'}
       />
-      
+
       <NavGroup label="Revenue" icon={TrendingUp} defaultOpen>
         <NavItem
           href="/dashboard/finance/revenue-branches"
@@ -588,7 +636,7 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/finance/payments'}
         />
       </NavGroup>
-      
+
       <NavGroup label="Expenses" icon={Wallet}>
         <NavItem
           href="/dashboard/finance/expenses"
@@ -603,7 +651,7 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/finance/ar-ap'}
         />
       </NavGroup>
-      
+
       <NavGroup label="Analysis" icon={BarChart3}>
         <NavItem
           href="/dashboard/finance/cashflow"
@@ -636,23 +684,23 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/finance/kpis'}
         />
       </NavGroup>
-      
+
       <NavItem
         href="/dashboard/finance/tax-summary"
         icon={FileSpreadsheet}
         label="Tax Summary"
         active={pathname === '/dashboard/finance/tax-summary'}
       />
-      
+
       <NavItem
-        href="/dashboard/finance/reports"
-        icon={FileText}
-        label="Reports"
-        active={pathname === '/dashboard/finance/reports'}
+        href="/dashboard/cashier"
+        icon={CreditCard}
+        label="Cashier Station"
+        active={pathname === '/dashboard/cashier'}
       />
     </>
   );
-  
+
   // Auditor Navigation
   const auditorNav = (
     <>
@@ -662,7 +710,7 @@ export function ConsolidatedNav() {
         label="Overview"
         active={pathname === '/dashboard/audit'}
       />
-      
+
       <NavGroup label="Audits" icon={ClipboardList} defaultOpen>
         <NavItem
           href="/dashboard/audit/financial"
@@ -683,14 +731,14 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/audit/compliance'}
         />
       </NavGroup>
-      
+
       <NavItem
         href="/dashboard/audit/logs"
         icon={FileText}
         label="Audit Logs"
         active={pathname === '/dashboard/audit/logs'}
       />
-      
+
       <NavItem
         href="/dashboard/audit/reports"
         icon={FileSpreadsheet}
@@ -699,7 +747,7 @@ export function ConsolidatedNav() {
       />
     </>
   );
-  
+
   // Central Storekeeper Navigation (Legacy)
   const centralStoreNav = (
     <>
@@ -709,7 +757,7 @@ export function ConsolidatedNav() {
         label="Overview"
         active={pathname === '/dashboard/central-store'}
       />
-      
+
       <NavGroup label="Inventory" icon={Package} defaultOpen>
         <NavItem
           href="/dashboard/central-store/inventory"
@@ -724,7 +772,7 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/central-store/stock-takes'}
         />
       </NavGroup>
-      
+
       <NavGroup label="Requests" icon={ClipboardList}>
         <NavItem
           href="/dashboard/central-store/requests"
@@ -739,14 +787,14 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/central-store/dispatch'}
         />
       </NavGroup>
-      
+
       <NavItem
         href="/dashboard/central-store/suppliers"
         icon={Store}
         label="Suppliers"
         active={pathname === '/dashboard/central-store/suppliers'}
       />
-      
+
       <NavGroup label="Fleet" icon={Truck}>
         <NavItem
           href="/dashboard/central-store/vehicles"
@@ -761,7 +809,7 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/central-store/drivers'}
         />
       </NavGroup>
-      
+
       <NavItem
         href="/dashboard/central-store/reports"
         icon={BarChart3}
@@ -770,7 +818,7 @@ export function ConsolidatedNav() {
       />
     </>
   );
-  
+
   // Branch Storekeeper Navigation (Legacy)
   const branchStoreNav = (
     <>
@@ -780,7 +828,7 @@ export function ConsolidatedNav() {
         label="Overview"
         active={pathname === '/dashboard/branch-store'}
       />
-      
+
       <NavGroup label="Stock" icon={Package} defaultOpen>
         <NavItem
           href="/dashboard/branch-store/stock"
@@ -801,7 +849,7 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/branch-store/stock-out'}
         />
       </NavGroup>
-      
+
       <NavGroup label="Requests" icon={ClipboardList}>
         <NavItem
           href="/dashboard/branch-store/requests"
@@ -822,14 +870,14 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/branch-store/receive'}
         />
       </NavGroup>
-      
+
       <NavItem
         href="/dashboard/branch-store/kitchen-usage"
         icon={Utensils}
         label="Kitchen Usage"
         active={pathname === '/dashboard/branch-store/kitchen-usage'}
       />
-      
+
       <NavItem
         href="/dashboard/branch-store/reports"
         icon={BarChart3}
@@ -838,7 +886,7 @@ export function ConsolidatedNav() {
       />
     </>
   );
-  
+
   // Housekeeping Navigation (Legacy)
   const housekeepingNav = (
     <>
@@ -848,7 +896,7 @@ export function ConsolidatedNav() {
         label="Overview"
         active={pathname === '/dashboard/housekeeping'}
       />
-      
+
       <NavGroup label="Tasks" icon={ClipboardList} defaultOpen>
         <NavItem
           href="/dashboard/housekeeping/tasks"
@@ -869,42 +917,42 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/housekeeping/inspections'}
         />
       </NavGroup>
-      
+
       <NavItem
         href="/dashboard/housekeeping/scheduling"
         icon={Calendar}
         label="Scheduling"
         active={pathname === '/dashboard/housekeeping/scheduling'}
       />
-      
+
       <NavItem
         href="/dashboard/housekeeping/staff"
         icon={Users}
         label="Staff"
         active={pathname === '/dashboard/housekeeping/staff'}
       />
-      
+
       <NavItem
         href="/dashboard/housekeeping/inventory"
         icon={Package}
         label="Inventory"
         active={pathname === '/dashboard/housekeeping/inventory'}
       />
-      
+
       <NavItem
         href="/dashboard/housekeeping/lost-found"
         icon={LifeBuoy}
         label="Lost & Found"
         active={pathname === '/dashboard/housekeeping/lost-found'}
       />
-      
+
       <NavItem
         href="/dashboard/housekeeping/workflows"
         icon={ArrowDownUp}
         label="Workflows"
         active={pathname === '/dashboard/housekeeping/workflows'}
       />
-      
+
       <NavItem
         href="/dashboard/housekeeping/reports"
         icon={BarChart3}
@@ -913,7 +961,7 @@ export function ConsolidatedNav() {
       />
     </>
   );
-  
+
   // Maintenance Navigation (Legacy)
   const maintenanceNav = (
     <>
@@ -923,21 +971,21 @@ export function ConsolidatedNav() {
         label="Overview"
         active={pathname === '/dashboard/maintenance'}
       />
-      
+
       <NavItem
         href="/dashboard/maintenance/orders"
         icon={ClipboardList}
         label="Work Orders"
         active={pathname === '/dashboard/maintenance/orders'}
       />
-      
+
       <NavItem
         href="/dashboard/maintenance/assets"
         icon={Home}
         label="Assets"
         active={pathname === '/dashboard/maintenance/assets'}
       />
-      
+
       <NavItem
         href="/dashboard/maintenance/schedule"
         icon={Calendar}
@@ -946,7 +994,7 @@ export function ConsolidatedNav() {
       />
     </>
   );
-  
+
   // General Manager Navigation (Legacy)
   const gmNav = (
     <>
@@ -956,7 +1004,7 @@ export function ConsolidatedNav() {
         label="Overview"
         active={pathname === '/dashboard/gm'}
       />
-      
+
       <NavGroup label="Operations" icon={Building} defaultOpen>
         <NavItem
           href="/dashboard/gm/branches"
@@ -977,7 +1025,7 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/gm/reservations'}
         />
       </NavGroup>
-      
+
       <NavGroup label="Staff" icon={Users}>
         <NavItem
           href="/dashboard/gm/staff"
@@ -992,23 +1040,29 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/gm/leave-requests'}
         />
       </NavGroup>
-      
+
       <NavItem
         href="/dashboard/gm/finance"
         icon={DollarSign}
         label="Finance"
         active={pathname === '/dashboard/gm/finance'}
       />
-      
+
       <NavItem
         href="/dashboard/gm/reports"
         icon={BarChart3}
         label="Reports"
         active={pathname === '/dashboard/gm/reports'}
       />
+      <NavItem
+        href="/dashboard/cashier"
+        icon={CreditCard}
+        label="Cashier Station"
+        active={pathname === '/dashboard/cashier'}
+      />
     </>
   );
-  
+
   // Branch Manager Navigation (Legacy)
   const branchManagerNav = (
     <>
@@ -1018,7 +1072,7 @@ export function ConsolidatedNav() {
         label="Overview"
         active={pathname === '/dashboard/branch-manager'}
       />
-      
+
       <NavGroup label="Front Desk" icon={UserCheck} defaultOpen>
         <NavItem
           href="/dashboard/branch-manager/reservations"
@@ -1051,14 +1105,14 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/branch-manager/guests'}
         />
       </NavGroup>
-      
+
       <NavItem
         href="/dashboard/branch-manager/rooms"
         icon={Bed}
         label="Rooms"
         active={pathname === '/dashboard/branch-manager/rooms'}
       />
-      
+
       <NavGroup label="Operations" icon={Building}>
         <NavItem
           href="/dashboard/branch-manager/housekeeping"
@@ -1079,7 +1133,22 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/branch-manager/restaurant'}
         />
       </NavGroup>
-      
+
+      <NavGroup label="Menu Management" icon={BookOpen}>
+        <NavItem
+          href="/dashboard/branch-manager/menu"
+          icon={Utensils}
+          label="Restaurant Menu"
+          active={pathname === '/dashboard/branch-manager/menu'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/bar-menu"
+          icon={Wine}
+          label="Bar Menu"
+          active={pathname === '/dashboard/branch-manager/bar-menu'}
+        />
+      </NavGroup>
+
       <NavGroup label="Inventory" icon={Package}>
         <NavItem
           href="/dashboard/branch-manager/stock"
@@ -1106,7 +1175,7 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/branch-manager/stock-out'}
         />
       </NavGroup>
-      
+
       <NavGroup label="Staff" icon={Users}>
         <NavItem
           href="/dashboard/branch-manager/staff"
@@ -1121,16 +1190,29 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/branch-manager/attendance'}
         />
       </NavGroup>
-      
+
+      <NavItem
+        href="/dashboard/branch-manager/wastage"
+        icon={Trash2}
+        label="Wastage Reports"
+        active={pathname === '/dashboard/branch-manager/wastage'}
+      />
+
       <NavItem
         href="/dashboard/branch-manager/reports"
         icon={BarChart3}
         label="Reports"
         active={pathname === '/dashboard/branch-manager/reports'}
       />
+      <NavItem
+        href="/dashboard/cashier"
+        icon={CreditCard}
+        label="Cashier Station"
+        active={pathname === '/dashboard/cashier'}
+      />
     </>
   );
-  
+
   // Determine which navigation to render based on user role
   const renderNavigation = () => {
     if (user.role === UserRole.SUPER_ADMIN) {
@@ -1146,90 +1228,103 @@ export function ConsolidatedNav() {
         </>
       );
     }
-    
+
     // Central Operations Manager Navigation
     if (user.role === UserRole.CENTRAL_OPERATIONS_MANAGER) {
       return centralOperationsNav;
     }
-    
+
     // Central Storekeeper Navigation (Legacy - has own dashboard)
     if (user.role === UserRole.CENTRAL_STOREKEEPER) {
       return centralStoreNav;
     }
-    
+
     // General Manager Navigation (Legacy - has own dashboard)
     if (user.role === UserRole.GENERAL_MANAGER) {
       return gmNav;
     }
-    
+
     // Branch Operations Manager Navigation
     if (user.role === UserRole.BRANCH_OPERATIONS_MANAGER) {
       return branchOperationsNav;
     }
-    
+
     // Branch Storekeeper Navigation (Legacy - has own dashboard)
     if (user.role === UserRole.BRANCH_STOREKEEPER) {
       return branchStoreNav;
     }
-    
+
     // Branch Manager Navigation (Legacy - has own dashboard)
     if (user.role === UserRole.BRANCH_MANAGER) {
       return branchManagerNav;
     }
-    
+
     // Facilities Manager Navigation
     if (user.role === UserRole.FACILITIES_MANAGER) {
       return facilitiesNav;
     }
-    
+
     // Housekeeping Navigation (Legacy - has own dashboard)
     if (user.role === UserRole.HOUSEKEEPING || user.role === UserRole.HOUSEKEEPING_SUPERVISOR) {
       return housekeepingNav;
     }
-    
+
     // Maintenance Navigation (Legacy - has own dashboard)
     if (user.role === UserRole.MAINTENANCE) {
       return maintenanceNav;
     }
-    
+
     // Receptionist Navigation
     if (user.role === UserRole.RECEPTIONIST) {
       return receptionNav;
     }
-    
+
     // Restaurant Navigation
     if (user.role === UserRole.RESTAURANT) {
       return restaurantNav;
     }
-    
+
+    // POS Kitchen Navigation
+    if (user.role === UserRole.POS_KITCHEN) {
+      return posKitchenNav;
+    }
+
+    // Kitchen Navigation
+    if (user.role === UserRole.KITCHEN) {
+      return kitchenNav;
+    }
+
     // Bartender Navigation
     if (user.role === UserRole.BARTENDER) {
       return barNav;
     }
-    
+
     // Accountant Navigation
     if (user.role === UserRole.ACCOUNTANT) {
       return financeNav;
     }
-    
+
     // Auditor Navigation
     if (user.role === UserRole.AUDITOR) {
       return auditorNav;
     }
-    
-    // Default navigation for other roles (EMPLOYEE, GUEST)
-    return (
-      <>
+
+    // Cashier Navigation
+    if (user.role === UserRole.CASHIER) {
+      return (
         <NavItem
-          href="/dashboard"
-          icon={Home}
-          label="Dashboard"
-          active={pathname === '/dashboard'}
+          href="/dashboard/cashier"
+          icon={CreditCard}
+          label="Cashier Station"
+          active={pathname === '/dashboard/cashier'}
         />
-      </>
-    );
+      );
+    }
+
+    // Default navigation for roles without specific nav - redirect to role-specific dashboard
+    return null;
   };
-  
+
   return (
     <div className="space-y-1">
       {renderNavigation()}

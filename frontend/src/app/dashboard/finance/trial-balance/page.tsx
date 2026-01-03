@@ -6,6 +6,8 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { financeAPI } from '@/lib/api';
 import { BookOpen, RefreshCw, Download, CheckCircle, AlertCircle } from 'lucide-react';
+import { BranchSelector } from '@/components/finance/BranchSelector';
+import { DateRangeSelector, DateRangePreset } from '@/components/finance/DateRangeSelector';
 
 interface TrialBalanceEntry {
   account: string;
@@ -26,26 +28,25 @@ interface Branch { id: number; name: string; }
 export default function TrialBalancePage() {
   const [data, setData] = useState<TrialBalanceData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
+  const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [datePreset, setDatePreset] = useState<DateRangePreset>('month');
 
-  const fetchBranches = useCallback(async () => {
-    try {
-      const response = await financeAPI.getBranches();
-      if (response.success && Array.isArray(response.data)) setBranches(response.data);
-    } catch (error) { console.error('Error:', error); }
-  }, []);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await financeAPI.getTrialBalance({ branch_id: selectedBranch || undefined });
+      const response = await financeAPI.getTrialBalance({
+        branch_id: selectedBranch || undefined,
+        startDate,
+        endDate
+      });
       if (response.success && response.data) setData(response.data);
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, [selectedBranch]);
+  }, [selectedBranch, startDate, endDate]);
 
-  useEffect(() => { fetchBranches(); }, [fetchBranches]);
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const entries = Array.isArray(data?.entries) ? data.entries : [];
@@ -61,14 +62,20 @@ export default function TrialBalancePage() {
               <p className="text-sm text-gray-500 mt-1">Verify debit and credit balances</p>
             </div>
             <div className="flex items-center gap-3">
-              <select
-                value={selectedBranch || ''}
-                onChange={(e) => setSelectedBranch(e.target.value ? Number(e.target.value) : null)}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"
-              >
-                <option value="">All Branches</option>
-                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
+              <BranchSelector
+                selectedBranch={selectedBranch}
+                onBranchChange={setSelectedBranch}
+              />
+              <DateRangeSelector
+                startDate={startDate}
+                endDate={endDate}
+                onRangeChange={(start, end) => {
+                  setStartDate(start);
+                  setEndDate(end);
+                }}
+                preset={datePreset}
+                onPresetChange={setDatePreset}
+              />
               <button onClick={fetchData} disabled={isLoading} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               </button>

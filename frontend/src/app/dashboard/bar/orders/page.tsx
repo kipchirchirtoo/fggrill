@@ -8,7 +8,8 @@ import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription }
 import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
-import { restaurantAPI } from '@/lib/api';
+import { barAPI } from '@/lib/api';
+import { useBranch } from '@/lib/branch-context';
 import { ShoppingCart, RefreshCw, Search, Eye, Clock, Wine } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -16,11 +17,15 @@ import { IOSCard } from '@/components/ui/ios-card';
 
 interface Order {
   id: string;
-  order_number: string;
-  table_number?: string;
+  order_number?: string;
+  seat_number?: string;
+  room_number?: string;
+  guest_name?: string;
+  order_type: string;
   status: string;
   total: number;
-  items_count: number;
+  subtotal: number;
+  items?: any[];
   created_at: string;
 }
 
@@ -35,6 +40,7 @@ const statusConfig: Record<string, { label: string; color: string; bgColor: stri
 
 export default function BarOrdersPage() {
   const { user } = useAuth();
+  const { activeBranchId } = useBranch();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -43,22 +49,23 @@ export default function BarOrdersPage() {
   const fetchOrders = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await restaurantAPI.getOrders(undefined, statusFilter !== 'all' ? statusFilter : undefined);
+      const response = await barAPI.getOrders(activeBranchId || undefined, statusFilter !== 'all' ? statusFilter : undefined);
       if (response.success) setOrders(response.data || []);
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, [statusFilter]);
+  }, [statusFilter, activeBranchId]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
-  const filteredOrders = orders.filter((order) => 
+  const filteredOrders = orders.filter((order) =>
     order.order_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    order.table_number?.includes(searchQuery)
+    order.seat_number?.includes(searchQuery) ||
+    order.guest_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleUpdateStatus = async (orderId: string, status: string) => {
     try {
-      await restaurantAPI.updateOrderStatus(orderId, status);
+      await barAPI.updateOrderStatus(orderId, status);
       toast.success(`Order ${status}`);
       fetchOrders();
     } catch (error: any) { toast.error(error.message || 'Failed'); }
@@ -76,8 +83,8 @@ export default function BarOrdersPage() {
           <IOSCard className="p-4">
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input placeholder="Search orders..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
+                <Input placeholder="Search orders..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
               </div>
               <div className="flex gap-2 flex-wrap">
                 {['all', 'pending', 'preparing', 'ready', 'completed'].map((status) => (
@@ -104,7 +111,7 @@ export default function BarOrdersPage() {
                         <div className="w-12 h-12 rounded-ios-lg bg-purple-100 flex items-center justify-center"><Wine className="h-6 w-6 text-purple-600" /></div>
                         <div>
                           <p className="font-bold">#{order.order_number}</p>
-                          <p className="text-sm text-gray-500">{order.table_number ? `Table ${order.table_number}` : 'Bar'} • {order.items_count} items</p>
+                          <p className="text-sm text-gray-500">{order.seat_number ? `Seat ${order.seat_number}` : order.guest_name || 'Bar'} • {order.items?.length || 0} items</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
@@ -113,8 +120,7 @@ export default function BarOrdersPage() {
                           <p className="text-sm text-gray-500">{new Date(order.created_at).toLocaleTimeString()}</p>
                         </div>
                         <IOSBadge className={`${statusInfo.bgColor} ${statusInfo.color}`}>{statusInfo.label}</IOSBadge>
-                        {order.status === 'pending' && <IOSButton size="sm" onClick={() => handleUpdateStatus(order.id, 'preparing')}>Start</IOSButton>}
-                        {order.status === 'preparing' && <IOSButton size="sm" onClick={() => handleUpdateStatus(order.id, 'ready')}>Ready</IOSButton>}
+                        {/* Status buttons removed as per request - drinks are already made */}
                       </div>
                     </div>
                   </IOSCard>

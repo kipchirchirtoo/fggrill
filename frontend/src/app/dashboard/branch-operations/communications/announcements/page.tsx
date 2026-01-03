@@ -112,8 +112,8 @@ function BranchAnnouncementsContent() {
             <div className="flex flex-wrap gap-4">
               <div className="flex-1 min-w-[200px]">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input placeholder="Search announcements..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
+                  <Input placeholder="Search announcements..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9" />
                 </div>
               </div>
               <select value={importanceFilter} onChange={(e) => setImportanceFilter(e.target.value)} className="px-3 py-2 border rounded-lg">
@@ -141,7 +141,7 @@ function BranchAnnouncementsContent() {
                       <div className="flex items-center gap-2 mb-1">
                         {announcement.is_pinned && <Pin className="h-4 w-4 text-blue-500" />}
                         <h3 className="font-semibold">{announcement.title}</h3>
-                        <IOSBadge variant={announcement.importance === 'high' ? 'destructive' : announcement.importance === 'medium' ? 'warning' : 'secondary'}>{announcement.importance}</IOSBadge>
+                        <IOSBadge color={announcement.importance === 'high' ? 'danger' : announcement.importance === 'medium' ? 'warning' : 'secondary'}>{announcement.importance}</IOSBadge>
                       </div>
                       <p className="text-sm text-gray-600 line-clamp-2">{announcement.content}</p>
                       <p className="text-xs text-gray-400 mt-2">By {announcement.author} • {announcement.created_at}</p>

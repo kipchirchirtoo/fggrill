@@ -5,11 +5,11 @@ from typing import Dict, Any, Optional, List
 from jinja2 import Template
 import httpx
 
-from models import (
+from communication_hub.models import (
     EmailRequest, SMSRequest, CommunicationResponse, 
     BookingConfirmationRequest, CheckInReminderRequest, InvoiceRequest
 )
-from templates import TEMPLATES
+from communication_hub.templates import TEMPLATES
 
 class CommunicationService:
     """

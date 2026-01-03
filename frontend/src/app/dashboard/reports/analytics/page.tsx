@@ -13,6 +13,7 @@ import {
   PieChart as RechartsPie, Pie, Cell, ComposedChart
 } from 'recharts';
 import { reportsAPI, pricingAPI } from '@/lib/api';
+import { toast } from 'sonner';
 
 // Sample data for charts
 const occupancyForecast = [
@@ -110,7 +111,26 @@ export default function AdvancedAnalyticsPage() {
           <button className="p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
             <Filter className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </button>
-          <button className="p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
+          <button
+            className="p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+            onClick={() => {
+              toast.promise(
+                reportsAPI.exportReport({
+                  reportType: 'occupancy',
+                  format: 'pdf',
+                  filters: {
+                    startDate: new Date(new Date().setDate(new Date().getDate() - (dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90))).toISOString(),
+                    endDate: new Date().toISOString()
+                  }
+                }),
+                {
+                  loading: 'Generating PDF report...',
+                  success: 'Report downloaded successfully',
+                  error: 'Failed to generate report'
+                }
+              );
+            }}
+          >
             <Download className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </button>
           <button className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
@@ -413,13 +433,12 @@ export default function AdvancedAnalyticsPage() {
                     {formatCurrency(room.revenue)}
                   </td>
                   <td className="text-right py-4 px-4">
-                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                      room.occupancy >= 80
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                        : room.occupancy >= 70
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${room.occupancy >= 80
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                      : room.occupancy >= 70
                         ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                         : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                    }`}>
+                      }`}>
                       {room.occupancy >= 80 ? (
                         <TrendingUp className="w-3 h-3" />
                       ) : room.occupancy >= 70 ? (

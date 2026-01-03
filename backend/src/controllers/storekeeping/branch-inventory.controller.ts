@@ -22,7 +22,7 @@ export const getBranchStock = async (
 ): Promise<void> => {
   try {
     const branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
-    
+
     if (!branchId) {
       res.status(400).json({ success: false, message: 'Branch ID required' });
       return;
@@ -50,7 +50,7 @@ export const getLowStockItems = async (
 ): Promise<void> => {
   try {
     const branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
-    
+
     if (!branchId) {
       res.status(400).json({ success: false, message: 'Branch ID required' });
       return;
@@ -180,33 +180,39 @@ export const getBranchRequests = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
+    const queryBranchId = req.query.branch_id ? parseInt(req.query.branch_id as string) : null;
+    let branchId = queryBranchId;
     const status = req.query.status as string;
 
-    if (!branchId) {
-      res.status(400).json({ success: false, message: 'Branch ID required' });
-      return;
+    console.log('getBranchRequests Debug:', {
+      userRole: req.user?.role,
+      userBranchId: req.user?.branch_id,
+      queryBranchId,
+      initialBranchId: branchId
+    });
+
+    // Allow central roles to fetch all requests (branchId is optional)
+    const isCentralRole = ['super_admin', 'general_manager', 'central_storekeeper', 'central_operations_manager'].includes(req.user?.role || '');
+
+    console.log('isCentralRole:', isCentralRole);
+
+    if (branchId === null) {
+      if (!isCentralRole) {
+        // Non-central roles must use their assigned branch
+        branchId = req.user?.branch_id || null;
+
+        if (!branchId) {
+          res.status(400).json({ success: false, message: 'Branch ID required' });
+          return;
+        }
+      }
+      // Central roles keep branchId as null to fetch all
     }
 
-    let query = supabase
-      .from('stock_requests')
-      .select(`
-        *,
-        items:stock_request_items(
-          *,
-          item:simple_items(sku, item_name, description, category, unit_of_measure)
-        ),
-        reviewer:users!stock_requests_reviewed_by_fkey(id, first_name, last_name)
-      `)
-      .eq('requesting_branch_id', branchId)
-      .order('created_at', { ascending: false });
+    console.log('Final branchId for service call:', branchId);
 
-    if (status) {
-      query = query.eq('status', status);
-    }
-
-    const { data, error } = await query;
-    if (error) throw error;
+    const data = await BranchInventoryService.getBranchRequests(branchId, status);
+    console.log('Data returned from service:', data?.length);
 
     res.status(200).json({
       success: true,
@@ -286,15 +292,15 @@ export const createDispatch = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { 
-      request_id, 
-      to_branch_id, 
-      items, 
-      vehicle_number, 
-      driver_name, 
+    const {
+      request_id,
+      to_branch_id,
+      items,
+      vehicle_number,
+      driver_name,
       driver_phone,
       estimated_delivery,
-      notes 
+      notes
     } = req.body;
 
     // Validate required fields
@@ -316,8 +322,8 @@ export const createDispatch = async (
     // Validate items
     const invalidItems = items.filter(item => !item.item_sku || !item.dispatched_quantity || item.dispatched_quantity <= 0);
     if (invalidItems.length > 0) {
-      res.status(400).json({ 
-        success: false, 
+      res.status(400).json({
+        success: false,
         message: 'All items must have a valid SKU and positive quantity',
         invalidItems
       });
@@ -372,7 +378,7 @@ export const createDispatch = async (
 
     if (!['APPROVED', 'PARTIALLY_APPROVED'].includes(request.status)) {
       res.status(400).json({
-        success: false, 
+        success: false,
         message: `Cannot create dispatch for request with status: ${request.status}. Request must be approved first.`
       });
       return;
@@ -381,7 +387,7 @@ export const createDispatch = async (
     // Verify the request is for the correct destination branch
     if (request.requesting_branch_id !== to_branch_id) {
       res.status(400).json({
-        success: false, 
+        success: false,
         message: 'Destination branch does not match the branch that made the request'
       });
       return;
@@ -432,7 +438,7 @@ export const dispatchItems = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    
+
     if (!id) {
       res.status(400).json({
         success: false,
@@ -440,7 +446,7 @@ export const dispatchItems = async (
       });
       return;
     }
-    
+
     // Validate user
     if (!req.user?.id) {
       res.status(401).json({
@@ -468,9 +474,9 @@ export const dispatchItems = async (
 
     try {
       const dispatch = await BranchInventoryService.dispatchItems(id, req.user.id);
-      
+
       logger.info(`Dispatch ${dispatch.dispatch_number} successfully sent by ${req.user.email}`);
-      
+
       res.status(200).json({
         success: true,
         message: `Dispatch ${dispatch.dispatch_number} sent`,
@@ -478,7 +484,7 @@ export const dispatchItems = async (
       });
     } catch (serviceError: any) {
       logger.error(`Dispatch error for ID ${id}:`, serviceError);
-      
+
       // Return appropriate status code based on error type
       if (serviceError.message.includes('not found') || serviceError.message.includes('couldn\'t be accessed')) {
         res.status(404).json({

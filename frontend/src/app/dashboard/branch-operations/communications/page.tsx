@@ -77,16 +77,14 @@ function BranchCommunicationsContent() {
         const commsData = response.data || [];
         processCommunicationsData(commsData);
       } else {
-        // If API fails, use placeholder data
-        const placeholderData = generatePlaceholderCommunications();
-        processCommunicationsData(placeholderData);
+        // Show empty state
+        processCommunicationsData([]);
       }
     } catch (error) {
       console.error('Error fetching communications:', error);
       toast.error('Failed to load communications');
-      // Fallback to placeholder data
-      const placeholderData = generatePlaceholderCommunications();
-      processCommunicationsData(placeholderData);
+      // Show empty state on error
+      processCommunicationsData([]);
     } finally {
       setIsLoading(false);
     }

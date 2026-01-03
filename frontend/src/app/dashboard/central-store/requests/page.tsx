@@ -16,29 +16,37 @@ import { IOSCard } from '@/components/ui/ios-card';
 interface StockRequest { id: string; request_number: string; branch_name: string; status: string; priority: string; items_count: number; created_at: string; }
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
-  pending: { label: 'Pending', color: 'text-yellow-700', bg: 'bg-yellow-100' },
-  approved: { label: 'Approved', color: 'text-blue-700', bg: 'bg-blue-100' },
-  fulfilled: { label: 'Fulfilled', color: 'text-green-700', bg: 'bg-green-100' },
-  rejected: { label: 'Rejected', color: 'text-red-700', bg: 'bg-red-100' },
+  PENDING: { label: 'Pending', color: 'text-yellow-700', bg: 'bg-yellow-100' },
+  UNDER_REVIEW: { label: 'Reviewing', color: 'text-orange-700', bg: 'bg-orange-100' },
+  APPROVED: { label: 'Approved', color: 'text-blue-700', bg: 'bg-blue-100' },
+  PARTIALLY_APPROVED: { label: 'Partial', color: 'text-blue-600', bg: 'bg-blue-50' },
+  DISPATCHED: { label: 'Dispatched', color: 'text-purple-700', bg: 'bg-purple-100' },
+  DELIVERED: { label: 'Fulfilled', color: 'text-green-700', bg: 'bg-green-100' },
+  FULFILLED: { label: 'Fulfilled', color: 'text-green-700', bg: 'bg-green-100' },
+  REJECTED: { label: 'Rejected', color: 'text-red-700', bg: 'bg-red-100' },
+  CANCELLED: { label: 'Cancelled', color: 'text-gray-700', bg: 'bg-gray-100' },
 };
 
 export default function CentralRequestsPage() {
   const { user } = useAuth();
   const [requests, setRequests] = useState<StockRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<string>('pending');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const fetchRequests = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = statusFilter === 'pending' ? await storeAPI.getPendingRequests() : await storeAPI.getBranchRequests();
+      const response = await storeAPI.getBranchRequests();
       if (response.success) {
-        const data = response.data || [];
-        setRequests(statusFilter === 'all' ? data : data.filter((r: StockRequest) => r.status === statusFilter));
+        const data = (response.data || []).map((r: any) => ({
+          ...r,
+          status: r.status.toUpperCase()
+        }));
+        setRequests(data);
       }
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, [statusFilter]);
+  }, []);
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
@@ -50,7 +58,17 @@ export default function CentralRequestsPage() {
     } catch (error: any) { toast.error(error.message || 'Failed'); }
   };
 
-  const stats = { pending: requests.filter(r => r.status === 'pending').length, approved: requests.filter(r => r.status === 'approved').length };
+  const stats = {
+    pending: requests.filter(r => r.status === 'PENDING' || r.status === 'UNDER_REVIEW').length,
+    approved: requests.filter(r => r.status === 'APPROVED' || r.status === 'PARTIALLY_APPROVED' || r.status === 'DISPATCHED').length
+  };
+
+  const filteredRequests = requests.filter((request: StockRequest) => {
+    if (statusFilter === 'all') return true;
+    if (statusFilter === 'PENDING') return request.status === 'PENDING' || request.status === 'UNDER_REVIEW';
+    if (statusFilter === 'APPROVED') return request.status === 'APPROVED' || request.status === 'PARTIALLY_APPROVED' || request.status === 'DISPATCHED';
+    return request.status === statusFilter;
+  });
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
@@ -67,21 +85,21 @@ export default function CentralRequestsPage() {
           </div>
 
           <div className="flex gap-2">
-            {['pending', 'approved', 'fulfilled', 'rejected'].map((status) => (
+            {['all', 'PENDING', 'APPROVED', 'DISPATCHED', 'DELIVERED', 'REJECTED'].map((status) => (
               <IOSButton key={status} variant={statusFilter === status ? 'primary' : 'secondary'} size="sm" onClick={() => setStatusFilter(status)}>
-                {statusConfig[status]?.label || status}
+                {status === 'all' ? 'All' : statusConfig[status]?.label || status}
               </IOSButton>
             ))}
           </div>
 
           {isLoading ? (
             <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
-          ) : requests.length === 0 ? (
+          ) : filteredRequests.length === 0 ? (
             <IOSCard className="p-12 text-center"><ClipboardList className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No requests</p></IOSCard>
           ) : (
             <div className="space-y-3">
-              {requests.map((request) => {
-                const status = statusConfig[request.status] || statusConfig.pending;
+              {filteredRequests.map((request: StockRequest) => {
+                const status = statusConfig[request.status] || statusConfig.PENDING;
                 return (
                   <IOSCard key={request.id} className="p-4">
                     <div className="flex items-center justify-between">
@@ -96,7 +114,7 @@ export default function CentralRequestsPage() {
                       <div className="flex items-center gap-3">
                         {request.priority === 'urgent' && <IOSBadge variant="light" color="danger">Urgent</IOSBadge>}
                         <IOSBadge className={`${status.bg} ${status.color}`}>{status.label}</IOSBadge>
-                        {request.status === 'pending' && (
+                        {request.status === 'PENDING' && (
                           <div className="flex gap-2">
                             <IOSButton size="sm" onClick={() => handleReview(request.id, 'APPROVE')}><Check className="h-4 w-4" /></IOSButton>
                             <IOSButton size="sm" variant="destructive" onClick={() => handleReview(request.id, 'REJECT')}><X className="h-4 w-4" /></IOSButton>

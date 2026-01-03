@@ -96,18 +96,28 @@ class PaystackService {
     email: string,
     amount: number,
     reference?: string,
-    metadata?: any
+    metadata?: any,
+    callbackUrl?: string
   ): Promise<PaystackInitializeResponse> {
     try {
+      const payload: any = {
+        email,
+        amount: amount * 100, // Convert to kobo
+        reference: reference || this.generateReference(),
+        metadata,
+        currency: 'KES'
+      };
+
+      // Add callback URL if provided
+      if (callbackUrl) {
+        payload.callback_url = callbackUrl;
+      } else if (process.env.PAYSTACK_CALLBACK_URL) {
+        payload.callback_url = process.env.PAYSTACK_CALLBACK_URL;
+      }
+
       const response = await axios.post<PaystackInitializeResponse>(
         `${this.baseURL}/transaction/initialize`,
-        {
-          email,
-          amount: amount * 100, // Convert to kobo
-          reference: reference || this.generateReference(),
-          metadata,
-          currency: 'KES'
-        },
+        payload,
         {
           headers: {
             Authorization: `Bearer ${this.apiKey}`,

@@ -73,8 +73,8 @@ export default function CentralInventoryPage() {
           <IOSCard className="p-4">
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input placeholder="Search items..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
+                <Input placeholder="Search items..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
               </div>
               <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="px-3 py-2 border rounded-ios-lg">
                 <option value="all">All Categories</option>
@@ -109,7 +109,7 @@ export default function CentralInventoryPage() {
                         <td className="p-3 text-gray-500">{item.category}</td>
                         <td className="p-3 text-center font-bold">{item.quantity} {item.unit}</td>
                         <td className="p-3 text-center text-gray-500">{item.min_quantity}</td>
-                        <td className="p-3 text-center"><IOSBadge variant={isLow ? 'warning' : 'success'}>{isLow ? 'Low' : 'OK'}</IOSBadge></td>
+                        <td className="p-3 text-center"><IOSBadge color={isLow ? 'warning' : 'success'}>{isLow ? 'Low' : 'OK'}</IOSBadge></td>
                         <td className="p-3 text-right">KES {formatNumber(item.unit_price || 0)}</td>
                       </tr>
                     );

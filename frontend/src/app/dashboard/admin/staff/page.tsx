@@ -216,7 +216,7 @@ export default function AdminStaffPage() {
           <IOSCard className="p-4">
             <div className="grid md:grid-cols-3 gap-4">
               <div className="md:col-span-2 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                 <Input 
                   placeholder="Search staff by name or email..." 
                   value={searchQuery} 
@@ -224,7 +224,7 @@ export default function AdminStaffPage() {
                     setSearchQuery(e.target.value);
                     setCurrentPage(1); // Reset to first page on search
                   }} 
-                  className="pl-10" 
+                  className="pl-9" 
                 />
               </div>
               <div>

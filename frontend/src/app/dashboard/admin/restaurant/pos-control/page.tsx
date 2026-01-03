@@ -65,7 +65,7 @@ export default function AdminPOSControlPage() {
                         <p className="text-sm text-gray-500">{terminal.location}</p>
                       </div>
                     </div>
-                    <IOSBadge variant={terminal.status === 'online' ? 'success' : 'error'}>{terminal.status}</IOSBadge>
+                    <IOSBadge color={terminal.status === 'online' ? 'success' : 'danger'}>{terminal.status}</IOSBadge>
                   </div>
                   {terminal.last_activity && <p className="text-xs text-gray-400">Last activity: {new Date(terminal.last_activity).toLocaleString()}</p>}
                   <div className="flex gap-2 mt-4">

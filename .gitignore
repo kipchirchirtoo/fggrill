@@ -39,3 +39,19 @@ next-env.d.ts
 .vscode/
 *.swp
 *.swo
+
+# Python
+python-services/venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Reports and temporary files
+*.pdf
+*.xlsx
+*.sql
+test_aggregation.ts
+test_verification.ts
+backend/test_aggregation.ts
+backend/test_verification.ts

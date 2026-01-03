@@ -16,9 +16,10 @@ import barStockRequestsRoutes from './bar-stock-requests.routes';
 import restaurantRoutes from './restaurant.routes';
 import restaurantReservationRoutes from './restaurant.reservation.routes';
 import restaurantTableRoutes from './restaurant.table.routes';
-import staffRoutes from './staff.routes';
-import payrollRoutes from './payroll.routes';
+import emailRoutes from './email.routes';
 import paymentRoutes from './payment.routes';
+import barcodeRoutes from './barcode.routes';
+import { sendBookingEmail, sendAllConfirmedBookingEmails, testEmailService } from '../controllers/email-booking.controller';
 import notificationRoutes from './notification.routes';
 import folioRoutes from './folio.routes';
 import guestRoutes from './guest.routes';
@@ -39,6 +40,13 @@ import pricingRoutes from './pricing.routes';
 import documentRoutes from './document.routes';
 import communicationRoutes from './communication.routes';
 import channelManagerRoutes from './channelManager.routes';
+import employeePortalRoutes from './employee-portal.routes';
+import guestPortalRoutes from './guest-portal.routes';
+import staffRoutes from './staff.routes';
+import storekeepingEnhancedRoutes from './storekeeping';
+import cashierRoutes from './cashier.routes';
+
+console.log('Index routes: importing staffRoutes', staffRoutes);
 
 const router = express.Router();
 
@@ -53,6 +61,7 @@ router.get('/health', (req, res) => {
 });
 
 // API routes
+router.use('/staff', staffRoutes);
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/bookings', bookingRoutes);
@@ -74,8 +83,6 @@ router.use('/bar/stock-requests', barStockRequestsRoutes);
 router.use('/restaurant', restaurantRoutes);
 router.use('/restaurant/reservations', restaurantReservationRoutes);
 router.use('/restaurant/tables', restaurantTableRoutes);
-router.use('/staff', staffRoutes);
-router.use('/payroll', payrollRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/folios', folioRoutes);
@@ -93,5 +100,17 @@ router.use('/facilities', facilitiesRoutes);
 router.use('/admin', adminRoutes);
 router.use('/communications', communicationRoutes);
 router.use('/channel-manager', channelManagerRoutes);
+router.use('/employee-portal', employeePortalRoutes);
+router.use('/guest-portal', guestPortalRoutes);
+// router.use('/staff', staffRoutes); // Removed duplicate
+router.use('/email', emailRoutes);
+router.use('/barcode', barcodeRoutes);
+router.use('/storekeeping', storekeepingEnhancedRoutes);
+router.use('/cashier', cashierRoutes);
+
+// Email booking endpoints (public - no auth required)
+router.post('/email/send-booking/:bookingId', sendBookingEmail);
+router.post('/email/send-all-bookings', sendAllConfirmedBookingEmails);
+router.get('/email/test-connection', testEmailService);
 
 export default router;

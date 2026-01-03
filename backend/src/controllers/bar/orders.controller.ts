@@ -14,7 +14,11 @@ export const getOrders = async (req: Request, res: Response, next: NextFunction)
       `)
       .order('created_at', { ascending: false });
 
-    if (branch_id) query = query.eq('branch_id', branch_id);
+    if (req.user?.branch_id) {
+      query = query.eq('branch_id', req.user.branch_id);
+    } else if (branch_id) {
+      query = query.eq('branch_id', branch_id);
+    }
     if (status) query = query.eq('status', status);
     if (date) {
       // Simple date filtering
@@ -53,10 +57,16 @@ export const getOrder = async (req: Request, res: Response, next: NextFunction):
 
 export const createOrder = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { 
-      branch_id, items, order_type, seat_number, 
-      room_number, guest_name, payment_method 
+    const {
+      items, order_type, seat_number,
+      room_number, guest_name, payment_method, status
     } = req.body;
+
+    const branchId = req.user?.branch_id || req.body.branch_id;
+
+    if (!branchId) {
+      throw new Error('Branch ID is required');
+    }
 
     // 1. Calculate totals
     let subtotal = 0;
@@ -77,9 +87,9 @@ export const createOrder = async (req: Request, res: Response, next: NextFunctio
     const { data: order, error: orderError } = await supabase
       .from('bar_orders')
       .insert([{
-        branch_id,
+        branch_id: branchId,
         order_type: order_type || 'bar',
-        status: 'pending',
+        status: status || 'pending',
         seat_number,
         room_number,
         guest_name,
@@ -147,7 +157,7 @@ export const updateOrderStatus = async (req: Request, res: Response, next: NextF
       .select('status, branch_id')
       .eq('id', id)
       .single();
-    
+
     if (!currentOrder) throw new Error('Order not found');
 
     const { data, error } = await supabase
@@ -175,14 +185,14 @@ export const updateOrderStatus = async (req: Request, res: Response, next: NextF
             // Using a raw SQL query via RPC would be better for atomicity, 
             // but here we'll fetch-update for simplicity of implementation 
             // or create a specific RPC later.
-            
+
             // Basic decrement:
-            await supabase.rpc('decrement_bar_stock', { 
-              p_drink_id: item.drink_id, 
-              p_branch_id: currentOrder.branch_id, 
-              p_quantity: item.quantity 
+            await supabase.rpc('decrement_bar_stock', {
+              p_drink_id: item.drink_id,
+              p_branch_id: currentOrder.branch_id,
+              p_quantity: item.quantity
             });
-            
+
             // Fallback if RPC doesn't exist (I haven't created it yet):
             // Implementation note: I should create this RPC.
           }

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
-import { SearchModal } from '@/components/modals/SearchModal';
 import { NotificationModal } from '@/components/modals/NotificationModal';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,42 +9,12 @@ import { useRouter, usePathname } from 'next/navigation';
 import { notificationsAPI } from '@/lib/api';
 import { ConsolidatedNav } from '@/components/layout/consolidated-nav';
 import {
-  Hotel,
-  LayoutDashboard,
-  Calendar,
-  Users,
-  Bed,
-  UtensilsCrossed,
-  DollarSign,
-  BarChart3,
-  Settings,
   Bell,
   LogOut,
   Menu,
   X,
   ChevronDown,
-  ChevronRight,
-  User,
-  Home,
-  Package,
-  ClipboardList,
-  ClipboardCheck,
-  Wrench,
-  Search,
-  Moon,
-  Sun,
-  Warehouse,
-  ArrowRightLeft,
-  Truck,
-  Car,
-  Building2,
-  FileText,
-  ShoppingCart,
-  Send,
-  Clock,
-  CheckCircle,
-  ChefHat,
-  AlertTriangle
+  User
 } from 'lucide-react';
 
 interface DashboardLayoutProps {
@@ -60,8 +29,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   // Dark mode removed - light theme only
-  const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const [notificationModalOpen, setNotificationModalOpen] = useState(false);
+    const [notificationModalOpen, setNotificationModalOpen] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['Storekeeping']);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -121,68 +89,65 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   // Use ConsolidatedNav for navigation
 
   return (
-    <div className="min-h-screen">
-      <div className="flex h-screen bg-[#F2F2F7]">
+    <div className="min-h-screen bg-[#FAFAF8]">
+      <div className="flex h-screen">
         {/* Sidebar - Desktop */}
         <AnimatePresence>
           {sidebarOpen && (
             <motion.aside
-              initial={{ x: -280 }}
+              initial={{ x: -260 }}
               animate={{ x: 0 }}
-              exit={{ x: -280 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              exit={{ x: -260 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 35 }}
               className="hidden lg:flex lg:flex-shrink-0"
             >
-              <div className="flex w-64 flex-col">
-                <div className="flex min-h-0 flex-1 flex-col bg-white border-r border-[rgba(60,60,67,0.12)]">
-                  <div className="flex flex-1 flex-col overflow-y-auto pt-5 pb-4">
+              <div className="flex w-[260px] flex-col">
+                <div className="flex min-h-0 flex-1 flex-col bg-white border-r border-stone-200/60">
+                  <div className="flex flex-1 flex-col overflow-y-auto scrollbar-thin">
                     {/* Logo */}
-                    <div className="flex items-center flex-shrink-0 px-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-xl bg-[#3C3C43] flex items-center justify-center overflow-hidden">
-                          <Image
-                            src="/fglogo.png"
-                            alt="Famous Gate"
-                            width={32}
-                            height={32}
-                            className="object-cover scale-150"
-                            style={{ objectPosition: 'center 30%', width: 'auto', height: 'auto' }}
-                          />
-                        </div>
-                        <div>
-                          <h1 className="text-base font-bold text-[#000000]">Famous Gate</h1>
-                          <p className="text-xs text-[#8E8E93]">Management</p>
-                        </div>
+                    <div className="flex items-center gap-3 px-5 py-5 border-b border-stone-100">
+                      <div className="w-9 h-9 rounded-lg bg-stone-900 flex items-center justify-center overflow-hidden">
+                        <Image
+                          src="/fglogo.png"
+                          alt="Famous Gate"
+                          width={28}
+                          height={28}
+                          className="object-cover scale-150"
+                          style={{ objectPosition: 'center 30%', width: 'auto', height: 'auto' }}
+                        />
+                      </div>
+                      <div>
+                        <h1 className="text-[15px] font-semibold text-stone-900">Famous Gate</h1>
+                        <p className="text-[11px] text-stone-500">Management System</p>
                       </div>
                     </div>
 
                     {/* Navigation */}
-                    <nav className="mt-8 flex-1 space-y-1 px-2 overflow-y-auto">
+                    <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
                       <ConsolidatedNav />
                     </nav>
                   </div>
 
                   {/* User section */}
-                  <div className="flex flex-shrink-0 border-t border-[rgba(60,60,67,0.12)] p-4">
-                    <div className="flex items-center w-full">
-                      <div className="flex-shrink-0">
-                        <div className="h-10 w-10 rounded-full bg-[#F2F2F7] flex items-center justify-center">
-                          <User className="h-6 w-6 text-[#3C3C43]" />
-                        </div>
+                  <div className="flex-shrink-0 border-t border-stone-100 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center">
+                        <User className="h-4 w-4 text-stone-600" />
                       </div>
-                      <div className="ml-3 flex-1">
-                        <p className="text-sm font-medium text-[#000000]">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-medium text-stone-900 truncate">
                           {user?.firstName} {user?.lastName}
                         </p>
-                        <p className="text-xs text-[#8E8E93]">
-                          {user?.role.replace('_', ' ')}
+                        <p className="text-[11px] text-stone-500 truncate">
+                          {user?.role.replace(/_/g, ' ')}
                         </p>
                       </div>
                       <button
                         onClick={logout}
-                        className="ml-auto text-[#8E8E93] hover:text-[#3C3C43]"
+                        className="p-1.5 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors"
+                        title="Sign out"
                       >
-                        <LogOut className="h-5 w-5" />
+                        <LogOut className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -198,22 +163,22 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <>
               <motion.div
                 initial={{ opacity: 0 }}
-                animate={{ opacity: 0.5 }}
+                animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-40 bg-black lg:hidden"
+                className="fixed inset-0 z-40 bg-stone-900/20 backdrop-blur-sm lg:hidden"
                 onClick={() => setMobileMenuOpen(false)}
               />
               <motion.aside
                 initial={{ x: -280 }}
                 animate={{ x: 0 }}
                 exit={{ x: -280 }}
-                className="fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-white border-r border-[rgba(60,60,67,0.12)] lg:hidden"
+                transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+                className="fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col bg-white shadow-soft-lg lg:hidden"
               >
-                {/* Mobile menu content - same as desktop */}
                 <div className="flex min-h-0 flex-1 flex-col">
-                  <div className="flex items-center justify-between p-4 border-b border-[rgba(60,60,67,0.12)]">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 rounded-ios-lg bg-[#3C3C43] flex items-center justify-center overflow-hidden">
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-stone-900 flex items-center justify-center overflow-hidden">
                         <Image
                           src="/fglogo.png"
                           alt="Famous Gate"
@@ -223,17 +188,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                           style={{ objectPosition: 'center 30%', width: 'auto', height: 'auto' }}
                         />
                       </div>
-                      <h1 className="text-base font-bold text-[#000000]">Famous Gate</h1>
+                      <span className="text-[15px] font-semibold text-stone-900">Famous Gate</span>
                     </div>
                     <button
                       onClick={() => setMobileMenuOpen(false)}
-                      className="text-[#3C3C43]"
+                      className="p-1.5 rounded-md text-stone-500 hover:bg-stone-100"
                     >
-                      <X className="h-6 w-6" />
+                      <X className="h-5 w-5" />
                     </button>
                   </div>
 
-                  <nav className="mt-5 flex-1 space-y-1 px-2 overflow-y-auto">
+                  <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto scrollbar-thin">
                     <ConsolidatedNav />
                   </nav>
                 </div>
@@ -245,46 +210,33 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* Main content */}
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Top bar */}
-          <header className="bg-white border-b border-[rgba(60,60,67,0.12)]">
-            <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
-              <div className="flex items-center">
+          <header className="bg-white border-b border-stone-200/60">
+            <div className="flex h-14 items-center justify-between px-4 lg:px-6">
+              <div className="flex items-center gap-3">
                 <button
                   onClick={() => setSidebarOpen(!sidebarOpen)}
-                  className="hidden lg:block text-[#3C3C43] hover:text-[#000000]"
+                  className="hidden lg:flex p-2 rounded-lg text-stone-500 hover:text-stone-700 hover:bg-stone-100 transition-colors"
                 >
-                  <Menu className="h-6 w-6" />
+                  <Menu className="h-5 w-5" />
                 </button>
                 <button
                   onClick={() => setMobileMenuOpen(true)}
-                  className="lg:hidden text-[#3C3C43] hover:text-[#000000]"
+                  className="lg:hidden p-2 rounded-lg text-stone-500 hover:text-stone-700 hover:bg-stone-100"
                 >
-                  <Menu className="h-6 w-6" />
+                  <Menu className="h-5 w-5" />
                 </button>
-
-                {/* Search */}
-                <div className="ml-4 flex-1 max-w-md">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-[#8E8E93]" />
-                    <button
-                      onClick={() => setSearchModalOpen(true)}
-                      className="w-full pl-10 pr-4 py-2 bg-[#F2F2F7] border border-[rgba(60,60,67,0.12)] rounded-xl text-left text-[#8E8E93] hover:bg-white"
-                    >
-                      Search...
-                    </button>
-                  </div>
-                </div>
               </div>
 
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center gap-2">
                 {/* Notifications */}
                 <button
                   onClick={() => setNotificationModalOpen(true)}
-                  className="relative text-[#3C3C43] hover:text-[#000000]"
+                  className="relative p-2 rounded-lg text-stone-500 hover:text-stone-700 hover:bg-stone-100 transition-colors"
                 >
-                  <Bell className="h-6 w-6" />
+                  <Bell className="h-5 w-5" />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 h-5 w-5 bg-[#3C3C43] text-white text-xs rounded-full flex items-center justify-center font-semibold font-sf-pro-display">
-                      {unreadCount > 9 ? '9+' : unreadCount}
+                    <span className="absolute top-1 right-1 h-4 w-4 bg-amber-500 text-white text-[10px] font-semibold rounded-full flex items-center justify-center">
+                      {unreadCount > 9 ? '9' : unreadCount}
                     </span>
                   )}
                 </button>
@@ -293,41 +245,47 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 <div className="relative">
                   <button
                     onClick={() => setUserMenuOpen(!userMenuOpen)}
-                    className="flex items-center space-x-2 text-[#3C3C43] hover:text-[#000000]"
+                    className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-stone-100 transition-colors"
                   >
-                    <div className="h-8 w-8 rounded-full bg-[#F2F2F7] flex items-center justify-center">
-                      <User className="h-5 w-5 text-[#3C3C43]" />
+                    <div className="h-7 w-7 rounded-full bg-stone-100 flex items-center justify-center">
+                      <User className="h-4 w-4 text-stone-600" />
                     </div>
-                    <ChevronDown className="h-4 w-4" />
+                    <ChevronDown className="h-3.5 w-3.5 text-stone-400" />
                   </button>
 
                   <AnimatePresence>
                     {userMenuOpen && (
                       <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        className="absolute right-0 mt-2 w-48 bg-white rounded-xl border border-[rgba(60,60,67,0.12)] shadow-lg py-1 z-50"
+                        initial={{ opacity: 0, y: -4, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -4, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 mt-2 w-52 bg-white rounded-lg border border-stone-200 shadow-soft-md py-1.5 z-50"
                       >
+                        <div className="px-3 py-2 border-b border-stone-100">
+                          <p className="text-[13px] font-medium text-stone-900">{user?.firstName} {user?.lastName}</p>
+                          <p className="text-[11px] text-stone-500">{user?.email}</p>
+                        </div>
                         <a
                           href="/dashboard/profile"
-                          className="block px-4 py-2 text-sm text-[#000000] hover:bg-[#F2F2F7]"
+                          className="block px-3 py-2 text-[13px] text-stone-700 hover:bg-stone-50"
                         >
                           Profile
                         </a>
                         <a
                           href="/dashboard/settings"
-                          className="block px-4 py-2 text-sm text-[#000000] hover:bg-[#F2F2F7]"
+                          className="block px-3 py-2 text-[13px] text-stone-700 hover:bg-stone-50"
                         >
                           Settings
                         </a>
-                        <hr className="my-1 border-[rgba(60,60,67,0.12)]" />
-                        <button
-                          onClick={logout}
-                          className="block w-full text-left px-4 py-2 text-sm text-[#FF3B30] hover:bg-[#F2F2F7]"
-                        >
-                          Sign out
-                        </button>
+                        <div className="border-t border-stone-100 mt-1.5 pt-1.5">
+                          <button
+                            onClick={logout}
+                            className="block w-full text-left px-3 py-2 text-[13px] text-red-600 hover:bg-red-50"
+                          >
+                            Sign out
+                          </button>
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -337,8 +295,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </header>
 
           {/* Main content area */}
-          <main className="flex-1 overflow-y-auto bg-[#F2F2F7]">
-            <div className="p-6">
+          <main className="flex-1 overflow-y-auto bg-[#FAFAF8] scrollbar-thin">
+            <div className="p-5 lg:p-6">
               {children}
             </div>
           </main>
@@ -346,10 +304,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       </div>
 
       {/* Modals */}
-      <SearchModal
-        isOpen={searchModalOpen}
-        onClose={() => setSearchModalOpen(false)}
-      />
       <NotificationModal
         isOpen={notificationModalOpen}
         onClose={handleNotificationModalClose}

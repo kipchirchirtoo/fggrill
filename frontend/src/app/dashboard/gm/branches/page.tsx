@@ -69,7 +69,7 @@ export default function GMBranchesPage() {
                     </div>
                     <div className="flex gap-2">
                       {branch.is_central && <IOSBadge variant="light" color="info">Central</IOSBadge>}
-                      <IOSBadge variant={branch.status === 'active' ? 'success' : 'neutral'}>{branch.status}</IOSBadge>
+                      <IOSBadge color={branch.status === 'active' ? 'success' : 'secondary'}>{branch.status}</IOSBadge>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3 mb-4">

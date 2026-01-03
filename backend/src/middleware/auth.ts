@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/database';
 import { User, UserRole } from '../models/User';
 import { logger } from '../utils/logger';
+import jwt from 'jsonwebtoken';
 
 // Re-export UserRole for convenience
 export { UserRole };
@@ -15,7 +16,7 @@ declare global {
   }
 }
 
-// Protect routes
+// Protect routes - Production-ready authentication
 export const protect = async (
   req: Request,
   res: Response,
@@ -32,70 +33,92 @@ export const protect = async (
       token = req.headers.authorization.split(' ')[1];
     }
 
-    const isDev = process.env.NODE_ENV !== 'production';
-
-    // In development, if there is no token at all, attach a dev super_admin user
-    if (!token && isDev) {
-      logger.warn('No auth token provided – using development super_admin user');
-      req.user = { id: 'dev-user', role: UserRole.SUPER_ADMIN, branch_id: 1, branchId: 1 };
-      next();
-      return;
-    }
-
-    // In non-development environments, token is mandatory
+    // Token is mandatory - no dev fallbacks
     if (!token) {
       res.status(401).json({
         success: false,
-        message: 'Not authorized to access this route'
+        message: 'Not authorized - no token provided'
       });
       return;
     }
 
     try {
-      // Verify token with Supabase
+      // First try to verify as our custom JWT token
+      const jwtSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'fallback-secret-key';
+      
+      try {
+        const decoded = jwt.verify(token, jwtSecret) as any;
+        
+        if (decoded && decoded.sub) {
+          // Valid JWT - get user from database
+          const { data: user, error: userError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', decoded.sub)
+            .single();
+
+          if (user && !userError) {
+            req.user = {
+              id: user.id,
+              email: user.email,
+              role: user.role,
+              branch_id: user.branch_id,
+              branchId: user.branch_id,
+              first_name: user.first_name,
+              last_name: user.last_name,
+              is_central: !user.branch_id
+            };
+            next();
+            return;
+          }
+        }
+      } catch (jwtError) {
+        // JWT verification failed, try Supabase auth
+      }
+
+      // Try Supabase auth as fallback
       const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser(token);
 
       if (authError || !supabaseUser) {
-        // In development, fall back to dev user on Supabase auth failure
-        if (isDev) {
-          logger.warn('Supabase auth failed in development, falling back to dev super_admin user', authError);
-          req.user = { id: 'dev-user', role: UserRole.SUPER_ADMIN, branch_id: 1, branchId: 1 };
-          next();
-          return;
-        }
-
         res.status(401).json({
           success: false,
-          message: 'Not authorized to access this route'
+          message: 'Invalid or expired token'
         });
         return;
       }
 
       // Get user from database
-      const user = await User.findById(supabaseUser.id);
-      if (!user) {
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', supabaseUser.id)
+        .single();
+
+      if (!user || userError) {
         res.status(401).json({
           success: false,
-          message: 'Not authorized to access this route'
+          message: 'User not found'
         });
         return;
       }
 
       // Add user to request object
-      req.user = user;
+      req.user = {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        branch_id: user.branch_id,
+        branchId: user.branch_id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        is_central: !user.branch_id
+      };
       next();
     } catch (error) {
-      // If Supabase is unreachable in development, fall back to dev user
-      if (isDev) {
-        logger.warn('Supabase auth threw an error in development, falling back to dev super_admin user', error);
-        req.user = { id: 'dev-user', role: UserRole.SUPER_ADMIN, branch_id: 1, branchId: 1 };
-        next();
-        return;
-      }
-
+      logger.error('Auth middleware error:', error);
       res.status(401).json({
         success: false,
-        message: 'Not authorized to access this route'
+        message: 'Authentication failed'
       });
       return;
     }

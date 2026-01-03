@@ -6,6 +6,7 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { financeAPI } from '@/lib/api';
 import { Scale, RefreshCw, ArrowDownRight, ArrowUpRight, AlertCircle } from 'lucide-react';
+import { BranchSelector } from '@/components/finance/BranchSelector';
 
 interface ArApItem { id: string; type: 'receivable' | 'payable'; entity_name: string; amount: number; due_date: string; status: 'current' | 'overdue' | 'paid'; days_overdue?: number; }
 interface Branch { id: number; name: string; }
@@ -15,30 +16,32 @@ export default function ArApPage() {
   const [items, setItems] = useState<ArApItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'receivable' | 'payable'>('all');
-  const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
 
-  const fetchBranches = useCallback(async () => {
-    try {
-      const response = await financeAPI.getBranches();
-      if (response.success && Array.isArray(response.data)) setBranches(response.data);
-    } catch (error) { console.error('Error:', error); }
-  }, []);
+
+  const [agingReport, setAgingReport] = useState<any>(null);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await financeAPI.getArAp();
-      if (response.success && Array.isArray(response.data)) {
-        setItems(response.data);
+      const [itemsRes, agingRes] = await Promise.all([
+        financeAPI.getArAp({ branch_id: selectedBranch || undefined }),
+        financeAPI.getAgingReport('receivable')
+      ]);
+
+      if (itemsRes.success && Array.isArray(itemsRes.data)) {
+        setItems(itemsRes.data);
       } else {
         setItems([]);
       }
+
+      if (agingRes.success) {
+        setAgingReport(agingRes.data);
+      }
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, []);
+  }, [selectedBranch]);
 
-  useEffect(() => { fetchBranches(); }, [fetchBranches]);
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const itemsArray = Array.isArray(items) ? items : [];
@@ -60,14 +63,10 @@ export default function ArApPage() {
               <p className="text-sm text-gray-500 mt-1">Outstanding balances and aging</p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <select
-                value={selectedBranch || ''}
-                onChange={(e) => setSelectedBranch(e.target.value ? Number(e.target.value) : null)}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"
-              >
-                <option value="">All Branches</option>
-                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
+              <BranchSelector
+                selectedBranch={selectedBranch}
+                onBranchChange={setSelectedBranch}
+              />
               {(['all', 'receivable', 'payable'] as const).map((f) => (
                 <button key={f} onClick={() => setFilter(f)} className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${filter === f ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
                   {f === 'all' ? 'All' : f === 'receivable' ? 'Receivable' : 'Payable'}
@@ -79,34 +78,67 @@ export default function ArApPage() {
             </div>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-white border border-gray-200 rounded-lg p-5">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-gray-100 rounded-lg"><ArrowDownRight className="h-5 w-5 text-gray-600" /></div>
-                <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Receivable</p>
-                  <p className="text-xl font-semibold text-gray-900">KES {stats.receivable.toLocaleString()}</p>
+          {/* Stats & Aging */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 grid grid-cols-3 gap-4">
+              <div className="bg-white border border-gray-200 rounded-lg p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-gray-100 rounded-lg"><ArrowDownRight className="h-5 w-5 text-gray-600" /></div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Receivable</p>
+                    <p className="text-xl font-semibold text-gray-900">KES {stats.receivable.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-lg p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-gray-100 rounded-lg"><ArrowUpRight className="h-5 w-5 text-gray-600" /></div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Payable</p>
+                    <p className="text-xl font-semibold text-gray-900">KES {stats.payable.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-lg p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-gray-100 rounded-lg"><AlertCircle className="h-5 w-5 text-gray-600" /></div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Overdue</p>
+                    <p className="text-xl font-semibold text-gray-900">{stats.overdue} items</p>
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* Aging Report Summary */}
             <div className="bg-white border border-gray-200 rounded-lg p-5">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-gray-100 rounded-lg"><ArrowUpRight className="h-5 w-5 text-gray-600" /></div>
-                <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Payable</p>
-                  <p className="text-xl font-semibold text-gray-900">KES {stats.payable.toLocaleString()}</p>
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">Receivables Aging</h3>
+              {agingReport && agingReport.buckets ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">Current</span>
+                    <span className="font-medium text-gray-900">KES {agingReport.buckets.current?.toLocaleString() || 0}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">1-30 Days</span>
+                    <span className="font-medium text-gray-900">KES {agingReport.buckets['1-30']?.toLocaleString() || 0}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">31-60 Days</span>
+                    <span className="font-medium text-gray-900">KES {agingReport.buckets['31-60']?.toLocaleString() || 0}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">61-90 Days</span>
+                    <span className="font-medium text-gray-900">KES {agingReport.buckets['61-90']?.toLocaleString() || 0}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">90+ Days</span>
+                    <span className="font-medium text-red-600">KES {agingReport.buckets['90+']?.toLocaleString() || 0}</span>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-5">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-gray-100 rounded-lg"><AlertCircle className="h-5 w-5 text-gray-600" /></div>
-                <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Overdue</p>
-                  <p className="text-xl font-semibold text-gray-900">{stats.overdue} items</p>
-                </div>
-              </div>
+              ) : (
+                <div className="flex items-center justify-center h-32 text-sm text-gray-500">No aging data</div>
+              )}
             </div>
           </div>
 

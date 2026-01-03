@@ -139,14 +139,14 @@ export default function HousekeepingRoomsPage() {
             </div>
             <div className="flex gap-2">
               <IOSButton 
-                variant={viewMode === 'grid' ? 'default' : 'outline'} 
+                variant={viewMode === 'grid' ? 'primary' : 'outline'} 
                 size="sm"
                 onClick={() => setViewMode('grid')}
               >
                 Grid
               </IOSButton>
               <IOSButton 
-                variant={viewMode === 'list' ? 'default' : 'outline'} 
+                variant={viewMode === 'list' ? 'primary' : 'outline'} 
                 size="sm"
                 onClick={() => setViewMode('list')}
               >
@@ -186,12 +186,12 @@ export default function HousekeepingRoomsPage() {
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                   <Input
                     placeholder="Search room number..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                    className="pl-9"
                   />
                 </div>
               </div>

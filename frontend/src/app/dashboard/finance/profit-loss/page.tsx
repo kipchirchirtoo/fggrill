@@ -6,6 +6,8 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { financeAPI } from '@/lib/api';
 import { BarChart3, RefreshCw, TrendingUp, TrendingDown, DollarSign, Download } from 'lucide-react';
+import { BranchSelector } from '@/components/finance/BranchSelector';
+import { DateRangeSelector, DateRangePreset } from '@/components/finance/DateRangeSelector';
 
 interface PLData { revenue: number; costOfGoods: number; grossProfit: number; operatingExpenses: number; operatingIncome: number; otherIncome: number; otherExpenses: number; netProfit: number; margin: number; }
 interface Branch { id: number; name: string; }
@@ -13,21 +15,20 @@ interface Branch { id: number; name: string; }
 export default function ProfitLossPage() {
   const [data, setData] = useState<PLData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [period, setPeriod] = useState<'month' | 'quarter' | 'year'>('month');
-  const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
+  const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [datePreset, setDatePreset] = useState<DateRangePreset>('month');
 
-  const fetchBranches = useCallback(async () => {
-    try {
-      const response = await financeAPI.getBranches();
-      if (response.success && Array.isArray(response.data)) setBranches(response.data);
-    } catch (error) { console.error('Error:', error); }
-  }, []);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await financeAPI.getProfitLoss({ branch_id: selectedBranch || undefined });
+      const response = await financeAPI.getProfitLoss({
+        branch_id: selectedBranch || undefined,
+        startDate,
+        endDate
+      });
       if (response.success && response.data) {
         setData({
           revenue: response.data.revenue || 0,
@@ -43,9 +44,8 @@ export default function ProfitLossPage() {
       }
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, [selectedBranch]);
+  }, [selectedBranch, startDate, endDate]);
 
-  useEffect(() => { fetchBranches(); }, [fetchBranches]);
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const LineItem = ({ label, amount, indent = false, bold = false }: { label: string; amount: number; indent?: boolean; bold?: boolean }) => (
@@ -67,20 +67,21 @@ export default function ProfitLossPage() {
               <h1 className="text-2xl font-semibold text-gray-900">Profit & Loss Statement</h1>
               <p className="text-sm text-gray-500 mt-1">Income statement overview</p>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <select
-                value={selectedBranch || ''}
-                onChange={(e) => setSelectedBranch(e.target.value ? Number(e.target.value) : null)}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"
-              >
-                <option value="">All Branches</option>
-                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-              {(['month', 'quarter', 'year'] as const).map((p) => (
-                <button key={p} onClick={() => setPeriod(p)} className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${period === p ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
-                  {p.charAt(0).toUpperCase() + p.slice(1)}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center gap-3">
+              <BranchSelector
+                selectedBranch={selectedBranch}
+                onBranchChange={setSelectedBranch}
+              />
+              <DateRangeSelector
+                startDate={startDate}
+                endDate={endDate}
+                onRangeChange={(start, end) => {
+                  setStartDate(start);
+                  setEndDate(end);
+                }}
+                preset={datePreset}
+                onPresetChange={setDatePreset}
+              />
               <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
                 <Download className="h-4 w-4" />
                 Export

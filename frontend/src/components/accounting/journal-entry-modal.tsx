@@ -21,12 +21,14 @@ interface JournalEntry {
   project_code?: string;
   branch_id?: number;
   attachments: string[];
+  status?: 'draft' | 'pending_review' | 'approved' | 'posted' | 'rejected';
+  created_by?: string;
 }
 
 interface JournalEntryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (entry: JournalEntry) => void;
+  onSave: (entry: JournalEntry) => void | Promise<void>;
   entry?: JournalEntry | null;
   branches?: Array<{ id: number; name: string }>;
 }

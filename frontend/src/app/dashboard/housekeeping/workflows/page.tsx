@@ -7,9 +7,9 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
-import { 
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { 
   Workflow, CheckCircle, Clock, ArrowRight, Settings, Plus,
   Bed, Sparkles, Eye, Wrench, ClipboardCheck
 } from 'lucide-react';
@@ -125,7 +125,7 @@ export default function HousekeepingWorkflowsPage() {
                     <h3 className="font-bold text-lg">{workflow.name}</h3>
                     <p className="text-sm text-gray-500">{workflow.description}</p>
                   </div>
-                  <IOSBadge variant={workflow.isActive ? 'success' : 'neutral'}>
+                  <IOSBadge color={workflow.isActive ? 'success' : 'secondary'}>
                     {workflow.isActive ? 'Active' : 'Inactive'}
                   </IOSBadge>
                 </div>

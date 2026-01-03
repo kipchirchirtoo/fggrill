@@ -6,6 +6,8 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { financeAPI } from '@/lib/api';
 import { FileText, RefreshCw, Plus, ChevronDown, ChevronUp } from 'lucide-react';
+import { BranchSelector } from '@/components/finance/BranchSelector';
+import { DateRangeSelector, DateRangePreset } from '@/components/finance/DateRangeSelector';
 
 interface JournalLine {
   account: string;
@@ -26,29 +28,30 @@ interface Branch { id: number; name: string; }
 export default function JournalEntriesPage() {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
+  const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [datePreset, setDatePreset] = useState<DateRangePreset>('month');
   const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const fetchBranches = useCallback(async () => {
-    try {
-      const response = await financeAPI.getBranches();
-      if (response.success && Array.isArray(response.data)) setBranches(response.data);
-    } catch (error) { console.error('Error:', error); }
-  }, []);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await financeAPI.getJournalEntries({ branch_id: selectedBranch || undefined, limit: 50 });
+      const response = await financeAPI.getJournalEntries({
+        branch_id: selectedBranch || undefined,
+        startDate,
+        endDate,
+        limit: 50
+      });
       if (response.success && Array.isArray(response.data)) setEntries(response.data);
       else if (Array.isArray(response)) setEntries(response);
+      else setEntries([]);
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, [selectedBranch]);
+  }, [selectedBranch, startDate, endDate]);
 
-  useEffect(() => { fetchBranches(); }, [fetchBranches]);
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const entriesArray = Array.isArray(entries) ? entries : [];
@@ -67,19 +70,25 @@ export default function JournalEntriesPage() {
               <h1 className="text-2xl font-semibold text-gray-900">Journal Entries</h1>
               <p className="text-sm text-gray-500 mt-1">Record and view financial transactions</p>
             </div>
-            <div className="flex items-center gap-3">
-              <select
-                value={selectedBranch || ''}
-                onChange={(e) => setSelectedBranch(e.target.value ? Number(e.target.value) : null)}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"
-              >
-                <option value="">All Branches</option>
-                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
+            <div className="flex items-center gap-3 flex-wrap">
+              <BranchSelector
+                selectedBranch={selectedBranch}
+                onBranchChange={setSelectedBranch}
+              />
+              <DateRangeSelector
+                startDate={startDate}
+                endDate={endDate}
+                onRangeChange={(start, end) => {
+                  setStartDate(start);
+                  setEndDate(end);
+                }}
+                preset={datePreset}
+                onPresetChange={setDatePreset}
+              />
               <button onClick={fetchData} disabled={isLoading} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               </button>
-              <button 
+              <button
                 onClick={() => setShowCreateModal(true)}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800"
               >
@@ -123,7 +132,7 @@ export default function JournalEntriesPage() {
                 const lines = Array.isArray(entry.lines) ? entry.lines : [];
                 const totalDebit = lines.reduce((sum, l) => sum + (l.debit || 0), 0);
                 const totalCredit = lines.reduce((sum, l) => sum + (l.credit || 0), 0);
-                
+
                 return (
                   <div key={entry.id}>
                     <button
@@ -147,7 +156,7 @@ export default function JournalEntriesPage() {
                         {isExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
                       </div>
                     </button>
-                    
+
                     {isExpanded && (
                       <div className="px-5 pb-4 bg-gray-50">
                         <table className="w-full text-sm">

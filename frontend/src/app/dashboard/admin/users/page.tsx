@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -23,8 +23,58 @@ interface UserData {
   role: string; 
   branch_id?: number;
   branch_name?: string; 
+  phone_number?: string;
   status: 'active' | 'inactive'; 
 }
+
+// Role display names mapping
+const ROLE_DISPLAY_NAMES: Record<string, string> = {
+  [UserRole.SUPER_ADMIN]: 'Super Admin',
+  [UserRole.GENERAL_MANAGER]: 'General Manager',
+  [UserRole.BRANCH_MANAGER]: 'Branch Manager',
+  [UserRole.CENTRAL_STOREKEEPER]: 'Central Storekeeper',
+  [UserRole.BRANCH_STOREKEEPER]: 'Branch Storekeeper',
+  [UserRole.HOUSEKEEPING]: 'Housekeeping',
+  [UserRole.HOUSEKEEPING_SUPERVISOR]: 'Housekeeping Supervisor',
+  [UserRole.MAINTENANCE]: 'Maintenance',
+  [UserRole.BRANCH_OPERATIONS_MANAGER]: 'Branch Operations Manager',
+  [UserRole.CENTRAL_OPERATIONS_MANAGER]: 'Central Operations Manager',
+  [UserRole.FACILITIES_MANAGER]: 'Facilities Manager',
+  [UserRole.RECEPTIONIST]: 'Receptionist',
+  [UserRole.RESTAURANT]: 'Restaurant',
+  [UserRole.POS_KITCHEN]: 'POS Kitchen',
+  [UserRole.BARTENDER]: 'Bartender',
+  [UserRole.ACCOUNTANT]: 'Accountant',
+  [UserRole.AUDITOR]: 'Auditor',
+  [UserRole.EMPLOYEE]: 'Employee',
+  [UserRole.GUEST]: 'Guest',
+};
+
+// Roles that require branch assignment
+const BRANCH_REQUIRED_ROLES = [
+  UserRole.BRANCH_MANAGER,
+  UserRole.BRANCH_STOREKEEPER,
+  UserRole.HOUSEKEEPING,
+  UserRole.HOUSEKEEPING_SUPERVISOR,
+  UserRole.MAINTENANCE,
+  UserRole.BRANCH_OPERATIONS_MANAGER,
+  UserRole.RECEPTIONIST,
+  UserRole.RESTAURANT,
+  UserRole.POS_KITCHEN,
+  UserRole.BARTENDER,
+  UserRole.EMPLOYEE,
+];
+
+// Roles that should NOT have branch assignment (central/global roles)
+const CENTRAL_ROLES = [
+  UserRole.SUPER_ADMIN,
+  UserRole.GENERAL_MANAGER,
+  UserRole.CENTRAL_STOREKEEPER,
+  UserRole.CENTRAL_OPERATIONS_MANAGER,
+  UserRole.FACILITIES_MANAGER,
+  UserRole.ACCOUNTANT,
+  UserRole.AUDITOR,
+];
 
 export default function AdminUsersPage() {
   const { user } = useAuth();
@@ -34,9 +84,27 @@ export default function AdminUsersPage() {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [roles, setRoles] = useState<{id: string, name: string}[]>([]);
-  const [branches, setBranches] = useState<{id: number, name: string, code: string}[]>([]);
-  const [formData, setFormData] = useState({ id: '', email: '', first_name: '', last_name: '', role: '', branch_id: '', password: '', status: 'active' });
+  const [branches, setBranches] = useState<{id: number, name: string, code: string, status?: string}[]>([]);
+  const [formData, setFormData] = useState({ id: '', email: '', first_name: '', last_name: '', role: '', branch_id: '', password: '', phone_number: '', status: 'active' });
+  
+  // Get all available roles from the UserRole enum
+  const availableRoles = useMemo(() => {
+    return Object.values(UserRole).map((role: string) => ({
+      id: role,
+      name: role,
+      displayName: ROLE_DISPLAY_NAMES[role] || role.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+    }));
+  }, []);
+  
+  // Check if selected role requires branch
+  const selectedRoleRequiresBranch = useMemo(() => {
+    return BRANCH_REQUIRED_ROLES.includes(formData.role as UserRole);
+  }, [formData.role]);
+  
+  // Check if selected role is a central role (should not have branch)
+  const selectedRoleIsCentral = useMemo(() => {
+    return CENTRAL_ROLES.includes(formData.role as UserRole);
+  }, [formData.role]);
   const [formErrors, setFormErrors] = useState<{[key: string]: string}>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -46,14 +114,12 @@ export default function AdminUsersPage() {
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [usersRes, rolesRes, branchesRes] = await Promise.all([
+      const [usersRes, branchesRes] = await Promise.all([
         userAPI.getUsers(),
-        systemAPI.getRoles(),
         systemAPI.getBranches(),
       ]);
-      if (usersRes.success) setUsers(usersRes.data || []);
-      if (rolesRes.success) setRoles(rolesRes.data || []);
-      if (branchesRes.success) setBranches(branchesRes.data || []);
+      if (usersRes.success) setUsers(Array.isArray(usersRes.data) ? usersRes.data : []);
+      if (branchesRes.success) setBranches(Array.isArray(branchesRes.data) ? branchesRes.data : []);
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
   }, []);
@@ -80,6 +146,16 @@ export default function AdminUsersPage() {
     if (!formData.first_name) errors.first_name = 'First name is required';
     if (!formData.role) errors.role = 'Role is required';
     
+    // Validate branch assignment for roles that require it
+    if (selectedRoleRequiresBranch && !formData.branch_id) {
+      errors.branch_id = `${ROLE_DISPLAY_NAMES[formData.role as UserRole] || 'This role'} requires a branch assignment`;
+    }
+    
+    // Ensure central roles don't have branch assignment
+    if (selectedRoleIsCentral && formData.branch_id) {
+      errors.branch_id = `${ROLE_DISPLAY_NAMES[formData.role as UserRole] || 'This role'} should not have a branch assignment (it's a central role)`;
+    }
+    
     if (!formData.id && !formData.password) errors.password = 'Password is required';
     else if (!formData.id && formData.password.length < 6) errors.password = 'Password must be at least 6 characters';
     
@@ -88,7 +164,7 @@ export default function AdminUsersPage() {
   };
 
   const resetForm = () => {
-    setFormData({ id: '', email: '', first_name: '', last_name: '', role: '', branch_id: '', password: '', status: 'active' });
+    setFormData({ id: '', email: '', first_name: '', last_name: '', role: '', branch_id: '', password: '', phone_number: '', status: 'active' });
     setFormErrors({});
   };
 
@@ -99,8 +175,9 @@ export default function AdminUsersPage() {
       first_name: user.first_name,
       last_name: user.last_name || '',
       role: user.role,
-      branch_id: user.branch_id || '',
+      branch_id: user.branch_id?.toString() || '',
       password: '',
+      phone_number: user.phone_number || '',
       status: user.status
     });
     setEditModalOpen(true);
@@ -116,11 +193,27 @@ export default function AdminUsersPage() {
     
     setIsSubmitting(true);
     try {
-      await userAPI.createUser(formData);
-      toast.success('User created successfully');
-      setAddModalOpen(false);
-      resetForm();
-      fetchUsers();
+      // Transform field names to match backend expectations
+      const payload = {
+        email: formData.email,
+        password: formData.password,
+        firstName: formData.first_name,
+        lastName: formData.last_name,
+        role: formData.role,
+        branchId: formData.branch_id ? parseInt(formData.branch_id) : null,
+        phoneNumber: formData.phone_number || null,
+        status: formData.status,
+      };
+      
+      const response = await userAPI.createUser(payload);
+      if (response.success) {
+        toast.success('User created successfully');
+        setAddModalOpen(false);
+        resetForm();
+        fetchUsers();
+      } else {
+        toast.error(response.message || 'Failed to create user');
+      }
     } catch (error: any) {
       toast.error(error.message || 'Failed to create user');
     } finally {
@@ -133,15 +226,31 @@ export default function AdminUsersPage() {
     
     setIsSubmitting(true);
     try {
-      // Don't send password if it's empty (no change)
-      const updateData = { ...formData };
-      if (!updateData.password) delete updateData.password;
+      // Transform field names to match backend expectations
+      const payload: any = {
+        email: formData.email,
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        role: formData.role,
+        branch_id: formData.branch_id ? parseInt(formData.branch_id) : null,
+        phone_number: formData.phone_number || null,
+        status: formData.status,
+      };
       
-      await userAPI.updateUser(formData.id, updateData);
-      toast.success('User updated successfully');
-      setEditModalOpen(false);
-      resetForm();
-      fetchUsers();
+      // Don't send password if it's empty (no change)
+      if (formData.password) {
+        payload.password = formData.password;
+      }
+      
+      const response = await userAPI.updateUser(formData.id, payload);
+      if (response.success) {
+        toast.success('User updated successfully');
+        setEditModalOpen(false);
+        resetForm();
+        fetchUsers();
+      } else {
+        toast.error(response.message || 'Failed to update user');
+      }
     } catch (error: any) {
       toast.error(error.message || 'Failed to update user');
     } finally {
@@ -179,7 +288,7 @@ export default function AdminUsersPage() {
           <IOSCard className="p-4">
             <div className="grid md:grid-cols-3 gap-4">
               <div className="md:col-span-2 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                 <Input 
                   placeholder="Search users by name or email..." 
                   value={searchQuery} 
@@ -187,7 +296,7 @@ export default function AdminUsersPage() {
                     setSearchQuery(e.target.value);
                     setCurrentPage(1); // Reset to first page on search
                   }} 
-                  className="pl-10" 
+                  className="pl-9" 
                 />
               </div>
               <div>
@@ -200,7 +309,7 @@ export default function AdminUsersPage() {
                   className="w-full p-2 border rounded-ios-lg"
                 >
                   <option value="">All Roles</option>
-                  {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
+                  {availableRoles.map((r) => <option key={r.id} value={r.name}>{r.displayName}</option>)}
                 </select>
               </div>
             </div>
@@ -236,9 +345,9 @@ export default function AdminUsersPage() {
                         </div>
                       </td>
                       <td className="p-3 text-gray-500">{u.email}</td>
-                      <td className="p-3"><IOSBadge variant="light" color="info">{u.role}</IOSBadge></td>
+                      <td className="p-3"><IOSBadge variant="light" color="info">{ROLE_DISPLAY_NAMES[u.role] || u.role}</IOSBadge></td>
                       <td className="p-3 text-gray-500">{u.branch_name || 'All'}</td>
-                      <td className="p-3 text-center"><IOSBadge variant={u.status === 'active' ? 'success' : 'neutral'}>{u.status}</IOSBadge></td>
+                      <td className="p-3 text-center"><IOSBadge color={u.status === 'active' ? 'success' : 'secondary'}>{u.status}</IOSBadge></td>
                       <td className="p-3 text-right flex justify-end space-x-1">
                         <IOSButton 
                           size="sm" 
@@ -373,24 +482,48 @@ export default function AdminUsersPage() {
                 <label className="text-sm font-medium">Role <span className="text-red-500">*</span></label>
                 <select 
                   value={formData.role} 
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })} 
+                  onChange={(e) => {
+                    const newRole = e.target.value;
+                    // Clear branch_id if selecting a central role
+                    if (CENTRAL_ROLES.includes(newRole as UserRole)) {
+                      setFormData({ ...formData, role: newRole, branch_id: '' });
+                    } else {
+                      setFormData({ ...formData, role: newRole });
+                    }
+                  }} 
                   className={`w-full p-2 border rounded-ios-lg ${formErrors.role ? 'border-red-500' : ''}`}
                 >
                   <option value="">Select role</option>
-                  {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
+                  {availableRoles.map((r) => <option key={r.id} value={r.name}>{r.displayName}</option>)}
                 </select>
                 {formErrors.role && <p className="text-red-500 text-xs mt-1">{formErrors.role}</p>}
               </div>
               <div>
-                <label className="text-sm font-medium">Branch</label>
+                <label className="text-sm font-medium">
+                  Branch {selectedRoleRequiresBranch && <span className="text-red-500">*</span>}
+                  {selectedRoleIsCentral && <span className="text-gray-400 text-xs ml-1">(Central role - no branch)</span>}
+                </label>
                 <select 
                   value={formData.branch_id} 
                   onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })} 
-                  className="w-full p-2 border rounded-ios-lg"
+                  className={`w-full p-2 border rounded-ios-lg ${selectedRoleRequiresBranch && !formData.branch_id ? 'border-amber-400' : ''}`}
+                  disabled={selectedRoleIsCentral}
                 >
-                  <option value="">All Branches</option>
-                  {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  <option value="">{selectedRoleIsCentral ? 'N/A - Central Role' : 'All Branches'}</option>
+                  {branches.filter(b => b.status !== 'inactive').map((b) => <option key={b.id} value={b.id}>{b.name} ({b.code})</option>)}
                 </select>
+                {selectedRoleRequiresBranch && !formData.branch_id && (
+                  <p className="text-amber-500 text-xs mt-1">This role typically requires a branch assignment</p>
+                )}
+              </div>
+              <div>
+                <label className="text-sm font-medium">Phone Number</label>
+                <Input 
+                  type="tel" 
+                  value={formData.phone_number} 
+                  onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })} 
+                  placeholder="+254 7XX XXX XXX"
+                />
               </div>
               <div>
                 <label className="text-sm font-medium">Status</label>
@@ -464,24 +597,48 @@ export default function AdminUsersPage() {
                 <label className="text-sm font-medium">Role <span className="text-red-500">*</span></label>
                 <select 
                   value={formData.role} 
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })} 
+                  onChange={(e) => {
+                    const newRole = e.target.value;
+                    // Clear branch_id if selecting a central role
+                    if (CENTRAL_ROLES.includes(newRole as UserRole)) {
+                      setFormData({ ...formData, role: newRole, branch_id: '' });
+                    } else {
+                      setFormData({ ...formData, role: newRole });
+                    }
+                  }} 
                   className={`w-full p-2 border rounded-ios-lg ${formErrors.role ? 'border-red-500' : ''}`}
                 >
                   <option value="">Select role</option>
-                  {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
+                  {availableRoles.map((r) => <option key={r.id} value={r.name}>{r.displayName}</option>)}
                 </select>
                 {formErrors.role && <p className="text-red-500 text-xs mt-1">{formErrors.role}</p>}
               </div>
               <div>
-                <label className="text-sm font-medium">Branch</label>
+                <label className="text-sm font-medium">
+                  Branch {selectedRoleRequiresBranch && <span className="text-red-500">*</span>}
+                  {selectedRoleIsCentral && <span className="text-gray-400 text-xs ml-1">(Central role - no branch)</span>}
+                </label>
                 <select 
                   value={formData.branch_id} 
                   onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })} 
-                  className="w-full p-2 border rounded-ios-lg"
+                  className={`w-full p-2 border rounded-ios-lg ${selectedRoleRequiresBranch && !formData.branch_id ? 'border-amber-400' : ''}`}
+                  disabled={selectedRoleIsCentral}
                 >
-                  <option value="">All Branches</option>
-                  {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  <option value="">{selectedRoleIsCentral ? 'N/A - Central Role' : 'All Branches'}</option>
+                  {branches.filter(b => b.status !== 'inactive').map((b) => <option key={b.id} value={b.id}>{b.name} ({b.code})</option>)}
                 </select>
+                {selectedRoleRequiresBranch && !formData.branch_id && (
+                  <p className="text-amber-500 text-xs mt-1">This role typically requires a branch assignment</p>
+                )}
+              </div>
+              <div>
+                <label className="text-sm font-medium">Phone Number</label>
+                <Input 
+                  type="tel" 
+                  value={formData.phone_number} 
+                  onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })} 
+                  placeholder="+254 7XX XXX XXX"
+                />
               </div>
               <div>
                 <label className="text-sm font-medium">Status</label>

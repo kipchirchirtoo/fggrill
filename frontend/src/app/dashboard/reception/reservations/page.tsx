@@ -10,11 +10,11 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { bookingsAPI, roomsAPI, guestAPI, ratePlansAPI, pricingAPI } from '@/lib/api';
-import { 
+import {
   Calendar, Plus, Search, RefreshCw, Edit2, Trash2, Eye, Clock,
   User, Bed, Phone, Mail, CheckCircle, XCircle, AlertTriangle,
   DollarSign, Users, Filter, ChevronDown, FileText, CreditCard,
-  LogIn, LogOut, Receipt
+  LogIn, LogOut, Receipt, TrendingUp
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -39,7 +39,7 @@ interface Booking {
   infants: number;
   meal_plan: string;
   status: 'pending' | 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled';
-  
+
   // Financials
   total_amount: number;
   amount_paid: number; // mapped to deposit_amount or separate?
@@ -51,12 +51,12 @@ interface Booking {
   deposit_amount: number;
   deposit_paid: boolean;
   payment_method: string;
-  
+
   // Details
   booking_source: string;
   special_requests?: string;
   internal_notes?: string;
-  
+
   // Timestamps
   created_at: string;
   checked_in_at?: string;
@@ -68,7 +68,15 @@ interface Room {
   id: string;
   room_number: string;
   room_type: string;
+  room_type_id?: string;
+  type?: {
+    id: string;
+    name: string;
+    base_price: number;
+    max_occupancy: number;
+  };
   price_per_night: number;
+  price_override?: number;
   max_occupancy: number;
   status: string;
 }
@@ -81,12 +89,12 @@ interface Guest {
   email?: string;
 }
 
-const statusConfig: Record<string, { label: string; color: string; bgColor: string }> = {
-  pending: { label: 'Pending', color: 'text-yellow-700', bgColor: 'bg-yellow-100' },
-  confirmed: { label: 'Confirmed', color: 'text-blue-700', bgColor: 'bg-blue-100' },
-  checked_in: { label: 'Checked In', color: 'text-green-700', bgColor: 'bg-green-100' },
-  checked_out: { label: 'Checked Out', color: 'text-gray-700', bgColor: 'bg-gray-100' },
-  cancelled: { label: 'Cancelled', color: 'text-red-700', bgColor: 'bg-red-100' },
+const statusConfig: Record<string, { label: string; color: string; bgColor: string; borderColor: string }> = {
+  pending: { label: 'Pending', color: 'text-amber-700', bgColor: 'bg-amber-50', borderColor: 'border-amber-200' },
+  confirmed: { label: 'Confirmed', color: 'text-emerald-700', bgColor: 'bg-emerald-50', borderColor: 'border-emerald-200' },
+  checked_in: { label: 'Checked In', color: 'text-blue-700', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' },
+  checked_out: { label: 'Checked Out', color: 'text-gray-700', bgColor: 'bg-gray-50', borderColor: 'border-gray-200' },
+  cancelled: { label: 'Cancelled', color: 'text-rose-700', bgColor: 'bg-rose-50', borderColor: 'border-rose-200' },
 };
 
 const mealPlanPrices: Record<string, number> = {
@@ -105,6 +113,7 @@ function NewReservationModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { user } = useAuth();
   const [step, setStep] = useState<'dates' | 'room' | 'guest' | 'confirm'>('dates');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -131,21 +140,25 @@ function NewReservationModal({
   const [selectedRatePlan, setSelectedRatePlan] = useState<any>(null);
   const [pricingQuote, setPricingQuote] = useState<any>(null);
 
-  const nights = checkIn && checkOut 
+  const nights = checkIn && checkOut
     ? Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24))
     : 0;
 
   const getRoomPrice = () => {
     if (!selectedRoom) return 0;
+
+    // Use mapped price_per_night which already handles overrides and base prices
+    let basePrice = selectedRoom.price_per_night || 0;
+
     if (selectedRatePlan) {
-      return selectedRatePlan.isPercentage 
-        ? selectedRoom.price_per_night * selectedRatePlan.multiplier
-        : selectedRatePlan.fixedAmount || selectedRoom.price_per_night;
+      return selectedRatePlan.isPercentage
+        ? basePrice * selectedRatePlan.multiplier
+        : selectedRatePlan.fixedAmount || basePrice;
     }
-    return selectedRoom.price_per_night;
+    return basePrice;
   };
 
-  const totalAmount = selectedRoom 
+  const totalAmount = selectedRoom
     ? (getRoomPrice() + mealPlanPrices[mealPlan]) * nights
     : 0;
 
@@ -178,7 +191,7 @@ function NewReservationModal({
     if (!guestSearch.trim()) return;
     setIsLoading(true);
     try {
-      const response = await guestAPI.getGuests(guestSearch);
+      const response = await guestAPI.getGuests(guestSearch, user?.branch_id || undefined);
       if (response.success) {
         setGuests(response.data || []);
       }
@@ -276,29 +289,7 @@ function NewReservationModal({
     }
   }, [isOpen]);
 
-  useEffect(() => {
-    const fetchQuote = async () => {
-      if (checkIn && checkOut && selectedRoom) {
-        try {
-          const res = await pricingAPI.getQuote({
-            checkIn,
-            checkOut,
-            roomTypeId: selectedRoom.room_type,
-            guests: adults + children
-          });
-          if (res.success) {
-            setPricingQuote(res.data);
-          }
-        } catch (error) {
-          console.error('Failed to get pricing quote');
-        }
-      } else {
-        setPricingQuote(null);
-      }
-    };
-    const debounce = setTimeout(fetchQuote, 800);
-    return () => clearTimeout(debounce);
-  }, [checkIn, checkOut, selectedRoom, adults, children]);
+  // AI Pricing Quote removed as per user request
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -314,13 +305,12 @@ function NewReservationModal({
         <div className="flex items-center justify-between mb-6">
           {['dates', 'room', 'guest', 'confirm'].map((s, i) => (
             <div key={s} className="flex items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                step === s ? 'bg-[#007AFF] text-white' : 
-                ['dates', 'room', 'guest', 'confirm'].indexOf(step) > i ? 'bg-[#34C759] text-white' : 'bg-gray-200'
-              }`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step === s ? 'bg-[#3C3C43] text-white' :
+                ['dates', 'room', 'guest', 'confirm'].indexOf(step) > i ? 'bg-[#3C3C43] text-white' : 'bg-[#F2F2F7] text-[#3C3C43]'
+                }`}>
                 {i + 1}
               </div>
-              {i < 3 && <div className={`w-16 h-1 mx-2 ${['dates', 'room', 'guest', 'confirm'].indexOf(step) > i ? 'bg-[#34C759]' : 'bg-gray-200'}`} />}
+              {i < 3 && <div className={`w-16 h-1 mx-2 ${['dates', 'room', 'guest', 'confirm'].indexOf(step) > i ? 'bg-[#3C3C43]' : 'bg-[#F2F2F7]'}`} />}
             </div>
           ))}
         </div>
@@ -384,14 +374,13 @@ function NewReservationModal({
                 <div
                   key={room.id}
                   onClick={() => setSelectedRoom(room)}
-                  className={`p-4 border-2 rounded-ios-lg cursor-pointer transition ${
-                    selectedRoom?.id === room.id ? 'border-[#007AFF] bg-blue-50' : 'border-[#E5E5EA] hover:border-[#E5E5EA]'
-                  }`}
+                  className={`p-4 border-2 rounded-ios-lg cursor-pointer transition ${selectedRoom?.id === room.id ? 'border-[#3C3C43] bg-[#F2F2F7]' : 'border-[rgba(60,60,67,0.12)] hover:border-[rgba(60,60,67,0.24)]'
+                    }`}
                 >
                   <p className="font-bold">Room {room.room_number}</p>
                   <p className="text-sm text-gray-500 capitalize">{room.room_type}</p>
                   <p className="text-sm">Max {room.max_occupancy} guests</p>
-                  <p className="font-medium text-[#007AFF]">KES {room.price_per_night?.toLocaleString()}/night</p>
+                  <p className="font-medium text-[#3C3C43]">KES {room.price_per_night?.toLocaleString()}/night</p>
                 </div>
               ))}
             </div>
@@ -498,18 +487,18 @@ function NewReservationModal({
         {step === 'confirm' && selectedRoom && selectedGuest && (
           <div className="space-y-4">
             {/* Summary */}
-            <div className="p-4 bg-blue-50 rounded-ios-lg">
+            <div className="p-4 bg-[#F2F2F7] rounded-ios-lg border border-[rgba(60,60,67,0.12)]">
               <div className="flex justify-between">
                 <div>
-                  <p className="font-bold">{selectedGuest.first_name} {selectedGuest.last_name}</p>
-                  <p className="text-sm text-[#007AFF]">{selectedGuest.phone}</p>
+                  <p className="font-bold text-[#000000]">{selectedGuest.first_name} {selectedGuest.last_name}</p>
+                  <p className="text-sm text-[#3C3C43]">{selectedGuest.phone}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold">Room {selectedRoom.room_number}</p>
-                  <p className="text-sm text-[#007AFF] capitalize">{selectedRoom.room_type}</p>
+                  <p className="font-bold text-[#000000]">Room {selectedRoom.room_number}</p>
+                  <p className="text-sm text-[#3C3C43] capitalize">{selectedRoom.room_type}</p>
                 </div>
               </div>
-              <div className="mt-3 pt-3 border-t border-blue-200 flex justify-between text-sm">
+              <div className="mt-3 pt-3 border-t border-[rgba(60,60,67,0.12)] flex justify-between text-sm text-[#3C3C43]">
                 <span>{new Date(checkIn).toLocaleDateString()} - {new Date(checkOut).toLocaleDateString()}</span>
                 <span>{nights} night{nights > 1 ? 's' : ''}</span>
               </div>
@@ -559,17 +548,6 @@ function NewReservationModal({
 
             {/* Pricing */}
             <div className="p-4 bg-gray-50 rounded-ios-lg space-y-2">
-              {pricingQuote && (
-                <div className="mb-3 p-3 bg-indigo-50 border border-indigo-100 rounded-ios-lg text-sm text-indigo-700">
-                  <div className="font-bold flex items-center gap-1">
-                    <TrendingUp className="h-4 w-4" />
-                    AI Recommendation: {pricingQuote.multiplier}x Base
-                  </div>
-                  <div className="text-xs mt-1 text-indigo-600">
-                    Factors: {pricingQuote.factors.join(', ')}
-                  </div>
-                </div>
-              )}
               <div className="flex justify-between">
                 <span>
                   Room ({nights} nights × KES {getRoomPrice()?.toLocaleString()})
@@ -635,9 +613,22 @@ export default function ReservationsPage() {
     try {
       const params: any = {};
       if (statusFilter !== 'all') params.status = statusFilter;
+      if (user?.branch_id) params.branch_id = user.branch_id;
+
+      console.log('Fetching bookings with params:', params);
       const response = await bookingsAPI.getBookings(params);
+
       if (response.success) {
-        setBookings(response.data || []);
+        console.log('Bookings API response:', response);
+        // Handle both array formats - the one returned directly from the API and the one transformed by the API wrapper
+        if (Array.isArray(response.data)) {
+          setBookings(response.data);
+        } else if (response.data && Array.isArray(response.data.data)) {
+          // Handle nested data structure from backend
+          setBookings(response.data.data);
+        } else {
+          setBookings([]);
+        }
       }
     } catch (error) {
       console.error('Error fetching bookings:', error);
@@ -645,7 +636,7 @@ export default function ReservationsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, user?.branch_id]);
 
   useEffect(() => {
     fetchBookings();
@@ -655,7 +646,7 @@ export default function ReservationsPage() {
   today.setHours(0, 0, 0, 0);
 
   const filteredBookings = bookings.filter((booking) => {
-    const matchesSearch = 
+    const matchesSearch =
       booking.guest_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       booking.room_number?.toLowerCase().includes(searchQuery.toLowerCase());
 
@@ -713,9 +704,9 @@ export default function ReservationsPage() {
               <p className="text-gray-500">Manage room bookings and reservations</p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="outline" onClick={fetchBookings} leftIcon={<RefreshCw />}>Refresh
+              <IOSButton variant="outline" onClick={fetchBookings} leftIcon={<RefreshCw />} className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]">Refresh
               </IOSButton>
-              <IOSButton onClick={() => setNewModalOpen(true)} leftIcon={<Plus />}>
+              <IOSButton onClick={() => setNewModalOpen(true)} leftIcon={<Plus />} className="bg-[#3C3C43] hover:bg-[#000000] text-white">
                 New Reservation
               </IOSButton>
             </div>
@@ -723,22 +714,24 @@ export default function ReservationsPage() {
 
           {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <IOSCard className="p-4">
-              <p className="text-sm text-gray-500">Total Reservations</p>
-              <p className="text-2xl font-bold">{stats.total}</p>
-            </IOSCard>
-            <IOSCard className="p-4">
-              <p className="text-sm text-gray-500">Confirmed</p>
-              <p className="text-2xl font-bold text-[#007AFF]">{stats.confirmed}</p>
-            </IOSCard>
-            <IOSCard className="p-4">
-              <p className="text-sm text-gray-500">Pending</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
-            </IOSCard>
-            <IOSCard className="p-4">
-              <p className="text-sm text-gray-500">Checked In</p>
-              <p className="text-2xl font-bold text-[#34C759]">{stats.checkedIn}</p>
-            </IOSCard>
+            {[
+              { label: 'Total Reservations', value: stats.total, icon: Calendar, color: 'text-gray-600', bg: 'bg-gray-50' },
+              { label: 'Confirmed', value: stats.confirmed, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+              { label: 'Pending', value: stats.pending, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
+              { label: 'Checked In', value: stats.checkedIn, icon: LogIn, color: 'text-blue-600', bg: 'bg-blue-50' },
+            ].map((stat) => (
+              <IOSCard key={stat.label} className="p-4 border-none shadow-sm bg-white">
+                <div className="flex items-center gap-4">
+                  <div className={`p-3 rounded-xl ${stat.bg}`}>
+                    <stat.icon className={`h-6 w-6 ${stat.color}`} />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 font-medium">{stat.label}</p>
+                    <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                  </div>
+                </div>
+              </IOSCard>
+            ))}
           </div>
 
           {/* Filters */}
@@ -746,12 +739,12 @@ export default function ReservationsPage() {
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                   <Input
                     placeholder="Search by guest or room..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                    className="pl-9"
                   />
                 </div>
               </div>
@@ -791,7 +784,7 @@ export default function ReservationsPage() {
             <IOSCard className="p-12 text-center">
               <Calendar className="h-12 w-12 mx-auto text-gray-300 mb-4" />
               <p className="text-gray-500">No reservations found</p>
-              <IOSButton onClick={() => setNewModalOpen(true)} className="mt-4" leftIcon={<Plus />}>
+              <IOSButton onClick={() => setNewModalOpen(true)} className="mt-4 bg-[#3C3C43] hover:bg-[#000000] text-white" leftIcon={<Plus />}>
                 Create Reservation
               </IOSButton>
             </IOSCard>
@@ -799,14 +792,14 @@ export default function ReservationsPage() {
             <IOSCard className="overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-gray-50 border-b">
+                  <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      <th className="text-left p-4 font-medium text-gray-700">Guest</th>
-                      <th className="text-left p-4 font-medium text-gray-700">Room</th>
-                      <th className="text-left p-4 font-medium text-gray-700">Dates</th>
-                      <th className="text-left p-4 font-medium text-gray-700">Amount</th>
-                      <th className="text-left p-4 font-medium text-gray-700">Status</th>
-                      <th className="text-right p-4 font-medium text-gray-700">Actions</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Guest</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Room</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Dates</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Amount</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -834,10 +827,10 @@ export default function ReservationsPage() {
                             <p className="font-medium">KES {booking.total_amount?.toLocaleString()}</p>
                             <p className="text-sm text-[#34C759]">Paid: KES {booking.amount_paid?.toLocaleString()}</p>
                           </td>
-                          <td className="p-4">
-                            <IOSBadge className={`${statusInfo.bgColor} ${statusInfo.color}`}>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${statusInfo.borderColor} ${statusInfo.bgColor} ${statusInfo.color}`}>
                               {statusInfo.label}
-                            </IOSBadge>
+                            </span>
                           </td>
                           <td className="p-4">
                             <div className="flex justify-end gap-2">

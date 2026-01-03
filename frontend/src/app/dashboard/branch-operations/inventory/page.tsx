@@ -16,22 +16,24 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 import {
   Package, Search, Plus, Filter, AlertTriangle, RefreshCw,
-  ShoppingCart, ArrowRight, ClipboardList, Check
+  ShoppingCart, ArrowRight, ClipboardList, Check, X
 } from 'lucide-react';
 
 interface InventoryItem {
-  id?: number;
-  sku: string;
-  barcode?: string;
+  id: string;
+  item_sku: string;
   item_name: string;
   description?: string;
   category: string;
   unit_of_measure: string;
   quantity: number;
-  reorder_level?: number;
-  price?: number;
-  supplier?: string;
-  branch_id?: number;
+  reserved_quantity: number;
+  reorder_level: number;
+  max_stock_level: number;
+  bin_location?: string;
+  last_stock_in?: string;
+  last_stock_out?: string;
+  last_counted?: string;
 }
 
 // Wrap the dashboard with BranchPageWrapper to prevent hydration errors
@@ -54,38 +56,38 @@ function BranchInventoryPageContent() {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [showLowStock, setShowLowStock] = useState(false);
-  
+
   // Request modal state
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
-  const [selectedItems, setSelectedItems] = useState<{[key: string]: {quantity: number}}>({}); 
+  const [selectedItems, setSelectedItems] = useState<{ [key: string]: { quantity: number } }>({});
   const [requestForm, setRequestForm] = useState({
     priority: 'normal',
     notes: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   // Fetch inventory data when branch changes
   useEffect(() => {
     if (activeBranchId) {
       fetchInventory();
     }
   }, [activeBranchId]);
-  
+
   // Apply filters when search or category changes
   useEffect(() => {
     applyFilters();
   }, [inventory, searchTerm, categoryFilter, showLowStock]);
-  
+
   const fetchInventory = async () => {
     if (!activeBranchId) return;
-    
+
     setIsLoading(true);
     try {
       const response = await branchOperationsAPI.getInventory(
-        { category: categoryFilter, lowStock: showLowStock }, 
+        { category: categoryFilter, lowStock: showLowStock },
         activeBranchId
       );
-      
+
       if (response.success) {
         const items = response.data || [];
         setInventory(items);
@@ -99,70 +101,70 @@ function BranchInventoryPageContent() {
       setIsLoading(false);
     }
   };
-  
+
   const applyFilters = () => {
     let filtered = [...inventory];
-    
+
     // Apply category filter
     if (categoryFilter) {
       filtered = filtered.filter(item => item.category === categoryFilter);
     }
-    
+
     // Apply search filter
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
-      filtered = filtered.filter(item => 
+      filtered = filtered.filter(item =>
         item.item_name.toLowerCase().includes(searchLower) ||
-        item.sku.toLowerCase().includes(searchLower) ||
+        item.item_sku.toLowerCase().includes(searchLower) ||
         (item.description && item.description.toLowerCase().includes(searchLower))
       );
     }
-    
+
     // Apply low stock filter
     if (showLowStock) {
-      filtered = filtered.filter(item => 
+      filtered = filtered.filter(item =>
         item.quantity <= (item.reorder_level || 10)
       );
     }
-    
+
     setFilteredItems(filtered);
   };
-  
+
   const toggleItemSelection = (item: InventoryItem) => {
     const newSelected = { ...selectedItems };
-    
-    if (newSelected[item.sku]) {
-      delete newSelected[item.sku];
+
+    if (newSelected[item.item_sku]) {
+      delete newSelected[item.item_sku];
     } else {
-      newSelected[item.sku] = { quantity: 1 };
+      newSelected[item.item_sku] = { quantity: 1 };
     }
-    
+
     setSelectedItems(newSelected);
   };
-  
+
   const updateRequestQuantity = (sku: string, quantity: number) => {
     if (quantity < 1) return;
-    
+
     setSelectedItems(prev => ({
       ...prev,
       [sku]: { quantity }
     }));
   };
-  
+
   const openRequestModal = () => {
     // Pre-select low stock items
-    const lowStockItems = inventory.filter(item => 
+    const lowStockItems = inventory.filter(item =>
       item.quantity <= (item.reorder_level || 10)
     );
-    
-    const preSelected: {[key: string]: {quantity: number}} = {};
+
+    const preSelected: { [key: string]: { quantity: number } } = {};
     lowStockItems.forEach(item => {
       const neededQuantity = (item.reorder_level || 10) - item.quantity;
       if (neededQuantity > 0) {
-        preSelected[item.sku] = { quantity: neededQuantity };
+        preSelected[item.item_sku] = { quantity: neededQuantity };
       }
     });
-    
+
     setSelectedItems(preSelected);
     setRequestForm({
       priority: 'normal',
@@ -170,35 +172,34 @@ function BranchInventoryPageContent() {
     });
     setIsRequestModalOpen(true);
   };
-  
+
   const handleCreateRequest = async () => {
     if (!activeBranchId) return;
-    
+
     // Convert selected items to request format
     const items = Object.keys(selectedItems).map(sku => {
-      const item = inventory.find(i => i.sku === sku);
+      const item = inventory.find(i => i.item_sku === sku);
       return {
         item_sku: sku,
-        requested_quantity: selectedItems[sku].quantity,
-        current_branch_stock: item?.quantity || 0
+        requested_quantity: selectedItems[sku].quantity
       };
     });
-    
+
     if (items.length === 0) {
       toast.error('Please select at least one item');
       return;
     }
-    
+
     setIsSubmitting(true);
     try {
       const response = await branchOperationsAPI.createStockRequest({
-        branch_id: activeBranchId,
+        requesting_branch_id: activeBranchId,
         items,
-        priority: requestForm.priority,
-        notes: requestForm.notes,
-        request_type: 'standard'
+        priority: requestForm.priority.toUpperCase(),
+        reason: requestForm.notes,
+        request_type: 'REPLENISHMENT'
       }, activeBranchId);
-      
+
       if (response.success) {
         toast.success('Stock request created successfully');
         setIsRequestModalOpen(false);
@@ -213,7 +214,7 @@ function BranchInventoryPageContent() {
       setIsSubmitting(false);
     }
   };
-  
+
   const getStockLevel = (item: InventoryItem) => {
     const reorderLevel = item.reorder_level || 10;
     if (item.quantity <= 0) return 'out';
@@ -221,7 +222,7 @@ function BranchInventoryPageContent() {
     if (item.quantity <= reorderLevel) return 'low';
     return 'normal';
   };
-  
+
   const getStockBadge = (stockLevel: string) => {
     switch (stockLevel) {
       case 'out':
@@ -261,7 +262,7 @@ function BranchInventoryPageContent() {
               <p className="text-sm text-gray-500">Total Items</p>
               <p className="text-lg font-bold">{inventory.length}</p>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <AlertTriangle className="h-5 w-5 text-yellow-600 mb-2" />
               <p className="text-sm text-gray-500">Low Stock Items</p>
@@ -269,7 +270,7 @@ function BranchInventoryPageContent() {
                 {inventory.filter(i => i.quantity <= (i.reorder_level || 10)).length}
               </p>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <ClipboardList className="h-5 w-5 text-purple-600 mb-2" />
               <p className="text-sm text-gray-500">Active Categories</p>
@@ -277,7 +278,7 @@ function BranchInventoryPageContent() {
                 {new Set(inventory.map(i => i.category)).size}
               </p>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <ShoppingCart className="h-5 w-5 text-green-600 mb-2" />
               <p className="text-sm text-gray-500">Selected Items</p>
@@ -289,15 +290,15 @@ function BranchInventoryPageContent() {
           <IOSCard className="p-4">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="md:col-span-2 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                 <Input
                   placeholder="Search by name, SKU, or description..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-9"
                 />
               </div>
-              
+
               <div>
                 <select
                   value={categoryFilter}
@@ -310,7 +311,7 @@ function BranchInventoryPageContent() {
                   ))}
                 </select>
               </div>
-              
+
               <div>
                 <label className="flex items-center space-x-2 h-10 cursor-pointer">
                   <input
@@ -322,10 +323,10 @@ function BranchInventoryPageContent() {
                   <span>Show Low Stock Only</span>
                 </label>
               </div>
-              
+
               <div>
-                <IOSButton 
-                  onClick={fetchInventory} 
+                <IOSButton
+                  onClick={fetchInventory}
                   leftIcon={<RefreshCw />}
                   className="w-full"
                 >
@@ -372,10 +373,10 @@ function BranchInventoryPageContent() {
                   ) : (
                     filteredItems.map((item) => {
                       const stockLevel = getStockLevel(item);
-                      const isSelected = !!selectedItems[item.sku];
-                      
+                      const isSelected = !!selectedItems[item.item_sku];
+
                       return (
-                        <tr key={item.sku} className={`hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}`}>
+                        <tr key={item.item_sku} className={`hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}`}>
                           <td className="px-4 py-4">
                             <input
                               type="checkbox"
@@ -390,14 +391,14 @@ function BranchInventoryPageContent() {
                               <p className="text-xs text-gray-500 truncate max-w-xs">{item.description || '-'}</p>
                             </div>
                           </td>
-                          <td className="px-4 py-4 font-mono text-sm">{item.sku}</td>
+                          <td className="px-4 py-4 font-mono text-sm">{item.item_sku}</td>
                           <td className="px-4 py-4">{item.category}</td>
                           <td className="px-4 py-4 text-right font-bold">
                             <span className={
                               stockLevel === 'out' ? 'text-red-600' :
-                              stockLevel === 'critical' ? 'text-orange-600' :
-                              stockLevel === 'low' ? 'text-yellow-600' :
-                              'text-green-600'
+                                stockLevel === 'critical' ? 'text-orange-600' :
+                                  stockLevel === 'low' ? 'text-yellow-600' :
+                                    'text-green-600'
                             }>
                               {item.quantity}
                             </span>
@@ -426,14 +427,14 @@ function BranchInventoryPageContent() {
             </div>
           </IOSCard>
         </div>
-        
+
         {/* Stock Request Modal */}
         <Dialog open={isRequestModalOpen} onOpenChange={setIsRequestModalOpen}>
           <DialogContent className="max-w-3xl">
             <DialogHeader>
               <DialogTitle>Create Stock Request</DialogTitle>
             </DialogHeader>
-            
+
             <div className="space-y-4 mt-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium">Selected Items ({Object.keys(selectedItems).length})</h3>
@@ -442,7 +443,7 @@ function BranchInventoryPageContent() {
                     <span>Priority:</span>
                     <select
                       value={requestForm.priority}
-                      onChange={(e) => setRequestForm({...requestForm, priority: e.target.value})}
+                      onChange={(e) => setRequestForm({ ...requestForm, priority: e.target.value })}
                       className="px-2 py-1 border rounded-ios-lg"
                     >
                       <option value="low">Low</option>
@@ -453,7 +454,7 @@ function BranchInventoryPageContent() {
                   </label>
                 </div>
               </div>
-              
+
               <div className="overflow-y-auto max-h-64">
                 <table className="w-full">
                   <thead className="bg-gray-50">
@@ -474,9 +475,9 @@ function BranchInventoryPageContent() {
                       </tr>
                     ) : (
                       Object.keys(selectedItems).map(sku => {
-                        const item = inventory.find(i => i.sku === sku);
+                        const item = inventory.find(i => i.item_sku === sku);
                         if (!item) return null;
-                        
+
                         return (
                           <tr key={sku} className="hover:bg-gray-50">
                             <td className="px-4 py-3">
@@ -509,20 +510,20 @@ function BranchInventoryPageContent() {
                   </tbody>
                 </table>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Notes
                 </label>
                 <textarea
                   value={requestForm.notes}
-                  onChange={(e) => setRequestForm({...requestForm, notes: e.target.value})}
+                  onChange={(e) => setRequestForm({ ...requestForm, notes: e.target.value })}
                   placeholder="Add any details or special instructions..."
                   className="w-full px-3 py-2 border rounded-ios-lg"
                   rows={3}
                 />
               </div>
-              
+
               <div className="flex justify-end space-x-3 pt-4 mt-4 border-t">
                 <IOSButton
                   variant="secondary"

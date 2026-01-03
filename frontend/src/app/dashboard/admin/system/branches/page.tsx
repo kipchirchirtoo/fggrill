@@ -10,7 +10,7 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { systemAPI } from '@/lib/api';
-import { Building2, RefreshCw, Plus, MapPin, Edit2 } from 'lucide-react';
+import { Building2, RefreshCw, Plus, MapPin, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -22,6 +22,10 @@ export default function AdminBranchesPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({ name: '', location: '', is_central: false });
 
   const fetchBranches = useCallback(async () => {
@@ -35,14 +39,52 @@ export default function AdminBranchesPage() {
 
   useEffect(() => { fetchBranches(); }, [fetchBranches]);
 
+  const resetForm = () => setFormData({ name: '', location: '', is_central: false });
+
   const handleAddBranch = async () => {
     if (!formData.name) { toast.error('Name is required'); return; }
+    setIsSubmitting(true);
     try {
       await systemAPI.createBranch(formData);
       toast.success('Branch added');
       setAddModalOpen(false);
+      resetForm();
       fetchBranches();
     } catch (error: any) { toast.error(error.message || 'Failed'); }
+    finally { setIsSubmitting(false); }
+  };
+
+  const openEditModal = (branch: Branch) => {
+    setSelectedBranch(branch);
+    setFormData({ name: branch.name, location: branch.location || '', is_central: branch.is_central });
+    setEditModalOpen(true);
+  };
+
+  const handleUpdateBranch = async () => {
+    if (!selectedBranch || !formData.name) { toast.error('Name is required'); return; }
+    setIsSubmitting(true);
+    try {
+      await systemAPI.updateBranch(selectedBranch.id, formData);
+      toast.success('Branch updated');
+      setEditModalOpen(false);
+      setSelectedBranch(null);
+      resetForm();
+      fetchBranches();
+    } catch (error: any) { toast.error(error.message || 'Failed'); }
+    finally { setIsSubmitting(false); }
+  };
+
+  const handleDeleteBranch = async () => {
+    if (!selectedBranch) return;
+    setIsSubmitting(true);
+    try {
+      await systemAPI.deleteBranch(selectedBranch.id);
+      toast.success('Branch deleted');
+      setDeleteConfirmOpen(false);
+      setSelectedBranch(null);
+      fetchBranches();
+    } catch (error: any) { toast.error(error.message || 'Failed'); }
+    finally { setIsSubmitting(false); }
   };
 
   return (
@@ -70,10 +112,13 @@ export default function AdminBranchesPage() {
                     </div>
                     <div className="flex gap-2">
                       {branch.is_central && <IOSBadge variant="light" color="info">Central</IOSBadge>}
-                      <IOSBadge variant={branch.status === 'active' ? 'success' : 'neutral'}>{branch.status}</IOSBadge>
+                      <IOSBadge className={branch.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>{branch.status}</IOSBadge>
                     </div>
                   </div>
-                  <IOSButton variant="secondary" size="sm" className="w-full" leftIcon={<Edit2 />}>Edit</IOSButton>
+                  <div className="flex gap-2">
+                    <IOSButton variant="secondary" size="sm" className="flex-1" onClick={() => openEditModal(branch)} leftIcon={<Edit2 className="h-3 w-3" />}>Edit</IOSButton>
+                    <IOSButton variant="destructive" size="sm" onClick={() => { setSelectedBranch(branch); setDeleteConfirmOpen(true); }}><Trash2 className="h-3 w-3" /></IOSButton>
+                  </div>
                 </IOSCard>
               ))}
             </div>
@@ -92,7 +137,41 @@ export default function AdminBranchesPage() {
               </div>
               <div className="flex gap-3">
                 <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                <IOSButton onClick={handleAddBranch} className="flex-1">Add</IOSButton>
+                <IOSButton onClick={handleAddBranch} disabled={isSubmitting} className="flex-1">{isSubmitting ? 'Adding...' : 'Add'}</IOSButton>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Modal */}
+        <Dialog open={editModalOpen} onOpenChange={(open) => { setEditModalOpen(open); if (!open) setSelectedBranch(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader><DialogTitle>Edit Branch</DialogTitle></DialogHeader>
+            <div className="space-y-4 mt-4">
+              <div><label className="text-sm font-medium">Name *</label><Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} /></div>
+              <div><label className="text-sm font-medium">Location</label><Input value={formData.location} onChange={(e) => setFormData({ ...formData, location: e.target.value })} /></div>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" checked={formData.is_central} onChange={(e) => setFormData({ ...formData, is_central: e.target.checked })} />
+                <label className="text-sm">Central Branch</label>
+              </div>
+              <div className="flex gap-3">
+                <IOSButton variant="secondary" onClick={() => setEditModalOpen(false)} className="flex-1">Cancel</IOSButton>
+                <IOSButton onClick={handleUpdateBranch} disabled={isSubmitting} className="flex-1">{isSubmitting ? 'Updating...' : 'Update'}</IOSButton>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation */}
+        <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle className="text-red-600">Delete Branch</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <p className="text-stone-600">Are you sure you want to delete this branch?</p>
+              {selectedBranch && <div className="p-3 bg-stone-50 rounded-lg"><p className="font-medium">{selectedBranch.name}</p><p className="text-sm text-stone-500">{selectedBranch.location}</p></div>}
+              <div className="flex gap-2">
+                <IOSButton variant="secondary" className="flex-1" onClick={() => setDeleteConfirmOpen(false)}>Cancel</IOSButton>
+                <IOSButton variant="destructive" className="flex-1" onClick={handleDeleteBranch} disabled={isSubmitting}>{isSubmitting ? 'Deleting...' : 'Delete'}</IOSButton>
               </div>
             </div>
           </DialogContent>

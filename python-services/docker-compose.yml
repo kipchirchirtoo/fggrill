@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  unified-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    environment:
+      - SMTP_HOST=smtp-relay.brevo.com
+      - SMTP_PORT=587
+      - SMTP_USER=96a507001@smtp-brevo.com
+      - SMTP_PASS=xsmtpsib-38bcbdb899aab096feabd5c17c1e566d5c057251501891a77b64bc74ba87ad06-XPa8Pw5mp819KU2E
+      - SMTP_FROM_NAME=FG Grill Hotel
+      - SMTP_FROM_EMAIL=96a507001@smtp-brevo.com
+      - DATABASE_URL=${DATABASE_URL}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+    volumes:
+      - ./email_automation/email_schedule.db:/app/email_schedule.db
+      - ./template_generator/templates.db:/app/templates.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  default:
+    name: fggrill-microservices

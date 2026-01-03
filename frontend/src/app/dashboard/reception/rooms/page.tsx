@@ -10,7 +10,7 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { roomsAPI, bookingsAPI, guestAPI } from '@/lib/api';
-import { 
+import {
   Bed, Users, Search, Plus, RefreshCw, Filter, Eye, Edit2, Trash2,
   CheckCircle, XCircle, Clock, Wrench, Sparkles, Calendar, Phone, Mail,
   DoorOpen, DoorClosed, AlertTriangle, ChevronDown, MoreVertical,
@@ -20,22 +20,22 @@ import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
-// Room status configuration
-const roomStatusConfig: Record<string, { label: string; color: string; bgColor: string; icon: any }> = {
-  available: { label: 'Available', color: 'text-green-700', bgColor: 'bg-green-100', icon: CheckCircle },
-  occupied: { label: 'Occupied', color: 'text-blue-700', bgColor: 'bg-blue-100', icon: DoorClosed },
-  reserved: { label: 'Reserved', color: 'text-purple-700', bgColor: 'bg-purple-100', icon: Calendar },
-  maintenance: { label: 'Maintenance', color: 'text-orange-700', bgColor: 'bg-orange-100', icon: Wrench },
-  cleaning: { label: 'Cleaning', color: 'text-yellow-700', bgColor: 'bg-yellow-100', icon: Sparkles },
-  checkout: { label: 'Checkout', color: 'text-red-700', bgColor: 'bg-red-100', icon: LogOut },
+// Room status configuration - minimal theme
+const roomStatusConfig: Record<string, { label: string; color: string; bgColor: string; borderColor: string; icon: any }> = {
+  available: { label: 'Available', color: 'text-emerald-700', bgColor: 'bg-emerald-50', borderColor: 'border-emerald-200', icon: CheckCircle },
+  occupied: { label: 'Occupied', color: 'text-blue-700', bgColor: 'bg-blue-50', borderColor: 'border-blue-200', icon: DoorClosed },
+  reserved: { label: 'Reserved', color: 'text-purple-700', bgColor: 'bg-purple-50', borderColor: 'border-purple-200', icon: Calendar },
+  maintenance: { label: 'Maintenance', color: 'text-rose-700', bgColor: 'bg-rose-50', borderColor: 'border-rose-200', icon: Wrench },
+  cleaning: { label: 'Cleaning', color: 'text-amber-700', bgColor: 'bg-amber-50', borderColor: 'border-amber-200', icon: Sparkles },
+  checkout: { label: 'Checkout', color: 'text-indigo-700', bgColor: 'bg-indigo-50', borderColor: 'border-indigo-200', icon: LogOut },
 };
 
-// Room type configuration
+// Room type configuration - minimal theme
 const roomTypeConfig: Record<string, { label: string; color: string }> = {
-  deluxe: { label: 'Deluxe', color: 'bg-[#007AFF]' },
-  executive: { label: 'Executive', color: 'bg-amber-500' },
-  standard: { label: 'Standard', color: 'bg-[#8E8E93]' },
-  suite: { label: 'Suite', color: 'bg-purple-500' },
+  deluxe: { label: 'Deluxe', color: 'bg-[#3C3C43]' },
+  executive: { label: 'Executive', color: 'bg-[#3C3C43]' },
+  standard: { label: 'Standard', color: 'bg-[#3C3C43]' },
+  suite: { label: 'Suite', color: 'bg-[#3C3C43]' },
 };
 
 interface Room {
@@ -79,17 +79,18 @@ interface BookingFormData {
 }
 
 // Quick Check-in Modal
-function QuickCheckInModal({ 
-  isOpen, 
-  onClose, 
-  room, 
-  onSuccess 
-}: { 
-  isOpen: boolean; 
-  onClose: () => void; 
+function QuickCheckInModal({
+  isOpen,
+  onClose,
+  room,
+  onSuccess
+}: {
+  isOpen: boolean;
+  onClose: () => void;
   room: Room | null;
   onSuccess: () => void;
 }) {
+  const { user } = useAuth();
   const [step, setStep] = useState<'guest' | 'booking'>('guest');
   const [searchQuery, setSearchQuery] = useState('');
   const [guests, setGuests] = useState<Guest[]>([]);
@@ -121,7 +122,7 @@ function QuickCheckInModal({
     if (!searchQuery.trim()) return;
     setIsLoading(true);
     try {
-      const response = await guestAPI.getGuests(searchQuery);
+      const response = await guestAPI.getGuests(searchQuery, user?.branch_id);
       if (response.success) {
         setGuests(response.data || []);
       }
@@ -139,7 +140,7 @@ function QuickCheckInModal({
     }
     setIsSubmitting(true);
     try {
-      const response = await guestAPI.createGuest(newGuest);
+      const response = await guestAPI.createGuest({ ...newGuest, branch_id: user?.branch_id });
       if (response.success) {
         setSelectedGuest(response.data);
         setIsNewGuest(false);
@@ -167,12 +168,12 @@ function QuickCheckInModal({
         room_id: room.id,
         guest_id: selectedGuest.id,
         check_in: booking.check_in,
-        check_out: booking.check_out,
         adults: booking.adults,
         children: booking.children,
-        meal_plan: booking.meal_plan,
-        special_requests: booking.special_requests,
+        mealPlan: booking.meal_plan,
+        specialRequests: booking.special_requests,
         status: 'checked_in',
+        branchId: user?.branch_id
       };
 
       const response = await bookingsAPI.createBooking(bookingData);
@@ -258,8 +259,8 @@ function QuickCheckInModal({
                 )}
 
                 <div className="border-t pt-4">
-                  <IOSButton 
-                    variant="outline" 
+                  <IOSButton
+                    variant="outline"
                     className="w-full"
                     onClick={() => setIsNewGuest(true)}
                     leftIcon={<UserPlus />}
@@ -328,11 +329,11 @@ function QuickCheckInModal({
 
         {step === 'booking' && selectedGuest && (
           <div className="space-y-4 mt-4">
-            <div className="p-3 bg-green-50 rounded-ios-lg border border-green-200">
-              <p className="font-medium text-green-800">
+            <div className="p-3 bg-[#F2F2F7] rounded-ios-lg border border-[rgba(60,60,67,0.12)]">
+              <p className="font-medium text-[#000000]">
                 {selectedGuest.first_name} {selectedGuest.last_name}
               </p>
-              <p className="text-sm text-[#34C759]">{selectedGuest.phone}</p>
+              <p className="text-sm text-[#3C3C43]">{selectedGuest.phone}</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -405,10 +406,10 @@ function QuickCheckInModal({
               <IOSButton variant="outline" onClick={() => setStep('guest')} className="flex-1">
                 Back
               </IOSButton>
-              <IOSButton 
-                onClick={handleCheckIn} 
+              <IOSButton
+                onClick={handleCheckIn}
                 disabled={isSubmitting}
-                className="flex-1 bg-[#34C759] hover:bg-green-700"
+                className="flex-1 bg-[#3C3C43] hover:bg-[#000000] text-white"
               >
                 {isSubmitting ? 'Processing...' : 'Complete Check-In'}
               </IOSButton>
@@ -477,15 +478,15 @@ function RoomDetailsModal({
 
           {/* Current Guest Info */}
           {room.current_guest && (
-            <div className="p-4 bg-blue-50 rounded-ios-lg border border-blue-200">
-              <p className="text-sm font-medium text-blue-800 mb-2">Current Guest</p>
-              <p className="font-semibold font-sf-pro-display">{room.current_guest.name}</p>
-              <div className="flex gap-4 mt-2 text-sm text-[#007AFF]">
+            <div className="p-4 bg-[#F2F2F7] rounded-ios-lg border border-[rgba(60,60,67,0.12)]">
+              <p className="text-sm font-medium text-[#3C3C43] mb-2">Current Guest</p>
+              <p className="font-semibold font-sf-pro-display text-[#000000]">{room.current_guest.name}</p>
+              <div className="flex gap-4 mt-2 text-sm text-[#3C3C43]">
                 <span>In: {new Date(room.current_guest.check_in).toLocaleDateString()}</span>
                 <span>Out: {new Date(room.current_guest.check_out).toLocaleDateString()}</span>
               </div>
               {room.current_guest.phone && (
-                <p className="text-sm text-[#007AFF] mt-1">{room.current_guest.phone}</p>
+                <p className="text-sm text-[#3C3C43] mt-1">{room.current_guest.phone}</p>
               )}
             </div>
           )}
@@ -497,7 +498,7 @@ function RoomDetailsModal({
               {room.status === 'occupied' && (
                 <IOSButton
                   variant="outline"
-                  className="text-[#FF3B30] border-red-200 hover:bg-red-50"
+                  className="text-[#3C3C43] border-[rgba(60,60,67,0.12)] hover:bg-[#F2F2F7]"
                   onClick={() => onCheckOut(room)}
                   leftIcon={<LogOut />}
                 >
@@ -507,7 +508,7 @@ function RoomDetailsModal({
               {room.status === 'available' && (
                 <IOSButton
                   variant="outline"
-                  className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                  className="text-[#3C3C43] border-[rgba(60,60,67,0.12)] hover:bg-[#F2F2F7]"
                   onClick={() => onStatusChange(room.id, 'maintenance')}
                   leftIcon={<Wrench />}
                 >
@@ -517,7 +518,7 @@ function RoomDetailsModal({
               {room.status === 'cleaning' && (
                 <IOSButton
                   variant="outline"
-                  className="text-[#34C759] border-green-200 hover:bg-green-50"
+                  className="text-[#3C3C43] border-[rgba(60,60,67,0.12)] hover:bg-[#F2F2F7]"
                   onClick={() => onStatusChange(room.id, 'available')}
                   leftIcon={<CheckCircle />}
                 >
@@ -527,7 +528,7 @@ function RoomDetailsModal({
               {room.status === 'maintenance' && (
                 <IOSButton
                   variant="outline"
-                  className="text-[#34C759] border-green-200 hover:bg-green-50"
+                  className="text-[#3C3C43] border-[rgba(60,60,67,0.12)] hover:bg-[#F2F2F7]"
                   onClick={() => onStatusChange(room.id, 'available')}
                   leftIcon={<CheckCircle />}
                 >
@@ -536,7 +537,7 @@ function RoomDetailsModal({
               )}
               <IOSButton
                 variant="outline"
-                className="text-yellow-600 border-yellow-200 hover:bg-yellow-50"
+                className="text-[#3C3C43] border-[rgba(60,60,67,0.12)] hover:bg-[#F2F2F7]"
                 onClick={() => onStatusChange(room.id, 'cleaning')}
                 leftIcon={<Sparkles />}
               >
@@ -572,7 +573,7 @@ export default function ReceptionRoomsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [floorFilter, setFloorFilter] = useState<number | 'all'>('all');
-  
+
   // Modals
   const [checkInModalOpen, setCheckInModalOpen] = useState(false);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
@@ -582,7 +583,7 @@ export default function ReceptionRoomsPage() {
   const fetchRooms = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await roomsAPI.getRooms(user?.branch_id || undefined);
+      const response = await roomsAPI.getRooms(user?.branch_id ? { branch_id: user.branch_id } : undefined);
       if (response.success) {
         setRooms(response.data || []);
       }
@@ -600,24 +601,31 @@ export default function ReceptionRoomsPage() {
 
   // Filter rooms
   const filteredRooms = rooms.filter((room) => {
-    const matchesSearch = room.room_number.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || room.status === statusFilter;
-    const matchesType = typeFilter === 'all' || room.room_type === typeFilter;
-    const matchesFloor = floorFilter === 'all' || room.floor === floorFilter;
+    // Add null checks to prevent errors when properties are undefined
+    const roomNumber = room?.room_number || '';
+    const roomStatus = room?.status || '';
+    const roomType = room?.room_type || '';
+    const roomFloor = room?.floor || '';
+
+    const matchesSearch = searchQuery ? roomNumber.toString().toLowerCase().includes(searchQuery.toLowerCase()) : true;
+    const matchesStatus = statusFilter === 'all' || roomStatus === statusFilter;
+    const matchesType = typeFilter === 'all' || roomType === typeFilter;
+    const matchesFloor = floorFilter === 'all' || roomFloor === floorFilter;
+
     return matchesSearch && matchesStatus && matchesType && matchesFloor;
   });
 
-  // Get unique floors
-  const floors = [...new Set(rooms.map((r) => r.floor))].sort((a, b) => a - b);
+  // Get unique floors - with null checks
+  const floors = [...new Set(rooms.map((r) => r?.floor).filter((f): f is number => typeof f === 'number'))].sort((a, b) => a - b);
 
-  // Stats
+  // Stats - with null checks
   const stats = {
     total: rooms.length,
-    available: rooms.filter((r) => r.status === 'available').length,
-    occupied: rooms.filter((r) => r.status === 'occupied').length,
-    reserved: rooms.filter((r) => r.status === 'reserved').length,
-    maintenance: rooms.filter((r) => r.status === 'maintenance').length,
-    cleaning: rooms.filter((r) => r.status === 'cleaning').length,
+    available: rooms.filter((r) => r?.status === 'available').length,
+    occupied: rooms.filter((r) => r?.status === 'occupied').length,
+    reserved: rooms.filter((r) => r?.status === 'reserved').length,
+    maintenance: rooms.filter((r) => r?.status === 'maintenance').length,
+    cleaning: rooms.filter((r) => r?.status === 'cleaning').length,
   };
 
   const handleStatusChange = async (roomId: string, newStatus: string) => {
@@ -636,11 +644,11 @@ export default function ReceptionRoomsPage() {
       // Find active booking and check out
       const bookingsResponse = await roomsAPI.getRoomBookings(room.id);
       const activeBooking = bookingsResponse.data?.find((b: any) => b.status === 'checked_in');
-      
+
       if (activeBooking) {
         await bookingsAPI.checkOut(activeBooking.id);
       }
-      
+
       await roomsAPI.updateRoomStatus(room.id, 'cleaning');
       toast.success(`Guest checked out from Room ${room.room_number}`);
       fetchRooms();
@@ -671,7 +679,7 @@ export default function ReceptionRoomsPage() {
               <p className="text-gray-500">Manage rooms, check-ins, and availability</p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="outline" onClick={fetchRooms} leftIcon={<RefreshCw />}>
+              <IOSButton variant="outline" onClick={fetchRooms} leftIcon={<RefreshCw />} className="border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]">
                 Refresh
               </IOSButton>
             </div>
@@ -680,16 +688,16 @@ export default function ReceptionRoomsPage() {
           {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {[
-              { label: 'Total', value: stats.total, color: 'bg-gray-100 text-gray-700' },
-              { label: 'Available', value: stats.available, color: 'bg-green-100 text-green-700' },
-              { label: 'Occupied', value: stats.occupied, color: 'bg-blue-100 text-blue-700' },
-              { label: 'Reserved', value: stats.reserved, color: 'bg-purple-100 text-purple-700' },
-              { label: 'Cleaning', value: stats.cleaning, color: 'bg-yellow-100 text-yellow-700' },
-              { label: 'Maintenance', value: stats.maintenance, color: 'bg-orange-100 text-orange-700' },
+              { label: 'Total', value: stats.total },
+              { label: 'Available', value: stats.available },
+              { label: 'Occupied', value: stats.occupied },
+              { label: 'Reserved', value: stats.reserved },
+              { label: 'Cleaning', value: stats.cleaning },
+              { label: 'Maintenance', value: stats.maintenance },
             ].map((stat) => (
-              <IOSCard key={stat.label} className="p-4">
-                <p className="text-sm text-gray-500">{stat.label}</p>
-                <p className={`text-2xl font-bold mt-1 ${stat.color.split(' ')[1]}`}>{stat.value}</p>
+              <IOSCard key={stat.label} className="p-4 bg-[#FFFFFF] border-[rgba(60,60,67,0.12)]">
+                <p className="text-sm text-[#8E8E93]">{stat.label}</p>
+                <p className="text-2xl font-bold mt-1 text-[#000000]">{stat.value}</p>
               </IOSCard>
             ))}
           </div>
@@ -699,12 +707,12 @@ export default function ReceptionRoomsPage() {
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                   <Input
                     placeholder="Search by room number..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                    className="pl-9"
                   />
                 </div>
               </div>
@@ -763,14 +771,7 @@ export default function ReceptionRoomsPage() {
                 return (
                   <IOSCard
                     key={room.id}
-                    className={`p-4 cursor-pointer hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition-all border-2 ${
-                      room.status === 'available' ? 'border-green-200 hover:border-green-400' :
-                      room.status === 'occupied' ? 'border-blue-200 hover:border-blue-400' :
-                      room.status === 'reserved' ? 'border-purple-200 hover:border-purple-400' :
-                      room.status === 'maintenance' ? 'border-orange-200 hover:border-orange-400' :
-                      room.status === 'cleaning' ? 'border-yellow-200 hover:border-yellow-400' :
-                      'border-[#E5E5EA] hover:border-gray-400'
-                    }`}
+                    className={`p-4 cursor-pointer hover:shadow-md transition-all border ${statusInfo.borderColor} ${statusInfo.bgColor} hover:opacity-95`}
                     onClick={() => openDetails(room)}
                   >
                     {/* Room Header */}
@@ -808,7 +809,7 @@ export default function ReceptionRoomsPage() {
                     {room.status === 'available' && (
                       <IOSButton
                         size="sm"
-                        className="w-full mt-3 bg-[#34C759] hover:bg-green-700"
+                        className="w-full mt-3 bg-[#3C3C43] hover:bg-[#000000] text-white"
                         onClick={(e) => {
                           e.stopPropagation();
                           openCheckIn(room);

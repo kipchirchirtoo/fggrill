@@ -4,13 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
-import { Button } from "@/components/ui/minimal/button";
 import { auditAPI } from '@/lib/api';
 import { Shield, RefreshCw, FileText, AlertTriangle, CheckCircle, Clock, ClipboardList, BarChart3 } from 'lucide-react';
 import Link from 'next/link';
-import { IOSButton } from '@/components/ui/ios-button';
-import { IOSCard } from '@/components/ui/ios-card';
 
 interface AuditStats { totalAudits: number; pendingReviews: number; complianceScore: number; recentFindings: number; }
 
@@ -39,50 +35,82 @@ export default function AuditDashboard() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const quickLinks = [
-    { href: '/dashboard/audit/logs', icon: ClipboardList, label: 'Audit Logs', desc: 'View all logs', color: 'bg-blue-50 text-[#007AFF]' },
-    { href: '/dashboard/audit/reports', icon: FileText, label: 'Reports', desc: 'Audit reports', color: 'bg-green-50 text-[#34C759]' },
-    { href: '/dashboard/audit/compliance', icon: Shield, label: 'Compliance', desc: 'Check status', color: 'bg-purple-50 text-purple-600' },
-    { href: '/dashboard/audit/inventory', icon: BarChart3, label: 'Inventory Audit', desc: 'Stock checks', color: 'bg-orange-50 text-orange-600' },
+    { href: '/dashboard/audit/logs', icon: ClipboardList, label: 'Audit Logs', desc: 'View all logs' },
+    { href: '/dashboard/audit/reports', icon: FileText, label: 'Reports', desc: 'Audit reports' },
+    { href: '/dashboard/audit/compliance', icon: Shield, label: 'Compliance', desc: 'Check status' },
+    { href: '/dashboard/audit/inventory', icon: BarChart3, label: 'Inventory Audit', desc: 'Stock checks' },
+  ];
+
+  const statCards = [
+    { label: 'Total Audits', value: stats.totalAudits, icon: ClipboardList },
+    { label: 'Pending Reviews', value: stats.pendingReviews, icon: Clock },
+    { label: 'Compliance Score', value: `${stats.complianceScore}%`, icon: CheckCircle },
+    { label: 'High Findings', value: stats.recentFindings, icon: AlertTriangle },
   ];
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div><h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Shield className="h-7 w-7" /> Audit Dashboard</h1><p className="text-gray-500">Internal audit and compliance</p></div>
-            <IOSButton variant="secondary" onClick={fetchData} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Audit Dashboard</h1>
+              <p className="text-stone-500 mt-0.5">Internal audit and compliance</p>
+            </div>
+            <button onClick={fetchData} disabled={isLoading} className="btn-secondary self-start sm:self-auto">
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <IOSCard className="p-4"><ClipboardList className="h-8 w-8 text-[#007AFF] mb-2" /><p className="text-sm text-gray-500">Total Audits</p><p className="text-2xl font-bold">{stats.totalAudits}</p></IOSCard>
-            <IOSCard className="p-4"><Clock className="h-8 w-8 text-yellow-600 mb-2" /><p className="text-sm text-gray-500">Pending Reviews</p><p className="text-2xl font-bold text-yellow-600">{stats.pendingReviews}</p></IOSCard>
-            <IOSCard className="p-4"><CheckCircle className="h-8 w-8 text-[#34C759] mb-2" /><p className="text-sm text-gray-500">Compliance Score</p><p className="text-2xl font-bold text-[#34C759]">{stats.complianceScore}%</p></IOSCard>
-            <IOSCard className="p-4"><AlertTriangle className="h-8 w-8 text-[#FF3B30] mb-2" /><p className="text-sm text-gray-500">High Findings</p><p className="text-2xl font-bold text-[#FF3B30]">{stats.recentFindings}</p></IOSCard>
+          {/* Stats Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {statCards.map((stat, i) => (
+              <div key={i} className="stat-card">
+                <div className="stat-icon">
+                  <stat.icon className="h-5 w-5" />
+                </div>
+                <p className="stat-value">{stat.value}</p>
+                <p className="stat-label">{stat.label}</p>
+              </div>
+            ))}
           </div>
 
-          <IOSCard className="p-6">
-            <h2 className="text-lg font-semibold font-sf-pro-display mb-4">Quick Access</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Quick Access */}
+          <div className="card-elevated p-5">
+            <div className="section-header mb-4">
+              <h2 className="section-title">Quick Access</h2>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {quickLinks.map((link) => (
                 <Link key={link.href} href={link.href}>
-                  <IOSCard className={`p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer ${link.color.split(' ')[0]}`}>
-                    <link.icon className={`h-8 w-8 mb-2 ${link.color.split(' ')[1]}`} />
-                    <p className="font-medium">{link.label}</p>
-                    <p className="text-sm text-gray-500">{link.desc}</p>
-                  </IOSCard>
+                  <div className="action-card group">
+                    <div className="action-card-icon">
+                      <link.icon className="h-5 w-5" />
+                    </div>
+                    <p className="action-card-label">{link.label}</p>
+                    <p className="text-[11px] text-stone-400 mt-0.5">{link.desc}</p>
+                  </div>
                 </Link>
               ))}
             </div>
-          </IOSCard>
+          </div>
 
-          <IOSCard className="p-6">
-            <h2 className="text-lg font-semibold font-sf-pro-display mb-4">Compliance Overview</h2>
-            <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
-              <div className="h-full bg-[#34C759]" style={{ width: `${stats.complianceScore}%` }} />
+          {/* Compliance Overview */}
+          <div className="card-elevated p-5">
+            <h2 className="text-[15px] font-semibold text-stone-900 mb-4">Compliance Overview</h2>
+            <div className="h-3 bg-stone-100 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-stone-400 rounded-full transition-all duration-500" 
+                style={{ width: `${stats.complianceScore}%` }} 
+              />
             </div>
-            <p className="text-sm text-gray-500 mt-2">Overall compliance: {stats.complianceScore}%</p>
-          </IOSCard>
+            <div className="flex items-center justify-between mt-3">
+              <p className="text-[13px] text-stone-500">Overall compliance</p>
+              <p className="text-[15px] font-semibold text-stone-700">{stats.complianceScore}%</p>
+            </div>
+          </div>
         </div>
       </DashboardLayout>
     </ProtectedRoute>

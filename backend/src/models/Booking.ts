@@ -7,7 +7,8 @@ export enum BookingStatus {
   CHECKED_IN = 'checked_in',
   CHECKED_OUT = 'checked_out',
   CANCELLED = 'cancelled',
-  NO_SHOW = 'no_show'
+  NO_SHOW = 'no_show',
+  MODIFIED = 'modified'
 }
 
 export interface IBooking {
@@ -159,7 +160,39 @@ export class Booking implements IBooking {
   }
 
   private generateConfirmationNumber(): string {
-    return 'RES-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+    return this.generateBookingId();
+  }
+
+  static async generateBookingId(): Promise<string> {
+    const now = new Date();
+    const year = now.getFullYear().toString().slice(-2);
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const day = now.getDate().toString().padStart(2, '0');
+    const dateStr = `${year}${month}${day}`;
+    
+    // Get today's booking count to generate sequential number
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setDate(endOfDay.getDate() + 1);
+    
+    const { count } = await supabase
+      .from('reservations')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', startOfDay.toISOString())
+      .lt('created_at', endOfDay.toISOString());
+    
+    const sequentialNumber = ((count || 0) + 1).toString().padStart(4, '0');
+    return `HTL${dateStr}-${sequentialNumber}`;
+  }
+
+  private generateBookingId(): string {
+    // Fallback for synchronous calls - will be replaced by async version
+    const now = new Date();
+    const year = now.getFullYear().toString().slice(-2);
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const day = now.getDate().toString().padStart(2, '0');
+    const random = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
+    return `HTL${year}${month}${day}-${random}`;
   }
 
   static async findById(id: string): Promise<Booking | null> {
@@ -197,6 +230,24 @@ export class Booking implements IBooking {
 
   async save(): Promise<Booking> {
     console.log('Saving booking payload...');
+    console.log('Booking data:', {
+      id: this.id,
+      guestId: this.guestId,
+      roomId: this.roomId,
+      roomTypeId: this.roomTypeId
+    });
+    
+    // Validate UUID fields
+    if (!this.guestId || this.guestId.trim() === '') {
+      throw new Error('Guest ID is required and cannot be empty');
+    }
+    if (!this.roomId || this.roomId.trim() === '') {
+      throw new Error('Room ID is required and cannot be empty');
+    }
+    if (!this.roomTypeId || this.roomTypeId.trim() === '') {
+      throw new Error('Room Type ID is required and cannot be empty');
+    }
+    
     const { data, error } = await supabase
       .from('reservations')
       .upsert([

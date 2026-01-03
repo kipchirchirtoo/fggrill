@@ -10,6 +10,7 @@ export enum UserRole {
   AUDITOR = 'auditor',
   CENTRAL_STOREKEEPER = 'central_storekeeper',
   BRANCH_STOREKEEPER = 'branch_storekeeper',
+  CASHIER = 'cashier',
   EMPLOYEE = 'employee',
   GUEST = 'guest'
 }

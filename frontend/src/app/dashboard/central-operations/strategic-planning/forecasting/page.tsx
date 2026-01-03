@@ -53,7 +53,7 @@ function ForecastingContent() {
   const fetchForecasts = useCallback(async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('auth_token') || 'demo-token';
+      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE}/api/central-operations/strategic-planning/forecasting`, { 
         headers: { 'Authorization': `Bearer ${token}` } 
       });
@@ -75,7 +75,7 @@ function ForecastingContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('auth_token') || 'demo-token';
+      const token = localStorage.getItem('token');
       const url = editingForecast 
         ? `${API_BASE}/api/central-operations/strategic-planning/forecasting/${editingForecast.id}`
         : `${API_BASE}/api/central-operations/strategic-planning/forecasting`;
@@ -123,7 +123,7 @@ function ForecastingContent() {
   const handleDelete = async (id: number) => {
     if (!confirm('Are you sure you want to delete this forecast?')) return;
     try {
-      const token = localStorage.getItem('auth_token') || 'demo-token';
+      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE}/api/central-operations/strategic-planning/forecasting/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
@@ -140,7 +140,7 @@ function ForecastingContent() {
 
   const handleUpdateActual = async (id: number, actual_value: string) => {
     try {
-      const token = localStorage.getItem('auth_token') || 'demo-token';
+      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE}/api/central-operations/strategic-planning/forecasting/${id}`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },

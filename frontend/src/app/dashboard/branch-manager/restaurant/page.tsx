@@ -2,29 +2,40 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { restaurantAPI } from '@/lib/api';
-import { Utensils, RefreshCw, ShoppingCart, DollarSign, Clock, ChefHat } from 'lucide-react';
+import { Utensils, RefreshCw, ShoppingCart, DollarSign, Clock, ChefHat, Building2 } from 'lucide-react';
 import Link from 'next/link';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
 export default function BranchRestaurantPage() {
   const { user } = useAuth();
+  const { activeBranchId, activeBranch } = useBranch();
   const [orders, setOrders] = useState<any[]>([]);
   const [stats, setStats] = useState({ total: 0, pending: 0, revenue: 0 });
   const [isLoading, setIsLoading] = useState(true);
 
+  // Use active branch from context, fallback to user's branch
+  const currentBranchId = activeBranchId || user?.branch_id;
+
   const fetchData = useCallback(async () => {
+    if (!currentBranchId) {
+      setOrders([]);
+      setStats({ total: 0, pending: 0, revenue: 0 });
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       const [ordersRes, salesRes] = await Promise.all([
-        restaurantAPI.getOrders(),
-        restaurantAPI.getDailySales(),
+        restaurantAPI.getOrders(currentBranchId),
+        restaurantAPI.getDailySales(currentBranchId),
       ]);
       if (ordersRes.success) {
         const data = ordersRes.data || [];
@@ -37,7 +48,7 @@ export default function BranchRestaurantPage() {
       }
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, []);
+  }, [currentBranchId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -46,7 +57,13 @@ export default function BranchRestaurantPage() {
       <DashboardLayout>
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div><h1 className="text-2xl font-bold text-gray-900">Restaurant</h1><p className="text-gray-500">Food & beverage operations</p></div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Restaurant</h1>
+              <p className="text-gray-500 flex items-center gap-1">
+                <Building2 className="h-3.5 w-3.5" />
+                {activeBranch?.name || 'Select a branch'}
+              </p>
+            </div>
             <IOSButton variant="secondary" onClick={fetchData} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 
@@ -60,10 +77,10 @@ export default function BranchRestaurantPage() {
             <IOSCard className="p-6">
               <h2 className="text-lg font-semibold font-sf-pro-display mb-4">Quick Actions</h2>
               <div className="grid grid-cols-2 gap-3">
-                <Link href="/dashboard/restaurant/pos"><IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-blue-50 text-center"><ShoppingCart className="h-6 w-6 mx-auto text-[#007AFF] mb-2" /><p className="text-sm font-medium">POS</p></IOSCard></Link>
-                <Link href="/dashboard/restaurant/kitchen"><IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-orange-50 text-center"><ChefHat className="h-6 w-6 mx-auto text-orange-600 mb-2" /><p className="text-sm font-medium">Kitchen</p></IOSCard></Link>
-                <Link href="/dashboard/restaurant/orders"><IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-green-50 text-center"><Clock className="h-6 w-6 mx-auto text-[#34C759] mb-2" /><p className="text-sm font-medium">Orders</p></IOSCard></Link>
-                <Link href="/dashboard/restaurant/menu"><IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-purple-50 text-center"><Utensils className="h-6 w-6 mx-auto text-purple-600 mb-2" /><p className="text-sm font-medium">Menu</p></IOSCard></Link>
+                <Link href="/dashboard/pos-kitchen"><IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-blue-50 text-center"><ShoppingCart className="h-6 w-6 mx-auto text-[#007AFF] mb-2" /><p className="text-sm font-medium">POS & Kitchen</p></IOSCard></Link>
+                <Link href="/dashboard/pos-kitchen"><IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-orange-50 text-center"><ChefHat className="h-6 w-6 mx-auto text-orange-600 mb-2" /><p className="text-sm font-medium">Kitchen Display</p></IOSCard></Link>
+                <Link href="/dashboard/pos-kitchen"><IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-green-50 text-center"><Clock className="h-6 w-6 mx-auto text-[#34C759] mb-2" /><p className="text-sm font-medium">Orders</p></IOSCard></Link>
+                <Link href="/dashboard/branch-manager/menu"><IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer bg-purple-50 text-center"><Utensils className="h-6 w-6 mx-auto text-purple-600 mb-2" /><p className="text-sm font-medium">Menu</p></IOSCard></Link>
               </div>
             </IOSCard>
 

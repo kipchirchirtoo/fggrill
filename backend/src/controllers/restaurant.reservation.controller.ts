@@ -12,7 +12,7 @@ export const getReservations = async (
 ): Promise<void> => {
   try {
     const { branch_id, status, date } = req.query;
-    
+
     let query = supabase
       .from('restaurant_reservations')
       .select(`
@@ -22,15 +22,16 @@ export const getReservations = async (
       `)
       .order('reservation_date', { ascending: true })
       .order('reservation_time', { ascending: true });
-    
-    if (branch_id) query = query.eq('branch_id', branch_id);
+
+    const branchId = req.user?.branch_id || req.query.branch_id;
+    if (branchId) query = query.eq('branch_id', branchId);
     if (status) query = query.eq('status', status);
     if (date) query = query.eq('reservation_date', date);
-    
+
     const { data: reservations, error } = await query;
-    
+
     if (error) throw error;
-    
+
     res.status(200).json({
       success: true,
       count: reservations?.length || 0,
@@ -59,9 +60,9 @@ export const getReservationById = async (
       `)
       .eq('id', req.params.id)
       .single();
-    
+
     if (error) throw error;
-    
+
     if (!reservation) {
       res.status(404).json({
         success: false,
@@ -69,7 +70,7 @@ export const getReservationById = async (
       });
       return;
     }
-    
+
     res.status(200).json({
       success: true,
       data: reservation
@@ -102,15 +103,15 @@ export const createReservation = async (
       specialRequests,
       depositAmount
     } = req.body;
-    
+
     // Generate reservation number
     const { data: resNumber } = await supabase
       .rpc('generate_reservation_number');
-    
+
     const { data: reservation, error } = await supabase
       .from('restaurant_reservations')
       .insert([{
-        branch_id: branchId,
+        branch_id: req.user?.branch_id || branchId,
         reservation_number: resNumber,
         guest_name: guestName,
         guest_email: guestEmail,
@@ -128,14 +129,14 @@ export const createReservation = async (
       }])
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     res.status(201).json({
       success: true,
       data: reservation
     });
-    
+
     logger.info(`New reservation created: ${resNumber}`);
   } catch (error) {
     next(error);
@@ -161,7 +162,7 @@ export const updateReservation = async (
       specialRequests,
       tableId
     } = req.body;
-    
+
     const { data: reservation, error } = await supabase
       .from('restaurant_reservations')
       .update({
@@ -178,14 +179,14 @@ export const updateReservation = async (
       .eq('id', req.params.id)
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     res.status(200).json({
       success: true,
       data: reservation
     });
-    
+
     logger.info(`Reservation updated: ${reservation.reservation_number}`);
   } catch (error) {
     next(error);
@@ -211,14 +212,14 @@ export const confirmReservation = async (
       .eq('id', req.params.id)
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     res.status(200).json({
       success: true,
       data: reservation
     });
-    
+
     logger.info(`Reservation confirmed: ${reservation.reservation_number}`);
   } catch (error) {
     next(error);
@@ -235,7 +236,7 @@ export const seatReservation = async (
 ): Promise<void> => {
   try {
     const { tableId } = req.body;
-    
+
     const { data: reservation, error } = await supabase
       .from('restaurant_reservations')
       .update({
@@ -247,9 +248,9 @@ export const seatReservation = async (
       .eq('id', req.params.id)
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     // Update table status to occupied
     if (tableId) {
       await supabase
@@ -257,12 +258,12 @@ export const seatReservation = async (
         .update({ status: 'occupied' })
         .eq('id', tableId);
     }
-    
+
     res.status(200).json({
       success: true,
       data: reservation
     });
-    
+
     logger.info(`Reservation seated: ${reservation.reservation_number}`);
   } catch (error) {
     next(error);
@@ -279,7 +280,7 @@ export const cancelReservation = async (
 ): Promise<void> => {
   try {
     const { reason } = req.body;
-    
+
     const { data: reservation, error } = await supabase
       .from('restaurant_reservations')
       .update({
@@ -291,14 +292,14 @@ export const cancelReservation = async (
       .eq('id', req.params.id)
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     res.status(200).json({
       success: true,
       data: reservation
     });
-    
+
     logger.info(`Reservation cancelled: ${reservation.reservation_number}`);
   } catch (error) {
     next(error);
@@ -324,14 +325,14 @@ export const markNoShow = async (
       .eq('id', req.params.id)
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     res.status(200).json({
       success: true,
       data: reservation
     });
-    
+
     logger.info(`Reservation marked as no-show: ${reservation.reservation_number}`);
   } catch (error) {
     next(error);
@@ -348,7 +349,7 @@ export const checkAvailability = async (
 ): Promise<void> => {
   try {
     const { date, time, partySize, branchId } = req.query;
-    
+
     // Get existing reservations for that date/time
     const { data: existingReservations } = await supabase
       .from('restaurant_reservations')
@@ -357,20 +358,20 @@ export const checkAvailability = async (
       .eq('reservation_time', time)
       .eq('branch_id', branchId)
       .in('status', ['confirmed', 'pending', 'seated']);
-    
+
     // Get total table capacity
     const { data: tables } = await supabase
       .from('restaurant_tables')
       .select('capacity')
       .eq('branch_id', branchId)
       .eq('is_active', true);
-    
+
     const totalCapacity = tables?.reduce((sum, t) => sum + (t.capacity || 0), 0) || 0;
     const bookedCapacity = existingReservations?.reduce((sum, r) => sum + (r.party_size || 0), 0) || 0;
     const availableCapacity = totalCapacity - bookedCapacity;
-    
+
     const isAvailable = availableCapacity >= parseInt(partySize as string);
-    
+
     res.status(200).json({
       success: true,
       data: {

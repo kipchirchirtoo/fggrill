@@ -30,23 +30,23 @@ export default function VendorReports({
   const [generatingReport, setGeneratingReport] = useState(false);
   const [reportData, setReportData] = useState<any | null>(null);
   const [selectedVendorId, setSelectedVendorId] = useState<string>('');
-  
+
   // When selectedVendor changes from parent
   useEffect(() => {
     if (selectedVendor?.id) {
       setSelectedVendorId(selectedVendor.id.toString());
     }
   }, [selectedVendor]);
-  
+
   // Generate report
   const generateReport = async () => {
     setGeneratingReport(true);
     setReportData(null);
-    
+
     try {
       const vendorId = selectedVendorId ? Number(selectedVendorId) : undefined;
       const response = await vendorPerformanceAPI.generateReport(vendorId, selectedCategory || undefined);
-      
+
       if (response.success) {
         setReportData(response.data);
         toast.success('Report generated successfully');
@@ -60,31 +60,31 @@ export default function VendorReports({
       setGeneratingReport(false);
     }
   };
-  
+
   // Export report
   const exportReport = (format: 'pdf' | 'excel') => {
     // This would connect to the export endpoint
     toast.info(`Exporting report as ${format.toUpperCase()}...`);
-    
+
     // Mock export for now
     setTimeout(() => {
       toast.success(`Report exported as ${format.toUpperCase()}`);
     }, 1500);
   };
-  
+
   // Format vendor options for select
   const getVendorOptions = () => {
     // Filter by category if selected
-    const filteredVendors = selectedCategory 
+    const filteredVendors = selectedCategory
       ? vendors.filter(v => v.category === selectedCategory)
       : vendors;
-      
+
     return filteredVendors.map(vendor => ({
       value: vendor.id.toString(),
       label: vendor.name || `Vendor ${vendor.id}`
     }));
   };
-  
+
   // Handle vendor selection
   const handleVendorChange = (value: string) => {
     setSelectedVendorId(value);
@@ -93,22 +93,22 @@ export default function VendorReports({
       onSelectVendor(vendor);
     }
   };
-  
+
   // Handle category selection 
   const handleCategoryChange = (value: string) => {
     onSelectCategory(value || null);
     setSelectedVendorId(''); // Reset vendor when category changes
   };
-  
+
   const vendorOptions = getVendorOptions();
-  
+
   return (
     <div className="p-6 space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-6">
           <IOSCard className="p-4">
             <h3 className="text-lg font-medium mb-4">Generate Report</h3>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Report Type</label>
@@ -125,15 +125,15 @@ export default function VendorReports({
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium mb-1">Category</label>
-                <Select value={selectedCategory || ''} onValueChange={handleCategoryChange}>
+                <Select value={selectedCategory || 'ALL'} onValueChange={(value) => handleCategoryChange(value === 'ALL' ? '' : value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="All Categories" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Categories</SelectItem>
+                    <SelectItem value="ALL">All Categories</SelectItem>
                     {categories.map(category => (
                       <SelectItem key={category} value={category}>
                         {category}
@@ -142,15 +142,15 @@ export default function VendorReports({
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium mb-1">Vendor (Optional)</label>
-                <Select value={selectedVendorId} onValueChange={handleVendorChange}>
+                <Select value={selectedVendorId || 'ALL'} onValueChange={(value) => handleVendorChange(value === 'ALL' ? '' : value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="All Vendors" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Vendors</SelectItem>
+                    <SelectItem value="ALL">All Vendors</SelectItem>
                     {vendorOptions.map(option => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
@@ -159,9 +159,9 @@ export default function VendorReports({
                   </SelectContent>
                 </Select>
               </div>
-              
-              <IOSButton 
-                className="w-full mt-4" 
+
+              <IOSButton
+                className="w-full mt-4"
                 onClick={generateReport}
                 disabled={generatingReport}
                 leftIcon={generatingReport ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
@@ -170,7 +170,7 @@ export default function VendorReports({
               </IOSButton>
             </div>
           </IOSCard>
-          
+
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>About Reports</AlertTitle>
@@ -180,7 +180,7 @@ export default function VendorReports({
             </AlertDescription>
           </Alert>
         </div>
-        
+
         <div className="lg:col-span-2 space-y-6">
           {generatingReport ? (
             <div className="flex flex-col items-center justify-center h-64 border rounded-lg bg-gray-50">
@@ -201,9 +201,9 @@ export default function VendorReports({
                 <div className="flex justify-between items-start">
                   <div>
                     <h3 className="text-xl font-bold">
-                      {selectedVendor?.name 
-                        ? `${selectedVendor.name} Report` 
-                        : selectedCategory 
+                      {selectedVendor?.name
+                        ? `${selectedVendor.name} Report`
+                        : selectedCategory
                           ? `${selectedCategory} Category Report`
                           : 'Vendor Performance Report'
                       }
@@ -212,18 +212,18 @@ export default function VendorReports({
                       Generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
                     </p>
                   </div>
-                  
+
                   <div className="flex space-x-2">
-                    <IOSButton 
-                      variant="outline" 
+                    <IOSButton
+                      variant="outline"
                       size="sm"
                       onClick={() => exportReport('pdf')}
                       leftIcon={<Download className="h-4 w-4" />}
                     >
                       Export PDF
                     </IOSButton>
-                    <IOSButton 
-                      variant="outline" 
+                    <IOSButton
+                      variant="outline"
                       size="sm"
                       onClick={() => exportReport('excel')}
                       leftIcon={<Download className="h-4 w-4" />}
@@ -233,14 +233,14 @@ export default function VendorReports({
                   </div>
                 </div>
               </IOSCard>
-              
+
               {/* Report Content */}
               <IOSCard className="p-6">
                 <h4 className="font-medium mb-4">Report Summary</h4>
                 <p className="text-sm text-gray-600 mb-4">
                   This report provides a comprehensive analysis of vendor performance metrics including delivery timeliness, product quality, price competitiveness, and overall satisfaction.
                 </p>
-                
+
                 {/* Top Vendors Section */}
                 {reportData.top_vendors?.length > 0 && (
                   <div className="mt-6">
@@ -266,7 +266,7 @@ export default function VendorReports({
                     </div>
                   </div>
                 )}
-                
+
                 {/* Recent Issues Section */}
                 {reportData.recent_issues?.length > 0 && (
                   <div className="mt-6">
@@ -301,7 +301,7 @@ export default function VendorReports({
                     </div>
                   </div>
                 )}
-                
+
                 {/* Performance Trends */}
                 {reportData.performance_trends?.length > 0 && (
                   <div className="mt-6">
@@ -309,7 +309,7 @@ export default function VendorReports({
                     <p className="text-sm text-gray-600 mb-4">
                       Performance trends show how vendor metrics have changed over time. This helps identify improvements or declines in service quality.
                     </p>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {reportData.performance_trends.slice(0, 6).map((trend: any, index: number) => (
                         <div key={index} className="border rounded p-3">
@@ -328,11 +328,11 @@ export default function VendorReports({
                     </div>
                   </div>
                 )}
-                
+
                 {/* Key Metrics */}
                 <div className="mt-6">
                   <h5 className="font-medium text-sm uppercase text-gray-500 mb-3">Key Metrics</h5>
-                  
+
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="border rounded p-3">
                       <p className="text-xs text-gray-500">Total Vendors</p>
@@ -340,7 +340,7 @@ export default function VendorReports({
                         {reportData.vendors?.length || vendors.length || 0}
                       </p>
                     </div>
-                    
+
                     <div className="border rounded p-3">
                       <p className="text-xs text-gray-500">Avg. On-time</p>
                       <p className="text-2xl font-bold">
@@ -350,7 +350,7 @@ export default function VendorReports({
                         }
                       </p>
                     </div>
-                    
+
                     <div className="border rounded p-3">
                       <p className="text-xs text-gray-500">Avg. Quality</p>
                       <p className="text-2xl font-bold">
@@ -360,7 +360,7 @@ export default function VendorReports({
                         }
                       </p>
                     </div>
-                    
+
                     <div className="border rounded p-3">
                       <p className="text-xs text-gray-500">Avg. Price</p>
                       <p className="text-2xl font-bold">
@@ -372,7 +372,7 @@ export default function VendorReports({
                     </div>
                   </div>
                 </div>
-                
+
                 {/* Report Footer */}
                 <div className="mt-8 pt-4 border-t text-xs text-gray-500">
                   <p>Report ID: {reportData.report_date}</p>

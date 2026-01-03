@@ -5,13 +5,13 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
 import { reportAPI } from '@/lib/api';
-import { 
-  DollarSign, TrendingUp, Calendar, Download, 
-  CreditCard, AlertTriangle 
+import {
+  DollarSign, TrendingUp, Calendar, Download,
+  CreditCard, AlertTriangle
 } from 'lucide-react';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';
-import { 
+import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, Legend
 } from 'recharts';
@@ -27,7 +27,7 @@ export default function RevenueReportsPage() {
     try {
       const endDate = new Date();
       const startDate = new Date();
-      
+
       if (dateRange === '30d') startDate.setDate(startDate.getDate() - 30);
       if (dateRange === '7d') startDate.setDate(startDate.getDate() - 7);
       if (dateRange === '90d') startDate.setDate(startDate.getDate() - 90);
@@ -71,7 +71,27 @@ export default function RevenueReportsPage() {
                 <option value="30d">Last 30 Days</option>
                 <option value="90d">Last 3 Months</option>
               </select>
-              <IOSButton variant="outline" leftIcon={<Download />}>
+              <IOSButton
+                variant="outline"
+                leftIcon={<Download />}
+                onClick={() => {
+                  toast.promise(
+                    reportAPI.exportReport({
+                      reportType: 'revenue_analysis',
+                      format: 'excel',
+                      filters: {
+                        startDate: new Date(new Date().setDate(new Date().getDate() - (dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90))).toISOString(),
+                        endDate: new Date().toISOString()
+                      }
+                    }),
+                    {
+                      loading: 'Generating Excel report...',
+                      success: 'Report downloaded successfully',
+                      error: 'Failed to generate report'
+                    }
+                  );
+                }}
+              >
                 Export
               </IOSButton>
             </div>
@@ -141,12 +161,12 @@ export default function RevenueReportsPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data?.dailyBreakdown || []}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis 
-                        dataKey="date" 
+                      <XAxis
+                        dataKey="date"
                         tickFormatter={(str) => new Date(str).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
                       />
                       <YAxis />
-                      <Tooltip 
+                      <Tooltip
                         formatter={(value: number) => [`KES ${value.toLocaleString()}`, 'Revenue']}
                         labelFormatter={(label) => new Date(label).toLocaleDateString()}
                       />

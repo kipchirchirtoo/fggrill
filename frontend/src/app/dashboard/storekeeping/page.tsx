@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Button } from "@/components/ui/minimal/button";
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { IOSBadge } from '@/components/ui/ios-badge';
+import { BranchSelector } from '@/components/ui/branch-selector';
 import {
   Package, Warehouse, Truck, AlertTriangle, TrendingUp,
   Building2, ArrowRight, RefreshCw, BarChart3, ClipboardList,
@@ -48,8 +50,10 @@ interface LowStockItem {
 
 export default function StorekeepingDashboard() {
   const { user, isLoading: authLoading } = useAuth();
+  const { activeBranchId, activeBranch, userBranches } = useBranch();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
   const [stats, setStats] = useState<DashboardStats>({
     totalItems: 0,
     lowStockItems: 0,
@@ -60,6 +64,9 @@ export default function StorekeepingDashboard() {
   });
   const [branches, setBranches] = useState<Branch[]>([]);
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
+
+  // Effective branch for filtering
+  const effectiveBranchId = selectedBranchId || activeBranchId;
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -74,19 +81,20 @@ export default function StorekeepingDashboard() {
       }
       fetchDashboardData();
     }
-  }, [authLoading, user, router]);
+  }, [authLoading, user, router, effectiveBranchId]);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('token');
       const headers = { 'Authorization': `Bearer ${token}` };
+      const branchQuery = effectiveBranchId ? `?branch_id=${effectiveBranchId}` : '';
 
-      // Fetch all data in parallel
+      // Fetch all data in parallel with branch filter
       const [itemsRes, branchesRes, statsRes] = await Promise.all([
-        fetch(`${API_URL}/api/store/items`, { headers }),
+        fetch(`${API_URL}/api/store/items${branchQuery}`, { headers }),
         fetch(`${API_URL}/api/store/branches`, { headers }),
-        fetch(`${API_URL}/api/inventory/stats/overview`, { headers })
+        fetch(`${API_URL}/api/inventory/stats/overview${branchQuery}`, { headers })
       ]);
 
       if (itemsRes.ok) {
@@ -123,7 +131,7 @@ export default function StorekeepingDashboard() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [effectiveBranchId]);
 
   const isCentral = user?.is_central || user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER;
 
@@ -151,10 +159,19 @@ export default function StorekeepingDashboard() {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Storekeeping Dashboard</h1>
               <p className="text-gray-600">
-                {isCentral ? 'Central Warehouse Management' : 'Branch Stock Management'}
+                {isCentral ? 'Central Warehouse Management' : (activeBranch?.name || 'Branch Stock Management')}
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex items-center gap-3">
+              {isCentral && userBranches.length > 1 && (
+                <BranchSelector 
+                  size="sm" 
+                  showAllOption={true}
+                  allOptionLabel="All Branches"
+                  value={selectedBranchId}
+                  onChange={setSelectedBranchId}
+                />
+              )}
               <IOSButton variant="outline" onClick={fetchDashboardData} leftIcon={<RefreshCw />}>Refresh
               </IOSButton>
               <IOSButton onClick={() => router.push('/dashboard/storekeeping/inventory')} leftIcon={<Plus />}>

@@ -344,12 +344,12 @@ function BranchBudgetPageContent() {
               <IOSCard className="p-4 mb-4">
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                   <div className="relative col-span-2">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                     <Input
                       placeholder="Search budgets..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10"
+                      className="pl-9"
                     />
                   </div>
                   

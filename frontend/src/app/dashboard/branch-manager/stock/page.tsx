@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
@@ -9,7 +10,7 @@ import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
 import { storeAPI } from '@/lib/api';
-import { Package, RefreshCw, Search, AlertTriangle, TrendingDown, CheckCircle, ShoppingCart } from 'lucide-react';
+import { Package, RefreshCw, Search, AlertTriangle, TrendingDown, CheckCircle, ShoppingCart, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -19,18 +20,45 @@ interface StockItem { id: string; sku: string; name: string; category: string; q
 
 export default function BranchStockPage() {
   const { user } = useAuth();
+  const { activeBranchId, activeBranch } = useBranch();
   const [items, setItems] = useState<StockItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Use active branch from context, fallback to user's branch
+  const currentBranchId = activeBranchId || user?.branch_id;
+
   const fetchItems = useCallback(async () => {
+    if (!currentBranchId) {
+      setItems([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
-      const response = await storeAPI.getBranchStock();
-      if (response.success) setItems(response.data || []);
-    } catch (error) { console.error('Error:', error); }
-    finally { setIsLoading(false); }
-  }, []);
+      const response = await storeAPI.getBranchStock(currentBranchId);
+      if (response.success && Array.isArray(response.data)) {
+        // Map backend response to StockItem interface
+        const mappedItems: StockItem[] = response.data.map((record: any) => ({
+          id: record.id,
+          sku: record.item_sku,
+          name: record.item?.item_name || 'Unknown Item',
+          category: record.item?.category || 'Uncategorized',
+          quantity: record.quantity || 0,
+          min_quantity: record.reorder_level || 0,
+          unit: record.item?.unit_of_measure || 'units'
+        }));
+        setItems(mappedItems);
+      } else {
+        setItems([]);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('Failed to load stock items');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentBranchId]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
@@ -54,7 +82,13 @@ export default function BranchStockPage() {
       <DashboardLayout>
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div><h1 className="text-2xl font-bold text-gray-900">Stock</h1><p className="text-gray-500">Branch inventory</p></div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Stock</h1>
+              <p className="text-gray-500 flex items-center gap-1">
+                <Building2 className="h-3.5 w-3.5" />
+                {activeBranch?.name || 'Select a branch'}
+              </p>
+            </div>
             <div className="flex gap-2">
               <IOSButton variant="secondary" onClick={fetchItems} leftIcon={<RefreshCw />}>Refresh</IOSButton>
               <Link href="/dashboard/branch-manager/requests"><IOSButton leftIcon={<ShoppingCart />}>Requests</IOSButton></Link>
@@ -80,8 +114,8 @@ export default function BranchStockPage() {
 
           <IOSCard className="p-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input placeholder="Search items..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
+              <Input placeholder="Search items..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
             </div>
           </IOSCard>
 

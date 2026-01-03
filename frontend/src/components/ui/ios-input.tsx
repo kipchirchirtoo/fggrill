@@ -132,7 +132,7 @@ export const IOSInput = React.forwardRef<HTMLInputElement, IOSInputProps>(
             ref={ref}
             className={cn(
               inputVariants({ variant, size, rounded, filled }),
-              icon && iconPosition === 'left' && 'pl-10',
+              icon && iconPosition === 'left' && 'pl-9',
               icon && iconPosition === 'right' && 'pr-10',
               rightElement && 'pr-12',
               floatingLabel && (isFocused || hasValue) && 'pt-6 pb-2',

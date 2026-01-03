@@ -78,9 +78,8 @@ function BranchRevenueContent() {
       if (response.success) {
         processRevenueData(response.data);
       } else {
-        // If API fails, use placeholder data
-        const placeholderData = generatePlaceholderData();
-        processRevenueData(placeholderData);
+        // Show empty state
+        processRevenueData({ sources: [], byDay: [], total: 0, comparison: 0, trend: 0 });
       }
     } catch (error) {
       console.error('Error fetching revenue data:', error);

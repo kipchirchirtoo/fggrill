@@ -8,7 +8,7 @@ from typing import List, Optional, Dict, Any
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
-from models import (
+from room_service.models import (
     Room, RoomType, AvailableRoom, OccupiedRoom, OccupancyStats,
     DailyOccupancy, VacancyForecast, RoomStatus, BookingStatus, BranchStats
 )

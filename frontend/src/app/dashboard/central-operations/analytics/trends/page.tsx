@@ -5,24 +5,25 @@ import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { BranchAwareDashboardLayout } from '@/components/layout/branch-aware-dashboard-layout';
 import { toast } from 'sonner';
-import { 
-  TrendingUp, TrendingDown, RefreshCw, Loader2, DollarSign, ShoppingCart, 
-  ArrowUp, ArrowDown, Calendar, BarChart3, Activity, PieChart, 
+import {
+  TrendingUp, TrendingDown, RefreshCw, Loader2, DollarSign, ShoppingCart,
+  ArrowUp, ArrowDown, Calendar, BarChart3, Activity, PieChart,
   ChevronDown, Download, Filter, MoreHorizontal, X
 } from 'lucide-react';
 import { BranchPageWrapper } from '@/components/branch/branch-page-wrapper';
+import { useBranch } from '@/lib/branch-context';
 
 // Python microservice URL for analytics
 const ANALYTICS_API = process.env.NEXT_PUBLIC_REPORTS_SERVICE_URL || 'http://localhost:5001';
 
-interface TrendData { 
-  date: string; 
-  revenue: number; 
-  orders: number; 
+interface TrendData {
+  date: string;
+  revenue: number;
+  orders: number;
 }
 
-interface Summary { 
-  total_revenue: number; 
+interface Summary {
+  total_revenue: number;
   total_orders: number;
   avg_order_value: number;
   daily_avg_revenue: number;
@@ -41,9 +42,10 @@ interface Category {
 
 function TrendsContent() {
   const { user } = useAuth();
+  const { branches } = useBranch();
   const [revenueTrend, setRevenueTrend] = useState<TrendData[]>([]);
-  const [summary, setSummary] = useState<Summary>({ 
-    total_revenue: 0, 
+  const [summary, setSummary] = useState<Summary>({
+    total_revenue: 0,
     total_orders: 0,
     avg_order_value: 0,
     daily_avg_revenue: 0,
@@ -69,7 +71,7 @@ function TrendsContent() {
         const url = new URL(`${ANALYTICS_API}/api/analytics/trends`);
         url.searchParams.append('period', period);
         if (filterBranch) url.searchParams.append('branch_id', filterBranch);
-        
+
         const res = await fetch(url.toString(), { signal: AbortSignal.timeout(5000) });
         if (res.ok) {
           data = await res.json();
@@ -77,24 +79,24 @@ function TrendsContent() {
       } catch (e) {
         console.log('Python service unavailable, using fallback');
       }
-      
+
       // Fallback to Node backend
       if (!data || !data.success) {
         const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-        const token = localStorage.getItem('auth_token') || 'demo-token';
-        const res = await fetch(`${API_BASE}/api/central-operations/analytics/trends?period=${period}`, { 
-          headers: { 'Authorization': `Bearer ${token}` } 
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_BASE}/api/central-operations/analytics/trends?period=${period}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
           const result = await res.json();
           data = { success: true, data: result.data };
         }
       }
-      
+
       if (data?.success || data?.data) {
         setRevenueTrend(Array.isArray(data.data?.revenue_trend) ? data.data.revenue_trend : []);
-        setSummary(data.data?.summary || { 
-          total_revenue: data.data?.total_revenue || 0, 
+        setSummary(data.data?.summary || {
+          total_revenue: data.data?.total_revenue || 0,
           total_orders: data.data?.total_orders || 0,
           avg_order_value: 0,
           daily_avg_revenue: 0,
@@ -105,11 +107,11 @@ function TrendsContent() {
         });
         setCategories(data.data?.categories || []);
       }
-    } catch (error) { 
-      console.error('Error:', error); 
-      toast.error('Failed to load trends'); 
-    } finally { 
-      setIsLoading(false); 
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('Failed to load trends');
+    } finally {
+      setIsLoading(false);
     }
   }, [period, filterBranch]);
 
@@ -121,24 +123,24 @@ function TrendsContent() {
     try {
       // Use the existing reports service for export
       const reportType = 'daily_sales';
-      const endpoint = type === 'pdf' 
+      const endpoint = type === 'pdf'
         ? `${ANALYTICS_API}/api/reports/generate/branded-pdf`
         : `${ANALYTICS_API}/api/reports/generate/excel`;
-      
+
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           reportType,
-          filters: { 
+          filters: {
             start_date: new Date(Date.now() - parseInt(period) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             end_date: new Date().toISOString().split('T')[0],
-            branch_id: filterBranch || null 
+            branch_id: filterBranch || null
           },
           useRealData: true
         })
       });
-      
+
       if (res.ok) {
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);
@@ -191,9 +193,9 @@ function TrendsContent() {
               </div>
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <select 
-                    value={period} 
-                    onChange={(e) => setPeriod(e.target.value)} 
+                  <select
+                    value={period}
+                    onChange={(e) => setPeriod(e.target.value)}
                     className="appearance-none bg-white border border-gray-200 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
                   >
                     <option value="7">Last 7 Days</option>
@@ -202,7 +204,7 @@ function TrendsContent() {
                   </select>
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                 </div>
-                <button 
+                <button
                   onClick={() => setShowFilterModal(true)}
                   className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-colors"
                 >
@@ -211,7 +213,7 @@ function TrendsContent() {
                   {filterBranch && <span className="w-2 h-2 bg-gray-500 rounded-full" />}
                 </button>
                 <div className="relative group">
-                  <button 
+                  <button
                     className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-colors"
                     disabled={isExporting}
                   >
@@ -220,13 +222,13 @@ function TrendsContent() {
                     <ChevronDown className="h-3 w-3" />
                   </button>
                   <div className="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-                    <button 
+                    <button
                       onClick={() => handleExport('pdf')}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 rounded-t-lg"
                     >
                       Export as PDF
                     </button>
-                    <button 
+                    <button
                       onClick={() => handleExport('excel')}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 rounded-b-lg"
                     >
@@ -234,8 +236,8 @@ function TrendsContent() {
                     </button>
                   </div>
                 </div>
-                <button 
-                  onClick={fetchTrends} 
+                <button
+                  onClick={fetchTrends}
                   disabled={isLoading}
                   className="flex items-center gap-2 bg-gray-800 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-900 transition-colors disabled:opacity-50"
                 >
@@ -348,11 +350,10 @@ function TrendsContent() {
                         <button
                           key={tab}
                           onClick={() => setActiveTab(tab as any)}
-                          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                            activeTab === tab 
-                              ? 'bg-gray-900 text-white' 
+                          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === tab
+                              ? 'bg-gray-900 text-white'
                               : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                          }`}
+                            }`}
                         >
                           {tab.charAt(0).toUpperCase() + tab.slice(1)}
                         </button>
@@ -374,7 +375,7 @@ function TrendsContent() {
                         <span>KES {(maxRevenue * 0.25).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                         <span>0</span>
                       </div>
-                      
+
                       {/* Chart Grid and Bars */}
                       <div className="ml-20 h-full flex flex-col">
                         {/* Grid lines */}
@@ -382,7 +383,7 @@ function TrendsContent() {
                           {[0, 1, 2, 3, 4].map((i) => (
                             <div key={i} className="absolute left-0 right-0 border-t border-gray-50" style={{ top: `${i * 25}%` }} />
                           ))}
-                          
+
                           {/* Area Chart Visualization */}
                           <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
                             <defs>
@@ -435,7 +436,7 @@ function TrendsContent() {
                             )}
                           </svg>
                         </div>
-                        
+
                         {/* X-axis labels */}
                         <div className="h-8 flex justify-between items-center text-xs text-gray-400 pt-2">
                           {revenueTrend.slice(0, 14).reverse().filter((_, i) => i % 2 === 0).map((d, i) => (
@@ -460,12 +461,11 @@ function TrendsContent() {
                         const percentage = (revenue / maxRevenue) * 100;
                         return (
                           <div key={index} className="flex items-center gap-4">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                              index === 0 ? 'bg-gray-100 text-gray-700' :
-                              index === 1 ? 'bg-gray-100 text-gray-600' :
-                              index === 2 ? 'bg-gray-100 text-gray-700' :
-                              'bg-gray-50 text-gray-500'
-                            }`}>
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${index === 0 ? 'bg-gray-100 text-gray-700' :
+                                index === 1 ? 'bg-gray-100 text-gray-600' :
+                                  index === 2 ? 'bg-gray-100 text-gray-700' :
+                                    'bg-gray-50 text-gray-500'
+                              }`}>
                               {index + 1}
                             </div>
                             <div className="flex-1">
@@ -476,7 +476,7 @@ function TrendsContent() {
                                 <span className="text-sm font-semibold text-gray-900">KES {revenue.toLocaleString()}</span>
                               </div>
                               <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                <div 
+                                <div
                                   className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
                                   style={{ width: `${percentage}%` }}
                                 />
@@ -503,7 +503,7 @@ function TrendsContent() {
                               const circumference = 2 * Math.PI * 35;
                               const strokeDasharray = `${(cat.value / 100) * circumference} ${circumference}`;
                               const strokeDashoffset = -(prevTotal / 100) * circumference;
-                              
+
                               acc.push(
                                 <circle
                                   key={cat.name}
@@ -526,7 +526,7 @@ function TrendsContent() {
                             <span className="text-xs text-gray-500">Total</span>
                           </div>
                         </div>
-                        
+
                         {/* Legend */}
                         <div className="space-y-3">
                           {revenueByCategory.map((cat) => (
@@ -584,11 +584,10 @@ function TrendsContent() {
                                 <span className="text-sm text-gray-600">KES {avgOrderValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                               </td>
                               <td className="py-4 px-6 text-center">
-                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
-                                  isAboveAvg 
-                                    ? 'bg-gray-50 text-gray-700' 
+                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${isAboveAvg
+                                    ? 'bg-gray-50 text-gray-700'
                                     : 'bg-amber-50 text-amber-700'
-                                }`}>
+                                  }`}>
                                   {isAboveAvg ? (
                                     <TrendingUp className="h-3 w-3" />
                                   ) : (
@@ -620,20 +619,20 @@ function TrendsContent() {
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
-                      <select 
+                      <select
                         value={filterBranch}
                         onChange={(e) => setFilterBranch(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="">All Branches</option>
-                        <option value="1">Main Branch</option>
-                        <option value="2">Branch 2</option>
-                        <option value="3">Branch 3</option>
+                        {Array.isArray(branches) && branches.map((branch) => (
+                          <option key={branch.id} value={branch.id.toString()}>{branch.name}</option>
+                        ))}
                       </select>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
-                      <select 
+                      <select
                         value={period}
                         onChange={(e) => setPeriod(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -646,7 +645,7 @@ function TrendsContent() {
                     </div>
                   </div>
                   <div className="flex gap-3 mt-6">
-                    <button 
+                    <button
                       onClick={() => {
                         setFilterBranch('');
                         setPeriod('30');
@@ -655,7 +654,7 @@ function TrendsContent() {
                     >
                       Reset
                     </button>
-                    <button 
+                    <button
                       onClick={() => {
                         setShowFilterModal(false);
                         fetchTrends();

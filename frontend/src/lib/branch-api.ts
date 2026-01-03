@@ -29,7 +29,7 @@ export async function fetchWithBranchContext<T>(
 ): Promise<T> {
   let retries = 0;
   let lastError: Error | null = null;
-  
+
   try {
     // Get token from storage safely
     const token = getStorageValue('token');
@@ -41,7 +41,7 @@ export async function fetchWithBranchContext<T>(
         branchId = parseInt(storedBranchId);
       }
     }
-    
+
     // Always ensure branchId is a number before using it
     if (branchId && typeof branchId === 'number' && !isNaN(branchId) && !multiBranch) {
       console.log(`Using branch ID: ${branchId}`);
@@ -53,7 +53,7 @@ export async function fetchWithBranchContext<T>(
       console.log('Using multi-branch mode for central operations');
       branchId = null;
     }
-    
+
     while (retries <= MAX_RETRIES) {
       try {
         // If this is a retry, wait with exponential backoff
@@ -62,7 +62,7 @@ export async function fetchWithBranchContext<T>(
           console.log(`Retry attempt ${retries} for ${endpoint} after ${delay}ms`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
-        
+
         // Set up headers with authorization and branch context
         const headers = {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
@@ -70,7 +70,7 @@ export async function fetchWithBranchContext<T>(
           ...(branchId ? { 'X-Branch-ID': branchId.toString() } : {}),
           ...options.headers
         };
-        
+
         // Add branch_id as a query parameter if not already in the URL and we have a valid branchId
         // In multi-branch mode, don't add the branch_id param
         let modifiedEndpoint = endpoint;
@@ -78,16 +78,16 @@ export async function fetchWithBranchContext<T>(
           const separator = endpoint.includes('?') ? '&' : '?';
           modifiedEndpoint = `${endpoint}${separator}branch_id=${branchId}`;
         }
-    
+
         // Make the API request with modified endpoint that includes branch_id
         const response = await fetch(`${API_URL}${modifiedEndpoint}`, {
           ...options,
           headers
         });
-    
+
         // Handle response
         const responseData = await response.json().catch(() => ({}));
-        
+
         if (!response.ok) {
           console.error('API error response:', response.status, responseData);
           // Return error response instead of throwing for better handling
@@ -97,31 +97,31 @@ export async function fetchWithBranchContext<T>(
             error: responseData.error
           } as unknown as T;
         }
-    
+
         return responseData;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('Unknown error');
-        
+
         // Only retry on network errors or 500-level server errors
         const isNetworkError = lastError.message.includes('fetch') || lastError.message.includes('network');
         const isServerError = lastError.message.includes('500') || lastError.message.includes('refused');
-        
+
         if (!isNetworkError && !isServerError) {
           console.error(`Branch API request error (not retrying):`, error);
           break; // Don't retry client errors or other issues
         }
-        
-        console.warn(`Branch API request failed (attempt ${retries+1}/${MAX_RETRIES+1}):`, error);
+
+        console.warn(`Branch API request failed (attempt ${retries + 1}/${MAX_RETRIES + 1}):`, error);
         retries++;
       }
     }
-    
+
     // If we get here, all retries have failed
     throw lastError || new Error('API request failed after retries');
-    
+
   } catch (error) {
     console.error('Branch API request error after retries:', error);
-    
+
     // If mock data is available for this endpoint in development, return it
     if (process.env.NODE_ENV === 'development') {
       const mockData = getMockData(endpoint);
@@ -130,12 +130,12 @@ export async function fetchWithBranchContext<T>(
         return mockData as unknown as T;
       }
     }
-    
+
     // Return a standardized error response structure
-    return { 
-      success: false, 
-      message: error instanceof Error ? error.message : 'API request failed', 
-      data: [] 
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'API request failed',
+      data: []
     } as unknown as T;
   }
 }
@@ -145,17 +145,17 @@ function getMockData(endpoint: string): any {
   // Remove leading slash and parse path
   const cleanEndpoint = endpoint.replace(/^\//, '');
   const pathParts = cleanEndpoint.split('/');
-  
+
   // Central operations endpoints should not use mock data
   if (cleanEndpoint.startsWith('api/central-operations')) {
     return null;
   }
-  
+
   // Branch operations and other endpoints
   const mockDataStore: Record<string, any> = {
-    'api/branch-operations/staff': { 
+    'api/branch-operations/staff': {
       success: true,
-      message: 'Mock staff data retrieved successfully', 
+      message: 'Mock staff data retrieved successfully',
       data: [
         { id: '1', name: 'John Doe', email: 'john@example.com', role: 'manager', department: 'Management', status: 'active' },
         { id: '2', name: 'Jane Smith', email: 'jane@example.com', role: 'reception', department: 'Front Desk', status: 'active' },
@@ -172,7 +172,7 @@ function getMockData(endpoint: string): any {
       }
     }
   };
-  
+
   return mockDataStore[cleanEndpoint] || null;
 }
 
@@ -242,17 +242,30 @@ export const branchOperationsAPI = {
     return fetchWithBranchContext<any>(`/api/branch-operations/inventory?${query}`, {}, branchId);
   },
 
+  // Enhanced Stock Requests (using new storekeeping API)
   createStockRequest: (data: any, branchId?: number) =>
-    fetchWithBranchContext<any>('/api/branch-operations/inventory/requests', {
+    fetchWithBranchContext<any>('/api/storekeeping/stock-requests', {
       method: 'POST',
       body: JSON.stringify(data)
     }, branchId),
 
-  getStockRequests: (status?: string, branchId?: number) => {
-    const query = status ? `?status=${status}` : '';
-    // Connect to real backend route /stock-requests (no placeholder URL)
-    return fetchWithBranchContext<any>(`/api/branch-operations/stock-requests${query}`, {}, branchId);
+  getStockRequests: (params?: { status?: string; priority?: string; from_date?: string; to_date?: string }, branchId?: number) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.priority) query.append('priority', params.priority);
+    if (params?.from_date) query.append('from_date', params.from_date);
+    if (params?.to_date) query.append('to_date', params.to_date);
+
+    return fetchWithBranchContext<any>(`/api/storekeeping/stock-requests?${query.toString()}`, {}, branchId);
   },
+
+  getStockRequest: (id: string, branchId?: number) =>
+    fetchWithBranchContext<any>(`/api/storekeeping/stock-requests/${id}`, {}, branchId),
+
+  cancelStockRequest: (id: string, branchId?: number) =>
+    fetchWithBranchContext<any>(`/api/storekeeping/stock-requests/${id}/cancel`, {
+      method: 'PUT'
+    }, branchId),
 
   // Reservations
   getReservations: (params?: { status?: string; from?: string; to?: string }, branchId?: number) => {
@@ -260,7 +273,28 @@ export const branchOperationsAPI = {
     if (params?.status) query.append('status', params.status);
     if (params?.from) query.append('from', params.from);
     if (params?.to) query.append('to', params.to);
-    return fetchWithBranchContext<any>(`/api/branch-operations/reservations?${query}`, {}, branchId);
+    return fetchWithBranchContext<any>(`/api/branch-operations/reservations?${query}`, {}, branchId).then(response => {
+      // Transform response to match frontend expected format
+      if (response.success && Array.isArray(response.data)) {
+        response.data = response.data.map((booking: any) => ({
+          id: booking.id,
+          guest_name: booking.guest_name,
+          room_number: booking.room_number,
+          room_type: booking.room_type,
+          check_in: booking.check_in_date,
+          check_out: booking.check_out_date,
+          status: booking.status,
+          adults: booking.adults,
+          children: booking.children,
+          nights: booking.nights || calculateNights(booking.check_in_date, booking.check_out_date),
+          total: booking.total_amount,
+          balance: booking.balance,
+          phone: booking.guest_phone,
+          email: booking.guest_email
+        }));
+      }
+      return response;
+    });
   },
 
   createReservation: (data: any, branchId?: number) =>
@@ -316,7 +350,7 @@ export const branchOperationsAPI = {
     fetchWithBranchContext<any>('/api/branch-operations/inventory/incoming', {}, branchId),
 
   confirmDelivery: (id: string, data: any, branchId?: number) =>
-    fetchWithBranchContext<any>(`/api/branch-operations/inventory/incoming/${id}/confirm`, {
+    fetchWithBranchContext<any>(`/api/storekeeping/dispatch-notes/${id}/confirm-delivery`, {
       method: 'PUT',
       body: JSON.stringify(data)
     }, branchId),
@@ -487,6 +521,10 @@ export const centralOperationsAPI = {
   // Dashboard
   getDashboard: () => fetchWithBranchContext<any>('/api/central-operations/dashboard', {}, null, true),
 
+  getWarehouseDashboard: () => fetchWithBranchContext<any>('/api/storekeeping/dashboard', {}, null, true),
+
+  getSuppliers: () => fetchWithBranchContext<any>('/api/store/suppliers', {}, null, true),
+
   // Branch Oversight
   getBranchPerformance: (branchId?: number) => {
     if (branchId) {
@@ -498,7 +536,7 @@ export const centralOperationsAPI = {
 
   getBranchComparison: (metric: string = 'revenue', period: string = 'month') =>
     fetchWithBranchContext<any>(`/api/central-operations/branches/compare?metric=${metric}&period=${period}`, {}, null, true),
-    
+
   // Get all branches for central operations
   getAllBranches: () => fetchWithBranchContext<any>('/api/central-operations/branches', {}, null, true),
 
@@ -518,6 +556,9 @@ export const centralOperationsAPI = {
       body: JSON.stringify(data)
     }, null, true),
 
+  getWarehouseInventory: () =>
+    fetchWithBranchContext<any>('/api/storekeeping/inventory', {}, null, true),
+
   updateMasterItem: (sku: string, data: any) =>
     fetchWithBranchContext<any>(`/api/central-operations/warehouse/inventory/${sku}`, {
       method: 'PUT',
@@ -525,56 +566,89 @@ export const centralOperationsAPI = {
     }, null, true),
 
   // Branch Staff Management
-  getAllBranchStaff: () => 
+  getAllBranchStaff: () =>
     fetchWithBranchContext<any>('/api/central-operations/staff/all', {}, null, true),
-    
+
   getBranchStaff: (branchId: number) =>
     fetchWithBranchContext<any>(`/api/central-operations/staff?branch_id=${branchId}`),
-    
-  // Dispatch Management
+
+  // Enhanced Dispatch Management (using new storekeeping API)
   getPendingRequests: () =>
-    fetchWithBranchContext<any>('/api/central-operations/warehouse/requests/pending', {}, null, true),
+    fetchWithBranchContext<any>('/api/storekeeping/stock-requests?status=PENDING', {}, null, true),
 
-  getAllRequests: (status?: string, branchId?: number) => {
+  getAllRequests: (params?: { status?: string; branch_id?: number }, branchId?: number) => {
     const query = new URLSearchParams();
-    if (status) query.append('status', status);
-    if (branchId) query.append('branch_id', branchId.toString());
-    return fetchWithBranchContext<any>(`/api/central-operations/warehouse/requests?${query}`, {}, null, true);
-  },
-
-  getRequestsByBranch: (branchId: number, status?: string) => {
-    const query = new URLSearchParams();
-    if (status) query.append('status', status);
-    return fetchWithBranchContext<any>(`/api/central-operations/warehouse/requests/branch/${branchId}?${query}`);
+    if (params?.status) query.append('status', params.status);
+    if (params?.branch_id) query.append('branch_id', params.branch_id.toString());
+    return fetchWithBranchContext<any>(`/api/storekeeping/stock-requests?${query}`, {}, null, true);
   },
 
   reviewRequest: (id: string, data: any) =>
-    fetchWithBranchContext<any>(`/api/central-operations/warehouse/requests/${id}/review`, {
+    fetchWithBranchContext<any>(`/api/storekeeping/stock-requests/${id}/review`, {
       method: 'PUT',
       body: JSON.stringify(data)
     }, null, true),
 
+  approveRequest: (id: string, data?: any) =>
+    fetchWithBranchContext<any>(`/api/storekeeping/stock-requests/${id}/approve`, {
+      method: 'PUT',
+      body: JSON.stringify(data || {})
+    }, null, true),
+
+  rejectRequest: (id: string, data?: any) =>
+    fetchWithBranchContext<any>(`/api/storekeeping/stock-requests/${id}/reject`, {
+      method: 'PUT',
+      body: JSON.stringify(data || {})
+    }, null, true),
+
   createDispatch: (data: any) =>
-    fetchWithBranchContext<any>('/api/central-operations/warehouse/dispatches', {
+    fetchWithBranchContext<any>('/api/storekeeping/dispatch-notes', {
       method: 'POST',
       body: JSON.stringify(data)
     }, null, true),
 
-  getDispatches: (status?: string, branchId?: number) => {
+  getDispatches: (params?: { status?: string; branch_id?: number }, branchId?: number) => {
     const query = new URLSearchParams();
-    if (status) query.append('status', status);
-    if (branchId) query.append('branch_id', branchId.toString());
-    return fetchWithBranchContext<any>(`/api/central-operations/warehouse/dispatches?${query}`, {}, null, true);
+    if (params?.status) query.append('status', params.status);
+    if (params?.branch_id) query.append('branch_id', params.branch_id.toString());
+    return fetchWithBranchContext<any>(`/api/storekeeping/dispatch-notes?${query}`, {}, null, true);
   },
 
-  getDispatchesByBranch: (branchId: number, status?: string) => {
-    const query = status ? `?status=${status}` : '';
-    return fetchWithBranchContext<any>(`/api/central-operations/warehouse/dispatches/branch/${branchId}${query}`);
+  dispatchNote: (id: string, data: { carrier?: string; tracking_number?: string; notes?: string }) =>
+    fetchWithBranchContext<any>(`/api/storekeeping/dispatch-notes/${id}/dispatch`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }, null, true),
+
+  confirmDispatchDelivery: (id: string, data: any) =>
+    fetchWithBranchContext<any>(`/api/storekeeping/dispatch-notes/${id}/confirm-delivery`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }, null, true),
+
+  // Purchase Orders
+  getPurchaseOrders: (params?: { status?: string; branch_id?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.branch_id) query.append('branch_id', params.branch_id.toString());
+    return fetchWithBranchContext<any>(`/api/storekeeping/purchase-orders?${query}`, {}, null, true);
   },
 
-  dispatchItems: (id: string) =>
-    fetchWithBranchContext<any>(`/api/central-operations/warehouse/dispatches/${id}/dispatch`, {
+  createPurchaseOrder: (data: any) =>
+    fetchWithBranchContext<any>('/api/storekeeping/purchase-orders', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }, null, true),
+
+  approvePurchaseOrder: (id: string) =>
+    fetchWithBranchContext<any>(`/api/storekeeping/purchase-orders/${id}/approve`, {
       method: 'PUT'
+    }, null, true),
+
+  receivePurchaseOrder: (id: string, data: any) =>
+    fetchWithBranchContext<any>(`/api/storekeeping/purchase-orders/${id}/receive`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
     }, null, true),
 
   // Branch Transfers
@@ -634,17 +708,29 @@ export const centralOperationsAPI = {
     if (params.branchId) query.append('branch_id', String(params.branchId));
     return fetchWithBranchContext<any>(`/api/central-operations/finances/reports?${query}`, {}, null, true);
   },
-  
+
   // Multi-branch analytics
   getMultiBranchAnalytics: (metric: string = 'revenue', period: string = 'month') => {
     const query = new URLSearchParams();
     query.append('metric', metric);
     query.append('period', period);
     return fetchWithBranchContext<any>(`/api/central-operations/analytics?${query}`, {}, null, true);
-  }
+  },
+
+  getVehicles: () => fetchWithBranchContext<any>('/api/storekeeping/vehicles', {}, null, true),
+  getDrivers: () => fetchWithBranchContext<any>('/api/storekeeping/drivers', {}, null, true),
+  getDispatchNote: (id: string) => fetchWithBranchContext<any>(`/api/storekeeping/dispatch-notes/${id}`, {}, null, true)
 };
 
 // Facilities Management API - Combined functionality from Housekeeping and Maintenance
+// Helper function to calculate nights between two dates
+function calculateNights(checkIn: string, checkOut: string): number {
+  if (!checkIn || !checkOut) return 0;
+  const checkInDate = new Date(checkIn);
+  const checkOutDate = new Date(checkOut);
+  return Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 export const facilitiesAPI = {
   // Dashboard
   getDashboard: (branchId?: number | null) =>
@@ -786,3 +872,16 @@ export const facilitiesAPI = {
       body: JSON.stringify({ status })
     }, branchId || undefined)
 };
+
+export const branchManagerAPI = {
+  // Incoming Dispatches
+  getIncomingDispatches: () =>
+    fetchWithBranchContext<any>('/api/storekeeping/dispatch-notes/incoming', {}, null, false),
+
+  confirmDispatchDelivery: (id: string, data: any) =>
+    fetchWithBranchContext<any>(`/api/storekeeping/dispatch-notes/${id}/confirm-delivery`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }, null, false)
+};
+

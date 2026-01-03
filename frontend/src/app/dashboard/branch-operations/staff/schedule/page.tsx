@@ -95,7 +95,7 @@ function BranchStaffScheduleContent() {
       if (staffResponse.success && Array.isArray(staffResponse.data)) {
         setStaff(staffResponse.data);
       } else {
-        setStaff(generatePlaceholderStaff());
+        setStaff([]);
       }
 
       // Get shift types
@@ -103,7 +103,7 @@ function BranchStaffScheduleContent() {
       if (shiftTypesResponse.success && Array.isArray(shiftTypesResponse.data)) {
         setShiftTypes(shiftTypesResponse.data);
       } else {
-        setShiftTypes(generatePlaceholderShiftTypes());
+        setShiftTypes([]);
       }
 
       // Get shifts for the current week
@@ -118,16 +118,16 @@ function BranchStaffScheduleContent() {
       if (shiftsResponse.success && Array.isArray(shiftsResponse.data)) {
         setShifts(shiftsResponse.data);
       } else {
-        setShifts(generatePlaceholderShifts());
+        setShifts([]);
       }
 
     } catch (error) {
       console.error('Error fetching schedule data:', error);
       toast.error('Failed to load schedule data');
-      // Fallback data on error
-      setStaff(generatePlaceholderStaff());
-      setShiftTypes(generatePlaceholderShiftTypes());
-      setShifts(generatePlaceholderShifts());
+      // Show empty state on error
+      setStaff([]);
+      setShiftTypes([]);
+      setShifts([]);
     } finally {
       setIsLoading(false);
     }

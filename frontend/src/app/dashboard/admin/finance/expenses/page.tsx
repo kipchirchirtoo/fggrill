@@ -10,7 +10,7 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { financeAPI } from '@/lib/api';
-import { DollarSign, RefreshCw, Plus, Calendar, User, CheckCircle } from 'lucide-react';
+import { DollarSign, RefreshCw, Plus, Calendar, User, CheckCircle, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -22,6 +22,10 @@ export default function AdminExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({ description: '', amount: 0, category: 'operations' });
 
   const fetchExpenses = useCallback(async () => {
@@ -35,14 +39,52 @@ export default function AdminExpensesPage() {
 
   useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
 
+  const resetForm = () => setFormData({ description: '', amount: 0, category: 'operations' });
+
   const handleAddExpense = async () => {
     if (!formData.description || !formData.amount) { toast.error('Fill required fields'); return; }
+    setIsSubmitting(true);
     try {
       await financeAPI.createExpense(formData);
       toast.success('Expense added');
       setAddModalOpen(false);
+      resetForm();
       fetchExpenses();
     } catch (error: any) { toast.error(error.message || 'Failed'); }
+    finally { setIsSubmitting(false); }
+  };
+
+  const openEditModal = (expense: Expense) => {
+    setSelectedExpense(expense);
+    setFormData({ description: expense.description, amount: expense.amount, category: expense.category });
+    setEditModalOpen(true);
+  };
+
+  const handleUpdateExpense = async () => {
+    if (!selectedExpense || !formData.description) { toast.error('Fill required fields'); return; }
+    setIsSubmitting(true);
+    try {
+      await financeAPI.updateExpense(selectedExpense.id, formData);
+      toast.success('Expense updated');
+      setEditModalOpen(false);
+      setSelectedExpense(null);
+      resetForm();
+      fetchExpenses();
+    } catch (error: any) { toast.error(error.message || 'Failed'); }
+    finally { setIsSubmitting(false); }
+  };
+
+  const handleDeleteExpense = async () => {
+    if (!selectedExpense) return;
+    setIsSubmitting(true);
+    try {
+      await financeAPI.deleteExpense(selectedExpense.id);
+      toast.success('Expense deleted');
+      setDeleteConfirmOpen(false);
+      setSelectedExpense(null);
+      fetchExpenses();
+    } catch (error: any) { toast.error(error.message || 'Failed'); }
+    finally { setIsSubmitting(false); }
   };
 
   const handleApprove = async (id: string) => {
@@ -87,8 +129,10 @@ export default function AdminExpensesPage() {
                     </div>
                     <div className="flex items-center gap-3">
                       <p className="font-bold text-lg">KES {expense.amount?.toLocaleString()}</p>
-                      <IOSBadge variant={expense.status === 'approved' ? 'success' : expense.status === 'rejected' ? 'error' : 'warning'}>{expense.status}</IOSBadge>
+                      <IOSBadge className={expense.status === 'approved' ? 'bg-green-100 text-green-700' : expense.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}>{expense.status}</IOSBadge>
                       {expense.status === 'pending' && <IOSButton size="sm" onClick={() => handleApprove(expense.id)}>Approve</IOSButton>}
+                      <IOSButton size="sm" variant="secondary" onClick={() => openEditModal(expense)}><Edit2 className="h-3 w-3" /></IOSButton>
+                      <IOSButton size="sm" variant="destructive" onClick={() => { setSelectedExpense(expense); setDeleteConfirmOpen(true); }}><Trash2 className="h-3 w-3" /></IOSButton>
                     </div>
                   </div>
                 </IOSCard>
@@ -114,7 +158,46 @@ export default function AdminExpensesPage() {
               </div>
               <div className="flex gap-3">
                 <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                <IOSButton onClick={handleAddExpense} className="flex-1">Add</IOSButton>
+                <IOSButton onClick={handleAddExpense} disabled={isSubmitting} className="flex-1">{isSubmitting ? 'Adding...' : 'Add'}</IOSButton>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Modal */}
+        <Dialog open={editModalOpen} onOpenChange={(open) => { setEditModalOpen(open); if (!open) setSelectedExpense(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader><DialogTitle>Edit Expense</DialogTitle></DialogHeader>
+            <div className="space-y-4 mt-4">
+              <div><label className="text-sm font-medium">Description *</label><Input value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} /></div>
+              <div><label className="text-sm font-medium">Amount *</label><Input type="number" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })} /></div>
+              <div><label className="text-sm font-medium">Category</label>
+                <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full p-2 border rounded-ios-lg">
+                  <option value="operations">Operations</option>
+                  <option value="utilities">Utilities</option>
+                  <option value="supplies">Supplies</option>
+                  <option value="maintenance">Maintenance</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div className="flex gap-3">
+                <IOSButton variant="secondary" onClick={() => setEditModalOpen(false)} className="flex-1">Cancel</IOSButton>
+                <IOSButton onClick={handleUpdateExpense} disabled={isSubmitting} className="flex-1">{isSubmitting ? 'Updating...' : 'Update'}</IOSButton>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation */}
+        <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle className="text-red-600">Delete Expense</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <p className="text-stone-600">Are you sure you want to delete this expense?</p>
+              {selectedExpense && <div className="p-3 bg-stone-50 rounded-lg"><p className="font-medium">{selectedExpense.description}</p><p className="text-sm text-stone-500">KES {selectedExpense.amount?.toLocaleString()}</p></div>}
+              <div className="flex gap-2">
+                <IOSButton variant="secondary" className="flex-1" onClick={() => setDeleteConfirmOpen(false)}>Cancel</IOSButton>
+                <IOSButton variant="destructive" className="flex-1" onClick={handleDeleteExpense} disabled={isSubmitting}>{isSubmitting ? 'Deleting...' : 'Delete'}</IOSButton>
               </div>
             </div>
           </DialogContent>

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
 import { Settings, RefreshCw, Search, Plus, Wrench, Calendar, AlertTriangle, CheckCircle } from 'lucide-react';
+import { maintenanceAPI } from '@/lib/api';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
@@ -28,15 +29,33 @@ export default function MaintenanceAssetsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
+  const fetchAssets = async () => {
+    setIsLoading(true);
+    try {
+      const response = await maintenanceAPI.getRequests();
+      if (response.success) {
+        // Map maintenance requests to assets format
+        const mappedAssets = (response.data || []).map((r: any) => ({
+          id: r.id,
+          name: r.title || r.description || 'Asset',
+          type: r.category || 'General',
+          location: r.location || 'Unknown',
+          status: r.status === 'completed' ? 'operational' : r.status === 'in_progress' ? 'under_repair' : 'needs_maintenance',
+          last_maintenance: r.completed_at,
+          next_maintenance: r.scheduled_date,
+        }));
+        setAssets(mappedAssets);
+      }
+    } catch (error) {
+      console.error('Error fetching assets:', error);
+      setAssets([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // Mock data - replace with API
-    setAssets([
-      { id: '1', name: 'HVAC System - Main Building', type: 'HVAC', location: 'Main Building', status: 'operational', last_maintenance: '2024-11-15', next_maintenance: '2025-02-15' },
-      { id: '2', name: 'Generator - Backup', type: 'Power', location: 'Basement', status: 'operational', last_maintenance: '2024-10-01', next_maintenance: '2025-01-01' },
-      { id: '3', name: 'Elevator 1', type: 'Elevator', location: 'Main Building', status: 'needs_maintenance', last_maintenance: '2024-09-01', next_maintenance: '2024-12-01' },
-      { id: '4', name: 'Pool Pump', type: 'Pool', location: 'Pool Area', status: 'under_repair', last_maintenance: '2024-11-01' },
-    ]);
-    setIsLoading(false);
+    fetchAssets();
   }, []);
 
   const filteredAssets = assets.filter((a) => {
@@ -62,17 +81,17 @@ export default function MaintenanceAssetsPage() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <IOSCard className="p-4"><Settings className="h-6 w-6 text-[#007AFF] mb-2" /><p className="text-sm text-gray-500">Total Assets</p><p className="text-xl font-bold">{stats.total}</p></IOSCard>
-            <IOSCard className="p-4 border-l-4 border-green-500"><CheckCircle className="h-6 w-6 text-[#34C759] mb-2" /><p className="text-sm text-gray-500">Operational</p><p className="text-xl font-bold text-[#34C759]">{stats.operational}</p></IOSCard>
-            <IOSCard className="p-4 border-l-4 border-yellow-500"><AlertTriangle className="h-6 w-6 text-yellow-600 mb-2" /><p className="text-sm text-gray-500">Needs Maintenance</p><p className="text-xl font-bold text-yellow-600">{stats.needsMaintenance}</p></IOSCard>
-            <IOSCard className="p-4 border-l-4 border-[#007AFF]"><Wrench className="h-6 w-6 text-[#007AFF] mb-2" /><p className="text-sm text-gray-500">Under Repair</p><p className="text-xl font-bold text-[#007AFF]">{stats.underRepair}</p></IOSCard>
+            <IOSCard className="p-4"><Settings className="h-6 w-6 text-gray-600 mb-2" /><p className="text-sm text-gray-500">Total Assets</p><p className="text-xl font-bold">{stats.total}</p></IOSCard>
+            <IOSCard className="p-4"><CheckCircle className="h-6 w-6 text-gray-600 mb-2" /><p className="text-sm text-gray-500">Operational</p><p className="text-xl font-bold">{stats.operational}</p></IOSCard>
+            <IOSCard className="p-4"><AlertTriangle className="h-6 w-6 text-gray-600 mb-2" /><p className="text-sm text-gray-500">Needs Maintenance</p><p className="text-xl font-bold">{stats.needsMaintenance}</p></IOSCard>
+            <IOSCard className="p-4"><Wrench className="h-6 w-6 text-gray-600 mb-2" /><p className="text-sm text-gray-500">Under Repair</p><p className="text-xl font-bold">{stats.underRepair}</p></IOSCard>
           </div>
 
           <IOSCard className="p-4">
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input placeholder="Search assets..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
+                <Input placeholder="Search assets..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
               </div>
               <div className="flex gap-2">
                 {['all', 'operational', 'needs_maintenance', 'under_repair'].map((status) => (

@@ -2,18 +2,19 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { housekeepingAPI } from '@/lib/api';
-import { ClipboardList, RefreshCw, Clock, CheckCircle, Play, Bed, User } from 'lucide-react';
+import { ClipboardList, RefreshCw, Clock, CheckCircle, Play, Bed, User, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
-interface Task { id: string; room_number: string; task_type: string; priority: string; status: string; assigned_to?: string; }
+interface Task { id: string; room_number: string; task_type: string; priority: string; status: string; assigned_to?: string; branch_id?: number; }
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
   pending: { label: 'Pending', color: 'text-yellow-700', bg: 'bg-yellow-100' },
@@ -23,18 +24,27 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
 
 export default function BranchHousekeepingPage() {
   const { user } = useAuth();
+  const { activeBranchId, activeBranch } = useBranch();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('pending');
 
+  // Use active branch from context, fallback to user's branch
+  const currentBranchId = activeBranchId || user?.branch_id;
+
   const fetchTasks = useCallback(async () => {
+    if (!currentBranchId) {
+      setTasks([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
-      const response = await housekeepingAPI.getTasks();
+      const response = await housekeepingAPI.getTasks({ branch_id: currentBranchId });
       if (response.success) setTasks(response.data || []);
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, []);
+  }, [currentBranchId]);
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
 
@@ -54,7 +64,13 @@ export default function BranchHousekeepingPage() {
       <DashboardLayout>
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div><h1 className="text-2xl font-bold text-gray-900">Housekeeping</h1><p className="text-gray-500">Cleaning tasks</p></div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Housekeeping</h1>
+              <p className="text-gray-500 flex items-center gap-1">
+                <Building2 className="h-3.5 w-3.5" />
+                {activeBranch?.name || 'Select a branch'}
+              </p>
+            </div>
             <IOSButton variant="secondary" onClick={fetchTasks} leftIcon={<RefreshCw />}>Refresh</IOSButton>
           </div>
 

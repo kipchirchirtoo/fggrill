@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Dict, List, Optional, Any
 from supabase import create_client, Client
 import logging
+from .anomaly_detector import PaymentAnomalyDetector
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,74 @@ class FinanceService:
             os.getenv('SUPABASE_URL'),
             os.getenv('SUPABASE_SERVICE_KEY')
         )
+        self.anomaly_detector = PaymentAnomalyDetector()
+
+    def _get_aggregated_data(self, branch_id=None, start_date=None, end_date=None):
+        """Helper to aggregate revenue and expenses from all tables using payments table"""
+        try:
+            # 1. Revenue from Payments Table (Single Source of Truth)
+            payments_query = self.supabase.table('payments').select('amount, booking_id, restaurant_order_id, bar_order_id, metadata, bookings(rooms(branch_id)), restaurant_orders(branch_id), bar_orders(branch_id)').eq('status', 'completed')
+            
+            if start_date:
+                payments_query = payments_query.gte('created_at', start_date)
+            if end_date:
+                payments_query = payments_query.lte('created_at', end_date)
+                
+            payments_res = payments_query.execute()
+            payments_data = payments_res.data or []
+            
+            total_revenue = 0
+            
+            for p in payments_data:
+                # Determine branch_id
+                p_branch_id = None
+                if p.get('bookings') and p['bookings'].get('rooms'):
+                    p_branch_id = p['bookings']['rooms'].get('branch_id')
+                elif p.get('restaurant_orders'):
+                    p_branch_id = p['restaurant_orders'].get('branch_id')
+                elif p.get('bar_orders'):
+                    p_branch_id = p['bar_orders'].get('branch_id')
+                
+                # Filter by branch
+                if branch_id and p_branch_id and int(p_branch_id) != int(branch_id):
+                    continue
+                    
+                total_revenue += float(p['amount'] or 0)
+
+            # 2. Expenses
+            expenses_query = self.supabase.table('expenses').select('amount').in_('status', ['approved', 'paid'])
+            
+            # 3. Finance Transactions (Expenses only)
+            finance_expense_query = self.supabase.table('finance_transactions').select('amount').eq('transaction_type', 'expense')
+
+            if branch_id:
+                expenses_query = expenses_query.eq('branch_id', branch_id)
+                finance_expense_query = finance_expense_query.eq('branch_id', branch_id)
+
+            if start_date:
+                expenses_query = expenses_query.gte('expense_date', start_date)
+                finance_expense_query = finance_expense_query.gte('created_at', start_date)
+
+            if end_date:
+                expenses_query = expenses_query.lte('expense_date', end_date)
+                finance_expense_query = finance_expense_query.lte('created_at', end_date)
+
+            expenses_res = expenses_query.execute()
+            finance_expense_res = finance_expense_query.execute()
+            
+            total_expenses_table = sum(float(r['amount']) for r in (expenses_res.data or []))
+            total_finance_expense = sum(float(r['amount']) for r in (finance_expense_res.data or []))
+            
+            total_expenses = total_expenses_table + total_finance_expense
+            
+            return {
+                'revenue': total_revenue,
+                'expenses': total_expenses,
+                'net_profit': total_revenue - total_expenses
+            }
+        except Exception as e:
+            logger.error(f"Error aggregating data: {e}")
+            return {'revenue': 0, 'expenses': 0, 'net_profit': 0}
     
     # ==================== DASHBOARD ====================
     
@@ -30,25 +99,16 @@ class FinanceService:
             last_month_start = (start_of_month - timedelta(days=1)).replace(day=1)
             last_month_end = start_of_month - timedelta(days=1)
             
-            # Current month transactions
-            query = self.supabase.table('finance_transactions').select('amount, transaction_type')
-            if branch_id:
-                query = query.eq('branch_id', branch_id)
-            query = query.gte('created_at', start_of_month.isoformat())
-            current = query.execute()
+            # Current month aggregated data
+            current_data = self._get_aggregated_data(branch_id, start_of_month.isoformat())
             
-            # Last month transactions
-            query_last = self.supabase.table('finance_transactions').select('amount, transaction_type')
-            if branch_id:
-                query_last = query_last.eq('branch_id', branch_id)
-            query_last = query_last.gte('created_at', last_month_start.isoformat()).lte('created_at', last_month_end.isoformat())
-            last_month = query_last.execute()
+            # Last month aggregated data
+            last_month_data = self._get_aggregated_data(branch_id, last_month_start.isoformat(), last_month_end.isoformat())
             
-            # Calculate totals
-            current_revenue = sum(float(t['amount']) for t in (current.data or []) if t['transaction_type'] == 'income')
-            current_expenses = sum(float(t['amount']) for t in (current.data or []) if t['transaction_type'] == 'expense')
-            last_revenue = sum(float(t['amount']) for t in (last_month.data or []) if t['transaction_type'] == 'income')
-            last_expenses = sum(float(t['amount']) for t in (last_month.data or []) if t['transaction_type'] == 'expense')
+            current_revenue = current_data['revenue']
+            current_expenses = current_data['expenses']
+            last_revenue = last_month_data['revenue']
+            last_expenses = last_month_data['expenses']
             
             # Calculate changes
             revenue_change = ((current_revenue - last_revenue) / last_revenue * 100) if last_revenue > 0 else 0
@@ -56,6 +116,8 @@ class FinanceService:
             
             # Pending payments (unpaid invoices)
             pending_query = self.supabase.table('accounting_ar_invoices').select('balance').neq('status', 'paid')
+            if branch_id:
+                pending_query = pending_query.eq('branch_id', branch_id)
             pending = pending_query.execute()
             pending_payments = sum(float(p['balance']) for p in (pending.data or []))
             
@@ -216,34 +278,50 @@ class FinanceService:
             if params.get('endDate'):
                 end_date = datetime.fromisoformat(params['endDate'].replace('Z', ''))
             
-            query = self.supabase.table('finance_transactions').select('amount, transaction_type, created_at')
-            query = query.gte('created_at', start_date.isoformat()).lte('created_at', end_date.isoformat())
+            # 1. Inflow (Revenue from Payments)
+            payments_query = self.supabase.table('payments').select('amount, created_at, bookings(rooms(branch_id)), restaurant_orders(branch_id), bar_orders(branch_id)').eq('status', 'completed')
+            payments_query = payments_query.gte('created_at', start_date.isoformat()).lte('created_at', end_date.isoformat())
             
-            if params.get('branch_id'):
-                query = query.eq('branch_id', params['branch_id'])
+            payments_data = payments_query.execute().data or []
             
-            result = query.execute()
-            transactions = result.data or []
+            inflows = []
+            for p in payments_data:
+                # Determine branch_id
+                p_branch_id = None
+                if p.get('bookings') and p['bookings'].get('rooms'):
+                    p_branch_id = p['bookings']['rooms'].get('branch_id')
+                elif p.get('restaurant_orders'):
+                    p_branch_id = p['restaurant_orders'].get('branch_id')
+                elif p.get('bar_orders'):
+                    p_branch_id = p['bar_orders'].get('branch_id')
+                
+                # Filter by branch
+                if params.get('branch_id') and p_branch_id and int(p_branch_id) != int(params['branch_id']):
+                    continue
+                    
+                inflows.append({'amount': float(p['amount']), 'date': p['created_at']})
             
-            # Calculate totals
-            total_inflow = sum(float(t['amount']) for t in transactions if t['transaction_type'] == 'income')
-            total_outflow = sum(float(t['amount']) for t in transactions if t['transaction_type'] == 'expense')
+            outflows = []
+            for e in exp_data: outflows.append({'amount': float(e['amount']), 'date': e['expense_date']})
+            for e in fin_exp_data: outflows.append({'amount': float(e['amount']), 'date': e['created_at']})
             
-            # Group by week
+            total_inflow = sum(i['amount'] for i in inflows)
+            total_outflow = sum(o['amount'] for o in outflows)
+            
+            # Group by week/period
             periods = []
             current = start_date
             while current < end_date:
                 week_end = min(current + timedelta(days=7), end_date)
-                week_txns = [t for t in transactions if current.isoformat() <= t['created_at'] < week_end.isoformat()]
                 
-                inflow = sum(float(t['amount']) for t in week_txns if t['transaction_type'] == 'income')
-                outflow = sum(float(t['amount']) for t in week_txns if t['transaction_type'] == 'expense')
+                period_inflow = sum(i['amount'] for i in inflows if current.isoformat() <= i['date'] < week_end.isoformat())
+                period_outflow = sum(o['amount'] for o in outflows if current.isoformat() <= o['date'] < week_end.isoformat())
                 
                 periods.append({
                     'period': current.strftime('%b %d') + ' - ' + week_end.strftime('%b %d'),
-                    'inflow': round(inflow, 2),
-                    'outflow': round(outflow, 2),
-                    'net': round(inflow - outflow, 2)
+                    'inflow': round(period_inflow, 2),
+                    'outflow': round(period_outflow, 2),
+                    'net': round(period_inflow - period_outflow, 2)
                 })
                 current = week_end
             
@@ -267,22 +345,36 @@ class FinanceService:
             end_date = datetime.now()
             start_date = end_date - timedelta(days=30)
             
-            query = self.supabase.table('finance_transactions').select('amount, transaction_type, category')
-            query = query.gte('created_at', start_date.isoformat())
+            if params.get('startDate'):
+                start_date = datetime.fromisoformat(params['startDate'].replace('Z', ''))
+            if params.get('endDate'):
+                end_date = datetime.fromisoformat(params['endDate'].replace('Z', ''))
             
+            # Aggregated Data
+            aggregated = self._get_aggregated_data(params.get('branch_id'), start_date.isoformat(), end_date.isoformat())
+            
+            revenue = aggregated['revenue']
+            total_expenses = aggregated['expenses']
+            
+            # Categorize expenses from 'expenses' table
+            exp_query = self.supabase.table('expenses').select('amount, category').in_('status', ['approved', 'paid'])
+            exp_query = exp_query.gte('expense_date', start_date.isoformat()).lte('expense_date', end_date.isoformat())
             if params.get('branch_id'):
-                query = query.eq('branch_id', params['branch_id'])
+                exp_query = exp_query.eq('branch_id', params['branch_id'])
+            expenses_list = exp_query.execute().data or []
             
-            result = query.execute()
-            transactions = result.data or []
+            # Also include finance_transactions expenses
+            fin_exp_query = self.supabase.table('finance_transactions').select('amount, category').eq('transaction_type', 'expense')
+            fin_exp_query = fin_exp_query.gte('created_at', start_date.isoformat()).lte('created_at', end_date.isoformat())
+            if params.get('branch_id'):
+                fin_exp_query = fin_exp_query.eq('branch_id', params['branch_id'])
+            fin_expenses_list = fin_exp_query.execute().data or []
             
-            revenue = sum(float(t['amount']) for t in transactions if t['transaction_type'] == 'income')
-            expenses = sum(float(t['amount']) for t in transactions if t['transaction_type'] == 'expense')
+            all_expenses = expenses_list + fin_expenses_list
             
-            # Estimate cost breakdown
-            cost_of_goods = expenses * 0.4
-            operating_expenses = expenses * 0.5
-            other_expenses = expenses * 0.1
+            cost_of_goods = sum(float(e['amount']) for e in all_expenses if e.get('category') in ['Food & Beverage', 'Supplies', 'Inventory'])
+            operating_expenses = sum(float(e['amount']) for e in all_expenses if e.get('category') in ['Salaries', 'Utilities', 'Maintenance', 'Marketing', 'Transport', 'Rent'])
+            other_expenses = total_expenses - cost_of_goods - operating_expenses
             
             gross_profit = revenue - cost_of_goods
             operating_income = gross_profit - operating_expenses
@@ -322,19 +414,40 @@ class FinanceService:
             
             txns = self.supabase.table('finance_transactions').select('amount, transaction_type, branch_id').gte('created_at', start_date.isoformat()).execute()
             
+            # Get occupancy data
+            rooms = self.supabase.table('rooms').select('id, branch_id').execute()
+            bookings = self.supabase.table('bookings').select('id, room_id').eq('status', 'checked_in').execute()
+            
+            occupied_rooms_by_branch = {}
+            for b in (bookings.data or []):
+                room = next((r for r in (rooms.data or []) if r['id'] == b['room_id']), None)
+                if room:
+                    branch_id = room['branch_id']
+                    occupied_rooms_by_branch[branch_id] = occupied_rooms_by_branch.get(branch_id, 0) + 1
+            
+            total_rooms_by_branch = {}
+            for r in (rooms.data or []):
+                branch_id = r['branch_id']
+                total_rooms_by_branch[branch_id] = total_rooms_by_branch.get(branch_id, 0) + 1
+            
             result = []
             for branch in (branches.data or []):
-                branch_txns = [t for t in (txns.data or []) if t.get('branch_id') == branch['id']]
+                branch_id = branch['id']
+                branch_txns = [t for t in (txns.data or []) if t.get('branch_id') == branch_id]
                 revenue = sum(float(t['amount']) for t in branch_txns if t['transaction_type'] == 'income')
                 expenses = sum(float(t['amount']) for t in branch_txns if t['transaction_type'] == 'expense')
                 
+                total_rooms = total_rooms_by_branch.get(branch_id, 0)
+                occupied_rooms = occupied_rooms_by_branch.get(branch_id, 0)
+                occupancy = (occupied_rooms / total_rooms * 100) if total_rooms > 0 else 0
+                
                 result.append({
-                    'branch_id': branch['id'],
+                    'branch_id': branch_id,
                     'branch_name': branch['name'],
                     'revenue': round(revenue, 2),
                     'expenses': round(expenses, 2),
                     'profit': round(revenue - expenses, 2),
-                    'occupancy': 75  # Placeholder
+                    'occupancy': round(occupancy, 1)
                 })
             
             return result
@@ -349,9 +462,14 @@ class FinanceService:
         try:
             year = params.get('year', datetime.now().year)
             month = params.get('month', datetime.now().month)
+            branch_id = params.get('branch_id')
             
-            # Get budgets
-            budgets = self.supabase.table('budgets').select('*').execute()
+            # Get budgets from the budgets table
+            budget_query = self.supabase.table('budgets').select('*')
+            if branch_id:
+                budget_query = budget_query.eq('branch_id', branch_id)
+            
+            budgets_data = budget_query.execute().data or []
             
             # Get actual expenses
             start_date = datetime(year, month, 1)
@@ -360,7 +478,13 @@ class FinanceService:
             else:
                 end_date = datetime(year, month + 1, 1)
             
-            expenses = self.supabase.table('expenses').select('amount, category').gte('expense_date', start_date.date().isoformat()).lt('expense_date', end_date.date().isoformat()).execute()
+            expense_query = self.supabase.table('expenses').select('amount, category')
+            expense_query = expense_query.gte('expense_date', start_date.date().isoformat()).lt('expense_date', end_date.date().isoformat())
+            
+            if branch_id:
+                expense_query = expense_query.eq('branch_id', branch_id)
+                
+            expenses = expense_query.execute()
             
             # Group expenses by category
             actuals = {}
@@ -368,19 +492,26 @@ class FinanceService:
                 cat = exp.get('category', 'Other')
                 actuals[cat] = actuals.get(cat, 0) + float(exp['amount'])
             
-            # Build analysis
-            categories = ['Utilities', 'Supplies', 'Maintenance', 'Salaries', 'Marketing', 'Food & Beverage', 'Transport', 'Other']
+            # Build analysis based on real budgets
             result = []
             
+            # If no budgets found, use standard categories with 0 budget to show actuals
+            categories = list(set([b.get('category') for b in budgets_data] + list(actuals.keys())))
+            if not categories:
+                categories = ['Utilities', 'Supplies', 'Maintenance', 'Salaries', 'Marketing', 'Food & Beverage', 'Transport', 'Other']
+
             for cat in categories:
-                budgeted = 50000  # Default budget per category
+                # Find budget for this category
+                cat_budget = next((b for b in budgets_data if b.get('category') == cat), None)
+                budgeted = float(cat_budget['amount']) if cat_budget else 0
+                
                 actual = actuals.get(cat, 0)
                 variance = budgeted - actual
                 percent_used = (actual / budgeted * 100) if budgeted > 0 else 0
                 
                 result.append({
                     'category': cat,
-                    'budgeted': budgeted,
+                    'budgeted': round(budgeted, 2),
                     'actual': round(actual, 2),
                     'variance': round(variance, 2),
                     'percentUsed': round(percent_used, 1)
@@ -399,20 +530,36 @@ class FinanceService:
             end_date = datetime.now()
             start_date = datetime(end_date.year, 1, 1)
             
-            txns = self.supabase.table('finance_transactions').select('amount, transaction_type').gte('created_at', start_date.isoformat()).execute()
+            if params.get('startDate'):
+                start_date = datetime.fromisoformat(params['startDate'].replace('Z', ''))
+            if params.get('endDate'):
+                end_date = datetime.fromisoformat(params['endDate'].replace('Z', ''))
+            
+            query = self.supabase.table('finance_transactions').select('amount, transaction_type')
+            query = query.gte('created_at', start_date.isoformat()).lte('created_at', end_date.isoformat())
+            
+            if params.get('branch_id'):
+                query = query.eq('branch_id', params['branch_id'])
+                
+            txns = query.execute()
             
             revenue = sum(float(t['amount']) for t in (txns.data or []) if t['transaction_type'] == 'income')
             expenses = sum(float(t['amount']) for t in (txns.data or []) if t['transaction_type'] == 'expense')
             
-            # Kenya tax rates
+            # Kenya tax rates (simplified)
             vat_rate = 0.16
-            vat_collected = revenue * vat_rate
-            vat_paid = expenses * vat_rate
+            # Assuming 70% of revenue is VATable
+            vat_collected = (revenue * 0.7) * (vat_rate / (1 + vat_rate))
+            # Assuming 50% of expenses have deductible VAT
+            vat_paid = (expenses * 0.5) * (vat_rate / (1 + vat_rate))
             net_vat = vat_collected - vat_paid
             
-            # Estimated payroll taxes
-            paye_tax = expenses * 0.1  # Rough estimate
-            withholding_tax = revenue * 0.05
+            # Estimated payroll taxes (PAYE) - assuming 30% of expenses are salaries
+            salaries = expenses * 0.3
+            paye_tax = salaries * 0.15  # Average PAYE rate
+            
+            # Withholding tax (assuming 10% of revenue is subject to 5% WHT)
+            withholding_tax = (revenue * 0.1) * 0.05
             
             return {
                 'vatCollected': round(vat_collected, 2),
@@ -434,23 +581,57 @@ class FinanceService:
     def get_forecast(self, months: int = 6) -> List[Dict]:
         """Get financial forecast"""
         try:
-            # Get historical data
+            # Get historical data (last 6 months)
             end_date = datetime.now()
             start_date = end_date - timedelta(days=180)
             
-            txns = self.supabase.table('finance_transactions').select('amount, transaction_type, created_at').gte('created_at', start_date.isoformat()).execute()
+            # Fetch all data in one go
+            # 1. Restaurant
+            rest_query = self.supabase.table('restaurant_orders').select('total_amount, created_at').in_('status', ['completed', 'paid', 'delivered'])
+            rest_query = rest_query.gte('created_at', start_date.isoformat()).lte('created_at', end_date.isoformat())
+            rest_data = rest_query.execute().data or []
             
-            # Calculate monthly averages
+            # 2. Rooms
+            room_query = self.supabase.table('reservations').select('total_amount, created_at').in_('status', ['confirmed', 'checked_in', 'checked_out'])
+            room_query = room_query.gte('created_at', start_date.isoformat()).lte('created_at', end_date.isoformat())
+            room_data = room_query.execute().data or []
+            
+            # 3. Finance Income
+            fin_inc_query = self.supabase.table('finance_transactions').select('amount, created_at').eq('transaction_type', 'income').eq('payment_status', 'paid')
+            fin_inc_query = fin_inc_query.gte('created_at', start_date.isoformat()).lte('created_at', end_date.isoformat())
+            fin_inc_data = fin_inc_query.execute().data or []
+
+            # 4. Expenses
+            exp_query = self.supabase.table('expenses').select('amount, expense_date').in_('status', ['approved', 'paid'])
+            exp_query = exp_query.gte('expense_date', start_date.isoformat()).lte('expense_date', end_date.isoformat())
+            exp_data = exp_query.execute().data or []
+            
+            # 5. Finance Expenses
+            fin_exp_query = self.supabase.table('finance_transactions').select('amount, created_at').eq('transaction_type', 'expense').eq('payment_status', 'paid')
+            fin_exp_query = fin_exp_query.gte('created_at', start_date.isoformat()).lte('created_at', end_date.isoformat())
+            fin_exp_data = fin_exp_query.execute().data or []
+
+            # Aggregate monthly
             monthly_revenue = {}
             monthly_expenses = {}
             
-            for t in (txns.data or []):
-                month_key = t['created_at'][:7]
-                if t['transaction_type'] == 'income':
-                    monthly_revenue[month_key] = monthly_revenue.get(month_key, 0) + float(t['amount'])
-                else:
-                    monthly_expenses[month_key] = monthly_expenses.get(month_key, 0) + float(t['amount'])
-            
+            for r in rest_data:
+                month = r['created_at'][:7]
+                monthly_revenue[month] = monthly_revenue.get(month, 0) + float(r['total_amount'])
+            for r in room_data:
+                month = r['created_at'][:7]
+                monthly_revenue[month] = monthly_revenue.get(month, 0) + float(r['total_amount'])
+            for r in fin_inc_data:
+                month = r['created_at'][:7]
+                monthly_revenue[month] = monthly_revenue.get(month, 0) + float(r['amount'])
+                
+            for e in exp_data:
+                month = e['expense_date'][:7]
+                monthly_expenses[month] = monthly_expenses.get(month, 0) + float(e['amount'])
+            for e in fin_exp_data:
+                month = e['created_at'][:7]
+                monthly_expenses[month] = monthly_expenses.get(month, 0) + float(e['amount'])
+
             avg_revenue = sum(monthly_revenue.values()) / max(len(monthly_revenue), 1)
             avg_expenses = sum(monthly_expenses.values()) / max(len(monthly_expenses), 1)
             
@@ -531,15 +712,14 @@ class FinanceService:
             prev_start = start_date - timedelta(days=days)
             
             # Current period
-            current = self.supabase.table('finance_transactions').select('amount, transaction_type').gte('created_at', start_date.isoformat()).execute()
+            curr_data = self._get_aggregated_data(None, start_date.isoformat(), end_date.isoformat())
+            curr_revenue = curr_data['revenue']
+            curr_expenses = curr_data['expenses']
             
             # Previous period
-            previous = self.supabase.table('finance_transactions').select('amount, transaction_type').gte('created_at', prev_start.isoformat()).lt('created_at', start_date.isoformat()).execute()
-            
-            curr_revenue = sum(float(t['amount']) for t in (current.data or []) if t['transaction_type'] == 'income')
-            curr_expenses = sum(float(t['amount']) for t in (current.data or []) if t['transaction_type'] == 'expense')
-            prev_revenue = sum(float(t['amount']) for t in (previous.data or []) if t['transaction_type'] == 'income')
-            prev_expenses = sum(float(t['amount']) for t in (previous.data or []) if t['transaction_type'] == 'expense')
+            prev_data = self._get_aggregated_data(None, prev_start.isoformat(), start_date.isoformat())
+            prev_revenue = prev_data['revenue']
+            prev_expenses = prev_data['expenses']
             
             revenue_change = ((curr_revenue - prev_revenue) / prev_revenue * 100) if prev_revenue > 0 else 0
             expense_change = ((curr_expenses - prev_expenses) / prev_expenses * 100) if prev_expenses > 0 else 0
@@ -567,29 +747,35 @@ class FinanceService:
             as_of_date = params.get('as_of_date', datetime.now().date().isoformat())
             
             # Get all transactions up to date
-            query = self.supabase.table('finance_transactions').select('amount, transaction_type, category').lte('created_at', as_of_date)
-            if branch_id:
-                query = query.eq('branch_id', branch_id)
-            result = query.execute()
-            transactions = result.data or []
+            aggregated = self._get_aggregated_data(branch_id, end_date=as_of_date)
             
-            # Calculate totals
-            total_income = sum(float(t['amount']) for t in transactions if t['transaction_type'] == 'income')
-            total_expenses = sum(float(t['amount']) for t in transactions if t['transaction_type'] == 'expense')
+            total_income = aggregated['revenue']
+            total_expenses = aggregated['expenses']
             retained_earnings = total_income - total_expenses
             
             # Get AR (Assets)
-            ar = self.supabase.table('accounting_ar_invoices').select('balance').neq('status', 'paid').execute()
+            ar_query = self.supabase.table('accounting_ar_invoices').select('balance').neq('status', 'paid')
+            if branch_id:
+                ar_query = ar_query.eq('branch_id', branch_id)
+            ar = ar_query.execute()
             accounts_receivable = sum(float(inv['balance']) for inv in (ar.data or []))
             
             # Get AP (Liabilities)
-            ap = self.supabase.table('accounting_ap_bills').select('balance').neq('status', 'paid').execute()
+            ap_query = self.supabase.table('accounting_ap_bills').select('balance').neq('status', 'paid')
+            if branch_id:
+                ap_query = ap_query.eq('branch_id', branch_id)
+            ap = ap_query.execute()
             accounts_payable = sum(float(bill['balance']) for bill in (ap.data or []))
             
-            # Estimate other values based on business logic
-            cash = retained_earnings * 0.3  # 30% of earnings as cash
-            inventory = total_expenses * 0.15  # 15% of expenses as inventory
-            fixed_assets = 5000000  # Estimated fixed assets
+            # Cash calculation (30% of retained earnings as a fallback, but try to use transactions)
+            # In a real system, this would come from bank account balances
+            cash = retained_earnings * 0.3
+            
+            # Inventory (15% of expenses as a fallback)
+            inventory = total_expenses * 0.15
+            
+            # Fixed Assets (Estimate based on branch size or fixed value)
+            fixed_assets = 5000000 if not branch_id else 2500000
             accumulated_depreciation = fixed_assets * 0.2
             
             # Current Assets
@@ -633,10 +819,11 @@ class FinanceService:
             
             # Equity
             equity = {
-                'common_stock': 1000000,
+                'common_stock': 1000000 if not branch_id else 500000,
                 'retained_earnings': round(retained_earnings, 2),
-                'total': round(1000000 + retained_earnings, 2)
+                'total': 0
             }
+            equity['total'] = round(equity['common_stock'] + equity['retained_earnings'], 2)
             
             return {
                 'as_of_date': as_of_date,
@@ -652,9 +839,9 @@ class FinanceService:
         except Exception as e:
             logger.error(f"Error getting balance sheet: {e}")
             return {}
-    
+
     # ==================== TRIAL BALANCE ====================
-    
+
     def get_trial_balance(self, params: Dict[str, Any]) -> Dict:
         """Get trial balance report"""
         try:
@@ -725,9 +912,9 @@ class FinanceService:
         except Exception as e:
             logger.error(f"Error getting trial balance: {e}")
             return {'entries': [], 'total_debit': 0, 'total_credit': 0, 'is_balanced': True}
-    
+
     # ==================== JOURNAL ENTRIES ====================
-    
+
     def get_journal_entries(self, params: Dict[str, Any]) -> List[Dict]:
         """Get journal entries"""
         try:
@@ -767,7 +954,7 @@ class FinanceService:
         except Exception as e:
             logger.error(f"Error getting journal entries: {e}")
             return []
-    
+
     def create_journal_entry(self, data: Dict[str, Any], user_id: str) -> Dict:
         """Create a journal entry"""
         try:
@@ -800,9 +987,9 @@ class FinanceService:
         except Exception as e:
             logger.error(f"Error creating journal entry: {e}")
             raise
-    
+
     # ==================== FINANCIAL RATIOS ====================
-    
+
     def get_financial_ratios(self, params: Dict[str, Any]) -> Dict:
         """Calculate key financial ratios"""
         try:
@@ -810,17 +997,12 @@ class FinanceService:
             end_date = datetime.now()
             start_date = end_date - timedelta(days=365)
             
-            # Get transactions
-            query = self.supabase.table('finance_transactions').select('amount, transaction_type')
-            query = query.gte('created_at', start_date.isoformat())
-            if branch_id:
-                query = query.eq('branch_id', branch_id)
-            result = query.execute()
-            transactions = result.data or []
+            # Get aggregated data for the year
+            aggregated = self._get_aggregated_data(branch_id, start_date.isoformat())
             
-            revenue = sum(float(t['amount']) for t in transactions if t['transaction_type'] == 'income')
-            expenses = sum(float(t['amount']) for t in transactions if t['transaction_type'] == 'expense')
-            net_income = revenue - expenses
+            revenue = aggregated['revenue']
+            expenses = aggregated['expenses']
+            net_income = aggregated['net_profit']
             
             # Get balance sheet data
             balance_sheet = self.get_balance_sheet(params)
@@ -834,6 +1016,17 @@ class FinanceService:
             ar = balance_sheet.get('current_assets', {}).get('accounts_receivable', 0)
             
             # Calculate ratios
+            # Note: Categorized expenses still come from finance_transactions as a fallback
+            query = self.supabase.table('finance_transactions').select('amount, transaction_type, category')
+            query = query.gte('created_at', start_date.isoformat())
+            if branch_id:
+                query = query.eq('branch_id', branch_id)
+            result = query.execute()
+            transactions = result.data or []
+
+            cost_of_goods = sum(float(t['amount']) for t in transactions if t['transaction_type'] == 'expense' and t.get('category') in ['Food & Beverage', 'Supplies'])
+            operating_expenses = sum(float(t['amount']) for t in transactions if t['transaction_type'] == 'expense' and t.get('category') in ['Salaries', 'Utilities', 'Maintenance', 'Marketing', 'Transport'])
+            
             ratios = {
                 'liquidity': {
                     'current_ratio': round(current_assets / max(current_liabilities, 1), 2),
@@ -841,15 +1034,15 @@ class FinanceService:
                     'cash_ratio': round(balance_sheet.get('current_assets', {}).get('cash', 0) / max(current_liabilities, 1), 2)
                 },
                 'profitability': {
-                    'gross_margin': round((revenue - expenses * 0.4) / max(revenue, 1) * 100, 1),
-                    'operating_margin': round((revenue - expenses * 0.9) / max(revenue, 1) * 100, 1),
+                    'gross_margin': round((revenue - cost_of_goods) / max(revenue, 1) * 100, 1),
+                    'operating_margin': round((revenue - cost_of_goods - operating_expenses) / max(revenue, 1) * 100, 1),
                     'net_profit_margin': round(net_income / max(revenue, 1) * 100, 1),
                     'return_on_assets': round(net_income / max(total_assets, 1) * 100, 1),
                     'return_on_equity': round(net_income / max(total_equity, 1) * 100, 1)
                 },
                 'efficiency': {
                     'asset_turnover': round(revenue / max(total_assets, 1), 2),
-                    'inventory_turnover': round(expenses * 0.4 / max(inventory, 1), 2),
+                    'inventory_turnover': round(cost_of_goods / max(inventory, 1), 2),
                     'receivables_turnover': round(revenue / max(ar, 1), 2),
                     'days_sales_outstanding': round(365 / max(revenue / max(ar, 1), 1), 0)
                 },
@@ -881,8 +1074,8 @@ class FinanceService:
             items = result.data or []
             
             today = datetime.now()
-            buckets = {'current': [], '1_30': [], '31_60': [], '61_90': [], 'over_90': []}
-            totals = {'current': 0, '1_30': 0, '31_60': 0, '61_90': 0, 'over_90': 0}
+            buckets = {'current': [], '1-30': [], '31-60': [], '61-90': [], '90+': []}
+            totals = {'current': 0, '1-30': 0, '31-60': 0, '61-90': 0, '90+': 0}
             
             for item in items:
                 due_date = datetime.fromisoformat(item['due_date'])
@@ -902,17 +1095,17 @@ class FinanceService:
                     buckets['current'].append(entry)
                     totals['current'] += balance
                 elif days_overdue <= 30:
-                    buckets['1_30'].append(entry)
-                    totals['1_30'] += balance
+                    buckets['1-30'].append(entry)
+                    totals['1-30'] += balance
                 elif days_overdue <= 60:
-                    buckets['31_60'].append(entry)
-                    totals['31_60'] += balance
+                    buckets['31-60'].append(entry)
+                    totals['31-60'] += balance
                 elif days_overdue <= 90:
-                    buckets['61_90'].append(entry)
-                    totals['61_90'] += balance
+                    buckets['61-90'].append(entry)
+                    totals['61-90'] += balance
                 else:
-                    buckets['over_90'].append(entry)
-                    totals['over_90'] += balance
+                    buckets['90+'].append(entry)
+                    totals['90+'] += balance
             
             return {
                 'type': report_type,
@@ -1068,24 +1261,16 @@ class FinanceService:
         prev_end = current_start
         prev_start = prev_end - timedelta(days=days)
         
-        # Current period
-        query = self.supabase.table('finance_transactions').select('amount, transaction_type')
-        query = query.gte('created_at', current_start.isoformat())
-        if branch_id:
-            query = query.eq('branch_id', branch_id)
-        current = query.execute()
+        # Current period aggregated data
+        current_data = self._get_aggregated_data(branch_id, current_start.isoformat())
         
-        # Previous period
-        query = self.supabase.table('finance_transactions').select('amount, transaction_type')
-        query = query.gte('created_at', prev_start.isoformat()).lt('created_at', prev_end.isoformat())
-        if branch_id:
-            query = query.eq('branch_id', branch_id)
-        previous = query.execute()
+        # Previous period aggregated data
+        prev_data = self._get_aggregated_data(branch_id, prev_start.isoformat(), prev_end.isoformat())
         
-        curr_revenue = sum(float(t['amount']) for t in (current.data or []) if t['transaction_type'] == 'income')
-        curr_expenses = sum(float(t['amount']) for t in (current.data or []) if t['transaction_type'] == 'expense')
-        prev_revenue = sum(float(t['amount']) for t in (previous.data or []) if t['transaction_type'] == 'income')
-        prev_expenses = sum(float(t['amount']) for t in (previous.data or []) if t['transaction_type'] == 'expense')
+        curr_revenue = current_data['revenue']
+        curr_expenses = current_data['expenses']
+        prev_revenue = prev_data['revenue']
+        prev_expenses = prev_data['expenses']
         
         return {
             'type': 'period',
@@ -1119,15 +1304,12 @@ class FinanceService:
         # Get branches
         branches = self.supabase.table('branches').select('id, name').execute()
         
-        # Get transactions
-        txns = self.supabase.table('finance_transactions').select('amount, transaction_type, branch_id')
-        txns = txns.gte('created_at', start_date.isoformat()).execute()
-        
         branch_data = []
         for branch in (branches.data or []):
-            branch_txns = [t for t in (txns.data or []) if t.get('branch_id') == branch['id']]
-            revenue = sum(float(t['amount']) for t in branch_txns if t['transaction_type'] == 'income')
-            expenses = sum(float(t['amount']) for t in branch_txns if t['transaction_type'] == 'expense')
+            # Get aggregated data for this branch
+            aggregated = self._get_aggregated_data(branch['id'], start_date.isoformat())
+            revenue = aggregated['revenue']
+            expenses = aggregated['expenses']
             
             branch_data.append({
                 'branch_id': branch['id'],
@@ -1241,3 +1423,41 @@ class FinanceService:
             'financial_ratios': ratios,
             'period_comparison': comparison
         }
+
+    # ==================== ANOMALY DETECTION ====================
+
+    def get_anomalies(self, branch_id: Optional[int] = None) -> List[Dict]:
+        """Detect anomalies in recent transactions"""
+        try:
+            # Get recent transactions
+            query = self.supabase.table('finance_transactions').select('*').order('created_at', desc=True).limit(100)
+            if branch_id:
+                query = query.eq('branch_id', branch_id)
+            result = query.execute()
+            transactions = result.data or []
+            
+            anomalies = []
+            for t in transactions:
+                # Prepare data for detector
+                analysis = self.anomaly_detector.detect_anomaly({
+                    'amount': t.get('amount', 0),
+                    'payment_method': t.get('payment_method', 'unknown'),
+                    'created_at': t.get('created_at')
+                })
+                
+                if analysis['is_high_risk']:
+                    anomalies.append({
+                        'id': t.get('id'),
+                        'transaction_number': t.get('transaction_number'),
+                        'amount': t.get('amount'),
+                        'type': t.get('transaction_type'),
+                        'date': t.get('created_at'),
+                        'risk_score': analysis['risk_score'],
+                        'risk_factors': analysis['risk_factors'],
+                        'recommendation': analysis['recommendation']
+                    })
+            
+            return anomalies
+        except Exception as e:
+            logger.error(f"Error detecting anomalies: {e}")
+            return []

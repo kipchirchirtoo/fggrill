@@ -38,8 +38,8 @@ export default function AdminRestaurantPage() {
 
   const quickLinks = [
     { href: '/dashboard/admin/restaurant/menu', icon: Menu, label: 'Menu', color: 'bg-blue-50 text-[#007AFF]' },
-    { href: '/dashboard/restaurant/orders', icon: ShoppingCart, label: 'Orders', color: 'bg-green-50 text-[#34C759]' },
-    { href: '/dashboard/restaurant/kitchen', icon: ChefHat, label: 'Kitchen', color: 'bg-orange-50 text-orange-600' },
+    { href: '/dashboard/pos-kitchen', icon: ShoppingCart, label: 'POS & Kitchen', color: 'bg-green-50 text-[#34C759]' },
+    { href: '/dashboard/pos-kitchen', icon: ChefHat, label: 'Kitchen Display', color: 'bg-orange-50 text-orange-600' },
     { href: '/dashboard/admin/restaurant/pos-control', icon: Settings, label: 'POS Control', color: 'bg-purple-50 text-purple-600' },
   ];
 

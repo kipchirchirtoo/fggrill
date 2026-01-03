@@ -271,7 +271,7 @@ export default function TransfersPage() {
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
             <DialogHeader><DialogTitle className="flex items-center gap-2"><ShoppingCart className="h-5 w-5 text-[#3C3C43]" />Request Transfer</DialogTitle></DialogHeader>
             <div className="space-y-4">
-              <div className="relative"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" /><Input placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10" /></div>
+              <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" /><Input placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9" /></div>
               <div className="max-h-64 overflow-y-auto border rounded-ios-lg">
                 {filteredItems.slice(0, 20).map(i => (
                   <div key={i.sku} onClick={() => setSelectedItem(i)} className={`p-3 border-b cursor-pointer hover:bg-gray-50 ${selectedItem?.sku === i.sku ? 'bg-[#F2F2F7]' : ''}`}>

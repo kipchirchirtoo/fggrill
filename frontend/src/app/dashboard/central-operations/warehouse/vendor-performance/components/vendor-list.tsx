@@ -15,13 +15,13 @@ interface VendorListProps {
   selectedCategory: string | null;
 }
 
-export default function VendorList({ 
-  vendors, 
-  categories, 
-  isLoading, 
-  onSelectVendor, 
+export default function VendorList({
+  vendors,
+  categories,
+  isLoading,
+  onSelectVendor,
   onSelectCategory,
-  selectedCategory 
+  selectedCategory
 }: VendorListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState('overall_score');
@@ -29,14 +29,14 @@ export default function VendorList({
   const [viewVendor, setViewVendor] = useState<any | null>(null);
   const [vendorDetails, setVendorDetails] = useState<any | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
-  
+
   // Filter and sort vendors
   const filteredVendors = vendors.filter(vendor => {
     // Category filter
     if (selectedCategory && vendor.category !== selectedCategory) {
       return false;
     }
-    
+
     // Search filter
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
@@ -46,26 +46,26 @@ export default function VendorList({
         vendor.category?.toLowerCase().includes(searchLower)
       );
     }
-    
+
     return true;
   });
-  
+
   const sortedVendors = [...filteredVendors].sort((a, b) => {
     let aValue = a[sortField] || 0;
     let bValue = b[sortField] || 0;
-    
+
     if (typeof aValue === 'string') {
       aValue = aValue.toLowerCase();
       bValue = bValue.toLowerCase();
     }
-    
+
     if (sortDirection === 'asc') {
       return aValue > bValue ? 1 : -1;
     } else {
       return aValue < bValue ? 1 : -1;
     }
   });
-  
+
   // Handle sort
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -75,13 +75,13 @@ export default function VendorList({
       setSortDirection('desc');
     }
   };
-  
+
   // Get vendor details
   const getVendorDetails = async (vendorId: number) => {
     setLoadingDetails(true);
     try {
       const response = await vendorPerformanceAPI.getVendorDetails(vendorId);
-      
+
       if (response.success) {
         setVendorDetails(response.data);
       } else {
@@ -93,7 +93,7 @@ export default function VendorList({
       setLoadingDetails(false);
     }
   };
-  
+
   // When viewVendor changes, fetch details
   useEffect(() => {
     if (viewVendor?.id) {
@@ -102,11 +102,11 @@ export default function VendorList({
       setVendorDetails(null);
     }
   }, [viewVendor]);
-  
+
   // Render score with color
   const renderScore = (score: number) => {
     let colorClass = 'text-gray-500';
-    
+
     if (score >= 90) {
       colorClass = 'text-green-600';
     } else if (score >= 75) {
@@ -116,33 +116,33 @@ export default function VendorList({
     } else if (score > 0) {
       colorClass = 'text-red-600';
     }
-    
+
     return <span className={colorClass}>{score.toFixed(1)}</span>;
   };
-  
+
   return (
     <div className="space-y-4">
       <div className="p-4 flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
           <Input
             placeholder="Search vendors..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
+            className="pl-9"
           />
         </div>
-        
+
         <div className="w-full sm:w-48">
           <Select
-            value={selectedCategory || ''}
-            onValueChange={(value) => onSelectCategory(value || null)}
+            value={selectedCategory || 'ALL'}
+            onValueChange={(value) => onSelectCategory(value === 'ALL' ? null : value)}
           >
             <SelectTrigger>
               <SelectValue placeholder="All Categories" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Categories</SelectItem>
+              <SelectItem value="ALL">All Categories</SelectItem>
               {categories.map((category) => (
                 <SelectItem key={category} value={category}>
                   {category}
@@ -152,7 +152,7 @@ export default function VendorList({
           </Select>
         </div>
       </div>
-      
+
       <div className="relative overflow-x-auto">
         <table className="w-full text-sm text-left rtl:text-right">
           <thead className="text-xs text-gray-700 uppercase bg-gray-50">
@@ -161,8 +161,8 @@ export default function VendorList({
                 <div className="flex items-center">
                   Vendor
                   {sortField === 'name' && (
-                    sortDirection === 'asc' ? 
-                      <ChevronUp className="h-4 w-4 ml-1" /> : 
+                    sortDirection === 'asc' ?
+                      <ChevronUp className="h-4 w-4 ml-1" /> :
                       <ChevronDown className="h-4 w-4 ml-1" />
                   )}
                 </div>
@@ -172,8 +172,8 @@ export default function VendorList({
                 <div className="flex items-center">
                   Category
                   {sortField === 'category' && (
-                    sortDirection === 'asc' ? 
-                      <ChevronUp className="h-4 w-4 ml-1" /> : 
+                    sortDirection === 'asc' ?
+                      <ChevronUp className="h-4 w-4 ml-1" /> :
                       <ChevronDown className="h-4 w-4 ml-1" />
                   )}
                 </div>
@@ -182,8 +182,8 @@ export default function VendorList({
                 <div className="flex items-center">
                   Overall Score
                   {sortField === 'overall_score' && (
-                    sortDirection === 'asc' ? 
-                      <ChevronUp className="h-4 w-4 ml-1" /> : 
+                    sortDirection === 'asc' ?
+                      <ChevronUp className="h-4 w-4 ml-1" /> :
                       <ChevronDown className="h-4 w-4 ml-1" />
                   )}
                 </div>
@@ -228,9 +228,9 @@ export default function VendorList({
                   <td className="px-4 py-4 font-medium">
                     <div className="flex items-center">
                       {Array.from({ length: 5 }).map((_, i) => (
-                        <Star 
+                        <Star
                           key={i}
-                          className={`h-4 w-4 ${i < Math.round(vendor.overall_score / 20) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200'}`} 
+                          className={`h-4 w-4 ${i < Math.round(vendor.overall_score / 20) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200'}`}
                         />
                       ))}
                       <span className="ml-2">{renderScore(vendor.overall_score)}</span>
@@ -247,8 +247,8 @@ export default function VendorList({
                   </td>
                   <td className="px-4 py-4">
                     <div className="flex items-center space-x-2">
-                      <IOSButton 
-                        variant="ghost" 
+                      <IOSButton
+                        variant="ghost"
                         size="sm"
                         onClick={() => {
                           setViewVendor(vendor);
@@ -265,14 +265,14 @@ export default function VendorList({
           </tbody>
         </table>
       </div>
-      
+
       {/* Vendor Details Dialog */}
       <Dialog open={!!viewVendor} onOpenChange={(open) => !open && setViewVendor(null)}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Vendor Details</DialogTitle>
           </DialogHeader>
-          
+
           {loadingDetails ? (
             <div className="flex flex-col items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
@@ -319,7 +319,7 @@ export default function VendorList({
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h4 className="font-medium mb-3">Performance Scores</h4>
                   <div className="space-y-2">
@@ -327,13 +327,12 @@ export default function VendorList({
                       <span className="text-sm">Overall Score</span>
                       <div className="flex items-center">
                         <div className="w-32 h-2 bg-gray-200 rounded-full mr-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              vendorDetails.vendor?.overall_score >= 90 ? 'bg-green-500' :
-                              vendorDetails.vendor?.overall_score >= 75 ? 'bg-blue-500' :
-                              vendorDetails.vendor?.overall_score >= 60 ? 'bg-yellow-500' :
-                              'bg-red-500'
-                            }`} 
+                          <div
+                            className={`h-2 rounded-full ${vendorDetails.vendor?.overall_score >= 90 ? 'bg-green-500' :
+                                vendorDetails.vendor?.overall_score >= 75 ? 'bg-blue-500' :
+                                  vendorDetails.vendor?.overall_score >= 60 ? 'bg-yellow-500' :
+                                    'bg-red-500'
+                              }`}
                             style={{ width: `${vendorDetails.vendor?.overall_score || 0}%` }}
                           ></div>
                         </div>
@@ -342,18 +341,17 @@ export default function VendorList({
                         </span>
                       </div>
                     </div>
-                    
+
                     <div className="flex justify-between items-center">
                       <span className="text-sm">On-time Delivery</span>
                       <div className="flex items-center">
                         <div className="w-32 h-2 bg-gray-200 rounded-full mr-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              vendorDetails.vendor?.on_time_delivery_score >= 90 ? 'bg-green-500' :
-                              vendorDetails.vendor?.on_time_delivery_score >= 75 ? 'bg-blue-500' :
-                              vendorDetails.vendor?.on_time_delivery_score >= 60 ? 'bg-yellow-500' :
-                              'bg-red-500'
-                            }`} 
+                          <div
+                            className={`h-2 rounded-full ${vendorDetails.vendor?.on_time_delivery_score >= 90 ? 'bg-green-500' :
+                                vendorDetails.vendor?.on_time_delivery_score >= 75 ? 'bg-blue-500' :
+                                  vendorDetails.vendor?.on_time_delivery_score >= 60 ? 'bg-yellow-500' :
+                                    'bg-red-500'
+                              }`}
                             style={{ width: `${vendorDetails.vendor?.on_time_delivery_score || 0}%` }}
                           ></div>
                         </div>
@@ -362,18 +360,17 @@ export default function VendorList({
                         </span>
                       </div>
                     </div>
-                    
+
                     <div className="flex justify-between items-center">
                       <span className="text-sm">Quality</span>
                       <div className="flex items-center">
                         <div className="w-32 h-2 bg-gray-200 rounded-full mr-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              vendorDetails.vendor?.quality_score >= 90 ? 'bg-green-500' :
-                              vendorDetails.vendor?.quality_score >= 75 ? 'bg-blue-500' :
-                              vendorDetails.vendor?.quality_score >= 60 ? 'bg-yellow-500' :
-                              'bg-red-500'
-                            }`} 
+                          <div
+                            className={`h-2 rounded-full ${vendorDetails.vendor?.quality_score >= 90 ? 'bg-green-500' :
+                                vendorDetails.vendor?.quality_score >= 75 ? 'bg-blue-500' :
+                                  vendorDetails.vendor?.quality_score >= 60 ? 'bg-yellow-500' :
+                                    'bg-red-500'
+                              }`}
                             style={{ width: `${vendorDetails.vendor?.quality_score || 0}%` }}
                           ></div>
                         </div>
@@ -382,18 +379,17 @@ export default function VendorList({
                         </span>
                       </div>
                     </div>
-                    
+
                     <div className="flex justify-between items-center">
                       <span className="text-sm">Price</span>
                       <div className="flex items-center">
                         <div className="w-32 h-2 bg-gray-200 rounded-full mr-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              vendorDetails.vendor?.price_score >= 90 ? 'bg-green-500' :
-                              vendorDetails.vendor?.price_score >= 75 ? 'bg-blue-500' :
-                              vendorDetails.vendor?.price_score >= 60 ? 'bg-yellow-500' :
-                              'bg-red-500'
-                            }`} 
+                          <div
+                            className={`h-2 rounded-full ${vendorDetails.vendor?.price_score >= 90 ? 'bg-green-500' :
+                                vendorDetails.vendor?.price_score >= 75 ? 'bg-blue-500' :
+                                  vendorDetails.vendor?.price_score >= 60 ? 'bg-yellow-500' :
+                                    'bg-red-500'
+                              }`}
                             style={{ width: `${vendorDetails.vendor?.price_score || 0}%` }}
                           ></div>
                         </div>
@@ -402,18 +398,17 @@ export default function VendorList({
                         </span>
                       </div>
                     </div>
-                    
+
                     <div className="flex justify-between items-center">
                       <span className="text-sm">Responsiveness</span>
                       <div className="flex items-center">
                         <div className="w-32 h-2 bg-gray-200 rounded-full mr-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              vendorDetails.vendor?.responsiveness_score >= 90 ? 'bg-green-500' :
-                              vendorDetails.vendor?.responsiveness_score >= 75 ? 'bg-blue-500' :
-                              vendorDetails.vendor?.responsiveness_score >= 60 ? 'bg-yellow-500' :
-                              'bg-red-500'
-                            }`} 
+                          <div
+                            className={`h-2 rounded-full ${vendorDetails.vendor?.responsiveness_score >= 90 ? 'bg-green-500' :
+                                vendorDetails.vendor?.responsiveness_score >= 75 ? 'bg-blue-500' :
+                                  vendorDetails.vendor?.responsiveness_score >= 60 ? 'bg-yellow-500' :
+                                    'bg-red-500'
+                              }`}
                             style={{ width: `${vendorDetails.vendor?.responsiveness_score || 0}%` }}
                           ></div>
                         </div>
@@ -425,7 +420,7 @@ export default function VendorList({
                   </div>
                 </div>
               </div>
-              
+
               {/* Recent Deliveries */}
               <div>
                 <h3 className="text-lg font-medium mb-3">Recent Deliveries</h3>
@@ -454,9 +449,9 @@ export default function VendorList({
                             </td>
                             <td className="px-4 py-2">
                               <span className={`px-2 py-1 rounded-full text-xs 
-                                ${delivery.status === 'complete' ? 'bg-green-100 text-green-800' : 
-                                  delivery.status === 'partial' ? 'bg-yellow-100 text-yellow-800' : 
-                                  'bg-gray-100 text-gray-800'
+                                ${delivery.status === 'complete' ? 'bg-green-100 text-green-800' :
+                                  delivery.status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-gray-100 text-gray-800'
                                 }`}>
                                 {delivery.status}
                               </span>
@@ -484,7 +479,7 @@ export default function VendorList({
                   <p className="text-gray-500 text-sm">No recent deliveries</p>
                 )}
               </div>
-              
+
               {/* Price Comparison */}
               {vendorDetails.price_comparison?.length > 0 && (
                 <div>
@@ -504,7 +499,7 @@ export default function VendorList({
                         {vendorDetails.price_comparison.map((item: any, index: number) => {
                           const diff = item.vendor_price - item.avg_market_price;
                           const diffPercent = item.avg_market_price ? (diff / item.avg_market_price) * 100 : 0;
-                          
+
                           return (
                             <tr key={index} className="border-t">
                               <td className="px-4 py-2">{item.item_name}</td>

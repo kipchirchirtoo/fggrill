@@ -6,6 +6,7 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { financeAPI } from '@/lib/api';
 import { TrendingUp, RefreshCw, Calendar, Target } from 'lucide-react';
+import { BranchSelector } from '@/components/finance/BranchSelector';
 
 interface ForecastItem { month: string; projectedRevenue: number; projectedExpenses: number; projectedProfit: number; confidence: number; }
 
@@ -13,19 +14,25 @@ export default function ForecastPage() {
   const [forecast, setForecast] = useState<ForecastItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [months, setMonths] = useState<number>(6);
+  const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await financeAPI.getForecast(months);
+      const response = await financeAPI.getForecast({
+        months,
+        branch_id: selectedBranch || undefined
+      });
       if (response?.success && Array.isArray(response.data)) {
         setForecast(response.data);
       } else if (Array.isArray(response)) {
         setForecast(response);
+      } else {
+        setForecast([]);
       }
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, [months]);
+  }, [months, selectedBranch]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -43,13 +50,26 @@ export default function ForecastPage() {
               <h1 className="text-2xl font-semibold text-gray-900">Financial Forecast</h1>
               <p className="text-sm text-gray-500 mt-1">Projected financial performance</p>
             </div>
-            <div className="flex gap-2">
-              {[3, 6, 12].map((m) => (
-                <button key={m} onClick={() => setMonths(m)} className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${months === m ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
-                  {m} Months
-                </button>
-              ))}
-              <button onClick={fetchData} disabled={isLoading} className="p-2 text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+            <div className="flex flex-wrap items-center gap-3">
+              <BranchSelector
+                selectedBranch={selectedBranch}
+                onBranchChange={setSelectedBranch}
+              />
+              <div className="flex gap-1 bg-stone-100 p-1 rounded-lg border border-stone-200">
+                {[3, 6, 12].map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setMonths(m)}
+                    className={`px-3 py-1.5 text-[12px] font-medium rounded-md transition-all ${months === m
+                        ? 'bg-white text-stone-900 shadow-sm'
+                        : 'text-stone-500 hover:text-stone-700'
+                      }`}
+                  >
+                    {m} Months
+                  </button>
+                ))}
+              </div>
+              <button onClick={fetchData} disabled={isLoading} className="p-2.5 text-stone-500 bg-white border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors">
                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               </button>
             </div>

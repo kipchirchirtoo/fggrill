@@ -5,18 +5,19 @@ import { useAuth, UserRole } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { BranchSelector } from '@/components/dashboard/BranchSelector';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { housekeepingAPI } from '@/lib/api';
 import { 
   Sparkles, Bed, CheckCircle, Clock, AlertTriangle, Users,
-  RefreshCw, ClipboardList, Eye, Play, Check,
+  RefreshCw, ClipboardList, Eye, Play, Check, Plus, Search,
   Building2, Layers, Timer, TrendingUp
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { NewTaskModal, TaskFormData } from '@/components/modals/HousekeepingTaskModal';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 
 interface Task {
   id: string;
@@ -44,20 +45,20 @@ interface RoomStatus {
 }
 
 const statusColors: Record<string, { bg: string; text: string }> = {
-  clean: { bg: 'bg-green-100', text: 'text-green-700' },
-  dirty: { bg: 'bg-red-100', text: 'text-red-700' },
-  inspecting: { bg: 'bg-blue-100', text: 'text-blue-700' },
-  cleaning: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-  maintenance: { bg: 'bg-orange-100', text: 'text-orange-700' },
-  occupied: { bg: 'bg-purple-100', text: 'text-purple-700' },
-  available: { bg: 'bg-green-100', text: 'text-green-700' },
+  clean: { bg: 'bg-stone-100', text: 'text-stone-700' },
+  dirty: { bg: 'bg-stone-200', text: 'text-stone-800' },
+  inspecting: { bg: 'bg-stone-100', text: 'text-stone-600' },
+  cleaning: { bg: 'bg-stone-150', text: 'text-stone-700' },
+  maintenance: { bg: 'bg-stone-200', text: 'text-stone-700' },
+  occupied: { bg: 'bg-stone-300', text: 'text-stone-800' },
+  available: { bg: 'bg-stone-50', text: 'text-stone-600' },
 };
 
 const priorityColors: Record<string, string> = {
-  urgent: 'bg-[#FF3B30]',
-  high: 'bg-orange-500',
-  normal: 'bg-[#007AFF]',
-  low: 'bg-[#8E8E93]',
+  urgent: 'bg-stone-700',
+  high: 'bg-stone-600',
+  normal: 'bg-stone-500',
+  low: 'bg-stone-400',
 };
 
 export default function HousekeepingDashboard() {
@@ -75,15 +76,20 @@ export default function HousekeepingDashboard() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [selectedFloor, setSelectedFloor] = useState<number | 'all'>('all');
+  const [showNewTaskModal, setShowNewTaskModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [taskFilter, setTaskFilter] = useState<string>('all');
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
+    const currentBranchId = activeBranchId || user?.branch_id;
+    if (!currentBranchId) return;
+    
     try {
-      const branchIdStr = activeBranchId ? String(activeBranchId) : undefined;
       const [tasksRes, roomsRes, statsRes] = await Promise.allSettled([
-        housekeepingAPI.getTasks({ status: 'pending' }),
+        housekeepingAPI.getTasks({ status: 'pending', branch_id: currentBranchId }),
         housekeepingAPI.getRooms(),
-        housekeepingAPI.getStats(branchIdStr),
+        housekeepingAPI.getStats(String(currentBranchId)),
       ]);
 
       if (tasksRes.status === 'fulfilled' && tasksRes.value?.success) setTasks(tasksRes.value.data || []);
@@ -129,6 +135,26 @@ export default function HousekeepingDashboard() {
     }
   };
 
+  const handleCreateTask = async (data: TaskFormData) => {
+    try {
+      await housekeepingAPI.createTask({
+        ...data,
+        status: 'pending',
+      });
+      fetchData();
+    } catch (error: any) {
+      throw error;
+    }
+  };
+
+  const filteredTasks = tasks.filter(task => {
+    const matchesSearch = searchQuery === '' || 
+      task.room_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      task.task_type?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesFilter = taskFilter === 'all' || task.status === taskFilter;
+    return matchesSearch && matchesFilter;
+  });
+
   const floors = [...new Set(rooms.map(r => r.floor))].sort((a, b) => a - b);
   const filteredRooms = selectedFloor === 'all' 
     ? rooms 
@@ -139,147 +165,140 @@ export default function HousekeepingDashboard() {
       <DashboardLayout>
         <div className="space-y-6">
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Housekeeping Dashboard</h1>
-              <p className="text-gray-500">Manage room cleaning and maintenance tasks</p>
+              <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Housekeeping</h1>
+              <p className="text-stone-500 mt-0.5">Manage room cleaning and maintenance tasks</p>
             </div>
-            <div className="flex gap-2">
-              <IOSButton variant="outline" onClick={fetchData} leftIcon={<RefreshCw />}>Refresh
-              </IOSButton>
-              <Link href="/dashboard/housekeeping/tasks">
-                <IOSButton leftIcon={<ClipboardList />}>All Tasks
-                </IOSButton>
-              </Link>
+            <div className="flex items-center gap-2">
+              <button onClick={fetchData} disabled={isLoading} className="btn-secondary">
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+              <button onClick={() => setShowNewTaskModal(true)} className="btn-primary">
+                <Plus className="h-4 w-4" />
+                <span>New Task</span>
+              </button>
             </div>
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <IOSCard className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-ios-lg">
-                  <Building2 className="h-5 w-5 text-[#007AFF]" />
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {[
+              { label: 'Total Rooms', value: stats.totalRooms, icon: Building2 },
+              { label: 'Clean', value: stats.cleanRooms, icon: CheckCircle },
+              { label: 'Dirty', value: stats.dirtyRooms, icon: AlertTriangle },
+              { label: 'In Progress', value: stats.inProgress, icon: Sparkles },
+              { label: 'Pending', value: stats.pendingTasks, icon: Clock },
+              { label: 'Done Today', value: stats.completedToday, icon: TrendingUp },
+            ].map((stat, i) => (
+              <div key={i} className="stat-card">
+                <div className="stat-icon">
+                  <stat.icon className="h-5 w-5" />
                 </div>
-                <div>
-                  <p className="text-sm text-gray-500">Total Rooms</p>
-                  <p className="text-xl font-bold">{stats.totalRooms}</p>
-                </div>
+                <p className="stat-value text-[20px]">{stat.value}</p>
+                <p className="stat-label">{stat.label}</p>
               </div>
-            </IOSCard>
-            <IOSCard className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 rounded-ios-lg">
-                  <CheckCircle className="h-5 w-5 text-[#34C759]" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Clean</p>
-                  <p className="text-xl font-bold text-[#34C759]">{stats.cleanRooms}</p>
-                </div>
-              </div>
-            </IOSCard>
-            <IOSCard className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-red-100 rounded-ios-lg">
-                  <AlertTriangle className="h-5 w-5 text-[#FF3B30]" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Dirty</p>
-                  <p className="text-xl font-bold text-[#FF3B30]">{stats.dirtyRooms}</p>
-                </div>
-              </div>
-            </IOSCard>
-            <IOSCard className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-yellow-100 rounded-ios-lg">
-                  <Sparkles className="h-5 w-5 text-yellow-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">In Progress</p>
-                  <p className="text-xl font-bold text-yellow-600">{stats.inProgress}</p>
-                </div>
-              </div>
-            </IOSCard>
-            <IOSCard className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 rounded-ios-lg">
-                  <Clock className="h-5 w-5 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Pending</p>
-                  <p className="text-xl font-bold text-purple-600">{stats.pendingTasks}</p>
-                </div>
-              </div>
-            </IOSCard>
-            <IOSCard className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-emerald-100 rounded-ios-lg">
-                  <TrendingUp className="h-5 w-5 text-emerald-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Done Today</p>
-                  <p className="text-xl font-bold text-emerald-600">{stats.completedToday}</p>
-                </div>
-              </div>
-            </IOSCard>
+            ))}
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-6">
+          <div className="grid lg:grid-cols-2 gap-5">
             {/* Pending Tasks */}
-            <IOSCard className="p-6">
+            <div className="card-elevated p-5">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold font-sf-pro-display">Pending Tasks</h2>
-                <Link href="/dashboard/housekeeping/tasks">
-                  <IOSButton variant="outline" size="sm">View All</IOSButton>
-                </Link>
+                <h2 className="text-[15px] font-semibold text-stone-900">Tasks</h2>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400" />
+                    <input
+                      type="text"
+                      placeholder="Search..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-8 pr-3 py-1.5 text-[12px] w-28 bg-stone-50 border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-300"
+                    />
+                  </div>
+                  <select
+                    value={taskFilter}
+                    onChange={(e) => setTaskFilter(e.target.value)}
+                    className="px-2 py-1.5 text-[12px] bg-stone-50 border border-stone-200 rounded-lg"
+                  >
+                    <option value="all">All</option>
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
+                  </select>
+                </div>
               </div>
               {isLoading ? (
                 <div className="flex justify-center py-8">
-                  <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
+                  <RefreshCw className="h-6 w-6 animate-spin text-stone-400" />
                 </div>
               ) : tasks.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <CheckCircle className="h-12 w-12 mx-auto mb-2 text-green-400" />
-                  <p>All tasks completed!</p>
+                <div className="empty-state">
+                  <div className="empty-state-icon bg-emerald-100">
+                    <CheckCircle className="h-6 w-6 text-emerald-600" />
+                  </div>
+                  <p className="empty-state-title">All tasks completed!</p>
                 </div>
               ) : (
-                <div className="space-y-3 max-h-80 overflow-y-auto">
-                  {tasks.slice(0, 5).map((task) => (
-                    <div key={task.id} className="p-3 border rounded-ios-lg flex items-center justify-between">
+                <div className="space-y-2 max-h-80 overflow-y-auto scrollbar-thin">
+                  {filteredTasks.slice(0, 8).map((task) => (
+                    <div key={task.id} className="p-3 bg-stone-50 rounded-lg flex items-center justify-between hover:bg-stone-100 transition-colors group">
                       <div className="flex items-center gap-3">
                         <div className={`w-2 h-2 rounded-full ${priorityColors[task.priority] || priorityColors.normal}`} />
                         <div>
-                          <p className="font-medium">Room {task.room_number}</p>
-                          <p className="text-sm text-gray-500 capitalize">{task.task_type?.replace('_', ' ')}</p>
+                          <p className="text-[13px] font-medium text-stone-800">Room {task.room_number}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-[11px] text-stone-500 capitalize">{task.task_type?.replace('_', ' ')}</p>
+                            {task.assigned_name && (
+                              <span className="text-[10px] text-stone-400">• {task.assigned_name}</span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex items-center gap-2">
+                        {task.status === 'in_progress' && (
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">In Progress</span>
+                        )}
                         {task.status === 'pending' && (
-                          <IOSButton size="sm" onClick={() => handleStartTask(task.id)}>
-                            <Play className="h-3 w-3" />
-                          </IOSButton>
+                          <button 
+                            onClick={() => handleStartTask(task.id)} 
+                            className="p-1.5 rounded-md bg-stone-200 hover:bg-stone-300 transition-colors flex items-center gap-1"
+                            title="Start Task"
+                          >
+                            <Play className="h-3 w-3 text-stone-700" />
+                          </button>
                         )}
                         {task.status === 'in_progress' && (
-                          <IOSButton size="sm" className="bg-[#34C759]" onClick={() => handleCompleteTask(task.id)}>
-                            <Check className="h-3 w-3" />
-                          </IOSButton>
+                          <button 
+                            onClick={() => handleCompleteTask(task.id)} 
+                            className="p-1.5 rounded-md bg-emerald-500 hover:bg-emerald-600 transition-colors"
+                            title="Mark Complete"
+                          >
+                            <Check className="h-3 w-3 text-white" />
+                          </button>
                         )}
                       </div>
                     </div>
                   ))}
+                  {filteredTasks.length === 0 && !isLoading && (
+                    <div className="text-center py-6 text-stone-500 text-sm">
+                      {searchQuery || taskFilter !== 'all' ? 'No matching tasks' : 'No pending tasks'}
+                    </div>
+                  )}
                 </div>
               )}
-            </IOSCard>
+            </div>
 
             {/* Room Status Grid */}
-            <IOSCard className="p-6">
+            <div className="card-elevated p-5">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold font-sf-pro-display">Room Status</h2>
+                <h2 className="text-[15px] font-semibold text-stone-900">Room Status</h2>
                 <div className="flex gap-2">
                   <select
                     value={selectedFloor}
                     onChange={(e) => setSelectedFloor(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-                    className="px-2 py-1 border rounded text-sm"
+                    className="px-2 py-1.5 text-[12px] bg-stone-50 border border-stone-200 rounded-lg"
                   >
                     <option value="all">All Floors</option>
                     {floors.map(f => (
@@ -287,97 +306,81 @@ export default function HousekeepingDashboard() {
                     ))}
                   </select>
                   <Link href="/dashboard/housekeeping/rooms">
-                    <IOSButton variant="outline" size="sm">View All</IOSButton>
+                    <button className="text-[13px] font-medium text-stone-600 hover:text-stone-900">View All</button>
                   </Link>
                 </div>
               </div>
               {isLoading ? (
                 <div className="flex justify-center py-8">
-                  <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
+                  <RefreshCw className="h-6 w-6 animate-spin text-stone-400" />
                 </div>
               ) : filteredRooms.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <Bed className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-                  <p>No rooms found</p>
+                <div className="empty-state">
+                  <div className="empty-state-icon">
+                    <Bed className="h-6 w-6 text-stone-400" />
+                  </div>
+                  <p className="empty-state-title">No rooms found</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-5 gap-2 max-h-80 overflow-y-auto">
+                <div className="grid grid-cols-5 gap-2 max-h-80 overflow-y-auto scrollbar-thin">
                   {filteredRooms.slice(0, 20).map((room) => {
                     const colors = statusColors[room.status] || statusColors.clean;
                     return (
                       <div
                         key={room.room_id || room.room_number}
-                        className={`p-2 rounded-ios-lg text-center ${colors.bg} ${colors.text} cursor-pointer hover:opacity-80 transition`}
+                        className={`p-2 rounded-lg text-center ${colors.bg} ${colors.text} cursor-pointer hover:opacity-80 transition`}
                         title={`Room ${room.room_number} - ${room.status}`}
                       >
-                        <p className="font-bold text-sm">{room.room_number}</p>
-                        <p className="text-xs capitalize">{room.status}</p>
+                        <p className="font-semibold text-[12px]">{room.room_number}</p>
+                        <p className="text-[10px] capitalize">{room.status}</p>
                       </div>
                     );
                   })}
                 </div>
               )}
               {/* Legend */}
-              <div className="flex flex-wrap gap-3 mt-4 pt-4 border-t">
+              <div className="flex flex-wrap gap-3 mt-4 pt-4 border-t border-stone-100">
                 {Object.entries(statusColors).slice(0, 5).map(([status, colors]) => (
                   <div key={status} className="flex items-center gap-1">
-                    <div className={`w-3 h-3 rounded ${colors.bg}`} />
-                    <span className="text-xs capitalize">{status}</span>
+                    <div className={`w-2.5 h-2.5 rounded ${colors.bg}`} />
+                    <span className="text-[11px] text-stone-500 capitalize">{status}</span>
                   </div>
                 ))}
               </div>
-            </IOSCard>
+            </div>
           </div>
 
           {/* Quick Links */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Link href="/dashboard/housekeeping/tasks">
-              <IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer">
-                <div className="flex items-center gap-3">
-                  <ClipboardList className="h-8 w-8 text-[#007AFF]" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { href: '/dashboard/housekeeping/tasks', icon: ClipboardList, label: 'Tasks', desc: 'Manage all tasks' },
+              { href: '/dashboard/housekeeping/rooms', icon: Bed, label: 'Rooms', desc: 'Room status' },
+              { href: '/dashboard/housekeeping/inspections', icon: Eye, label: 'Inspections', desc: 'Quality checks' },
+              { href: '/dashboard/housekeeping/staff', icon: Users, label: 'Staff', desc: 'Team management' },
+            ].map((link) => (
+              <Link key={link.href} href={link.href}>
+                <div className="card-elevated-hover p-4 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-stone-50 text-stone-500">
+                    <link.icon className="h-5 w-5" />
+                  </div>
                   <div>
-                    <p className="font-medium">Tasks</p>
-                    <p className="text-sm text-gray-500">Manage all tasks</p>
+                    <p className="text-[13px] font-medium text-stone-800">{link.label}</p>
+                    <p className="text-[11px] text-stone-500">{link.desc}</p>
                   </div>
                 </div>
-              </IOSCard>
-            </Link>
-            <Link href="/dashboard/housekeeping/rooms">
-              <IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer">
-                <div className="flex items-center gap-3">
-                  <Bed className="h-8 w-8 text-[#34C759]" />
-                  <div>
-                    <p className="font-medium">Rooms</p>
-                    <p className="text-sm text-gray-500">Room status</p>
-                  </div>
-                </div>
-              </IOSCard>
-            </Link>
-            <Link href="/dashboard/housekeeping/inspections">
-              <IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer">
-                <div className="flex items-center gap-3">
-                  <Eye className="h-8 w-8 text-purple-600" />
-                  <div>
-                    <p className="font-medium">Inspections</p>
-                    <p className="text-sm text-gray-500">Quality checks</p>
-                  </div>
-                </div>
-              </IOSCard>
-            </Link>
-            <Link href="/dashboard/housekeeping/staff">
-              <IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition cursor-pointer">
-                <div className="flex items-center gap-3">
-                  <Users className="h-8 w-8 text-orange-600" />
-                  <div>
-                    <p className="font-medium">Staff</p>
-                    <p className="text-sm text-gray-500">Team management</p>
-                  </div>
-                </div>
-              </IOSCard>
-            </Link>
+              </Link>
+            ))}
           </div>
         </div>
       </DashboardLayout>
+
+        {/* New Task Modal */}
+        <NewTaskModal
+          isOpen={showNewTaskModal}
+          onClose={() => setShowNewTaskModal(false)}
+          onSubmit={handleCreateTask}
+          rooms={rooms.map(r => ({ room_number: r.room_number, room_id: r.room_id }))}
+        />
     </ProtectedRoute>
   );
 }

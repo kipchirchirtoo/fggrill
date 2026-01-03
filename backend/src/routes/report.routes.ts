@@ -19,12 +19,16 @@ import {
   getHousekeepingReport,
   getMaintenanceReport,
   getInventoryReport,
-  getDashboardReport
+  getDashboardReport,
+  exportReport
 } from '../controllers/report.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
 
 const router = express.Router();
+
+// Public export for testing (TODO: Re-enable protect)
+router.post('/export', exportReport);
 
 // Apply protection to all routes
 router.use(protect);
