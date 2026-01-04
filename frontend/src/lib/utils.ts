@@ -1,6 +1,6 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
- 
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
@@ -38,8 +38,8 @@ export const formatNumber = (value: number) => {
 
 export const generateBookingNumber = () => {
   const prefix = 'FGH'
-  const date = new Date().toISOString().slice(0,10).replace(/-/g,'')
-  const random = Math.random().toString(36).substring(2,6).toUpperCase()
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const random = Math.random().toString(36).substring(2, 6).toUpperCase()
   return `${prefix}-${date}-${random}`
 }
 
@@ -82,4 +82,10 @@ export const formatPhoneNumber = (phone: string) => {
     return `+254${cleaned.slice(1)}`
   }
   return phone
+}
+
+export const getRoomImageUrl = (path: string | undefined | null) => {
+  if (!path) return '/fggallery/294216767_538857271357927_3834486940661836835_n.jpeg'; // Fallback
+  if (path.startsWith('http')) return path;
+  return `https://utsvlihpudfraxzcmtle.supabase.co/storage/v1/object/public/room-images/${path}`;
 }

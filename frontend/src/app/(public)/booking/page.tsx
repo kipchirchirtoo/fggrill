@@ -20,7 +20,7 @@ import {
   MapPin
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatNumber } from '@/lib/utils';
+import { formatNumber, getRoomImageUrl } from '@/lib/utils';
 import { API_URL } from '@/lib/config';
 
 function BookingContent() {
@@ -78,7 +78,8 @@ function BookingContent() {
           roomNumber: room.room_number,
           basePrice: basePrice,
           pricePerNight: inclusivePrice,
-          type: room.type?.name || 'Standard'
+          type: room.type?.name || 'Standard',
+          image_url: room.image_url ? getRoomImageUrl(room.image_url) : (room.type?.images?.[0] ? getRoomImageUrl(room.type.images[0]) : null)
         });
       }
     } catch (error) {

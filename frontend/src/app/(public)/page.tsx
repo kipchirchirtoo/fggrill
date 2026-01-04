@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { format, addDays } from 'date-fns';
 import { toast } from 'sonner';
+import { getRoomImageUrl } from '@/lib/utils';
 
 interface RoomType {
   id: string;
@@ -151,7 +152,7 @@ export default function HomePage() {
           const roomType = room.type || {};
 
           // Use price_override if set, otherwise use room type's base_price
-          const basePrice = room.price_override || roomType.base_price || 5000;
+          const basePrice = room.price_override || roomType.base_price || 0;
 
           // Pricing strategy: Price already includes all taxes
           const inclusivePrice = basePrice;
@@ -165,7 +166,7 @@ export default function HomePage() {
             basePrice: basePrice,
             amenities: room.amenities || roomType.amenities || [],
             floor: room.floor,
-            images: room.image_url ? [room.image_url] : (roomType.images && roomType.images.length > 0 ? roomType.images : []),
+            images: room.image_url ? [getRoomImageUrl(room.image_url)] : (roomType.images && roomType.images.length > 0 ? roomType.images.map((img: string) => getRoomImageUrl(img)) : []),
             description: room.description || roomType.description || 'Experience comfort and style in our well-appointed rooms.'
           };
         });
@@ -1169,24 +1170,31 @@ export default function HomePage() {
                 {/* Images Gallery */}
                 <div className="mb-6">
                   {(() => {
-                    const images = selectedRoom.images ||
-                      (typeof selectedRoom.type === 'object' ? selectedRoom.type?.images : []);
+                    // Collect all possible images
+                    const roomImages = selectedRoom.images || [];
+                    const typeImages = (typeof selectedRoom.type === 'object' ? (selectedRoom.type as any).images : []) || [];
+                    const allImages = [...roomImages, ...typeImages].map(img => getRoomImageUrl(img));
 
-                    return images && images.length > 0 ? (
+                    // Filter out duplicates and invalid paths
+                    const uniqueImages = Array.from(new Set(allImages)).filter(Boolean);
+
+                    return uniqueImages.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {images.map((image: string, index: number) => (
-                          <div key={index} className="aspect-[4/3] rounded-lg overflow-hidden">
+                        {uniqueImages.map((image: string, index: number) => (
+                          <div key={index} className="aspect-[4/3] rounded-lg overflow-hidden group/img relative">
                             <img
                               src={image}
                               alt={`${getRoomTypeName(selectedRoom)} - Image ${index + 1}`}
-                              className="w-full h-full object-cover"
+                              className="w-full h-full object-cover transition-transform duration-500 group-hover/img:scale-110"
                             />
+                            <div className="absolute inset-0 bg-black/5" />
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="aspect-[4/3] bg-gradient-to-br from-amber-100 to-stone-200 rounded-lg flex items-center justify-center">
-                        <Bed className="w-16 h-16 text-stone-400" />
+                      <div className="aspect-[16/9] bg-gradient-to-br from-amber-50 to-stone-100 rounded-2xl flex flex-col items-center justify-center border-2 border-dashed border-stone-200">
+                        <Bed className="w-16 h-16 text-stone-300 mb-2" />
+                        <p className="text-stone-400 text-sm">No specific images for this room</p>
                       </div>
                     );
                   })()}

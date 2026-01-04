@@ -1020,10 +1020,11 @@ export const bookingsAPI = {
     return fetchAPI<any>(`/bookings/available?${query}`, { showToast: true }).then(response => {
       if (response.success && Array.isArray(response.data)) {
         response.data = response.data.map((room: any) => ({
+          ...room,
           id: room.id,
-          room_number: room.room_number,
+          room_number: room.room_number || room.roomNumber,
           room_type: room.type?.name || room.room_type,
-          room_type_id: room.room_type_id,
+          room_type_id: room.room_type_id || room.type_id,
           price_per_night: room.price_override || room.type?.base_price || 0,
           max_occupancy: room.type?.max_occupancy || room.max_occupancy || 0,
           status: room.status,
