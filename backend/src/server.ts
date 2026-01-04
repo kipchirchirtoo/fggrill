@@ -55,6 +55,7 @@ import rateLimit from 'express-rate-limit';
 import { initializeApp } from './init';
 import { errorHandler } from './middleware/errorHandler';
 import { logRequest } from './middleware/auth';
+import { activityLogger } from './middleware/activity-log.middleware';
 import { logger } from './utils/logger';
 import routes from './routes';
 import startupService from './services/startup.service';
@@ -108,24 +109,40 @@ initializeApp().then(({ app, httpServer }) => {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Branch-ID']
   }));
 
-  // Relaxed Helmet for development
+  // Relaxed Helmet for development - but still providing some security
   app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
-    contentSecurityPolicy: false // Disable CSP for development
+    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
+    hsts: process.env.NODE_ENV === 'production' ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false
   }));
+
+  // HTTP Parameter Pollution protection
+  const hpp = require('hpp');
+  app.use(hpp());
 
   app.use(morgan('dev'));
   app.use(logRequest);
+  app.use(activityLogger);
 
   // Static files
   app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-  // Rate limiting - relaxed for development
+  // Global Rate limiting
   const limiter = rateLimit({
-    windowMs: 1 * 60 * 1000, // 1 minute
-    max: 1000 // limit each IP to 1000 requests per minute
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    message: 'Too many requests from this IP, please try again after 15 minutes'
   });
-  app.use(limiter);
+
+  // Strict rate limiting for auth routes
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 20, // limit each IP to 20 requests per windowMs (login/register)
+    message: 'Too many authentication attempts, please try again after 15 minutes'
+  });
+
+  app.use('/api/auth', authLimiter);
+  app.use('/api', limiter);
 
   // API routes
   app.use('/api', routes);

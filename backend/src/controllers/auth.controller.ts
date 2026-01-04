@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { logger } from '../utils/logger';
 import db from '../db';
+import { registerSchema, loginSchema, updatePasswordSchema } from '../schemas/auth.schema';
 
 // @desc    Register user
 // @route   POST /api/auth/register
@@ -14,7 +15,9 @@ export const register = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { firstName, lastName, email, password, role } = req.body;
+    // Validate input
+    const validatedData = registerSchema.parse(req.body);
+    const { firstName, lastName, email, password, role } = validatedData;
 
     // Check if user exists
     const { data: existingUser } = await supabase
@@ -78,6 +81,14 @@ export const register = async (
 
     logger.info(`New user registered: ${email}`);
   } catch (error) {
+    if (error instanceof Error && error.name === 'ZodError') {
+      res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: (error as any).errors
+      });
+      return;
+    }
     next(error);
   }
 };
@@ -91,42 +102,50 @@ export const login = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { email, password } = req.body;
+    // Validate input
+    const validatedData = loginSchema.parse(req.body);
+    const { email, password } = validatedData;
 
-    // Validate email & password
-    if (!email || !password) {
-      res.status(400).json({
-        success: false,
-        message: 'Please provide email and password'
-      });
-      return;
+    // Check for account lockout
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, login_attempts, lock_until')
+      .eq('email', email)
+      .single();
+
+    if (user) {
+      if (user.lock_until && new Date(user.lock_until) > new Date()) {
+        const remainingTime = Math.ceil((new Date(user.lock_until).getTime() - Date.now()) / 60000);
+        res.status(423).json({
+          success: false,
+          message: `Account is locked. Please try again in ${remainingTime} minutes.`
+        });
+        return;
+      }
     }
 
-    // No demo accounts - use real authentication only
-
-    // Try Supabase Auth first
+    // Try Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password
     });
 
     if (!authError && authData?.user) {
-      // Supabase Auth succeeded
-      const { data: profile, error: profileError } = await supabase
+      // Success - Reset login attempts
+      await supabase
+        .from('users')
+        .update({
+          login_attempts: 0,
+          lock_until: null,
+          last_login: new Date().toISOString()
+        })
+        .eq('id', authData.user.id);
+
+      const { data: profile } = await supabase
         .from('users')
         .select('*')
         .eq('id', authData.user.id)
         .single();
-
-      if (profileError) {
-        throw profileError;
-      }
-
-      // Update last login
-      await supabase
-        .from('users')
-        .update({ last_login: new Date().toISOString() })
-        .eq('id', authData.user.id);
 
       res.status(200).json({
         success: true,
@@ -140,126 +159,38 @@ export const login = async (
       return;
     }
 
-    // Fallback: Direct database authentication
-    logger.info(`Supabase Auth failed for ${email}, trying direct DB auth`);
-    
-    let storedHash: string | null = null;
-    let userId: string | null = null;
-    let userProfile: any = null;
-    
-    try {
-      // Use direct PostgreSQL connection with timeout settings
-      const { Pool } = require('pg');
-      const pool = new Pool({
-        connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false },
-        connectionTimeoutMillis: 10000,
-        query_timeout: 10000,
-        max: 1
-      });
-      
-      // Get user profile and auth data in one query
-      const result = await pool.query(
-        `SELECT 
-          u.id, u.email, u.first_name, u.last_name, u.role, u.branch_id,
-          au.encrypted_password
-        FROM public.users u
-        LEFT JOIN auth.users au ON u.id = au.id
-        WHERE u.email = $1`,
-        [email]
-      );
-      
-      await pool.end();
-      
-      if (result.rows[0]) {
-        const row = result.rows[0];
-        userId = row.id;
-        storedHash = row.encrypted_password;
-        userProfile = {
-          id: row.id,
-          email: row.email,
-          first_name: row.first_name,
-          last_name: row.last_name,
-          role: row.role,
-          branch_id: row.branch_id,
-          status: row.status
-        };
+    // Authentication failed - Increment attempts
+    if (user) {
+      const attempts = (user.login_attempts || 0) + 1;
+      let lockUntil = null;
+
+      if (attempts >= 5) {
+        lockUntil = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 minutes lockout
+        logger.warn(`Account locked for ${email} due to 5 failed attempts`);
       }
-    } catch (dbError) {
-      logger.error('Direct DB auth error:', dbError);
+
+      await supabase
+        .from('users')
+        .update({
+          login_attempts: attempts,
+          lock_until: lockUntil
+        })
+        .eq('id', user.id);
     }
 
-    if (!storedHash || !userId) {
-      res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-      return;
-    }
-
-    // Verify password with bcrypt
-    const passwordMatch = await bcrypt.compare(password, storedHash);
-    
-    if (!passwordMatch) {
-      res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-      return;
-    }
-
-    if (!userProfile) {
-      res.status(401).json({
-        success: false,
-        message: 'User profile not found'
-      });
-      return;
-    }
-
-    // Update last login using direct DB (avoid Supabase timeout)
-    try {
-      await db.query(
-        'UPDATE public.users SET last_login = NOW() WHERE id = $1',
-        [userId]
-      );
-    } catch (updateError) {
-      logger.warn('Failed to update last login:', updateError);
-    }
-
-    // Generate JWT token
-    const jwtSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'fallback-secret-key';
-    const accessToken = jwt.sign(
-      { 
-        sub: userId, 
-        email: userProfile.email,
-        role: userProfile.role,
-        aud: 'authenticated'
-      },
-      jwtSecret,
-      { expiresIn: '24h' }
-    );
-
-    const refreshToken = jwt.sign(
-      { sub: userId, type: 'refresh' },
-      jwtSecret,
-      { expiresIn: '7d' }
-    );
-
-    res.status(200).json({
-      success: true,
-      data: {
-        user: userProfile,
-        session: {
-          access_token: accessToken,
-          refresh_token: refreshToken,
-          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          user: { id: userId, email: userProfile.email }
-        }
-      }
+    res.status(401).json({
+      success: false,
+      message: 'Invalid credentials'
     });
-
-    logger.info(`User logged in via direct DB auth: ${email}`);
   } catch (error) {
+    if (error instanceof Error && error.name === 'ZodError') {
+      res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: (error as any).errors
+      });
+      return;
+    }
     next(error);
   }
 };
@@ -397,12 +328,14 @@ export const updateDetails = async (
       return;
     }
 
+    const { firstName, lastName, email, phoneNumber, address } = req.body;
+
     const fieldsToUpdate = {
-      first_name: req.body.firstName,
-      last_name: req.body.lastName,
-      email: req.body.email,
-      phone_number: req.body.phoneNumber,
-      address: req.body.address,
+      first_name: firstName,
+      last_name: lastName,
+      email: email,
+      phone_number: phoneNumber,
+      address: address,
       updated_at: new Date().toISOString()
     };
 
@@ -459,9 +392,13 @@ export const updatePassword = async (
       return;
     }
 
+    // Validate input
+    const validatedData = updatePasswordSchema.parse(req.body);
+    const { newPassword } = validatedData;
+
     // Update password
     const { error: updateError } = await supabase.auth.updateUser({
-      password: req.body.newPassword
+      password: newPassword
     });
 
     if (updateError) {
@@ -481,6 +418,14 @@ export const updatePassword = async (
 
     logger.info(`User updated password: ${session.user.email}`);
   } catch (error) {
+    if (error instanceof Error && error.name === 'ZodError') {
+      res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: (error as any).errors
+      });
+      return;
+    }
     next(error);
   }
 };

@@ -83,6 +83,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [mounted]);
 
+  // Inactivity timeout logic (15 minutes)
+  useEffect(() => {
+    if (!user || !mounted) return;
+
+    const INACTIVITY_TIMEOUT = 15 * 60 * 1000; // 15 minutes
+    let timeoutId: NodeJS.Timeout;
+
+    const resetTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        toast.info('Session expired due to inactivity');
+        logout();
+      }, INACTIVITY_TIMEOUT);
+    };
+
+    // Events to track activity
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+
+    // Initialize timer
+    resetTimer();
+
+    // Add event listeners
+    events.forEach(event => {
+      window.addEventListener(event, resetTimer);
+    });
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      events.forEach(event => {
+        window.removeEventListener(event, resetTimer);
+      });
+    };
+  }, [user, mounted]);
+
   const checkAuth = async () => {
     try {
       if (typeof window === 'undefined') {
