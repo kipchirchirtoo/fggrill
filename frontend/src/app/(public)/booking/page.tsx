@@ -66,14 +66,18 @@ function BookingContent() {
       if (data.success) {
         const room = data.data;
         // Extract and store room type ID
-        const roomTypeId = room.room_type_id || room.type?.id;
+        const roomTypeId = room.type_id || room.room_type_id || room.type?.id;
         setSelectedRoomTypeId(roomTypeId);
 
         // Map snake_case to camelCase
+        const basePrice = room.price_override || room.type?.base_price || 0;
+        const inclusivePrice = Math.round(basePrice * 1.26);
+
         setRoomDetails({
           ...room,
           roomNumber: room.room_number,
-          pricePerNight: room.price_override || room.type?.base_price || 0,
+          basePrice: basePrice,
+          pricePerNight: inclusivePrice,
           type: room.type?.name || 'Standard'
         });
       }
@@ -529,15 +533,23 @@ function BookingContent() {
                   <div className="pt-4 border-t border-stone-200 space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-stone-600">
-                        Room ({nights} night{nights !== 1 ? 's' : ''})
+                        Room Rate ({nights} night{nights !== 1 ? 's' : ''})
                       </span>
                       <span className="font-medium text-stone-900">
-                        KES {formatNumber(roomDetails?.pricePerNight * nights || 0)}
+                        KES {formatNumber((roomDetails?.basePrice || 0) * nights)}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-stone-600">Taxes & fees</span>
-                      <span className="font-medium text-stone-500">Included</span>
+                      <span className="text-stone-600">VAT (16%)</span>
+                      <span className="font-medium text-stone-900">
+                        KES {formatNumber(Math.round((roomDetails?.basePrice || 0) * nights * 0.16))}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-stone-600">Service Charge (10%)</span>
+                      <span className="font-medium text-stone-900">
+                        KES {formatNumber(Math.round((roomDetails?.basePrice || 0) * nights * 0.10))}
+                      </span>
                     </div>
                   </div>
 

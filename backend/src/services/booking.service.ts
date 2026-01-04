@@ -93,12 +93,14 @@ class BookingService {
 
       // If roomTypeId is provided, filter by room type
       if (roomTypeId) {
-        roomQuery = roomQuery.eq('room_type_id', roomTypeId);
+        roomQuery = roomQuery.eq('type_id', roomTypeId);
       }
 
       // Exclude booked rooms
       if (bookedIds.length > 0) {
-        roomQuery = roomQuery.not('id', 'in', `(${bookedIds.join(',')})`);
+        // Correctly format array for 'not in' filter
+        const bookedIdsList = `(${bookedIds.map(id => `"${id}"`).join(',')})`;
+        roomQuery = roomQuery.not('id', 'in', bookedIdsList);
       }
 
       const { data: availableRooms, error } = await roomQuery;
@@ -114,7 +116,7 @@ class BookingService {
         roomTypeId,
         branchId,
         bookedRoomCount: bookedIds.length,
-        foundRooms: availableRooms?.map(r => ({ id: r.id, room_number: r.room_number, room_type_id: r.room_type_id }))
+        foundRooms: availableRooms?.map(r => ({ id: r.id, room_number: r.room_number, type_id: r.type_id }))
       });
 
       return {

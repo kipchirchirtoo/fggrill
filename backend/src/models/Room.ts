@@ -2,11 +2,9 @@ import { supabase } from '../config/database';
 import crypto from 'crypto';
 
 export enum RoomType {
-  STANDARD = 'standard',
-  DELUXE = 'deluxe',
-  SUITE = 'suite',
-  EXECUTIVE = 'executive',
-  FAMILY = 'family'
+  STANDARD = 'Standard',
+  DELUXE = 'Deluxe',
+  SUITE = 'Suite'
 }
 
 export enum RoomStatus {
@@ -14,8 +12,8 @@ export enum RoomStatus {
   OCCUPIED = 'occupied',
   CLEANING = 'cleaning',
   MAINTENANCE = 'maintenance',
-  OUT_OF_ORDER = 'out-of-order',
-  RESERVED = 'reserved'
+  OUT_OF_ORDER = 'out_of_order',
+  RESERVED = 'occupied' // Map reserved to occupied for now if needed, or stick to available
 }
 
 export interface IMaintenanceRecord {
@@ -39,11 +37,9 @@ export interface IRoom {
   currentGuest?: string;
   checkIn?: Date;
   checkOut?: Date;
-  basePrice: number;
-  currentPrice: number;
-  description?: string;
+  priceOverride?: number;
   amenities: string[];
-  photos?: string[];
+  imageUrl?: string;
   maxOccupancy: number;
   bedConfiguration: {
     single: number;
@@ -94,11 +90,9 @@ export class Room implements IRoom {
   currentGuest?: string;
   checkIn?: Date;
   checkOut?: Date;
-  basePrice: number;
-  currentPrice: number;
-  description?: string;
+  priceOverride?: number;
   amenities: string[];
-  photos?: string[];
+  imageUrl?: string;
   maxOccupancy: number;
   bedConfiguration: {
     single: number;
@@ -148,11 +142,9 @@ export class Room implements IRoom {
     this.currentGuest = data.currentGuest;
     this.checkIn = data.checkIn;
     this.checkOut = data.checkOut;
-    this.basePrice = data.basePrice || 0;
-    this.currentPrice = data.currentPrice || 0;
-    this.description = data.description;
+    this.priceOverride = data.priceOverride;
     this.amenities = data.amenities || [];
-    this.photos = data.photos;
+    this.imageUrl = data.imageUrl;
     this.maxOccupancy = data.maxOccupancy || 2;
     this.bedConfiguration = data.bedConfiguration || { single: 0, double: 1, queen: 0, king: 0 };
     this.squareMeters = data.squareMeters || 25;
@@ -171,7 +163,7 @@ export class Room implements IRoom {
   static async findById(id: string): Promise<Room | null> {
     const { data, error } = await supabase
       .from('rooms')
-      .select('*')
+      .select('*, type:room_types!type_id(*)')
       .eq('id', id)
       .single();
 
@@ -182,7 +174,7 @@ export class Room implements IRoom {
   static async findByNumber(roomNumber: string): Promise<Room | null> {
     const { data, error } = await supabase
       .from('rooms')
-      .select('*')
+      .select('*, type:room_types!type_id(*)')
       .eq('room_number', roomNumber)
       .single();
 
@@ -193,11 +185,11 @@ export class Room implements IRoom {
   static async findByType(type: RoomType): Promise<Room[]> {
     const { data, error } = await supabase
       .from('rooms')
-      .select('*')
-      .eq('type', type);
+      .select('*, type:room_types!type_id(*)')
+      .eq('type:room_types.name', type);
 
     if (error || !data) return [];
-    return data.map(room => new Room(room));
+    return (data as any[]).map(room => new Room(room));
   }
 
   static async findByStatus(status: RoomStatus): Promise<Room[]> {
@@ -227,28 +219,13 @@ export class Room implements IRoom {
         {
           id: this.id,
           room_number: this.roomNumber,
-          type: this.type,
+          type_id: this.type, // Map enum to type_id UUID later if needed, or assume it stores UUID
           floor: this.floor,
           status: this.status,
-          current_guest: this.currentGuest,
-          check_in: this.checkIn,
-          check_out: this.checkOut,
-          base_price: this.basePrice,
-          current_price: this.currentPrice,
-          description: this.description,
+          price_override: this.priceOverride,
           amenities: this.amenities,
-          photos: this.photos,
+          image_url: this.imageUrl,
           max_occupancy: this.maxOccupancy,
-          bed_configuration: this.bedConfiguration,
-          square_meters: this.squareMeters,
-          view: this.view,
-          accessible: this.accessible,
-          smoking: this.smoking,
-          maintenance_history: this.maintenanceHistory,
-          cleaning_schedule: this.cleaningSchedule,
-          occupancy_history: this.occupancyHistory,
-          ratings: this.ratings,
-          reviews: this.reviews,
           updated_at: new Date()
         }
       ])
@@ -311,7 +288,7 @@ export class Room implements IRoom {
 
   async addReview(review: Omit<Room['reviews'][0], 'date'>): Promise<void> {
     this.reviews = [...(this.reviews || []), { ...review, date: new Date() }];
-    
+
     // Update ratings
     const totalRatings = this.reviews.length;
     const sumRatings = this.reviews.reduce((acc, curr) => acc + curr.rating, 0);
@@ -327,7 +304,7 @@ export class Room implements IRoom {
   }
 
   async updatePrice(newPrice: number): Promise<void> {
-    this.currentPrice = newPrice;
+    this.priceOverride = newPrice;
     await this.save();
   }
 

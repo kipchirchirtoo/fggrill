@@ -149,16 +149,24 @@ export default function HomePage() {
         const normalizedRooms = response.data.map((room: any) => {
           // Handle nested room_types data from Supabase join
           const roomType = room.type || {};
+
           // Use price_override if set, otherwise use room type's base_price
-          const price = room.price_override || roomType.base_price || 5000;
+          const basePrice = room.price_override || roomType.base_price || 5000;
+
+          // Calculate inclusive price (matching backend calculatePricing: 16% VAT + 10% Service Charge)
+          // Pricing strategy: Frontend should show the same total the guest will pay
+          const inclusivePrice = Math.round(basePrice * 1.26);
+
           return {
             id: room.id,
             roomNumber: room.room_number || room.roomNumber,
-            type: typeof roomType === 'string' ? roomType : (roomType.name || 'Standard'),
+            type: roomType, // Keep the object for component access
             capacity: roomType.max_occupancy || 2,
-            pricePerNight: price,
-            amenities: room.amenities || [],
+            pricePerNight: inclusivePrice, // Show inclusive price to avoid mismatch
+            basePrice: basePrice,
+            amenities: room.amenities || roomType.amenities || [],
             floor: room.floor,
+            images: room.image_url ? [room.image_url] : (roomType.images || []),
             description: roomType.description || ''
           };
         });

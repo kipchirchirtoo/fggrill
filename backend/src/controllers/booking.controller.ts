@@ -403,14 +403,13 @@ export const getAvailableRooms = async (
     const { checkIn, checkOut } = req.query;
     if (!checkIn || !checkOut) throw new AppError('Dates required', 400);
 
-    // Find booked room IDs
+    // Find booked room IDs from reservations table
     const { data: booked, error: bookedError } = await supabase
-      .from('bookings')
+      .from('reservations')
       .select('room_id')
-      .neq('status', 'cancelled')
-      .neq('status', 'checked_out')
-      .lte('check_in_date', checkOut as string)
-      .gte('check_out_date', checkIn as string);
+      .not('status', 'in', '(cancelled,checked_out)')
+      .lt('check_in_date', checkOut as string)
+      .gt('check_out_date', checkIn as string);
 
     if (bookedError) {
       logger.error('Error fetching booked rooms:', bookedError);
@@ -426,7 +425,7 @@ export const getAvailableRooms = async (
     // 3. Not already booked for the selected dates
     let query = supabase
       .from('rooms')
-      .select('*, type:room_types!room_type_id(*)')
+      .select('*, type:room_types!type_id(*)')
       .in('status', ['available', 'cleaning']);
 
     if (bookedIds.length > 0) {
