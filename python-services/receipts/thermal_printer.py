@@ -234,6 +234,14 @@ class ThermalPrinter:
             p.text("THANKS FOR VISITING\n")
             p.text(f"{self.company_name}\n")
             
+            p.text("\n")
+            p.text("-" * 32 + "\n")
+            p.set(align='center', font='a', bold=True)
+            p.text("System managed and made by Hirall\n")
+            p.set(align='center', font='a', bold=False)
+            p.text("+254 710 944 249 | admin@hirall.com\n")
+            p.text("-" * 32 + "\n")
+            
             # Cut paper
             p.cut()
             

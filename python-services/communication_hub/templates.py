@@ -68,6 +68,10 @@ BOOKING_CONFIRMATION_EMAIL = """
         <div class="footer">
             <p>If you have any questions, please contact us.</p>
             <p>&copy; {{ year }} Hotel Management System</p>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
+                <p style="margin: 0; font-weight: bold; color: #1a365d;">System managed and made by Hirall</p>
+                <p style="margin: 5px 0 0 0;">+254 710 944 249 | admin@hirall.com</p>
+            </div>
         </div>
     </div>
 </body>
@@ -114,6 +118,10 @@ CHECK_IN_REMINDER_EMAIL = """
         </div>
         <div class="footer">
             <p>&copy; {{ year }} Hotel Management System</p>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
+                <p style="margin: 0; font-weight: bold; color: #059669;">System managed and made by Hirall</p>
+                <p style="margin: 5px 0 0 0;">+254 710 944 249 | admin@hirall.com</p>
+            </div>
         </div>
     </div>
 </body>
@@ -183,6 +191,10 @@ INVOICE_EMAIL = """
         </div>
         <div class="footer">
             <p>&copy; {{ year }} Hotel Management System</p>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
+                <p style="margin: 0; font-weight: bold; color: #7c3aed;">System managed and made by Hirall</p>
+                <p style="margin: 5px 0 0 0;">+254 710 944 249 | admin@hirall.com</p>
+            </div>
         </div>
     </div>
 </body>

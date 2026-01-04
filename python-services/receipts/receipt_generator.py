@@ -255,8 +255,16 @@ class ReceiptGenerator:
                 y -= 5 * mm
                 c.setFont("Helvetica", 7)
                 c.drawCentredString(center_x, y, barcode_value)
+                y -= 8 * mm
             except:
                 pass
+        
+        # === HIRALL BRANDING ===
+        c.setFont("Helvetica-Bold", 7)
+        c.drawCentredString(center_x, y, "System managed and made by Hirall")
+        y -= 4 * mm
+        c.setFont("Helvetica", 6)
+        c.drawCentredString(center_x, y, "+254 710 944 249 | admin@hirall.com")
         
         c.save()
         buffer.seek(0)
@@ -466,6 +474,17 @@ class InvoiceGenerator:
         elements.append(Paragraph("Thank you for your business!", footer_style))
         elements.append(Paragraph(f"{self.company_website}", footer_style))
         
+        # Hirall Branding
+        hirall_style = ParagraphStyle(
+            'HirallFooter',
+            parent=footer_style,
+            fontSize=7,
+            textColor=colors.HexColor('#666666'),
+            spaceBefore=10
+        )
+        elements.append(Paragraph("System managed and made by <b>Hirall</b>", hirall_style))
+        elements.append(Paragraph("+254 710 944 249 | admin@hirall.com", hirall_style))
+        
         doc.build(elements)
         buffer.seek(0)
         return buffer.getvalue()
@@ -621,6 +640,18 @@ class InventoryReceiptGenerator:
             ('TOPPADDING', (0, 1), (-1, 1), 5),
         ]))
         elements.append(sig_table)
+        
+        # === HIRALL BRANDING ===
+        elements.append(Spacer(1, 15*mm))
+        hirall_style = ParagraphStyle(
+            'HirallFooter',
+            parent=styles['Normal'],
+            fontSize=7,
+            textColor=colors.HexColor('#666666'),
+            alignment=TA_CENTER
+        )
+        elements.append(Paragraph("System managed and made by <b>Hirall</b>", hirall_style))
+        elements.append(Paragraph("+254 710 944 249 | admin@hirall.com", hirall_style))
         
         doc.build(elements)
         buffer.seek(0)

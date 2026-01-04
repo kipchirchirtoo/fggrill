@@ -334,8 +334,8 @@ export default function HomePage() {
       </section>
 
       {/* ===================== BOOKING SECTION (STICKY) ===================== */}
-      <div ref={bookingRef} className="sticky top-16 z-30">
-        <div className={`${isStuck ? 'shadow-xl border-b border-stone-200' : ''} bg-white transition-all duration-300`}>
+      <div ref={bookingRef} className="lg:sticky lg:top-16 z-30">
+        <div className={`${isStuck ? 'lg:shadow-xl lg:border-b lg:border-stone-200' : ''} bg-white transition-all duration-300`}>
           <div className="max-w-6xl mx-auto px-6 py-6">
             <div className="flex flex-col lg:flex-row items-end gap-4">
               {/* Check-in */}
@@ -956,21 +956,41 @@ export default function HomePage() {
       </section>
 
       {/* ===================== FOOTER ===================== */}
-      <footer className="py-12 bg-stone-950">
+      <footer className="py-12 bg-stone-950 border-t border-stone-900">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-3">
-              <Image src="/fglogo.png" alt="Logo" width={36} height={36} className="object-contain" />
-              <span className="font-semibold text-white">Famous Gate Hotel</span>
+          <div className="flex flex-col md:flex-row items-center justify-between gap-8">
+            <div className="flex flex-col items-center md:items-start gap-4">
+              <div className="flex items-center gap-3">
+                <Image src="/fglogo.png" alt="Logo" width={36} height={36} className="object-contain" />
+                <span className="font-semibold text-white">Famous Gate Hotel</span>
+              </div>
+              <p className="text-stone-500 text-sm max-w-xs text-center md:text-left">
+                Experience the finest hospitality in Kericho. Your comfort is our priority.
+              </p>
             </div>
-            <div className="flex items-center gap-6 text-sm text-stone-500">
-              <a href="#" className="hover:text-white transition-colors">Privacy</a>
-              <a href="#" className="hover:text-white transition-colors">Terms</a>
-              <a href="#" className="hover:text-white transition-colors">FAQ</a>
+
+            <div className="flex flex-col items-center md:items-end gap-4">
+              <div className="flex items-center gap-6 text-sm text-stone-400">
+                <a href="#" className="hover:text-amber-500 transition-colors">Privacy Policy</a>
+                <a href="#" className="hover:text-amber-500 transition-colors">Terms of Service</a>
+                <a href="#" className="hover:text-amber-500 transition-colors">FAQ</a>
+              </div>
+              <div className="text-center md:text-right">
+                <p className="text-stone-500 text-xs mb-1">
+                  © 2024 Famous Gate Hotel. All rights reserved.
+                </p>
+                <div className="flex flex-col items-center md:items-end gap-1">
+                  <p className="text-stone-400 text-[10px] uppercase tracking-widest font-medium">
+                    System managed and made by <span className="text-amber-500">Hirall</span>
+                  </p>
+                  <div className="flex items-center gap-3 text-[10px] text-stone-500">
+                    <span>+254 710 944 249</span>
+                    <span className="w-1 h-1 bg-stone-700 rounded-full" />
+                    <span>admin@hirall.com</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <p className="text-stone-500 text-sm">
-              © 2024 Famous Gate Hotel. All rights reserved.
-            </p>
           </div>
         </div>
       </footer>

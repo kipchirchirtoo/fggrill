@@ -126,9 +126,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   </div>
 
                   {/* User section */}
-                  <div className="flex-shrink-0 border-t border-stone-100 p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center">
+                  <div className="flex-shrink-0 border-t border-stone-100 p-4 bg-stone-50/50">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-9 h-9 rounded-full bg-white border border-stone-200 flex items-center justify-center">
                         <User className="h-4 w-4 text-stone-600" />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -141,11 +141,22 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       </div>
                       <button
                         onClick={logout}
-                        className="p-1.5 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors"
+                        className="p-1.5 rounded-md text-stone-400 hover:text-stone-600 hover:bg-white border border-transparent hover:border-stone-200 transition-all"
                         title="Sign out"
                       >
                         <LogOut className="h-4 w-4" />
                       </button>
+                    </div>
+
+                    {/* Hirall Branding */}
+                    <div className="pt-4 border-t border-stone-200/60">
+                      <p className="text-[9px] uppercase tracking-wider font-bold text-stone-400 mb-1">
+                        System managed by <span className="text-amber-600">Hirall</span>
+                      </p>
+                      <div className="flex flex-col gap-0.5 text-[9px] text-stone-500 font-medium">
+                        <p>+254 710 944 249</p>
+                        <p>admin@hirall.com</p>
+                      </div>
                     </div>
                   </div>
                 </div>
