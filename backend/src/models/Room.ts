@@ -38,8 +38,11 @@ export interface IRoom {
   checkIn?: Date;
   checkOut?: Date;
   priceOverride?: number;
+  basePrice?: number;
+  currentPrice?: number;
   amenities: string[];
   imageUrl?: string;
+  description?: string;
   maxOccupancy: number;
   bedConfiguration: {
     single: number;
@@ -47,10 +50,18 @@ export interface IRoom {
     queen: number;
     king: number;
   };
+  beds?: {
+    single: number;
+    double: number;
+    queen: number;
+    king: number;
+  };
   squareMeters: number;
+  area?: number;
   view?: string;
   accessible: boolean;
   smoking: boolean;
+  isActive?: boolean;
   maintenanceHistory: IMaintenanceRecord[];
   cleaningSchedule: {
     lastCleaned?: Date;
@@ -91,8 +102,11 @@ export class Room implements IRoom {
   checkIn?: Date;
   checkOut?: Date;
   priceOverride?: number;
+  basePrice?: number;
+  currentPrice?: number;
   amenities: string[];
   imageUrl?: string;
+  description?: string;
   maxOccupancy: number;
   bedConfiguration: {
     single: number;
@@ -100,10 +114,18 @@ export class Room implements IRoom {
     queen: number;
     king: number;
   };
+  beds?: {
+    single: number;
+    double: number;
+    queen: number;
+    king: number;
+  };
   squareMeters: number;
+  area?: number;
   view?: string;
   accessible: boolean;
   smoking: boolean;
+  isActive?: boolean;
   maintenanceHistory: IMaintenanceRecord[];
   cleaningSchedule: {
     lastCleaned?: Date;
@@ -143,14 +165,20 @@ export class Room implements IRoom {
     this.checkIn = data.checkIn;
     this.checkOut = data.checkOut;
     this.priceOverride = data.priceOverride;
+    this.basePrice = data.basePrice;
+    this.currentPrice = data.currentPrice;
     this.amenities = data.amenities || [];
     this.imageUrl = data.imageUrl;
+    this.description = data.description;
     this.maxOccupancy = data.maxOccupancy || 2;
-    this.bedConfiguration = data.bedConfiguration || { single: 0, double: 1, queen: 0, king: 0 };
-    this.squareMeters = data.squareMeters || 25;
+    this.bedConfiguration = data.bedConfiguration || data.beds || { single: 0, double: 1, queen: 0, king: 0 };
+    this.beds = data.beds || this.bedConfiguration;
+    this.squareMeters = data.squareMeters || data.area || 25;
+    this.area = data.area || this.squareMeters;
     this.view = data.view;
     this.accessible = data.accessible || false;
     this.smoking = data.smoking || false;
+    this.isActive = data.isActive !== undefined ? data.isActive : true;
     this.maintenanceHistory = data.maintenanceHistory || [];
     this.cleaningSchedule = data.cleaningSchedule || {};
     this.occupancyHistory = data.occupancyHistory || [];
@@ -158,6 +186,23 @@ export class Room implements IRoom {
     this.reviews = data.reviews || [];
     this.createdAt = data.createdAt || new Date();
     this.updatedAt = data.updatedAt || new Date();
+  }
+
+  static async create(data: Partial<IRoom> | Partial<IRoom>[]): Promise<any> {
+    if (Array.isArray(data)) {
+      const rooms = data.map(d => new Room(d));
+      return await Promise.all(rooms.map(r => r.save()));
+    }
+    const room = new Room(data);
+    return await room.save();
+  }
+
+  static async findByIdAndUpdate(id: string, update: Partial<IRoom>): Promise<Room | null> {
+    const room = await Room.findById(id);
+    if (!room) return null;
+
+    Object.assign(room, update);
+    return await room.save();
   }
 
   static async findById(id: string): Promise<Room | null> {
