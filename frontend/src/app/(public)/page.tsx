@@ -70,7 +70,7 @@ export default function HomePage() {
   const [hasSearched, setHasSearched] = useState(false);
 
   // Sticky booking bar
-  const [isBookingSticky, setIsBookingSticky] = useState(false);
+  const [isStuck, setIsStuck] = useState(false);
 
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -107,12 +107,12 @@ export default function HomePage() {
     setCheckOut(format(tomorrow, 'yyyy-MM-dd'));
   }, []);
 
-  // Handle sticky booking bar
+  // Handle sticky booking bar shadow
   useEffect(() => {
     const handleScroll = () => {
       if (bookingRef.current) {
         const rect = bookingRef.current.getBoundingClientRect();
-        setIsBookingSticky(rect.top <= 80);
+        setIsStuck(rect.top <= 64); // 64px is the header height (h-16)
       }
     };
     window.addEventListener('scroll', handleScroll);
@@ -334,8 +334,8 @@ export default function HomePage() {
       </section>
 
       {/* ===================== BOOKING SECTION (STICKY) ===================== */}
-      <div ref={bookingRef} className="relative z-20">
-        <div className={`${isBookingSticky ? 'fixed top-16 left-0 right-0 shadow-xl' : ''} bg-white transition-all duration-300`}>
+      <div ref={bookingRef} className="sticky top-16 z-30">
+        <div className={`${isStuck ? 'shadow-xl border-b border-stone-200' : ''} bg-white transition-all duration-300`}>
           <div className="max-w-6xl mx-auto px-6 py-6">
             <div className="flex flex-col lg:flex-row items-end gap-4">
               {/* Check-in */}
@@ -419,8 +419,6 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-        {/* Spacer when sticky */}
-        {isBookingSticky && <div className="h-32" />}
       </div>
 
       {/* ===================== AVAILABLE ROOMS SECTION ===================== */}
