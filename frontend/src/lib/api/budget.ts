@@ -1,5 +1,6 @@
 // Budget API services
 import { fetchWithBranchContext } from '../branch-api';
+import { PYTHON_API_URL } from '../config';
 
 export interface Budget {
   id: string;
@@ -172,26 +173,26 @@ export interface BudgetDetail {
 // API functions
 export const budgetAPI = {
   // Backend API calls
-  getBudgets: (params?: { 
+  getBudgets: (params?: {
     category?: string;
     period?: string;
     status?: string;
     fiscal_year?: string;
   }, branchId?: number) => {
     const queryParams = new URLSearchParams();
-    
+
     if (params?.category) queryParams.append('category', params.category);
     if (params?.period) queryParams.append('period', params.period);
     if (params?.status) queryParams.append('status', params.status);
     if (params?.fiscal_year) queryParams.append('fiscal_year', params.fiscal_year);
-    
+
     return fetchWithBranchContext<Budget[]>(
       `/api/branch-operations/finances/budgets${queryParams.toString() ? `?${queryParams.toString()}` : ''}`,
       {},
       branchId
     );
   },
-  
+
   getBudgetById: (id: string, branchId?: number) => {
     return fetchWithBranchContext<BudgetDetail>(
       `/api/branch-operations/finances/budgets/${id}`,
@@ -199,7 +200,7 @@ export const budgetAPI = {
       branchId
     );
   },
-  
+
   createBudget: (data: any, branchId?: number) => {
     return fetchWithBranchContext<Budget>(
       `/api/branch-operations/finances/budgets`,
@@ -210,7 +211,7 @@ export const budgetAPI = {
       branchId
     );
   },
-  
+
   updateBudget: (id: string, data: any, branchId?: number) => {
     return fetchWithBranchContext<Budget>(
       `/api/branch-operations/finances/budgets/${id}`,
@@ -221,7 +222,7 @@ export const budgetAPI = {
       branchId
     );
   },
-  
+
   deleteBudget: (id: string, branchId?: number) => {
     return fetchWithBranchContext(
       `/api/branch-operations/finances/budgets/${id}`,
@@ -231,7 +232,7 @@ export const budgetAPI = {
       branchId
     );
   },
-  
+
   linkExpenseToBudget: (budgetId: string, expenseId: string, amount: number, branchId?: number) => {
     return fetchWithBranchContext(
       `/api/branch-operations/finances/budgets/${budgetId}/expenses`,
@@ -242,91 +243,91 @@ export const budgetAPI = {
       branchId
     );
   },
-  
+
   getBudgetSummary: (fiscalYear?: string, branchId?: number) => {
     const queryParams = new URLSearchParams();
-    
+
     if (fiscalYear) queryParams.append('fiscal_year', fiscalYear);
-    
+
     return fetchWithBranchContext<BudgetSummary>(
       `/api/branch-operations/finances/budget-summary${queryParams.toString() ? `?${queryParams.toString()}` : ''}`,
       {},
       branchId
     );
   },
-  
+
   getBudgetAnalysis: (params?: {
     period?: string;
     fiscal_year?: string;
     fiscal_month?: string;
   }, branchId?: number) => {
     const queryParams = new URLSearchParams();
-    
+
     if (params?.period) queryParams.append('period', params.period);
     if (params?.fiscal_year) queryParams.append('fiscal_year', params.fiscal_year);
     if (params?.fiscal_month) queryParams.append('fiscal_month', params.fiscal_month);
-    
+
     return fetchWithBranchContext<Budget[]>(
       `/api/branch-operations/finances/budget-analysis${queryParams.toString() ? `?${queryParams.toString()}` : ''}`,
       {},
       branchId
     );
   },
-  
+
   // Python microservice calls
   getBudgetPerformance: (fiscalYear?: string, branchId?: number) => {
     const queryParams = new URLSearchParams();
-    
+
     if (fiscalYear) queryParams.append('fiscal_year', fiscalYear);
     if (branchId) queryParams.append('branch_id', branchId.toString());
-    
-    return fetch(`http://localhost:5001/api/budget/performance?${queryParams.toString()}`, {
+
+    return fetch(`${PYTHON_API_URL}/api/budget/performance?${queryParams.toString()}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'
       }
     }).then(response => response.json());
   },
-  
+
   getBudgetForecast: (params?: {
     category?: string;
     periods?: number;
   }, branchId?: number) => {
     const queryParams = new URLSearchParams();
-    
+
     if (branchId) queryParams.append('branch_id', branchId.toString());
     if (params?.category) queryParams.append('category', params.category);
     if (params?.periods) queryParams.append('periods', params.periods.toString());
-    
-    return fetch(`http://localhost:5001/api/budget/forecast?${queryParams.toString()}`, {
+
+    return fetch(`${PYTHON_API_URL}/api/budget/forecast?${queryParams.toString()}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'
       }
     }).then(response => response.json());
   },
-  
+
   getBudgetVariance: (fiscalYear?: string, branchId?: number) => {
     const queryParams = new URLSearchParams();
-    
+
     if (fiscalYear) queryParams.append('fiscal_year', fiscalYear);
     if (branchId) queryParams.append('branch_id', branchId.toString());
-    
-    return fetch(`http://localhost:5001/api/budget/variance?${queryParams.toString()}`, {
+
+    return fetch(`${PYTHON_API_URL}/api/budget/variance?${queryParams.toString()}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'
       }
     }).then(response => response.json());
   },
-  
+
   getBudgetRecommendations: (fiscalYear?: string, branchId?: number) => {
     const queryParams = new URLSearchParams();
-    
+
     if (fiscalYear) queryParams.append('fiscal_year', fiscalYear);
     if (branchId) queryParams.append('branch_id', branchId.toString());
-    
-    return fetch(`http://localhost:5001/api/budget/recommendations?${queryParams.toString()}`, {
+
+    return fetch(`${PYTHON_API_URL}/api/budget/recommendations?${queryParams.toString()}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'

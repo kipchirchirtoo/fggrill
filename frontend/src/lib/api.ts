@@ -1732,7 +1732,7 @@ export const restaurantAPI = {
   generateReceipt: (orderId: string) => fetchAPI<any>(`/restaurant/orders/${orderId}/receipt`),
   processPayment: (orderId: string, data: any) => fetchAPI<any>(`/restaurant/orders/${orderId}/payment`, { method: 'POST', body: JSON.stringify(data) }),
   generateBill: (receiptData: any) => {
-    return fetch('http://localhost:5001/api/receipts/generate', {
+    return fetch(`${PYTHON_API_URL}/api/receipts/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
