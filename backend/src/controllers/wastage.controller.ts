@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
-import { AppError } from '../middleware/error';
+import { AppError } from '../middleware/errorHandler';
 
 // @desc    Create wastage record
 // @route   POST /api/wastage
