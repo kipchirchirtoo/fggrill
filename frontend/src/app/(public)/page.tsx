@@ -286,7 +286,7 @@ export default function HomePage() {
             onClick={() => router.push('/login')}
             className="text-sm font-medium text-stone-700 hover:text-stone-900 transition-colors"
           >
-            Staff Login →
+            Sign In →
           </button>
         </div>
       </header>
