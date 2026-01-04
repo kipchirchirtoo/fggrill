@@ -1328,13 +1328,6 @@ export function ConsolidatedNav() {
   return (
     <div className="space-y-1">
       {renderNavigation()}
-      <hr className="my-4 border-stone-200/60" />
-      <NavItem
-        href="/dashboard/docs"
-        icon={BookOpen}
-        label="System Documentation"
-        active={pathname === '/dashboard/docs'}
-      />
     </div>
   );
 }

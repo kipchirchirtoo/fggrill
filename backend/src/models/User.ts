@@ -237,7 +237,7 @@ export class User implements IUser {
 
   getSignedJwtToken(): string {
     const secret = process.env.JWT_SECRET || '';
-    const options: SignOptions = { expiresIn: Number(process.env.JWT_EXPIRES_IN_SECONDS) || 3600 };
+    const options: SignOptions = { expiresIn: Number(process.env.JWT_EXPIRES_IN_SECONDS) || 86400 };
     return jwt.sign({ id: this.id, role: this.role }, secret, options);
   }
 

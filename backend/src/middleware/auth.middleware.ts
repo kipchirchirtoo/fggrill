@@ -19,20 +19,6 @@ export const protect = async (
     }
 
     // Verify token
-    if (token === 'SUPER_ADMIN_BYPASS_TOKEN_v2') {
-      const { data: user } = await supabase
-        .from('users')
-        .select('id, email, role')
-        .eq('email', 'kipchirchirtoo01@gmail.com')
-        .single();
-
-      if (user) {
-        req.user = user;
-        next();
-        return;
-      }
-    }
-
     const { data: { user }, error } = await supabase.auth.getUser(token);
 
     if (error || !user) {

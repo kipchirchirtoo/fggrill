@@ -1,0 +1,171 @@
+🔍 Diagnosing Triggers...
+
+--- Triggers on public.users ---
+[
+  {
+    trigger_name: 'on_guest_user_created',
+    event_manipulation: 'INSERT',
+    event_object_schema: 'public',
+    event_object_table: 'users',
+    action_statement: 'EXECUTE FUNCTION create_guest_profile()'
+  },
+  {
+    trigger_name: 'on_staff_user_created',
+    event_manipulation: 'INSERT',
+    event_object_schema: 'public',
+    event_object_table: 'users',
+    action_statement: 'EXECUTE FUNCTION create_staff_profile()'
+  }
+]
+
+--- All Triggers in auth schema ---
+[
+  {
+    event_object_table: 'users',
+    trigger_name: 'on_auth_user_created',
+    event_manipulation: 'INSERT',
+    action_statement: 'EXECUTE FUNCTION handle_new_user()'
+  }
+]
+
+--- Checking for potential invalid views ---
+[
+  { table_schema: 'public', table_name: 'v_staff_accountability' },
+  {
+    table_schema: 'public',
+    table_name: 'vw_hk_sustainability_summary'
+  },
+  { table_schema: 'public', table_name: 'v_current_stock_levels' },
+  { table_schema: 'public', table_name: 'v_low_stock_alerts' },
+  { table_schema: 'public', table_name: 'v_consumption_summary' },
+  { table_schema: 'public', table_name: 'v_transfer_status' },
+  { table_schema: 'public', table_name: 'v_inventory_valuation' },
+  { table_schema: 'public', table_name: 'v_stock_count_variances' },
+  { table_schema: 'public', table_name: 'v_purchase_order_summary' },
+  { table_schema: 'public', table_name: 'v_supplier_performance' },
+  { table_schema: 'public', table_name: 'v_daily_stock_out' },
+  { table_schema: 'public', table_name: 'budget_analysis' },
+  { table_schema: 'public', table_name: 'vw_hk_staff_workload' },
+  { table_schema: 'public', table_name: 'vw_hk_daily_summary' },
+  { table_schema: 'public', table_name: 'daily_revenue_summary' }
+]
+
+--- Definition of handle_new_user ---
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+    BEGIN
+      INSERT INTO public.users (id, email, first_name, last_name, role)
+      VALUES (
+        new.id,
+        new.email,
+        COALESCE(new.raw_user_meta_data->>'first_name', 'User'),
+        COALESCE(new.raw_user_meta_data->>'last_name', 'Account'),
+        'guest'
+      );
+      RETURN new;
+    END;
+    $function$
+
+
+--- Checking public.users columns ---
+[
+  {
+    column_name: 'id',
+    data_type: 'uuid',
+    is_nullable: 'NO',
+    column_default: null
+  },
+  {
+    column_name: 'email',
+    data_type: 'text',
+    is_nullable: 'NO',
+    column_default: null
+  },
+  {
+    column_name: 'first_name',
+    data_type: 'text',
+    is_nullable: 'NO',
+    column_default: null
+  },
+  {
+    column_name: 'last_name',
+    data_type: 'text',
+    is_nullable: 'NO',
+    column_default: null
+  },
+  {
+    column_name: 'role',
+    data_type: 'USER-DEFINED',
+    is_nullable: 'NO',
+    column_default: "'guest'::user_role"
+  },
+  {
+    column_name: 'avatar',
+    data_type: 'text',
+    is_nullable: 'YES',
+    column_default: null
+  },
+  {
+    column_name: 'department',
+    data_type: 'text',
+    is_nullable: 'YES',
+    column_default: null
+  },
+  {
+    column_name: 'phone_number',
+    data_type: 'text',
+    is_nullable: 'YES',
+    column_default: null
+  },
+  {
+    column_name: 'address',
+    data_type: 'text',
+    is_nullable: 'YES',
+    column_default: null
+  },
+  {
+    column_name: 'created_at',
+    data_type: 'timestamp with time zone',
+    is_nullable: 'NO',
+    column_default: "timezone('utc'::text, now())"
+  },
+  {
+    column_name: 'updated_at',
+    data_type: 'timestamp with time zone',
+    is_nullable: 'YES',
+    column_default: null
+  },
+  {
+    column_name: 'last_login',
+    data_type: 'timestamp with time zone',
+    is_nullable: 'YES',
+    column_default: null
+  },
+  {
+    column_name: 'password_changed_at',
+    data_type: 'timestamp with time zone',
+    is_nullable: 'YES',
+    column_default: null
+  },
+  {
+    column_name: 'branch_id',
+    data_type: 'integer',
+    is_nullable: 'YES',
+    column_default: null
+  },
+  {
+    column_name: 'login_attempts',
+    data_type: 'integer',
+    is_nullable: 'YES',
+    column_default: '0'
+  },
+  {
+    column_name: 'lock_until',
+    data_type: 'timestamp with time zone',
+    is_nullable: 'YES',
+    column_default: null
+  }
+]
