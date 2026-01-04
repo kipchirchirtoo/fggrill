@@ -71,7 +71,7 @@ function BookingContent() {
 
         // Map snake_case to camelCase
         const basePrice = room.price_override || room.type?.base_price || 0;
-        const inclusivePrice = Math.round(basePrice * 1.26);
+        const inclusivePrice = basePrice; // Already includes taxes
 
         setRoomDetails({
           ...room,
@@ -533,35 +533,25 @@ function BookingContent() {
                   <div className="pt-4 border-t border-stone-200 space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-stone-600">
-                        Room Rate ({nights} night{nights !== 1 ? 's' : ''})
+                        Stay Total ({nights} night{nights !== 1 ? 's' : ''})
                       </span>
                       <span className="font-medium text-stone-900">
-                        KES {formatNumber((roomDetails?.basePrice || 0) * nights)}
+                        KES {formatNumber(total)}
                       </span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-stone-600">VAT (16%)</span>
-                      <span className="font-medium text-stone-900">
-                        KES {formatNumber(Math.round((roomDetails?.basePrice || 0) * nights * 0.16))}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-stone-600">Service Charge (10%)</span>
-                      <span className="font-medium text-stone-900">
-                        KES {formatNumber(Math.round((roomDetails?.basePrice || 0) * nights * 0.10))}
-                      </span>
+                    <div className="flex justify-between text-[11px] text-stone-400 italic">
+                      <span>Includes 16% VAT & 10% Service Charge</span>
                     </div>
                   </div>
 
                   {/* Total */}
                   <div className="pt-4 border-t border-stone-200">
                     <div className="flex justify-between items-center">
-                      <span className="text-base font-semibold text-stone-900">Total</span>
+                      <span className="text-base font-semibold text-stone-900">Amount Due</span>
                       <span className="text-2xl font-bold text-stone-900">
                         KES {formatNumber(total)}
                       </span>
                     </div>
-                    <p className="text-xs text-stone-500 mt-1 text-right">VAT inclusive</p>
                   </div>
 
                   {/* Submit Button - Desktop */}

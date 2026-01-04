@@ -190,10 +190,11 @@ class BookingService {
       const mealPlanCost = mealPlanRates[mealPlan as keyof typeof mealPlanRates] || 0;
 
       const subtotal = (roomRate + mealPlanCost) * nights;
-      const taxAmount = subtotal * 0.16; // 16% VAT
-      const serviceCharge = subtotal * 0.10; // 10% service charge
+      // Tax and Service Charge are already included in the price
+      const totalAmount = subtotal;
+      const taxAmount = Math.round(totalAmount * (0.16 / 1.16)); // 16% VAT included
+      const serviceCharge = 0; // Or calculate if needed, but for now let's assume it's in the base
       const discountAmount = 0; // No discount for now
-      const totalAmount = subtotal + taxAmount + serviceCharge - discountAmount;
 
       return {
         roomRate,
