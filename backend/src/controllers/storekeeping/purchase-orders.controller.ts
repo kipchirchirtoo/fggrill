@@ -383,3 +383,138 @@ export const cancelPurchaseOrder = async (
         next(error);
     }
 };
+
+// @desc    Update purchase order
+// @route   PUT /api/purchase-orders/:id
+// @access  Private
+export const updatePurchaseOrder = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { supplier_id, receiving_branch_id, expected_delivery, order_notes, items } = req.body;
+
+        // Check if PO exists and is in PENDING status
+        const { data: order, error: fetchError } = await supabase
+            .from('purchase_orders')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !order) {
+            throw new AppError('Purchase order not found', 404);
+        }
+
+        if (order.status !== 'PENDING') {
+            throw new AppError('Only pending purchase orders can be updated', 400);
+        }
+
+        // Calculate totals
+        const subtotal = items.reduce((sum: number, item: any) =>
+            sum + (item.quantity * item.unit_price), 0);
+        const tax_amount = subtotal * 0.16;
+        const total_amount = subtotal + tax_amount;
+
+        // Update PO
+        const { data: updatedPO, error: updateError } = await supabase
+            .from('purchase_orders')
+            .update({
+                supplier_id,
+                receiving_branch_id,
+                expected_delivery,
+                order_notes,
+                subtotal,
+                tax_amount,
+                total_amount,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateError) throw updateError;
+
+        // Delete old items
+        await supabase
+            .from('purchase_order_items')
+            .delete()
+            .eq('po_id', id);
+
+        // Insert new items
+        const poItems = items.map((item: any) => ({
+            po_id: id,
+            item_sku: item.item_sku,
+            ordered_quantity: item.quantity,
+            unit_cost: item.unit_price,
+            total_cost: item.quantity * item.unit_price,
+            status: 'PENDING'
+        }));
+
+        const { error: itemsError } = await supabase
+            .from('purchase_order_items')
+            .insert(poItems);
+
+        if (itemsError) throw itemsError;
+
+        res.status(200).json({
+            success: true,
+            message: 'Purchase order updated successfully',
+            data: updatedPO
+        });
+    } catch (error) {
+        logger.error('Error updating purchase order:', error);
+        next(error);
+    }
+};
+
+// @desc    Delete purchase order
+// @route   DELETE /api/purchase-orders/:id
+// @access  Private
+export const deletePurchaseOrder = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+
+        // Check if PO exists and is in PENDING status
+        const { data: order, error: fetchError } = await supabase
+            .from('purchase_orders')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !order) {
+            throw new AppError('Purchase order not found', 404);
+        }
+
+        if (order.status !== 'PENDING') {
+            throw new AppError('Only pending purchase orders can be deleted', 400);
+        }
+
+        // Delete items first
+        await supabase
+            .from('purchase_order_items')
+            .delete()
+            .eq('po_id', id);
+
+        // Delete PO
+        const { error: deleteError } = await supabase
+            .from('purchase_orders')
+            .delete()
+            .eq('id', id);
+
+        if (deleteError) throw deleteError;
+
+        res.status(200).json({
+            success: true,
+            message: 'Purchase order deleted successfully'
+        });
+    } catch (error) {
+        logger.error('Error deleting purchase order:', error);
+        next(error);
+    }
+};

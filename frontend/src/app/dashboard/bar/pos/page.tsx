@@ -37,22 +37,26 @@ export default function BarPOSPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [tableNumber, setTableNumber] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [openTabs, setOpenTabs] = useState<any[]>([]);
+  const [selectedTabId, setSelectedTabId] = useState<string>('');
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [drinksRes, categoriesRes] = await Promise.all([
+      const [drinksRes, categoriesRes, tabsRes] = await Promise.all([
         barAPI.getDrinks(),
         barAPI.getCategories(),
+        barAPI.getTabs(activeBranchId || undefined, 'open')
       ]);
       if (drinksRes.success) {
         const availableDrinks = (drinksRes.data || []).filter((d: Drink) => d.is_available !== false);
         setDrinks(availableDrinks);
       }
       if (categoriesRes.success) setCategories(categoriesRes.data || []);
+      if (tabsRes.success) setOpenTabs(tabsRes.data || []);
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, []);
+  }, [activeBranchId]);
 
   useEffect(() => {
     fetchData();
@@ -83,7 +87,7 @@ export default function BarPOSPage() {
   };
 
   const removeFromCart = (itemId: string) => setCart((prev) => prev.filter((i) => i.id !== itemId));
-  const clearCart = () => { setCart([]); setTableNumber(''); };
+  const clearCart = () => { setCart([]); setTableNumber(''); setSelectedTabId(''); };
 
   // VAT is INCLUDED in menu prices (16%) - calculate breakdown for display only
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -94,6 +98,24 @@ export default function BarPOSPage() {
     if (cart.length === 0) { toast.error('Cart is empty'); return; }
     setIsSubmitting(true);
     try {
+      if (selectedTabId) {
+        // Add to existing tab
+        const res = await barAPI.addToTab(selectedTabId, cart.map((item) => ({
+          drink_id: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity
+        })));
+
+        if (res.success) {
+          toast.success('Added to tab!');
+          clearCart();
+          fetchData(); // Refresh tabs to get updated totals if needed
+          return;
+        }
+        throw new Error(res.message || 'Failed to add to tab');
+      }
+
       // 1. Create Order (Completed immediately)
       const orderRes = await barAPI.createOrder({
         branch_id: activeBranchId,
@@ -211,7 +233,21 @@ export default function BarPOSPage() {
             <IOSCard className="flex-1 flex flex-col min-h-0">
               <div className="p-4 border-b">
                 <h2 className="font-bold text-lg flex items-center gap-2"><ShoppingCart className="h-5 w-5" /> Order</h2>
-                <Input placeholder="Seat Number (optional)" value={tableNumber} onChange={(e) => setTableNumber(e.target.value)} className="mt-3" />
+                <div className="mt-3 space-y-2">
+                  <select
+                    className="w-full p-2 border rounded-ios-lg text-sm bg-white"
+                    value={selectedTabId}
+                    onChange={(e) => setSelectedTabId(e.target.value)}
+                  >
+                    <option value="">-- Select Open Tab (Optional) --</option>
+                    {openTabs.map((tab) => (
+                      <option key={tab.id} value={tab.id}>
+                        Tab #{tab.tab_number} - {tab.customer_name}
+                      </option>
+                    ))}
+                  </select>
+                  <Input placeholder="Seat Number (optional)" value={tableNumber} onChange={(e) => setTableNumber(e.target.value)} />
+                </div>
               </div>
               <div className="flex-1 overflow-y-auto p-4">
                 {cart.length === 0 ? (
@@ -243,7 +279,9 @@ export default function BarPOSPage() {
                 </div>
                 <div className="flex gap-2">
                   <IOSButton variant="secondary" onClick={clearCart} className="flex-1" disabled={cart.length === 0}>Clear</IOSButton>
-                  <IOSButton onClick={handleGenerateBill} className="flex-1" disabled={cart.length === 0 || isSubmitting}>{isSubmitting ? 'Generating...' : 'Generate Bill'}</IOSButton>
+                  <IOSButton onClick={handleGenerateBill} className="flex-1" disabled={cart.length === 0 || isSubmitting}>
+                    {isSubmitting ? 'Processing...' : (selectedTabId ? 'Add to Tab' : 'Generate Bill')}
+                  </IOSButton>
                 </div>
               </div>
             </IOSCard>

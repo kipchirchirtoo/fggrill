@@ -565,6 +565,11 @@ export const centralOperationsAPI = {
       body: JSON.stringify(data)
     }, null, true),
 
+  deleteMasterItem: (sku: string) =>
+    fetchWithBranchContext<any>(`/api/central-operations/warehouse/inventory/${sku}`, {
+      method: 'DELETE'
+    }, null, true),
+
   // Branch Staff Management
   getAllBranchStaff: () =>
     fetchWithBranchContext<any>('/api/central-operations/staff/all', {}, null, true),
@@ -649,6 +654,17 @@ export const centralOperationsAPI = {
     fetchWithBranchContext<any>(`/api/storekeeping/purchase-orders/${id}/receive`, {
       method: 'PUT',
       body: JSON.stringify(data)
+    }, null, true),
+
+  updatePurchaseOrder: (id: string, data: any) =>
+    fetchWithBranchContext<any>(`/api/storekeeping/purchase-orders/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }, null, true),
+
+  deletePurchaseOrder: (id: string) =>
+    fetchWithBranchContext<any>(`/api/storekeeping/purchase-orders/${id}`, {
+      method: 'DELETE'
     }, null, true),
 
   // Branch Transfers

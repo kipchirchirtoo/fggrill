@@ -43,6 +43,8 @@ router.post('/drinks/:id/image', authorize([UserRole.SUPER_ADMIN, UserRole.GENER
 // ====================
 router.get('/tabs', tabController.getTabs);
 router.post('/tabs', tabController.createTab);
+router.put('/tabs/:id', tabController.updateTab);
+router.delete('/tabs/:id', tabController.deleteTab);
 router.post('/tabs/:id/items', tabController.addToTab);
 router.post('/tabs/:id/close', tabController.closeTab);
 

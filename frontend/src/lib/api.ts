@@ -1989,12 +1989,16 @@ export const barAPI = {
     }),
 
   // Tabs (for customers running a tab)
-  getTabs: (branchId?: number) => {
-    const query = branchId ? `?branch_id=${branchId}` : '';
-    return fetchAPI<any>(`/bar/tabs${query}`);
+  getTabs: (branchId?: number, status?: string) => {
+    const query = new URLSearchParams();
+    if (branchId) query.append('branch_id', String(branchId));
+    if (status) query.append('status', status);
+    return fetchAPI<any>(`/bar/tabs?${query}`);
   },
   createTab: (data: any) => fetchAPI<any>('/bar/tabs', { method: 'POST', body: JSON.stringify(data) }),
-  addToTab: (tabId: string, items: any) => fetchAPI<any>(`/bar/tabs/${tabId}/items`, { method: 'POST', body: JSON.stringify(items) }),
+  updateTab: (tabId: string, data: any) => fetchAPI<any>(`/bar/tabs/${tabId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteTab: (tabId: string) => fetchAPI<any>(`/bar/tabs/${tabId}`, { method: 'DELETE' }),
+  addToTab: (tabId: string, items: any[]) => fetchAPI<any>(`/bar/tabs/${tabId}/items`, { method: 'POST', body: JSON.stringify({ items }) }),
   closeTab: (tabId: string, paymentMethod: string) => fetchAPI<any>(`/bar/tabs/${tabId}/close`, { method: 'POST', body: JSON.stringify({ payment_method: paymentMethod }) }),
 
   // Stock & Inventory
@@ -2571,6 +2575,14 @@ export const accountingAPI = {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(entry)
+    });
+    return response.json();
+  },
+
+  deleteJournalEntry: async (id: string) => {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/journal-entries/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
     });
     return response.json();
   },

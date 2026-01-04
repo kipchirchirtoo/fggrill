@@ -81,7 +81,8 @@ export const getStaff = async (
           email,
           first_name,
           last_name,
-          phone_number
+          phone_number,
+          role
         )
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
@@ -98,7 +99,7 @@ export const getStaff = async (
       query = query.eq('status', req.query.status);
     }
     if (req.query.role) {
-      query = query.eq('role', req.query.role);
+      query = query.eq('user.role', req.query.role);
     }
     if (req.query.search) {
       const search = req.query.search as string;
@@ -142,7 +143,8 @@ export const getStaffMember = async (
           email,
           first_name,
           last_name,
-          phone_number
+          phone_number,
+          role
         ),
         schedules:staff_schedules(*)
       `)
@@ -190,10 +192,13 @@ export const createStaffMember = async (
       salary,
       startDate,
       idNumber,
+      employeeId, // Added to handle frontend field name
       emergencyContact,
       address,
       branchId
     } = req.body;
+
+    const actualIdNumber = idNumber || employeeId || 'pending';
 
     // Validate required fields
     if (!firstName || !lastName || !email || !role || !department) {
@@ -423,21 +428,22 @@ export const createStaffMember = async (
       else validDepartment = 'restaurant'; // Default fallback
     }
 
-    logger.debug?.('createStaffMember department mapping', { incomingRole: role, normalizedRole, mappedDepartment: validDepartment });
+    // Map role to position (human readable label)
+    const position = role.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+
+    logger.debug?.('createStaffMember mapping', { incomingRole: role, normalizedRole, mappedDepartment: validDepartment, position });
 
     // Create staff profile
     const staffData: any = {
       user_id: userId,
-      role,
       department: validDepartment,
+      role: role, // Changed from position to role to match schema
       shift: shift || 'morning',
       salary: salary ? parseFloat(salary) : 0,
-      start_date: startDate || new Date().toISOString().split('T')[0],
-      id_number: idNumber || 'STAFF-' + Date.now(),
-      emergency_contact: emergencyContact,
-      address,
+      start_date: startDate || new Date().toISOString().split('T')[0], // Changed from hire_date to start_date
+      id_number: actualIdNumber, // Changed from phone to actualIdNumber
       status: 'active',
-      created_at: new Date().toISOString()
+      updated_at: new Date().toISOString()
     };
 
     // Add branch_id if provided
@@ -445,9 +451,10 @@ export const createStaffMember = async (
       staffData.branch_id = parseInt(branchId);
     }
 
+    // Use upsert to handle the trigger conflict (trigger might have already created a profile)
     const { data: staffProfile, error: staffError } = await supabase
       .from('staff_profiles')
-      .insert([staffData])
+      .upsert([staffData], { onConflict: 'user_id' })
       .select(`
         *,
         user:users!user_id(
@@ -467,7 +474,8 @@ export const createStaffMember = async (
         await supabase.from('users').delete().eq('id', userId);
       }
       logger.error('Error creating staff profile:', staffError);
-      throw new Error('Failed to create staff profile');
+      logger.error('Staff profile payload:', staffData);
+      throw new Error(`Failed to create staff profile: ${staffError.message}`);
     }
 
     res.status(201).json({
@@ -503,9 +511,7 @@ export const updateStaffMember = async (
       department,
       shift,
       salary,
-      idNumber,
-      emergencyContact,
-      address,
+      startDate,
       status
     } = req.body;
 
@@ -525,13 +531,18 @@ export const updateStaffMember = async (
     }
 
     // Update user profile
+    const userUpdateData: any = {
+      first_name: firstName,
+      last_name: lastName,
+      phone_number: phone
+    };
+
+    if (role) userUpdateData.role = role;
+    if (department) userUpdateData.department = department;
+
     const { error: userError } = await supabase
       .from('users')
-      .update({
-        first_name: firstName,
-        last_name: lastName,
-        phone_number: phone
-      })
+      .update(userUpdateData)
       .eq('id', staff.user_id);
 
     if (userError) {
@@ -551,19 +562,23 @@ export const updateStaffMember = async (
     }
 
     // Update staff profile
+    const staffUpdateData: any = {
+      shift,
+      salary,
+      status,
+      updated_at: new Date().toISOString()
+    };
+
+    if (startDate) staffUpdateData.start_date = startDate; // Changed from hire_date
+    if (phone) staffUpdateData.phone = phone;
+    if (department) staffUpdateData.department = department;
+    if (role) {
+      staffUpdateData.role = role; // Changed from position
+    }
+
     const { data: updatedStaff, error: updateError } = await supabase
       .from('staff_profiles')
-      .update({
-        role,
-        department,
-        shift,
-        salary,
-        id_number: idNumber,
-        emergency_contact: emergencyContact,
-        address,
-        status,
-        updated_at: new Date().toISOString()
-      })
+      .update(staffUpdateData)
       .eq('id', req.params.id)
       .select()
       .single();

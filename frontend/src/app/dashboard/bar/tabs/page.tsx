@@ -14,7 +14,7 @@ import { useBranch } from '@/lib/branch-context';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
-import { RefreshCw, Plus, CreditCard, DollarSign, Check, User } from 'lucide-react';
+import { RefreshCw, Plus, CreditCard, DollarSign, Check, User, Edit2, Trash2 } from 'lucide-react';
 
 interface Tab {
   id: string;
@@ -35,9 +35,11 @@ export default function BarTabsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'closed'>('open');
   const [newTabModalOpen, setNewTabModalOpen] = useState(false);
+  const [editTabModalOpen, setEditTabModalOpen] = useState(false);
   const [closeTabModalOpen, setCloseTabModalOpen] = useState(false);
   const [selectedTab, setSelectedTab] = useState<Tab | null>(null);
   const [newTabData, setNewTabData] = useState({ customer_name: '', table_number: '' });
+  const [editTabData, setEditTabData] = useState({ customer_name: '', phone: '', table_number: '' });
 
   const fetchTabs = useCallback(async () => {
     setIsLoading(true);
@@ -79,6 +81,30 @@ export default function BarTabsPage() {
       setCloseTabModalOpen(false);
       fetchTabs();
     } catch (error: any) { toast.error(error.message || 'Failed'); }
+  };
+
+  const handleEditTab = async () => {
+    if (!selectedTab) return;
+    if (!editTabData.customer_name) { toast.error('Enter customer name'); return; }
+    try {
+      await barAPI.updateTab(selectedTab.id, {
+        customer_name: editTabData.customer_name,
+        phone: editTabData.phone || undefined,
+        table_number: editTabData.table_number || undefined,
+      });
+      toast.success('Tab updated');
+      setEditTabModalOpen(false);
+      fetchTabs();
+    } catch (error: any) { toast.error(error.message || 'Failed'); }
+  };
+
+  const handleDeleteTab = async (tab: Tab) => {
+    if (!confirm(`Delete tab for ${tab.customer_name}? This action cannot be undone.`)) return;
+    try {
+      await barAPI.deleteTab(tab.id);
+      toast.success('Tab deleted');
+      fetchTabs();
+    } catch (error: any) { toast.error(error.message || 'Failed to delete tab'); }
   };
 
   return (
@@ -141,9 +167,34 @@ export default function BarTabsPage() {
                       <p className="text-xs text-gray-500">{tab.items?.length || 0} items</p>
                     </div>
                     {tab.status === 'open' && (
-                      <IOSButton size="sm" onClick={() => { setSelectedTab(tab); setCloseTabModalOpen(true); }}>
-                        <Check className="h-3 w-3 mr-1" /> Close
-                      </IOSButton>
+                      <div className="flex gap-2">
+                        <IOSButton
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            setSelectedTab(tab);
+                            setEditTabData({
+                              customer_name: tab.customer_name,
+                              phone: tab.phone || '',
+                              table_number: ''
+                            });
+                            setEditTabModalOpen(true);
+                          }}
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </IOSButton>
+                        <IOSButton
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleDeleteTab(tab)}
+                          disabled={tab.total_amount > 0}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </IOSButton>
+                        <IOSButton size="sm" onClick={() => { setSelectedTab(tab); setCloseTabModalOpen(true); }}>
+                          <Check className="h-3 w-3 mr-1" /> Close
+                        </IOSButton>
+                      </div>
                     )}
                   </div>
                 </IOSCard>
@@ -161,6 +212,21 @@ export default function BarTabsPage() {
               <div className="flex gap-3">
                 <IOSButton variant="secondary" onClick={() => setNewTabModalOpen(false)} className="flex-1">Cancel</IOSButton>
                 <IOSButton onClick={handleCreateTab} className="flex-1">Open Tab</IOSButton>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={editTabModalOpen} onOpenChange={setEditTabModalOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader><DialogTitle>Edit Tab</DialogTitle></DialogHeader>
+            <div className="space-y-4 mt-4">
+              <div><label className="text-sm font-medium">Customer Name *</label><Input value={editTabData.customer_name} onChange={(e) => setEditTabData({ ...editTabData, customer_name: e.target.value })} /></div>
+              <div><label className="text-sm font-medium">Phone</label><Input value={editTabData.phone} onChange={(e) => setEditTabData({ ...editTabData, phone: e.target.value })} /></div>
+              <div><label className="text-sm font-medium">Table Number</label><Input value={editTabData.table_number} onChange={(e) => setEditTabData({ ...editTabData, table_number: e.target.value })} /></div>
+              <div className="flex gap-3">
+                <IOSButton variant="secondary" onClick={() => setEditTabModalOpen(false)} className="flex-1">Cancel</IOSButton>
+                <IOSButton onClick={handleEditTab} className="flex-1">Update Tab</IOSButton>
               </div>
             </div>
           </DialogContent>

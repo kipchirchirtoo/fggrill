@@ -12,7 +12,7 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { centralOperationsAPI } from '@/lib/branch-api';
 import { toast } from 'sonner';
 import {
-  Package, Search, Filter, RefreshCw, PlusCircle,
+  Package, Search, Filter, RefreshCw, PlusCircle, Trash2,
   Truck, AlertTriangle, Check, ShoppingCart, Camera, X, Keyboard, Scan, Barcode, Eye, Building2
 } from 'lucide-react';
 import { BranchPageWrapper } from '@/components/branch/branch-page-wrapper';
@@ -361,17 +361,36 @@ function CentralWarehouseInventoryContent() {
 
   const handleOpenEditModal = (item: InventoryItem) => {
     setSelectedItem(item);
-
-    // Populate form fields
-    setFormSku(item.sku);
     setFormName(item.name);
     setFormCategory(item.category);
     setFormUnit(item.unit);
-    setFormStock(item.central_stock);
-    setFormReorderLevel(item.reorder_level);
-    setFormValue(item.value);
+    setFormSku(item.sku);
+    setFormBarcode(item.barcode || '');
+    setFormDescription(item.description || '');
+    setFormParStock(item.par_stock || 0);
+    setFormReorderLevel(item.reorder_level || 0);
+    setFormCostPrice(item.cost_price || 0);
+    setFormSellingPrice(item.selling_price || 0);
+    setUseAutoSku(false);
+    setShowAddModal(true);
+  };
 
-    setShowEditModal(true);
+  const handleDeleteItem = async (sku: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await centralOperationsAPI.deleteMasterItem(sku);
+      if (response.success) {
+        toast.success('Item deleted successfully');
+        fetchInventory();
+      } else {
+        toast.error(response.message || 'Failed to delete item');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'An error occurred while deleting the item');
+    }
   };
 
   const handleOpenDispatchModal = (item: InventoryItem) => {
@@ -808,6 +827,15 @@ function CentralWarehouseInventoryContent() {
                               onClick={() => handleOpenDispatchModal(item)}
                             >
                               Dispatch
+                            </IOSButton>
+                            <IOSButton
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              leftIcon={<Trash2 className="h-3.5 w-3.5" />}
+                              onClick={() => handleDeleteItem(item.sku, item.name)}
+                            >
+                              Delete
                             </IOSButton>
                           </div>
                         </td>

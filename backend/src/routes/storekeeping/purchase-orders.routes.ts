@@ -6,7 +6,9 @@ import {
     createPurchaseOrder,
     approvePurchaseOrder,
     receivePurchaseOrder,
-    cancelPurchaseOrder
+    cancelPurchaseOrder,
+    updatePurchaseOrder,
+    deletePurchaseOrder
 } from '../../controllers/storekeeping/purchase-orders.controller';
 
 const router = express.Router();
@@ -20,7 +22,9 @@ router.route('/')
     .post(createPurchaseOrder);
 
 router.route('/:id')
-    .get(getPurchaseOrder);
+    .get(getPurchaseOrder)
+    .put(updatePurchaseOrder)
+    .delete(deletePurchaseOrder);
 
 router.put('/:id/approve', approvePurchaseOrder);
 router.put('/:id/receive', receivePurchaseOrder);

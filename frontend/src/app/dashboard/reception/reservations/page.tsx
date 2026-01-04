@@ -593,6 +593,146 @@ function NewReservationModal({
   );
 }
 
+// Edit Reservation Modal
+function EditReservationModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  booking
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+  booking: Booking | null;
+}) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    check_in: '',
+    check_out: '',
+    adults: 1,
+    children: 0,
+    meal_plan: 'bed_breakfast',
+    special_requests: '',
+    internal_notes: ''
+  });
+
+  useEffect(() => {
+    if (isOpen && booking) {
+      setFormData({
+        check_in: booking.check_in?.split('T')[0] || '',
+        check_out: booking.check_out?.split('T')[0] || '',
+        adults: booking.adults || 1,
+        children: booking.children || 0,
+        meal_plan: booking.meal_plan || 'bed_breakfast',
+        special_requests: booking.special_requests || '',
+        internal_notes: booking.internal_notes || ''
+      });
+    }
+  }, [isOpen, booking]);
+
+  const handleSubmit = async () => {
+    if (!booking) return;
+    setIsSubmitting(true);
+    try {
+      const response = await bookingsAPI.updateBooking(booking.id, formData);
+      if (response.success) {
+        toast.success('Reservation updated successfully');
+        onSuccess();
+        onClose();
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update reservation');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Edit2 className="h-5 w-5" />
+            Edit Reservation
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 mt-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium">Check-In</label>
+              <Input
+                type="date"
+                value={formData.check_in}
+                onChange={(e) => setFormData({ ...formData, check_in: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Check-Out</label>
+              <Input
+                type="date"
+                value={formData.check_out}
+                onChange={(e) => setFormData({ ...formData, check_out: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium">Adults</label>
+              <Input
+                type="number"
+                value={formData.adults}
+                onChange={(e) => setFormData({ ...formData, adults: parseInt(e.target.value) || 1 })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Children</label>
+              <Input
+                type="number"
+                value={formData.children}
+                onChange={(e) => setFormData({ ...formData, children: parseInt(e.target.value) || 0 })}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Meal Plan</label>
+            <select
+              value={formData.meal_plan}
+              onChange={(e) => setFormData({ ...formData, meal_plan: e.target.value })}
+              className="w-full p-2 border rounded-ios-lg mt-1"
+            >
+              <option value="bed_breakfast">Bed & Breakfast</option>
+              <option value="half_board">Half Board</option>
+              <option value="full_board">Full Board</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Special Requests</label>
+            <textarea
+              value={formData.special_requests}
+              onChange={(e) => setFormData({ ...formData, special_requests: e.target.value })}
+              className="w-full p-2 border rounded-ios-lg mt-1"
+              rows={2}
+            />
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <IOSButton variant="outline" onClick={onClose} className="flex-1">
+              Cancel
+            </IOSButton>
+            <IOSButton onClick={handleSubmit} disabled={isSubmitting} className="flex-1">
+              {isSubmitting ? 'Saving...' : 'Save Changes'}
+            </IOSButton>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function ReservationsPage() {
   const { user } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -603,6 +743,7 @@ export default function ReservationsPage() {
 
   // Modals
   const [newModalOpen, setNewModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [checkInModalOpen, setCheckInModalOpen] = useState(false);
   const [checkOutModalOpen, setCheckOutModalOpen] = useState(false);
   const [folioModalOpen, setFolioModalOpen] = useState(false);
@@ -866,6 +1007,14 @@ export default function ReservationsPage() {
                                   Cancel
                                 </IOSButton>
                               )}
+                              {(booking.status === 'pending' || booking.status === 'confirmed') && (
+                                <IOSButton size="sm" variant="outline" onClick={() => {
+                                  setSelectedBooking(booking);
+                                  setEditModalOpen(true);
+                                }}>
+                                  <Edit2 className="h-4 w-4" />
+                                </IOSButton>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -883,6 +1032,12 @@ export default function ReservationsPage() {
           isOpen={newModalOpen}
           onClose={() => setNewModalOpen(false)}
           onSuccess={fetchBookings}
+        />
+        <EditReservationModal
+          isOpen={editModalOpen}
+          onClose={() => setEditModalOpen(false)}
+          onSuccess={fetchBookings}
+          booking={selectedBooking}
         />
         <CheckInModal
           isOpen={checkInModalOpen}

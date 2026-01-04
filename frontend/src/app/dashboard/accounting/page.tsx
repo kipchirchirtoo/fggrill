@@ -5,12 +5,12 @@ import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { accountingAPI } from '@/lib/api';
-import { 
-  FileText, Plus, Search, Filter, Download, Eye, Edit3, CheckCircle, 
+import {
+  FileText, Plus, Search, Filter, Download, Eye, Edit3, CheckCircle,
   Clock, AlertCircle, TrendingUp, TrendingDown, DollarSign, Receipt,
   Calculator, FileSpreadsheet, UserCheck, Shield, BarChart3, Activity,
   Calendar, Building2, CreditCard, Wallet, PiggyBank, Target, Scale,
-  Stamp, FileSignature, Archive, RefreshCw, ChevronDown, X
+  Stamp, FileSignature, Archive, RefreshCw, ChevronDown, X, Trash2
 } from 'lucide-react';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -79,22 +79,22 @@ export default function AccountingWorkspace() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'entries' | 'review' | 'reconciliation' | 'audit' | 'reports'>('entries');
   const [isLoading, setIsLoading] = useState(false);
-  
+
   // Entries state
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [showEntryModal, setShowEntryModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
-  
+
   // Review queue state
   const [reviewQueue, setReviewQueue] = useState<JournalEntry[]>([]);
-  
+
   // Reconciliation state
   const [reconciliations, setReconciliations] = useState<ReconciliationItem[]>([]);
-  
+
   // Audit state
   const [auditTrail, setAuditTrail] = useState<AuditTrail[]>([]);
   const [workpapers, setWorkpapers] = useState<Workpaper[]>([]);
-  
+
   // Filters
   const [filters, setFilters] = useState({
     status: '',
@@ -241,6 +241,24 @@ export default function AccountingWorkspace() {
     }
   };
 
+  const handleDeleteEntry = async (entryId: string) => {
+    if (!confirm('Are you sure you want to delete this journal entry? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const response = await accountingAPI.deleteJournalEntry(entryId);
+      if (response.success) {
+        toast.success('Entry deleted successfully');
+        fetchEntries();
+      } else {
+        toast.error(response.message || 'Failed to delete entry');
+      }
+    } catch (error) {
+      toast.error('Failed to delete entry');
+    }
+  };
+
   const getStatusColor = (status: string) => {
     const colors = {
       draft: 'bg-gray-100 text-gray-700',
@@ -274,7 +292,7 @@ export default function AccountingWorkspace() {
                 {user?.role === UserRole.AUDITOR ? 'Audit Workspace' : 'Accounting Workspace'}
               </h1>
               <p className="text-sm text-gray-500 mt-1">
-                {user?.role === UserRole.AUDITOR 
+                {user?.role === UserRole.AUDITOR
                   ? 'Review, audit, and ensure compliance across all financial transactions'
                   : 'Create, review, and manage journal entries and financial records'
                 }
@@ -307,7 +325,7 @@ export default function AccountingWorkspace() {
                 </div>
               </div>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-yellow-100 rounded-lg">
@@ -319,7 +337,7 @@ export default function AccountingWorkspace() {
                 </div>
               </div>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-green-100 rounded-lg">
@@ -328,13 +346,13 @@ export default function AccountingWorkspace() {
                 <div>
                   <p className="text-xs text-gray-500">Posted Today</p>
                   <p className="text-xl font-semibold text-gray-900">
-                    {entries.filter(e => e.status === 'posted' && 
+                    {entries.filter(e => e.status === 'posted' &&
                       e.date === new Date().toISOString().split('T')[0]).length}
                   </p>
                 </div>
               </div>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-purple-100 rounded-lg">
@@ -365,11 +383,10 @@ export default function AccountingWorkspace() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
-                    className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                      activeTab === tab.id
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
+                    className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
                   >
                     <Icon className="h-4 w-4" />
                     {tab.label}
@@ -400,7 +417,7 @@ export default function AccountingWorkspace() {
                   <option value="approved">Approved</option>
                   <option value="posted">Posted</option>
                 </select>
-                
+
                 <select
                   value={filters.department}
                   onChange={(e) => setFilters(prev => ({ ...prev, department: e.target.value }))}
@@ -412,23 +429,23 @@ export default function AccountingWorkspace() {
                   <option value="bar">Bar</option>
                   <option value="housekeeping">Housekeeping</option>
                 </select>
-                
+
                 <input
                   type="date"
                   value={filters.dateRange.start}
-                  onChange={(e) => setFilters(prev => ({ 
-                    ...prev, 
+                  onChange={(e) => setFilters(prev => ({
+                    ...prev,
                     dateRange: { ...prev.dateRange, start: e.target.value }
                   }))}
                   className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
                   placeholder="Start Date"
                 />
-                
+
                 <input
                   type="date"
                   value={filters.dateRange.end}
-                  onChange={(e) => setFilters(prev => ({ 
-                    ...prev, 
+                  onChange={(e) => setFilters(prev => ({
+                    ...prev,
                     dateRange: { ...prev.dateRange, end: e.target.value }
                   }))}
                   className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
@@ -483,6 +500,7 @@ export default function AccountingWorkspace() {
                                 <button
                                   onClick={() => handleEditEntry(entry)}
                                   className="text-blue-600 hover:text-blue-800"
+                                  title="View/Edit Entry"
                                 >
                                   <Eye className="h-4 w-4" />
                                 </button>
@@ -490,8 +508,18 @@ export default function AccountingWorkspace() {
                                   <button
                                     onClick={() => handlePostEntry(entry.id)}
                                     className="text-green-600 hover:text-green-800"
+                                    title="Post to Ledger"
                                   >
                                     <CheckCircle className="h-4 w-4" />
+                                  </button>
+                                )}
+                                {(entry.status === 'draft' || entry.status === 'rejected') && (
+                                  <button
+                                    onClick={() => handleDeleteEntry(entry.id)}
+                                    className="text-red-600 hover:text-red-800"
+                                    title="Delete Entry"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
                                   </button>
                                 )}
                               </div>
@@ -583,8 +611,8 @@ export default function AccountingWorkspace() {
                         </div>
                         <IOSBadge className={
                           item.status === 'reconciled' ? 'bg-green-100 text-green-700' :
-                          item.status === 'discrepancy' ? 'bg-red-100 text-red-700' :
-                          'bg-yellow-100 text-yellow-700'
+                            item.status === 'discrepancy' ? 'bg-red-100 text-red-700' :
+                              'bg-yellow-100 text-yellow-700'
                         }>
                           {item.status}
                         </IOSBadge>
@@ -648,8 +676,8 @@ export default function AccountingWorkspace() {
                         </div>
                         <IOSBadge className={
                           paper.status === 'completed' ? 'bg-green-100 text-green-700' :
-                          paper.status === 'in_review' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-gray-100 text-gray-700'
+                            paper.status === 'in_review' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-gray-100 text-gray-700'
                         }>
                           {paper.status}
                         </IOSBadge>
@@ -692,7 +720,7 @@ export default function AccountingWorkspace() {
           )}
         </div>
       </DashboardLayout>
-      
+
       {/* Journal Entry Modal */}
       <JournalEntryModal
         isOpen={showEntryModal}

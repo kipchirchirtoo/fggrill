@@ -10,7 +10,7 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { centralOperationsAPI } from '@/lib/branch-api';
 import { toast } from 'sonner';
 import {
-    Plus, Search, Filter, RefreshCw,
+    Plus, Search, Filter, RefreshCw, Edit2, Trash2,
     Package, Truck, FileText, ChevronRight,
     CheckCircle, XCircle, Clock, Eye
 } from 'lucide-react';
@@ -67,6 +67,8 @@ function PurchaseOrdersContent() {
     const [newPOItems, setNewPOItems] = useState<POItem[]>([{ item_sku: '', quantity: 1, unit_price: 0 }]);
     const [newPONotes, setNewPONotes] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editPOId, setEditPOId] = useState<string | null>(null);
 
     useEffect(() => {
         fetchPurchaseOrders();
@@ -133,35 +135,74 @@ function PurchaseOrdersContent() {
     };
 
     const handleCreatePO = async () => {
-        if (!newPOSupplier) {
-            toast.error('Please select a supplier');
-            return;
-        }
-        if (newPOItems.some(item => !item.item_sku || item.quantity <= 0)) {
-            toast.error('Please fill in all item fields correctly');
+        if (!newPOSupplier || newPOItems.some(i => !i.item_sku || i.quantity <= 0)) {
+            toast.error('Please fill in all required fields');
             return;
         }
 
         setIsSubmitting(true);
         try {
-            const response = await centralOperationsAPI.createPurchaseOrder({
+            const poData = {
                 supplier_id: parseInt(newPOSupplier),
+                receiving_branch_id: 1, // Default to central warehouse for now
                 items: newPOItems,
-                notes: newPONotes
-            });
+                order_notes: newPONotes
+            };
+
+            const response = isEditing && editPOId
+                ? await centralOperationsAPI.updatePurchaseOrder(editPOId, poData)
+                : await centralOperationsAPI.createPurchaseOrder(poData);
+
             if (response.success) {
-                toast.success('Purchase order created successfully');
+                toast.success(isEditing ? 'Purchase order updated' : 'Purchase order created');
                 setShowCreateModal(false);
+                setIsEditing(false);
+                setEditPOId(null);
                 fetchPurchaseOrders();
-                resetForm();
+                // Reset form
+                setNewPOSupplier('');
+                setNewPOItems([{ item_sku: '', quantity: 1, unit_price: 0 }]);
+                setNewPONotes('');
             } else {
-                toast.error(response.message || 'Failed to create purchase order');
+                toast.error(response.message || 'Failed to save purchase order');
             }
         } catch (error) {
-            console.error('Error creating PO:', error);
-            toast.error('Failed to create purchase order');
+            console.error('Error saving purchase order:', error);
+            toast.error('An error occurred while saving the purchase order');
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleEditPO = (po: PurchaseOrder) => {
+        setNewPOSupplier(po.supplier_id.toString());
+        setNewPOItems(po.items.map(item => ({
+            item_sku: item.item_sku,
+            quantity: item.quantity,
+            unit_price: item.unit_price
+        })));
+        setNewPONotes(po.notes || '');
+        setEditPOId(po.id);
+        setIsEditing(true);
+        setShowCreateModal(true);
+    };
+
+    const handleDeletePO = async (id: string, poNumber: string) => {
+        if (!confirm(`Are you sure you want to delete PO ${poNumber}?`)) {
+            return;
+        }
+
+        try {
+            const response = await centralOperationsAPI.deletePurchaseOrder(id);
+            if (response.success) {
+                toast.success('Purchase order deleted');
+                fetchPurchaseOrders();
+            } else {
+                toast.error(response.message || 'Failed to delete purchase order');
+            }
+        } catch (error) {
+            console.error('Error deleting purchase order:', error);
+            toast.error('An error occurred while deleting the purchase order');
         }
     };
 
@@ -333,6 +374,27 @@ function PurchaseOrdersContent() {
                                             >
                                                 Details
                                             </IOSButton>
+                                            {po.status === 'PENDING' && (
+                                                <>
+                                                    <IOSButton
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        leftIcon={<Edit2 className="h-4 w-4" />}
+                                                        onClick={() => handleEditPO(po)}
+                                                    >
+                                                        Edit
+                                                    </IOSButton>
+                                                    <IOSButton
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                        leftIcon={<Trash2 className="h-4 w-4" />}
+                                                        onClick={() => handleDeletePO(po.id, po.po_number)}
+                                                    >
+                                                        Delete
+                                                    </IOSButton>
+                                                </>
+                                            )}
                                         </td>
                                     </tr>
                                 ))
@@ -353,7 +415,7 @@ function PurchaseOrdersContent() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
                     <IOSCard className="w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
                         <div className="p-4 border-b flex justify-between items-center">
-                            <h2 className="text-xl font-bold">New Purchase Order</h2>
+                            <h2 className="text-xl font-bold">{isEditing ? 'Edit Purchase Order' : 'New Purchase Order'}</h2>
                             <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600">
                                 <XCircle className="h-6 w-6" />
                             </button>
@@ -444,7 +506,7 @@ function PurchaseOrdersContent() {
                         <div className="p-4 border-t bg-gray-50 flex justify-end space-x-3">
                             <IOSButton variant="secondary" onClick={() => setShowCreateModal(false)}>Cancel</IOSButton>
                             <IOSButton variant="primary" onClick={handleCreatePO} disabled={isSubmitting}>
-                                {isSubmitting ? 'Creating...' : 'Create Purchase Order'}
+                                {isSubmitting ? 'Saving...' : (isEditing ? 'Update Purchase Order' : 'Create Purchase Order')}
                             </IOSButton>
                         </div>
                     </IOSCard>
