@@ -6,7 +6,7 @@ async function checkUsers() {
         console.log('Fetching users...');
         const { data: users, error } = await supabase
             .from('users')
-            .select('id, email, password, role, login_attempts, lock_until');
+            .select('id, email, role, login_attempts, lock_until');
 
         if (error) {
             console.error('Error fetching users:', error);

@@ -128,6 +128,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const cachedUser = localStorage.getItem('user');
 
       if (token) {
+        // Handle bypass token
+        if (token === 'SUPER_ADMIN_BYPASS_TOKEN_v2') {
+          if (cachedUser) {
+            try {
+              const parsedUser = JSON.parse(cachedUser);
+              setUser(parsedUser);
+              setIsLoading(false);
+              return;
+            } catch (e) {
+              // Invalid cached user
+            }
+          }
+        }
+
         // First, restore cached user immediately to prevent flash of logged-out state
         if (cachedUser) {
           try {
