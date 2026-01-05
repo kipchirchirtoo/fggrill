@@ -1,3 +1,6 @@
+'use client';
+
+import React from 'react';
 import { BranchAwareDashboardLayout } from '@/components/layout/branch-aware-dashboard-layout';
 import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';

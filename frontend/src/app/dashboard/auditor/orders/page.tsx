@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { BranchAwareDashboardLayout } from '@/components/layout/branch-aware-dashboard-layout';
 import { useBranch } from '@/lib/branch-context';
