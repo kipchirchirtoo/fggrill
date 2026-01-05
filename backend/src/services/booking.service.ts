@@ -234,7 +234,7 @@ class BookingService {
       }
 
       // 3. Generate unique booking ID
-      const confirmationNumber = await Booking.generateBookingId();
+      const confirmationNumber = await Booking.generateBookingNumber();
 
       // 4. Calculate pricing
       const pricing = await this.calculatePricing(

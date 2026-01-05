@@ -94,13 +94,13 @@ function BranchRoomsManagementContent() {
   const fetchRooms = async () => {
     setIsLoading(true);
     console.log('Fetching rooms for branch:', activeBranchId);
-    
+
     if (!activeBranchId) {
       console.warn('No active branch ID, cannot fetch rooms');
       setIsLoading(false);
       return;
     }
-    
+
     try {
       // Call the real API
       const response = await branchOperationsAPI.getRooms(
@@ -303,7 +303,7 @@ function BranchRoomsManagementContent() {
 
     try {
       const response = await branchOperationsAPI.deleteRoom(roomId, activeBranchId ?? undefined);
-      
+
       if (response.success) {
         toast.success(`Room ${roomNumber} deleted successfully`);
         fetchRooms(); // Refresh the list
@@ -350,17 +350,17 @@ function BranchRoomsManagementContent() {
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!activeBranchId) {
       toast.error('No branch selected. Please select a branch first.');
       return;
     }
-    
-    if (!formData.room_number || !formData.room_type || !formData.floor) {
+
+    if (!formData.room_number || !formData.room_type || (formData.floor === undefined || formData.floor === null || isNaN(formData.floor))) {
       toast.error('Please fill in all required fields (Room Number, Type, Floor)');
       return;
     }
-    
+
     setIsSubmitting(true);
 
     const roomData = {
@@ -376,7 +376,7 @@ function BranchRoomsManagementContent() {
       // amenities: formData.amenities || [],
       status: formData.status || 'available'
     };
-    
+
     console.log('Creating room with data:', JSON.stringify(roomData, null, 2), 'for branch:', activeBranchId);
 
     try {
@@ -674,7 +674,7 @@ function BranchRoomsManagementContent() {
                     />
                   </div>
                 )}
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-gray-500">Status</p>
@@ -768,8 +768,11 @@ function BranchRoomsManagementContent() {
                   type="number"
                   min="1"
                   required
-                  value={formData.floor}
-                  onChange={(e) => handleFormChange('floor', parseInt(e.target.value))}
+                  value={formData.floor === null || isNaN(formData.floor) ? '' : formData.floor}
+                  onChange={(e) => {
+                    const val = e.target.value === '' ? null : parseInt(e.target.value);
+                    handleFormChange('floor', val);
+                  }}
                 />
               </div>
 
@@ -843,7 +846,7 @@ function BranchRoomsManagementContent() {
                     ))}
                   </div>
                 )}
-                
+
                 {/* Upload button */}
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
                   <Upload className="mx-auto h-8 w-8 text-gray-400" />
@@ -858,13 +861,13 @@ function BranchRoomsManagementContent() {
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     onChange={(e) => {
                       const files = Array.from(e.target.files || []);
-                      
+
                       // Check total images limit
                       if (selectedImages.length + files.length > 5) {
                         alert('Maximum 5 images allowed');
                         return;
                       }
-                      
+
                       // Check file sizes
                       const validFiles = files.filter(file => {
                         if (file.size > 10 * 1024 * 1024) {
@@ -873,7 +876,7 @@ function BranchRoomsManagementContent() {
                         }
                         return true;
                       });
-                      
+
                       // Process valid files
                       validFiles.forEach(file => {
                         const reader = new FileReader();

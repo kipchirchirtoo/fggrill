@@ -67,14 +67,41 @@ export class Guest implements IGuest {
   }
 
   static async findById(id: string): Promise<Guest | null> {
-    const { data, error } = await supabase
+    // 1. Try guest_profiles first
+    const { data: profile, error: profileError } = await supabase
       .from('guest_profiles')
       .select('*, users!inner(first_name, last_name, email, phone_number)')
       .eq('id', id)
-      .single();
+      .maybeSingle();
 
-    if (error || !data) return null;
-    return Guest.fromDatabase(data);
+    if (profile) return Guest.fromDatabase(profile);
+
+    // 2. Fallback to guests table
+    const { data: guest, error: guestError } = await supabase
+      .from('guests')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (guest) {
+      return new Guest({
+        id: guest.id,
+        firstName: guest.first_name,
+        lastName: guest.last_name,
+        email: guest.email,
+        phone: guest.phone,
+        idType: guest.id_type,
+        idNumber: guest.id_number,
+        address: guest.address,
+        nationality: guest.nationality,
+        isVip: guest.is_vip,
+        notes: guest.notes,
+        createdAt: new Date(guest.created_at),
+        updatedAt: new Date(guest.updated_at)
+      });
+    }
+
+    return null;
   }
 
   static async findByEmail(email: string): Promise<Guest | null> {
@@ -119,9 +146,33 @@ export class Guest implements IGuest {
   }
 
   static async search(query: string, branchId?: number, checkedInOnly?: boolean): Promise<Guest[]> {
-    let allowedGuestIds: string[] | null = null;
+    let guestQuery = supabase.from('guests').select('*');
 
-    // 0. If checkedInOnly, get IDs of guests with active reservations
+    // 1. Filter by search query if provided
+    if (query) {
+      guestQuery = guestQuery.or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%,id_number.ilike.%${query}%`);
+    }
+
+    // 2. Filter by branchId if provided (via reservations)
+    if (branchId) {
+      const { data: branchGuestIds, error: branchError } = await supabase
+        .from('reservations')
+        .select('guest_id')
+        .eq('branch_id', branchId);
+
+      if (branchError) {
+        console.error('Error fetching branch guests:', branchError);
+      } else {
+        const ids = [...new Set(branchGuestIds?.map(r => r.guest_id).filter(id => id))] as string[];
+        if (ids.length > 0) {
+          guestQuery = guestQuery.in('id', ids);
+        } else {
+          return []; // No guests for this branch
+        }
+      }
+    }
+
+    // 3. Filter by checked-in status if requested
     if (checkedInOnly) {
       const { data: activeReservations, error: reservationError } = await supabase
         .from('reservations')
@@ -130,89 +181,38 @@ export class Guest implements IGuest {
 
       if (reservationError) {
         console.error('Error fetching active reservations:', reservationError);
-        return [];
-      }
-
-      allowedGuestIds = activeReservations?.map(r => r.guest_id).filter(id => id) || [];
-
-      // If no checked-in guests, return empty immediately
-      if (allowedGuestIds.length === 0) {
-        return [];
-      }
-    }
-
-    // 1. Get from guest_profiles (linked to users)
-    let profileQuery = supabase
-      .from('guest_profiles')
-      .select('*, users!inner(first_name, last_name, email, phone_number)')
-
-    if (query) {
-      profileQuery = profileQuery.or(`users.first_name.ilike.%${query}%,users.last_name.ilike.%${query}%,users.email.ilike.%${query}%,users.phone_number.ilike.%${query}%`)
-    }
-
-    if (allowedGuestIds) {
-      profileQuery = profileQuery.in('id', allowedGuestIds);
-    }
-
-    const { data: profileData, error: profileError } = await profileQuery;
-
-    // 2. Get from guests table (compatibility/legacy)
-    let guestTableQuery = supabase.from('guests').select('*');
-    if (query) {
-      guestTableQuery = guestTableQuery.or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%`);
-    }
-
-    if (allowedGuestIds) {
-      guestTableQuery = guestTableQuery.in('id', allowedGuestIds);
-    }
-
-    const { data: guestTableData, error: guestTableError } = await guestTableQuery;
-
-    if (profileError) console.error('Error fetching guest profiles:', profileError);
-    if (guestTableError) console.error('Error fetching guests table:', guestTableError);
-
-    // 3. Merge and deduplicate
-    const guestMap = new Map<string, Guest>();
-
-    if (profileData) {
-      profileData.forEach(d => {
-        guestMap.set(d.id, Guest.fromDatabase(d));
-      });
-    }
-
-    if (guestTableData) {
-      guestTableData.forEach(d => {
-        if (!guestMap.has(d.id)) {
-          guestMap.set(d.id, new Guest({
-            id: d.id,
-            firstName: d.first_name,
-            lastName: d.last_name,
-            email: d.email,
-            phone: d.phone,
-            idType: d.id_type,
-            idNumber: d.id_number,
-            address: d.address,
-            nationality: d.nationality,
-            isVip: d.is_vip,
-            notes: d.notes,
-            createdAt: new Date(d.created_at),
-            updatedAt: new Date(d.updated_at)
-          }));
+      } else {
+        const activeIds = [...new Set(activeReservations?.map(r => r.guest_id).filter(id => id))] as string[];
+        if (activeIds.length > 0) {
+          guestQuery = guestQuery.in('id', activeIds);
+        } else {
+          return []; // No checked-in guests
         }
-      });
+      }
     }
 
-    let guests = Array.from(guestMap.values());
+    const { data: guestsData, error: guestsError } = await guestQuery;
 
-    // 4. Filter by branch if branchId is provided
-    if (branchId) {
-      // Since we removed the join, we can't filter by bookings in memory efficiently for now.
-      // If strict branch filtering is required, we would need to fetch bookings separately.
-      // For now, we return all guests to ensure the dropdown works.
-      // TODO: Implement proper branch filtering if needed.
+    if (guestsError) {
+      console.error('Error fetching guests:', guestsError);
+      return [];
     }
 
-    return guests;
+    return (guestsData || []).map(d => new Guest({
+      id: d.id,
+      firstName: d.first_name,
+      lastName: d.last_name,
+      email: d.email,
+      phone: d.phone,
+      idType: d.id_type,
+      idNumber: d.id_number,
+      address: d.address,
+      nationality: d.nationality,
+      isVip: d.is_vip,
+      notes: d.notes,
+      createdAt: new Date(d.created_at),
+      updatedAt: new Date(d.updated_at)
+    }));
   }
 
   async save(): Promise<Guest> {
@@ -366,12 +366,21 @@ export class Guest implements IGuest {
   }
 
   async delete(): Promise<void> {
-    const { error } = await supabase
+    // 1. Delete from guest_profiles
+    const { error: profileError } = await supabase
       .from('guest_profiles')
       .delete()
       .eq('id', this.id);
 
-    if (error) throw error;
+    if (profileError) throw profileError;
+
+    // 2. Delete from guests table
+    const { error: guestError } = await supabase
+      .from('guests')
+      .delete()
+      .eq('id', this.id);
+
+    if (guestError) throw guestError;
   }
 
   static fromDatabase(data: any): Guest {
@@ -379,20 +388,18 @@ export class Guest implements IGuest {
 
     return new Guest({
       id: data.id,
-      firstName: userData.first_name,
-      lastName: userData.last_name,
-      email: userData.email,
-      phone: userData.phone_number,
+      firstName: userData.first_name || data.first_name,
+      lastName: userData.last_name || data.last_name,
+      email: userData.email || data.email,
+      phone: userData.phone_number || data.phone,
       idType: data.id_type,
       idNumber: data.id_number,
       address: data.address,
       nationality: data.nationality,
-      // Map fields
       city: data.city,
       country: data.country,
       dateOfBirth: data.date_of_birth,
-
-      isVip: data.vip_status,
+      isVip: data.vip_status || data.is_vip,
       notes: data.notes,
       preferences: data.preferences,
       blacklistStatus: data.blacklist_status,

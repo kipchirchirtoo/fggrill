@@ -3056,10 +3056,16 @@ router.post('/rooms', protect, async (req, res) => {
     }
 
     // Validate required fields
-    if (!room_number || !room_type || floor === undefined || floor === null) {
+    const missingFields = [];
+    if (!room_number) missingFields.push('room_number');
+    if (!room_type) missingFields.push('room_type');
+    if (floor === undefined || floor === null || isNaN(Number(floor))) missingFields.push('floor');
+
+    if (missingFields.length > 0) {
+      console.log('Room creation failed - missing or invalid fields:', missingFields);
       return res.status(400).json({
         success: false,
-        message: 'Room number, type, and floor are required',
+        message: `Missing or invalid required fields: ${missingFields.join(', ')}`,
         received: { room_number, room_type, floor, body: req.body }
       });
     }
