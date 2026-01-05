@@ -19,9 +19,11 @@ import {
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
+  hideHeader?: boolean;
 }
 
-export function DashboardLayout({ children }: DashboardLayoutProps) {
+export function DashboardLayout(props: DashboardLayoutProps) {
+  const { children } = props;
   const { user, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -218,89 +220,91 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* Main content */}
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Top bar */}
-          <header className="bg-white border-b border-stone-200/60">
-            <div className="flex h-14 items-center justify-between px-4 lg:px-6">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setSidebarOpen(!sidebarOpen)}
-                  className="hidden lg:flex p-2 rounded-lg text-stone-500 hover:text-stone-700 hover:bg-stone-100 transition-colors"
-                >
-                  <Menu className="h-5 w-5" />
-                </button>
-                <button
-                  onClick={() => setMobileMenuOpen(true)}
-                  className="lg:hidden p-2 rounded-lg text-stone-500 hover:text-stone-700 hover:bg-stone-100"
-                >
-                  <Menu className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {/* Notifications */}
-                <button
-                  onClick={() => setNotificationModalOpen(true)}
-                  className="relative p-2 rounded-lg text-stone-500 hover:text-stone-700 hover:bg-stone-100 transition-colors"
-                >
-                  <Bell className="h-5 w-5" />
-                  {unreadCount > 0 && (
-                    <span className="absolute top-1 right-1 h-4 w-4 bg-amber-500 text-white text-[10px] font-semibold rounded-full flex items-center justify-center">
-                      {unreadCount > 9 ? '9' : unreadCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* User menu */}
-                <div className="relative">
+          {!props.hideHeader && (
+            <header className="bg-white border-b border-stone-200/60">
+              <div className="flex h-14 items-center justify-between px-4 lg:px-6">
+                <div className="flex items-center gap-3">
                   <button
-                    onClick={() => setUserMenuOpen(!userMenuOpen)}
-                    className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-stone-100 transition-colors"
+                    onClick={() => setSidebarOpen(!sidebarOpen)}
+                    className="hidden lg:flex p-2 rounded-lg text-stone-500 hover:text-stone-700 hover:bg-stone-100 transition-colors"
                   >
-                    <div className="h-7 w-7 rounded-full bg-stone-100 flex items-center justify-center">
-                      <User className="h-4 w-4 text-stone-600" />
-                    </div>
-                    <ChevronDown className="h-3.5 w-3.5 text-stone-400" />
+                    <Menu className="h-5 w-5" />
+                  </button>
+                  <button
+                    onClick={() => setMobileMenuOpen(true)}
+                    className="lg:hidden p-2 rounded-lg text-stone-500 hover:text-stone-700 hover:bg-stone-100"
+                  >
+                    <Menu className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Notifications */}
+                  <button
+                    onClick={() => setNotificationModalOpen(true)}
+                    className="relative p-2 rounded-lg text-stone-500 hover:text-stone-700 hover:bg-stone-100 transition-colors"
+                  >
+                    <Bell className="h-5 w-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute top-1 right-1 h-4 w-4 bg-amber-500 text-white text-[10px] font-semibold rounded-full flex items-center justify-center">
+                        {unreadCount > 9 ? '9' : unreadCount}
+                      </span>
+                    )}
                   </button>
 
-                  <AnimatePresence>
-                    {userMenuOpen && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -4, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -4, scale: 0.95 }}
-                        transition={{ duration: 0.15 }}
-                        className="absolute right-0 mt-2 w-52 bg-white rounded-lg border border-stone-200 shadow-soft-md py-1.5 z-50"
-                      >
-                        <div className="px-3 py-2 border-b border-stone-100">
-                          <p className="text-[13px] font-medium text-stone-900">{user?.firstName} {user?.lastName}</p>
-                          <p className="text-[11px] text-stone-500">{user?.email}</p>
-                        </div>
-                        <a
-                          href="/dashboard/profile"
-                          className="block px-3 py-2 text-[13px] text-stone-700 hover:bg-stone-50"
+                  {/* User menu */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setUserMenuOpen(!userMenuOpen)}
+                      className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-stone-100 transition-colors"
+                    >
+                      <div className="h-7 w-7 rounded-full bg-stone-100 flex items-center justify-center">
+                        <User className="h-4 w-4 text-stone-600" />
+                      </div>
+                      <ChevronDown className="h-3.5 w-3.5 text-stone-400" />
+                    </button>
+
+                    <AnimatePresence>
+                      {userMenuOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -4, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -4, scale: 0.95 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute right-0 mt-2 w-52 bg-white rounded-lg border border-stone-200 shadow-soft-md py-1.5 z-50"
                         >
-                          Profile
-                        </a>
-                        <a
-                          href="/dashboard/settings"
-                          className="block px-3 py-2 text-[13px] text-stone-700 hover:bg-stone-50"
-                        >
-                          Settings
-                        </a>
-                        <div className="border-t border-stone-100 mt-1.5 pt-1.5">
-                          <button
-                            onClick={logout}
-                            className="block w-full text-left px-3 py-2 text-[13px] text-red-600 hover:bg-red-50"
+                          <div className="px-3 py-2 border-b border-stone-100">
+                            <p className="text-[13px] font-medium text-stone-900">{user?.firstName} {user?.lastName}</p>
+                            <p className="text-[11px] text-stone-500">{user?.email}</p>
+                          </div>
+                          <a
+                            href="/dashboard/profile"
+                            className="block px-3 py-2 text-[13px] text-stone-700 hover:bg-stone-50"
                           >
-                            Sign out
-                          </button>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                            Profile
+                          </a>
+                          <a
+                            href="/dashboard/settings"
+                            className="block px-3 py-2 text-[13px] text-stone-700 hover:bg-stone-50"
+                          >
+                            Settings
+                          </a>
+                          <div className="border-t border-stone-100 mt-1.5 pt-1.5">
+                            <button
+                              onClick={logout}
+                              className="block w-full text-left px-3 py-2 text-[13px] text-red-600 hover:bg-red-50"
+                            >
+                              Sign out
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
               </div>
-            </div>
-          </header>
+            </header>
+          )}
 
           {/* Main content area */}
           <main className="flex-1 overflow-y-auto bg-[#FAFAF8] scrollbar-thin">

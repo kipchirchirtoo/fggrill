@@ -1672,10 +1672,12 @@ export const maintenanceAPI = {
 
 export const restaurantAPI = {
   // Orders
-  getOrders: (branchId?: number, status?: string) => {
+  getOrders: (params?: { branchId?: number; status?: string; from_date?: string; to_date?: string }) => {
     const query = new URLSearchParams();
-    if (branchId) query.append('branch_id', String(branchId));
-    if (status) query.append('status', status);
+    if (params?.branchId) query.append('branch_id', String(params.branchId));
+    if (params?.status) query.append('status', params.status);
+    if (params?.from_date) query.append('from_date', params.from_date);
+    if (params?.to_date) query.append('to_date', params.to_date);
     return fetchAPI<any>(`/restaurant/orders?${query}`);
   },
   getOrder: (id: string) => fetchAPI<any>(`/restaurant/orders/${id}`),
@@ -1956,10 +1958,12 @@ export const receiptsAPI = {
 
 export const barAPI = {
   // Orders
-  getOrders: (branchId?: number, status?: string) => {
+  getOrders: (params?: { branchId?: number; status?: string; from_date?: string; to_date?: string }) => {
     const query = new URLSearchParams();
-    if (branchId) query.append('branch_id', String(branchId));
-    if (status) query.append('status', status);
+    if (params?.branchId) query.append('branch_id', String(params.branchId));
+    if (params?.status) query.append('status', params.status);
+    if (params?.from_date) query.append('from_date', params.from_date);
+    if (params?.to_date) query.append('to_date', params.to_date);
     return fetchAPI<any>(`/bar/orders?${query}`);
   },
   getOrder: (id: string) => fetchAPI<any>(`/bar/orders/${id}`),
@@ -2256,6 +2260,7 @@ export const reportsAPI = {
 // AUDIT API
 // =====================================================
 
+
 export const auditAPI = {
   getAuditLogs: (params?: { module?: string; from_date?: string; to_date?: string }) => {
     const query = new URLSearchParams();
@@ -2264,32 +2269,32 @@ export const auditAPI = {
     if (params?.to_date) query.append('to_date', params.to_date);
     return fetchAPI<any>(`/audit/logs?${query}`);
   },
-  getInventoryAudit: () => fetchAPI<any>('/audit/inventory'),
-  getReports: () => fetchAPI<any>('/audit/reports'),
-  getComplianceItems: () => fetchAPI<any>('/audit/compliance'),
+  getInventoryAudit: () => fetchAPI<any>('/auditor/inventory'), // Assuming this should also be auditor? or maybe it doesn't exist yet
+  getReports: () => fetchAPI<any>('/auditor/reports'), // Assuming auditor
+  getComplianceItems: () => fetchAPI<any>('/auditor/compliance'), // Assuming auditor
   getRoleMigrations: () => fetchAPI<any>('/admin/role-migrations'),
   executeRoleMigration: (id: number) => fetchAPI<any>(`/admin/role-migrations/${id}/execute`, { method: 'POST' }),
   revertRoleMigration: (id: number) => fetchAPI<any>(`/admin/role-migrations/${id}/revert`, { method: 'POST' }),
 
-  // Operational Audit
-  getConsumptionConfigs: () => fetchAPI<any>('/audit/consumption/configs'),
-  updateConsumptionConfig: (data: any) => fetchAPI<any>('/audit/consumption/configs', { method: 'POST', body: JSON.stringify(data) }),
+  // Operational Audit (Advanced)
+  getConsumptionConfigs: () => fetchAPI<any>('/auditor/consumption/configs'),
+  updateConsumptionConfig: (data: any) => fetchAPI<any>('/auditor/consumption/configs', { method: 'POST', body: JSON.stringify(data) }),
   getConsumptionVariances: (params: { branch_id: number; from_date: string; to_date: string }) => {
     const query = new URLSearchParams();
     query.append('branch_id', String(params.branch_id));
     query.append('from_date', params.from_date);
     query.append('to_date', params.to_date);
-    return fetchAPI<any>(`/audit/consumption/variances?${query}`);
+    return fetchAPI<any>(`/auditor/consumption/variances?${query}`);
   },
 
   // Approvals
   submitApproval: (data: { entity_type: string; entity_id: string; status: string; comments?: string }) =>
-    fetchAPI<any>('/audit/approvals', { method: 'POST', body: JSON.stringify(data) }),
+    fetchAPI<any>('/auditor/approvals', { method: 'POST', body: JSON.stringify(data) }),
   getApprovalHistory: (params?: { entity_type?: string; entity_id?: string }) => {
     const query = new URLSearchParams();
     if (params?.entity_type) query.append('entity_type', params.entity_type);
     if (params?.entity_id) query.append('entity_id', params.entity_id);
-    return fetchAPI<any>(`/audit/approvals?${query}`);
+    return fetchAPI<any>(`/auditor/approvals?${query}`);
   },
 
   // Payroll Audit
@@ -2297,9 +2302,10 @@ export const auditAPI = {
     const query = new URLSearchParams();
     if (params.branch_id) query.append('branch_id', String(params.branch_id));
     query.append('period_month', params.period_month);
-    return fetchAPI<any>(`/audit/payroll/variances?${query}`);
+    return fetchAPI<any>(`/auditor/payroll/variances?${query}`);
   }
 };
+
 
 // =====================================================
 // USER MANAGEMENT API
