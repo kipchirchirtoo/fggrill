@@ -35,7 +35,7 @@ const ROOM_TYPES = [
 ];
 
 const AMENITIES = [
-  'WiFi', 'Air Conditioning', 'TV', 'Mini Bar', 'Safe', 'Balcony', 
+  'WiFi', 'Air Conditioning', 'TV', 'Mini Bar', 'Safe', 'Balcony',
   'Ocean View', 'City View', 'Kitchenette', 'Jacuzzi', 'Work Desk'
 ];
 
@@ -53,7 +53,7 @@ export function AddRoomModal({ isOpen, onClose, onRoomAdded, branchId }: AddRoom
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.room_number.trim()) {
       toast.error('Room number is required');
       return;
@@ -73,7 +73,7 @@ export function AddRoomModal({ isOpen, onClose, onRoomAdded, branchId }: AddRoom
       };
 
       const response = await roomsAPI.createRoom(roomData);
-      
+
       if (response.success) {
         toast.success('Room added successfully');
         onRoomAdded();
@@ -122,152 +122,151 @@ export function AddRoomModal({ isOpen, onClose, onRoomAdded, branchId }: AddRoom
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Basic Information */}
-          <IOSCard className="p-2">
-            <h3 className="font-medium text-[#3C3C43] mb-2 flex items-center gap-1 text-sm">
-              <Building2 className="h-3 w-3" />
-              Basic Info
-            </h3>
-            
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs font-medium text-[#3C3C43] mb-1">
-                  Room Number *
-                </label>
-                <Input
-                  value={formData.room_number}
-                  onChange={(e) => setFormData({...formData, room_number: e.target.value})}
-                  placeholder="e.g., 101, 201A"
-                  className="text-sm h-8"
-                  required
-                />
+            {/* Basic Information */}
+            <IOSCard className="p-2">
+              <h3 className="font-medium text-[#3C3C43] mb-2 flex items-center gap-1 text-sm">
+                <Building2 className="h-3 w-3" />
+                Basic Info
+              </h3>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-[#3C3C43] mb-1">
+                    Room Number *
+                  </label>
+                  <Input
+                    value={formData.room_number}
+                    onChange={(e) => setFormData({ ...formData, room_number: e.target.value })}
+                    placeholder="e.g., 101, 201A"
+                    className="text-sm h-8"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[#3C3C43] mb-1">
+                    Floor
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={formData.floor}
+                    onChange={(e) => setFormData({ ...formData, floor: parseInt(e.target.value) || 1 })}
+                    className="text-sm h-8"
+                    required
+                  />
+                </div>
               </div>
 
-              <div>
+              <div className="mt-2">
                 <label className="block text-xs font-medium text-[#3C3C43] mb-1">
-                  Floor
-                </label>
-                <Input
-                  type="number"
-                  min="1"
-                  max="50"
-                  value={formData.floor}
-                  onChange={(e) => setFormData({...formData, floor: parseInt(e.target.value) || 1})}
-                  className="text-sm h-8"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="mt-2">
-              <label className="block text-xs font-medium text-[#3C3C43] mb-1">
-                Room Type
-              </label>
-              <select
-                value={formData.room_type_id}
-                onChange={(e) => setFormData({...formData, room_type_id: e.target.value})}
-                className="w-full px-2 py-1 border border-[#E5E5EA] rounded text-sm h-8"
-              >
-                {ROOM_TYPES.map((type) => (
-                  <option key={type.id} value={type.id}>{type.name}</option>
-                ))}
-              </select>
-            </div>
-          </IOSCard>
-
-          {/* Pricing & Capacity */}
-          <IOSCard className="p-2">
-            <h3 className="font-medium text-[#3C3C43] mb-2 flex items-center gap-1 text-sm">
-              <DollarSign className="h-3 w-3" />
-              Price & Guests
-            </h3>
-            
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs font-medium text-[#3C3C43] mb-1">
-                  Price (KES) *
-                </label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="100"
-                  value={formData.base_price || ''}
-                  onChange={(e) => setFormData({...formData, base_price: parseFloat(e.target.value) || 0})}
-                  placeholder="Enter price per night"
-                  className="text-sm h-8"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-[#3C3C43] mb-1">
-                  Max Guests
+                  Room Type
                 </label>
                 <select
-                  value={formData.max_occupancy}
-                  onChange={(e) => setFormData({...formData, max_occupancy: parseInt(e.target.value)})}
+                  value={formData.room_type_id}
+                  onChange={(e) => setFormData({ ...formData, room_type_id: e.target.value })}
                   className="w-full px-2 py-1 border border-[#E5E5EA] rounded text-sm h-8"
                 >
-                  {[1,2,3,4,5,6,7,8,9,10].map(num => (
-                    <option key={num} value={num}>{num} guest{num > 1 ? 's' : ''}</option>
+                  {ROOM_TYPES.map((type) => (
+                    <option key={type.id} value={type.id}>{type.name}</option>
                   ))}
                 </select>
               </div>
-            </div>
-          </IOSCard>
+            </IOSCard>
 
-          {/* Amenities & Description */}
-          <IOSCard className="p-2">
-            <h3 className="font-medium text-[#3C3C43] mb-2 flex items-center gap-1 text-sm">
-              <Bed className="h-3 w-3" />
-              Amenities & Notes
-            </h3>
-            
-            <div className="grid grid-cols-5 gap-1 mb-2">
-              {AMENITIES.slice(0, 10).map((amenity) => (
-                <button
-                  key={amenity}
-                  type="button"
-                  onClick={() => toggleAmenity(amenity)}
-                  className={`p-1 rounded text-xs transition-all ${
-                    formData.amenities.includes(amenity)
-                      ? 'bg-[#3C3C43] text-white'
-                      : 'bg-[#F2F2F7] text-[#3C3C43] hover:bg-[#E5E5EA]'
-                  }`}
-                >
-                  {amenity.length > 8 ? amenity.substring(0, 6) + '..' : amenity}
-                </button>
-              ))}
-            </div>
-            
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({...formData, description: e.target.value})}
-              placeholder="Optional notes..."
-              className="w-full px-2 py-1 border border-[#E5E5EA] rounded text-xs resize-none"
-              rows={1}
-            />
-          </IOSCard>
+            {/* Pricing & Capacity */}
+            <IOSCard className="p-2">
+              <h3 className="font-medium text-[#3C3C43] mb-2 flex items-center gap-1 text-sm">
+                <DollarSign className="h-3 w-3" />
+                Price & Guests
+              </h3>
 
-          {/* Actions */}
-          <div className="flex gap-2 pt-2">
-            <IOSButton
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              className="flex-1 h-8 text-sm"
-              disabled={isSubmitting}
-            >
-              Cancel
-            </IOSButton>
-            <IOSButton
-              type="submit"
-              className="flex-1 h-8 text-sm bg-[#3C3C43] hover:bg-[#000000] text-white"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'Adding...' : 'Add Room'}
-            </IOSButton>
-          </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-[#3C3C43] mb-1">
+                    Price (KES) *
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="100"
+                    value={formData.base_price || ''}
+                    onChange={(e) => setFormData({ ...formData, base_price: parseFloat(e.target.value) || 0 })}
+                    placeholder="Enter price per night"
+                    className="text-sm h-8"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[#3C3C43] mb-1">
+                    Max Guests
+                  </label>
+                  <select
+                    value={formData.max_occupancy}
+                    onChange={(e) => setFormData({ ...formData, max_occupancy: parseInt(e.target.value) })}
+                    className="w-full px-2 py-1 border border-[#E5E5EA] rounded text-sm h-8"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+                      <option key={num} value={num}>{num} guest{num > 1 ? 's' : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </IOSCard>
+
+            {/* Amenities & Description */}
+            <IOSCard className="p-2">
+              <h3 className="font-medium text-[#3C3C43] mb-2 flex items-center gap-1 text-sm">
+                <Bed className="h-3 w-3" />
+                Amenities & Notes
+              </h3>
+
+              <div className="grid grid-cols-5 gap-1 mb-2">
+                {AMENITIES.slice(0, 10).map((amenity) => (
+                  <button
+                    key={amenity}
+                    type="button"
+                    onClick={() => toggleAmenity(amenity)}
+                    className={`p-1 rounded text-xs transition-all ${formData.amenities.includes(amenity)
+                        ? 'bg-[#3C3C43] text-white'
+                        : 'bg-[#F2F2F7] text-[#3C3C43] hover:bg-[#E5E5EA]'
+                      }`}
+                  >
+                    {amenity.length > 8 ? amenity.substring(0, 6) + '..' : amenity}
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Optional notes..."
+                className="w-full px-2 py-1 border border-[#E5E5EA] rounded text-xs resize-none"
+                rows={1}
+              />
+            </IOSCard>
+
+            {/* Actions */}
+            <div className="flex gap-2 pt-2">
+              <IOSButton
+                type="button"
+                variant="outline"
+                onClick={onClose}
+                className="flex-1 h-8 text-sm"
+                disabled={isSubmitting}
+              >
+                Cancel
+              </IOSButton>
+              <IOSButton
+                type="submit"
+                className="flex-1 h-8 text-sm bg-[#3C3C43] hover:bg-[#000000] text-white"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Adding...' : 'Add Room'}
+              </IOSButton>
+            </div>
           </form>
         </div>
       </DialogContent>

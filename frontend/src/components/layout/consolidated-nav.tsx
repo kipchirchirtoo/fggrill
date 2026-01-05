@@ -582,145 +582,114 @@ export function ConsolidatedNav() {
     </>
   );
 
-  // Finance/Accountant Navigation
-  const financeNav = (
-    <>
-      <NavItem
-        href="/dashboard/finance"
-        icon={DollarSign}
-        label="Overview"
-        active={pathname === '/dashboard/finance'}
-      />
-
-      <NavGroup label="Revenue" icon={TrendingUp} defaultOpen>
-        <NavItem
-          href="/dashboard/finance/revenue-branches"
-          icon={Building2}
-          label="Revenue by Branch"
-          active={pathname === '/dashboard/finance/revenue-branches'}
-        />
-        <NavItem
-          href="/dashboard/finance/invoices"
-          icon={FileText}
-          label="Invoices"
-          active={pathname === '/dashboard/finance/invoices'}
-        />
-        <NavItem
-          href="/dashboard/finance/payments"
-          icon={CreditCard}
-          label="Payments"
-          active={pathname === '/dashboard/finance/payments'}
-        />
-      </NavGroup>
-
-      <NavGroup label="Expenses" icon={Wallet}>
-        <NavItem
-          href="/dashboard/finance/expenses"
-          icon={Receipt}
-          label="Expenses"
-          active={pathname === '/dashboard/finance/expenses'}
-        />
-        <NavItem
-          href="/dashboard/finance/ar-ap"
-          icon={ArrowDownUp}
-          label="AR/AP"
-          active={pathname === '/dashboard/finance/ar-ap'}
-        />
-      </NavGroup>
-
-      <NavGroup label="Analysis" icon={BarChart3}>
-        <NavItem
-          href="/dashboard/finance/cashflow"
-          icon={TrendingUp}
-          label="Cash Flow"
-          active={pathname === '/dashboard/finance/cashflow'}
-        />
-        <NavItem
-          href="/dashboard/finance/profit-loss"
-          icon={PieChart}
-          label="Profit & Loss"
-          active={pathname === '/dashboard/finance/profit-loss'}
-        />
-        <NavItem
-          href="/dashboard/finance/budget-analysis"
-          icon={BarChart3}
-          label="Budget Analysis"
-          active={pathname === '/dashboard/finance/budget-analysis'}
-        />
-        <NavItem
-          href="/dashboard/finance/forecast"
-          icon={LineChart}
-          label="Forecast"
-          active={pathname === '/dashboard/finance/forecast'}
-        />
-        <NavItem
-          href="/dashboard/finance/kpis"
-          icon={Award}
-          label="KPIs"
-          active={pathname === '/dashboard/finance/kpis'}
-        />
-      </NavGroup>
-
-      <NavItem
-        href="/dashboard/finance/tax-summary"
-        icon={FileSpreadsheet}
-        label="Tax Summary"
-        active={pathname === '/dashboard/finance/tax-summary'}
-      />
-
-      <NavItem
-        href="/dashboard/cashier"
-        icon={CreditCard}
-        label="Cashier Station"
-        active={pathname === '/dashboard/cashier'}
-      />
-    </>
-  );
-
   // Auditor Navigation
   const auditorNav = (
     <>
       <NavItem
-        href="/dashboard/audit"
-        icon={ShieldCheck}
-        label="Overview"
-        active={pathname === '/dashboard/audit'}
+        href="/dashboard/auditor"
+        icon={Shield}
+        label="Auditor Overview"
+        active={pathname === '/dashboard/auditor' && !pathname.includes('?tab=')}
       />
 
-      <NavGroup label="Audits" icon={ClipboardList} defaultOpen>
+      <NavGroup label="Monitoring" icon={ClipboardList} defaultOpen>
         <NavItem
-          href="/dashboard/audit/financial"
-          icon={DollarSign}
-          label="Financial Audit"
-          active={pathname === '/dashboard/audit/financial'}
+          href="/dashboard/auditor?tab=logs"
+          icon={ClipboardList}
+          label="System Logs"
+          active={pathname === '/dashboard/auditor' && pathname.includes('tab=logs')}
         />
         <NavItem
-          href="/dashboard/audit/inventory"
-          icon={Package}
-          label="Inventory Audit"
-          active={pathname === '/dashboard/audit/inventory'}
-        />
-        <NavItem
-          href="/dashboard/audit/compliance"
-          icon={Scale}
+          href="/dashboard/auditor?tab=compliance"
+          icon={CheckCircle}
           label="Compliance"
-          active={pathname === '/dashboard/audit/compliance'}
+          active={pathname === '/dashboard/auditor' && pathname.includes('tab=compliance')}
         />
       </NavGroup>
 
+      <NavGroup label="Audits" icon={Scale}>
+        <NavItem
+          href="/dashboard/auditor?tab=financial"
+          icon={DollarSign}
+          label="Financial Audit"
+          active={pathname === '/dashboard/auditor' && pathname.includes('tab=financial')}
+        />
+        <NavItem
+          href="/dashboard/auditor?tab=inventory"
+          icon={Package}
+          label="Inventory Audit"
+          active={pathname === '/dashboard/auditor' && pathname.includes('tab=inventory')}
+        />
+        <NavItem
+          href="/dashboard/auditor?tab=reports"
+          icon={FileText}
+          label="Audit Reports"
+          active={pathname === '/dashboard/auditor' && pathname.includes('tab=reports')}
+        />
+      </NavGroup>
+    </>
+  );
+
+  // Branch Accounting Navigation
+  const branchAccountingNav = (
+    <>
       <NavItem
-        href="/dashboard/audit/logs"
-        icon={FileText}
-        label="Audit Logs"
-        active={pathname === '/dashboard/audit/logs'}
+        href="/dashboard/branch-accounting"
+        icon={BarChart3}
+        label="Accounting Overview"
+        active={pathname === '/dashboard/branch-accounting' && !pathname.includes('?tab=')}
       />
 
-      <NavItem
-        href="/dashboard/audit/reports"
-        icon={FileSpreadsheet}
-        label="Reports"
-        active={pathname === '/dashboard/audit/reports'}
-      />
+      <NavGroup label="Operations" icon={Package} defaultOpen>
+        <NavItem
+          href="/dashboard/branch-accounting?tab=inventory"
+          icon={CheckCircle}
+          label="Stock Taking"
+          active={pathname === '/dashboard/branch-accounting' && pathname.includes('tab=inventory')}
+        />
+        <NavItem
+          href="/dashboard/branch-accounting?tab=billing"
+          icon={FileText}
+          label="Billing & Credit"
+          active={pathname === '/dashboard/branch-accounting' && pathname.includes('tab=billing')}
+        />
+        <NavItem
+          href="/dashboard/branch-accounting?tab=payments"
+          icon={CreditCard}
+          label="Payment Verification"
+          active={pathname === '/dashboard/branch-accounting' && pathname.includes('tab=payments')}
+        />
+      </NavGroup>
+
+      <NavGroup label="Financials" icon={DollarSign}>
+        <NavItem
+          href="/dashboard/branch-accounting/revenue"
+          icon={TrendingUp}
+          label="Branch Revenue"
+          active={pathname === '/dashboard/branch-accounting/revenue'}
+        />
+        <NavItem
+          href="/dashboard/branch-accounting/expenses"
+          icon={Receipt}
+          label="Expenses"
+          active={pathname === '/dashboard/branch-accounting/expenses'}
+        />
+      </NavGroup>
+
+      <NavGroup label="Documents" icon={FileText}>
+        <NavItem
+          href="/dashboard/branch-accounting/invoices"
+          icon={FileText}
+          label="Invoices"
+          active={pathname === '/dashboard/branch-accounting/invoices'}
+        />
+        <NavItem
+          href="/dashboard/branch-accounting/reports"
+          icon={FileSpreadsheet}
+          label="Daily Reports"
+          active={pathname === '/dashboard/branch-accounting/reports'}
+        />
+      </NavGroup>
     </>
   );
 
@@ -1202,15 +1171,12 @@ export function ConsolidatedNav() {
       return barNav;
     }
 
-    // Accountant Navigation
-    if (user.role === UserRole.ACCOUNTANT) {
-      return financeNav;
-    }
-
     // Auditor Navigation
     if (user.role === UserRole.AUDITOR) {
       return auditorNav;
     }
+
+    // Branch Accounting Navigation
 
     // Cashier Navigation
     if (user.role === UserRole.CASHIER) {

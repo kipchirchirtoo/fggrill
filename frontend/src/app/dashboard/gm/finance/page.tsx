@@ -67,9 +67,9 @@ export default function GMFinancePage() {
             <IOSCard className="p-6">
               <h2 className="text-lg font-semibold font-sf-pro-display mb-4">Quick Links</h2>
               <div className="space-y-3">
-                <Link href="/dashboard/finance/profit-loss"><IOSButton variant="secondary" className="w-full justify-start" leftIcon={<BarChart3 />}>Profit & Loss</IOSButton></Link>
-                <Link href="/dashboard/finance/revenue-branches"><IOSButton variant="secondary" className="w-full justify-start" leftIcon={<PieChart />}>Revenue by Branch</IOSButton></Link>
-                <Link href="/dashboard/finance/expenses"><IOSButton variant="secondary" className="w-full justify-start" leftIcon={<TrendingDown />}>Expenses</IOSButton></Link>
+                <Link href="/dashboard/branch-accounting"><IOSButton variant="secondary" className="w-full justify-start" leftIcon={<BarChart3 />}>Branch Accounting</IOSButton></Link>
+                <Link href="/dashboard/branch-accounting/revenue"><IOSButton variant="secondary" className="w-full justify-start" leftIcon={<PieChart />}>Revenue Tracking</IOSButton></Link>
+                <Link href="/dashboard/branch-accounting/expenses"><IOSButton variant="secondary" className="w-full justify-start" leftIcon={<TrendingDown />}>Expense Logs</IOSButton></Link>
               </div>
             </IOSCard>
             <IOSCard className="p-6">

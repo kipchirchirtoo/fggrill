@@ -86,7 +86,7 @@ export function EditRoomModal({ isOpen, onClose, onRoomUpdated, room }: EditRoom
       };
 
       const response = await roomsAPI.updateRoom(room.id, updateData);
-      
+
       if (response.success) {
         toast.success('Room updated successfully');
         onRoomUpdated();

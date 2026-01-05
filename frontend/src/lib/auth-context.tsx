@@ -31,6 +31,7 @@ export enum UserRole {
   KITCHEN = 'kitchen',
   BARTENDER = 'bartender',
   ACCOUNTANT = 'accountant',
+  BRANCH_ACCOUNTANT = 'branch_accountant',
   AUDITOR = 'auditor',
   CASHIER = 'cashier',
   EMPLOYEE = 'employee',
@@ -242,7 +243,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       [UserRole.KITCHEN]: '/dashboard/kitchen',
       [UserRole.BARTENDER]: '/dashboard/bar',
       [UserRole.ACCOUNTANT]: '/dashboard/finance',
-      [UserRole.AUDITOR]: '/dashboard/accounting',
+      [UserRole.BRANCH_ACCOUNTANT]: '/dashboard/branch-accounting',
+      [UserRole.AUDITOR]: '/dashboard/auditor',
       [UserRole.CASHIER]: '/dashboard/cashier',
       [UserRole.EMPLOYEE]: '/portal/employee',
       [UserRole.GUEST]: '/portal/guest'

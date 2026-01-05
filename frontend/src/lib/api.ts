@@ -2296,6 +2296,27 @@ export const auditAPI = {
   getRoleMigrations: () => fetchAPI<any>('/admin/role-migrations'),
   executeRoleMigration: (id: number) => fetchAPI<any>(`/admin/role-migrations/${id}/execute`, { method: 'POST' }),
   revertRoleMigration: (id: number) => fetchAPI<any>(`/admin/role-migrations/${id}/revert`, { method: 'POST' }),
+
+  // Operational Audit
+  getConsumptionConfigs: () => fetchAPI<any>('/audit/consumption/configs'),
+  updateConsumptionConfig: (data: any) => fetchAPI<any>('/audit/consumption/configs', { method: 'POST', body: JSON.stringify(data) }),
+  getConsumptionVariances: (params: { branch_id: number; from_date: string; to_date: string }) => {
+    const query = new URLSearchParams();
+    query.append('branch_id', String(params.branch_id));
+    query.append('from_date', params.from_date);
+    query.append('to_date', params.to_date);
+    return fetchAPI<any>(`/audit/consumption/variances?${query}`);
+  },
+
+  // Approvals
+  submitApproval: (data: { entity_type: string; entity_id: string; status: string; comments?: string }) =>
+    fetchAPI<any>('/audit/approvals', { method: 'POST', body: JSON.stringify(data) }),
+  getApprovalHistory: (params?: { entity_type?: string; entity_id?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.entity_type) query.append('entity_type', params.entity_type);
+    if (params?.entity_id) query.append('entity_id', params.entity_id);
+    return fetchAPI<any>(`/audit/approvals?${query}`);
+  },
 };
 
 // =====================================================

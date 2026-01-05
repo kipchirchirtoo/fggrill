@@ -29,10 +29,10 @@ export default function AdminFinancePage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const quickLinks = [
-    { href: '/dashboard/finance/expenses', icon: TrendingDown, label: 'Expenses', color: 'bg-red-50 text-[#FF3B30]' },
+    { href: '/dashboard/branch-accounting/expenses', icon: TrendingDown, label: 'Expenses', color: 'bg-red-50 text-[#FF3B30]' },
     { href: '/dashboard/admin/finance/budgets', icon: PieChart, label: 'Budgets', color: 'bg-blue-50 text-[#007AFF]' },
-    { href: '/dashboard/finance/profit-loss', icon: BarChart3, label: 'P&L', color: 'bg-green-50 text-[#34C759]' },
-    { href: '/dashboard/finance/reports', icon: FileText, label: 'Reports', color: 'bg-purple-50 text-purple-600' },
+    { href: '/dashboard/branch-accounting', icon: BarChart3, label: 'Branch Acc', color: 'bg-green-50 text-[#34C759]' },
+    { href: '/dashboard/branch-accounting/reports', icon: FileText, label: 'Reports', color: 'bg-purple-50 text-purple-600' },
   ];
 
   return (

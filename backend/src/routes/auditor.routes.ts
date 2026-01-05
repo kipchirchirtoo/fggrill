@@ -11,6 +11,13 @@ import {
   createFinding,
   getFindings
 } from '../controllers/auditor.controller';
+import {
+  getConsumptionConfigs,
+  updateConsumptionConfig,
+  getConsumptionVariances,
+  submitApproval,
+  getApprovalHistory
+} from '../controllers/auditor-advanced.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
 
@@ -70,6 +77,33 @@ router.post('/findings',
 router.get('/findings',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
   getFindings
+);
+
+// Advanced Operational Audit
+router.get('/consumption/configs',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
+  getConsumptionConfigs
+);
+
+router.post('/consumption/configs',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
+  updateConsumptionConfig
+);
+
+router.get('/consumption/variances',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
+  getConsumptionVariances
+);
+
+// Approvals
+router.post('/approvals',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
+  submitApproval
+);
+
+router.get('/approvals',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
+  getApprovalHistory
 );
 
 export default router;
