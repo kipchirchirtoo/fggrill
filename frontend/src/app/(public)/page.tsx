@@ -149,6 +149,7 @@ export default function HomePage() {
         const normalizedRooms = response.data.map((room: any) => {
           // Handle nested room_types data from Supabase join
           const roomType = room.type || {};
+<<<<<<< HEAD
 
           // Use price_override if set, otherwise use room type's base_price
           const basePrice = room.price_override || roomType.base_price || 5000;
@@ -157,6 +158,10 @@ export default function HomePage() {
           // Pricing strategy: Frontend should show the same total the guest will pay
           const inclusivePrice = Math.round(basePrice * 1.26);
 
+=======
+          // Use price_per_night from API which already handles overrides
+          const price = room.price_per_night || 5000;
+>>>>>>> A
           return {
             id: room.id,
             roomNumber: room.room_number || room.roomNumber,

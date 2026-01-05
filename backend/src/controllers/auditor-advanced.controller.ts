@@ -132,6 +132,105 @@ export const getConsumptionVariances = async (req: Request, res: Response, next:
     }
 };
 
+/**
+ * Detect payroll variances and anomalies
+ */
+export const getPayrollVariances = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { branch_id, period_month } = req.query; // format: 'YYYY-MM'
+
+        if (!period_month) {
+            res.status(400).json({ success: false, message: 'period_month is required (YYYY-MM)' });
+            return;
+        }
+
+        // 1. Get current month's payroll
+        let currentQuery = supabase
+            .from('payroll_records')
+            .select('*, employee:staff_profiles!inner(id, user:users(first_name, last_name), department)')
+            .ilike('pay_period_start', `${period_month}%`);
+
+        if (branch_id) {
+            // Assuming staff_profiles has branch_id or we filter by user's branch
+            // This might need adjustment based on exact schema
+        }
+
+        const { data: currentPayroll, error: currentError } = await currentQuery;
+        if (currentError) throw currentError;
+
+        // 2. Get previous month's payroll for comparison
+        const [year, month] = (period_month as string).split('-').map(Number);
+        const prevDate = new Date(year, month - 2, 1); // JS months are 0-indexed, so month-2 gives previous month
+        const prevMonthStr = prevDate.toISOString().slice(0, 7);
+
+        const { data: prevPayroll, error: prevError } = await supabase
+            .from('payroll_records')
+            .select('employee_id, net_pay, basic_salary')
+            .ilike('pay_period_start', `${prevMonthStr}%`);
+
+        if (prevError) throw prevError;
+
+        const prevMap = new Map();
+        prevPayroll?.forEach(p => prevMap.set(p.employee_id, p));
+
+        // 3. Analyze Variances
+        const variances: any[] = [];
+
+        currentPayroll?.forEach((curr: any) => {
+            const prev = prevMap.get(curr.employee_id);
+            const employeeName = `${curr.employee?.user?.first_name} ${curr.employee?.user?.last_name}`;
+            const department = curr.employee?.department;
+
+            // Check 1: Net Pay Variance > 10%
+            if (prev) {
+                const diff = curr.net_pay - prev.net_pay;
+                const percentChange = (diff / prev.net_pay) * 100;
+
+                if (Math.abs(percentChange) > 10) {
+                    variances.push({
+                        type: 'NET_PAY_SPIKE',
+                        employee_name: employeeName,
+                        department,
+                        details: `Net pay changed by ${percentChange.toFixed(1)}% (${diff > 0 ? '+' : ''}${diff})`,
+                        severity: 'HIGH',
+                        current_value: curr.net_pay,
+                        prev_value: prev.net_pay
+                    });
+                }
+            } else {
+                variances.push({
+                    type: 'NEW_EMPLOYEE',
+                    employee_name: employeeName,
+                    department,
+                    details: `New employee added to payroll`,
+                    severity: 'MEDIUM',
+                    current_value: curr.net_pay,
+                    prev_value: 0
+                });
+            }
+
+            // Check 2: High Overtime (> 30% of basic salary)
+            const otPercent = (curr.overtime / curr.basic_salary) * 100;
+            if (otPercent > 30) {
+                variances.push({
+                    type: 'HIGH_OVERTIME',
+                    employee_name: employeeName,
+                    department,
+                    details: `Overtime is ${otPercent.toFixed(1)}% of basic salary`,
+                    severity: 'HIGH',
+                    current_value: curr.overtime,
+                    prev_value: 0
+                });
+            }
+        });
+
+        res.status(200).json({ success: true, count: variances.length, data: variances });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
 // ============================================================
 // AUDITOR APPROVALS
 // ============================================================

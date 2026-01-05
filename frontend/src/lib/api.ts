@@ -235,14 +235,6 @@ export const storeAPI = {
     if (params?.to_date) query.append('to_date', params.to_date);
     return fetchAPI<any>(`/store/stock-movements?${query}`);
   },
-  updateBranchStock: (data: { item_sku: string; quantity: number; movement_type?: string; notes?: string }) =>
-    fetchAPI<any>('/store/branch-stock/adjustment', { method: 'POST', body: JSON.stringify(data) }),
-  recordStockOut: (data: { item_sku: string; quantity: number; movement_type?: string; reason?: string; notes?: string }) =>
-    fetchAPI<any>('/store/branch-stock/out', { method: 'POST', body: JSON.stringify(data) }),
-  getLowStockItems: (branchId?: number) => {
-    const query = branchId ? `?branch_id=${branchId}` : '';
-    return fetchAPI<any>(`/store/branch-stock/low${query}`);
-  },
 
   // Stock Requests
   createStockRequest: (data: {
@@ -420,22 +412,6 @@ export const storeAPI = {
     if (params?.to_date) query.append('to_date', params.to_date);
     return fetchAPI<any>(`/store/kitchen-usage/summary?${query}`);
   },
-
-  // Kitchen Usage (New Methods)
-  getTrackableItems: () => fetchAPI<any>('/store/kitchen-usage/trackable-items'),
-  createUsageRecord: (data: { item_sku: string; quantity: number; accountability_id?: string; notes?: string }) =>
-    fetchAPI<any>('/store/kitchen-usage', { method: 'POST', body: JSON.stringify(data) }),
-  recordUsageEntry: (usageRecordId: string, data: {
-    usage_type: 'CONSUMED' | 'SPOILT' | 'LOST' | 'DAMAGED' | 'EXPIRED' | 'RETURNED';
-    quantity: number;
-    notes?: string;
-    responsible_staff_id?: string;
-    responsible_staff_name?: string;
-  }) =>
-    fetchAPI<any>(`/store/kitchen-usage/${usageRecordId}/entries`, { method: 'POST', body: JSON.stringify(data) }),
-  getUsageEntries: (usageRecordId: string) => fetchAPI<any>(`/store/kitchen-usage/${usageRecordId}/entries`),
-  closeUsageRecord: (usageRecordId: string) => fetchAPI<any>(`/store/kitchen-usage/${usageRecordId}/close`, { method: 'PUT' }),
-  getKitchenUsageStaff: () => fetchAPI<any>('/store/kitchen-usage/staff'),
 };
 
 // =====================================================
@@ -678,12 +654,10 @@ export const roomsAPI = {
     // Transform frontend format to backend expected format
     const backendData = {
       room_number: data.roomNumber || data.room_number,
-      room_type: data.roomType || data.room_type || data.type,  // Backend requires room_type name
       type_id: data.typeId || data.type_id,
       floor: data.floor,
       status: data.status,
       base_price: data.basePrice || data.base_price,
-      rate_per_night: data.ratePerNight || data.rate_per_night || data.basePrice || data.base_price,
       description: data.description,
       amenities: data.amenities,
       max_occupancy: data.maxOccupancy || data.max_occupancy,
@@ -692,8 +666,7 @@ export const roomsAPI = {
       view: data.view,
       accessible: data.accessible,
       smoking: data.smoking,
-      branch_id: data.branchId || data.branch_id,
-      capacity: data.capacity
+      branch_id: data.branchId || data.branch_id
     };
     return fetchAPI<any>('/branch-operations/rooms', { method: 'POST', body: JSON.stringify(backendData) });
   },
@@ -1052,6 +1025,7 @@ export const bookingsAPI = {
           room_type: room.type?.name || room.room_type,
           room_type_id: room.room_type_id,
           price_per_night: room.price_override || room.type?.base_price || 0,
+          price_override: room.price_override,
           max_occupancy: room.type?.max_occupancy || room.max_occupancy || 0,
           status: room.status,
           type: room.type
@@ -1759,7 +1733,7 @@ export const restaurantAPI = {
   generateReceipt: (orderId: string) => fetchAPI<any>(`/restaurant/orders/${orderId}/receipt`),
   processPayment: (orderId: string, data: any) => fetchAPI<any>(`/restaurant/orders/${orderId}/payment`, { method: 'POST', body: JSON.stringify(data) }),
   generateBill: (receiptData: any) => {
-    return fetch(`${PYTHON_API_URL}/api/receipts/generate`, {
+    return fetch('http://localhost:5001/api/receipts/generate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2317,6 +2291,14 @@ export const auditAPI = {
     if (params?.entity_id) query.append('entity_id', params.entity_id);
     return fetchAPI<any>(`/audit/approvals?${query}`);
   },
+
+  // Payroll Audit
+  getPayrollVariances: (params: { branch_id?: number; period_month: string }) => {
+    const query = new URLSearchParams();
+    if (params.branch_id) query.append('branch_id', String(params.branch_id));
+    query.append('period_month', params.period_month);
+    return fetchAPI<any>(`/audit/payroll/variances?${query}`);
+  }
 };
 
 // =====================================================

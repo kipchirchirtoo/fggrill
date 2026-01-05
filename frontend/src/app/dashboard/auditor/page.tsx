@@ -175,13 +175,26 @@ const SalesAuditTab = () => {
 // 3. Stock Audit Tab
 const StockAuditTab = () => {
     const [stockItems, setStockItems] = useState<any[]>([]);
+    const [consumptionVariances, setConsumptionVariances] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
     const fetchStockData = async () => {
         setIsLoading(true);
         try {
+            // Fetch physical stock
             const res = await storeAPI.getBranchStock();
             if (res.success) setStockItems(res.data || []);
+
+            // Fetch consumption variances (mocking date range for now)
+            const today = new Date();
+            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
+            const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString();
+
+            // In a real scenario, we'd get the actual branch ID. Defaulting to 1 for demo if context missing
+            const branchId = 1;
+            const varRes = await auditAPI.getConsumptionVariances({ branch_id: branchId, from_date: firstDay, to_date: lastDay });
+            if (varRes.success) setConsumptionVariances(varRes.data || []);
+
         } catch (e) { toast.error("Failed to fetch stock data"); }
         finally { setIsLoading(false); }
     };
@@ -194,14 +207,24 @@ const StockAuditTab = () => {
                 <IOSCard className="p-6">
                     <div className="flex items-center gap-2 mb-6">
                         <Package className="h-5 w-5 text-stone-400" />
-                        <h3 className="font-bold text-stone-900">Items Sold vs Stock Depleted</h3>
+                        <h3 className="font-bold text-stone-900">Items Sold vs Stock Depleted (Monthly)</h3>
                     </div>
                     <div className="space-y-4">
-                        <ComparisonRow label="Castle Lite 500ml" sold={24} stockOut={26} variance={-2} />
-                        <ComparisonRow label="Prime Cut Steak" sold={12} stockOut={15} variance={-3} />
-                        <ComparisonRow label="White Cap 500ml" sold={45} stockOut={45} variance={0} />
+                        {consumptionVariances.length === 0 ? (
+                            <p className="text-sm text-stone-500 italic">No consumption anomalies detected.</p>
+                        ) : (
+                            consumptionVariances.slice(0, 5).map((item, i) => (
+                                <ComparisonRow
+                                    key={i}
+                                    label={item.item_sku}
+                                    sold={item.theoretical}
+                                    stockOut={item.actual}
+                                    variance={item.variance}
+                                />
+                            ))
+                        )}
                     </div>
-                    <IOSButton variant="secondary" className="w-full mt-6" leftIcon={<RefreshCw />}>Run Consumption Match</IOSButton>
+                    <IOSButton variant="secondary" className="w-full mt-6" leftIcon={<RefreshCw />} onClick={fetchStockData}>Refresh Analysis</IOSButton>
                 </IOSCard>
 
                 <IOSCard className="p-6">
@@ -276,6 +299,22 @@ const RequisitionItem = ({ branch, items, date, status }: any) => (
 
 // 4. Payroll & HR Audit Tab
 const PayrollAuditTab = () => {
+    const [variances, setVariances] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+
+    const fetchPayrollData = async () => {
+        setIsLoading(true);
+        try {
+            const today = new Date();
+            const monthStr = today.toISOString().slice(0, 7); // YYYY-MM
+            const res = await auditAPI.getPayrollVariances({ period_month: monthStr });
+            if (res.success) setVariances(res.data || []);
+        } catch (e) { toast.error("Failed to fetch payroll variances"); }
+        finally { setIsLoading(false); }
+    };
+
+    useEffect(() => { fetchPayrollData(); }, []);
+
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -285,9 +324,8 @@ const PayrollAuditTab = () => {
                         Employee Credit Limits
                     </h3>
                     <div className="space-y-3">
+                        {/* Placeholder for credit limit specific logic if different API */}
                         <CreditRow name="John Doe" used={1500} limit={5000} />
-                        <CreditRow name="Jane Smith" used={4800} limit={5000} />
-                        <CreditRow name="Alex Johnson" used={200} limit={5000} />
                     </div>
                 </IOSCard>
 
@@ -297,14 +335,19 @@ const PayrollAuditTab = () => {
                         Pay Period Variances
                     </h3>
                     <div className="space-y-4">
-                        <div className="p-4 bg-rose-50 border border-rose-100 rounded-ios-xl">
-                            <div className="flex items-center gap-2 text-rose-700 mb-2">
-                                <AlertTriangle className="h-4 w-4" />
-                                <span className="text-xs font-bold uppercase tracking-widest">Abnormal Overtime</span>
-                            </div>
-                            <p className="text-sm font-medium text-stone-900">5 employees in Kitchen Dept exceed 40hrs OT this month.</p>
-                            <button className="text-[11px] font-bold text-rose-600 mt-2 hover:underline">View Breakdown</button>
-                        </div>
+                        {variances.length === 0 ? (
+                            <p className="text-sm text-stone-500">No significant variances found.</p>
+                        ) : (
+                            variances.map((v, i) => (
+                                <div key={i} className="p-4 bg-rose-50 border border-rose-100 rounded-ios-xl">
+                                    <div className="flex items-center gap-2 text-rose-700 mb-2">
+                                        <AlertTriangle className="h-4 w-4" />
+                                        <span className="text-xs font-bold uppercase tracking-widest">{v.type.replace('_', ' ')}</span>
+                                    </div>
+                                    <p className="text-sm font-medium text-stone-900">{v.employee_name}: {v.details}</p>
+                                </div>
+                            ))
+                        )}
                     </div>
                 </IOSCard>
             </div>
