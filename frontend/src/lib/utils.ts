@@ -83,9 +83,3 @@ export const formatPhoneNumber = (phone: string) => {
   }
   return phone
 }
-
-export const getRoomImageUrl = (path: string | undefined | null) => {
-  if (!path) return '/fggallery/294216767_538857271357927_3834486940661836835_n.jpeg'; // Fallback
-  if (path.startsWith('http')) return path;
-  return `https://utsvlihpudfraxzcmtle.supabase.co/storage/v1/object/public/room-images/${path}`;
-}

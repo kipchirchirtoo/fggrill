@@ -31,7 +31,6 @@ import {
 } from 'lucide-react';
 import { format, addDays } from 'date-fns';
 import { toast } from 'sonner';
-import { getRoomImageUrl } from '@/lib/utils';
 
 interface RoomType {
   id: string;
@@ -152,22 +151,23 @@ export default function HomePage() {
           const roomType = room.type || {};
 
           // Use price_override if set, otherwise use room type's base_price
-          const basePrice = room.price_override || roomType.base_price || 0;
+          const basePrice = room.price_override || roomType.base_price || 5000;
 
-          // Pricing strategy: Price already includes all taxes
-          const inclusivePrice = basePrice;
+          // Calculate inclusive price (matching backend calculatePricing: 16% VAT + 10% Service Charge)
+          // Pricing strategy: Frontend should show the same total the guest will pay
+          const inclusivePrice = Math.round(basePrice * 1.26);
 
           return {
             id: room.id,
             roomNumber: room.room_number || room.roomNumber,
-            type: roomType,
+            type: roomType, // Keep the object for component access
             capacity: roomType.max_occupancy || 2,
-            pricePerNight: inclusivePrice,
+            pricePerNight: inclusivePrice, // Show inclusive price to avoid mismatch
             basePrice: basePrice,
             amenities: room.amenities || roomType.amenities || [],
             floor: room.floor,
-            images: room.image_url ? [getRoomImageUrl(room.image_url)] : (roomType.images && roomType.images.length > 0 ? roomType.images.map((img: string) => getRoomImageUrl(img)) : []),
-            description: room.description || roomType.description || 'Experience comfort and style in our well-appointed rooms.'
+            images: room.image_url ? [room.image_url] : (roomType.images || []),
+            description: roomType.description || ''
           };
         });
 
@@ -492,13 +492,8 @@ export default function HomePage() {
                         )}
                       </>
                     ) : (
-                      <div className="absolute inset-0">
-                        <img
-                          src={galleryImages[(index + 4) % galleryImages.length].src}
-                          alt="Room preview"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                        <div className="absolute inset-0 bg-black/10" />
+                      <div className="absolute inset-0 bg-gradient-to-br from-amber-100 to-stone-200 flex items-center justify-center">
+                        <Bed className="w-16 h-16 text-stone-400" />
                       </div>
                     )}
                     <div className="absolute top-4 left-4">
@@ -519,22 +514,12 @@ export default function HomePage() {
                     <h3 className="text-xl font-semibold text-stone-900 mb-2">
                       {getRoomTypeName(room)}
                     </h3>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-stone-500 mb-4">
-                      <span className="flex items-center gap-1.5 bg-stone-100 px-2 py-1 rounded-md">
-                        <Users className="w-4 h-4 text-amber-600" />
-                        {room.capacity || 2} Guests
+                    <div className="flex items-center gap-4 text-sm text-stone-500 mb-4">
+                      <span className="flex items-center gap-1">
+                        <Users className="w-4 h-4" />
+                        Up to {room.capacity || 2} guests
                       </span>
-                      {room.amenities && room.amenities.slice(0, 3).map((amenity: string, i: number) => (
-                        <span key={i} className="flex items-center gap-1.5 bg-stone-100 px-2 py-1 rounded-md">
-                          <Check className="w-3 h-3 text-green-600" />
-                          {amenity}
-                        </span>
-                      ))}
                     </div>
-
-                    <p className="text-stone-500 text-sm line-clamp-2 mb-6">
-                      {room.description}
-                    </p>
 
                     <div className="flex items-center justify-between pt-4 border-t border-stone-100">
                       <div>
@@ -1170,31 +1155,24 @@ export default function HomePage() {
                 {/* Images Gallery */}
                 <div className="mb-6">
                   {(() => {
-                    // Collect all possible images
-                    const roomImages = selectedRoom.images || [];
-                    const typeImages = (typeof selectedRoom.type === 'object' ? (selectedRoom.type as any).images : []) || [];
-                    const allImages = [...roomImages, ...typeImages].map(img => getRoomImageUrl(img));
+                    const images = selectedRoom.images ||
+                      (typeof selectedRoom.type === 'object' ? selectedRoom.type?.images : []);
 
-                    // Filter out duplicates and invalid paths
-                    const uniqueImages = Array.from(new Set(allImages)).filter(Boolean);
-
-                    return uniqueImages.length > 0 ? (
+                    return images && images.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {uniqueImages.map((image: string, index: number) => (
-                          <div key={index} className="aspect-[4/3] rounded-lg overflow-hidden group/img relative">
+                        {images.map((image: string, index: number) => (
+                          <div key={index} className="aspect-[4/3] rounded-lg overflow-hidden">
                             <img
                               src={image}
                               alt={`${getRoomTypeName(selectedRoom)} - Image ${index + 1}`}
-                              className="w-full h-full object-cover transition-transform duration-500 group-hover/img:scale-110"
+                              className="w-full h-full object-cover"
                             />
-                            <div className="absolute inset-0 bg-black/5" />
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="aspect-[16/9] bg-gradient-to-br from-amber-50 to-stone-100 rounded-2xl flex flex-col items-center justify-center border-2 border-dashed border-stone-200">
-                        <Bed className="w-16 h-16 text-stone-300 mb-2" />
-                        <p className="text-stone-400 text-sm">No specific images for this room</p>
+                      <div className="aspect-[4/3] bg-gradient-to-br from-amber-100 to-stone-200 rounded-lg flex items-center justify-center">
+                        <Bed className="w-16 h-16 text-stone-400" />
                       </div>
                     );
                   })()}

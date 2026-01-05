@@ -45,7 +45,7 @@ router.put('/:id/preferences',
 );
 
 router.delete('/:id',
-  authorize([UserRole.SUPER_ADMIN]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST]),
   deleteGuest
 );
 

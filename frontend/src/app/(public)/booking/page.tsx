@@ -20,7 +20,7 @@ import {
   MapPin
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatNumber, getRoomImageUrl } from '@/lib/utils';
+import { formatNumber } from '@/lib/utils';
 import { API_URL } from '@/lib/config';
 
 function BookingContent() {
@@ -71,15 +71,14 @@ function BookingContent() {
 
         // Map snake_case to camelCase
         const basePrice = room.price_override || room.type?.base_price || 0;
-        const inclusivePrice = basePrice; // Already includes taxes
+        const inclusivePrice = Math.round(basePrice * 1.26);
 
         setRoomDetails({
           ...room,
           roomNumber: room.room_number,
           basePrice: basePrice,
           pricePerNight: inclusivePrice,
-          type: room.type?.name || 'Standard',
-          image_url: room.image_url ? getRoomImageUrl(room.image_url) : (room.type?.images?.[0] ? getRoomImageUrl(room.type.images[0]) : null)
+          type: room.type?.name || 'Standard'
         });
       }
     } catch (error) {
@@ -213,12 +212,19 @@ function BookingContent() {
           } else {
             throw new Error('No authorization URL received from Paystack');
           }
+        } else if (paymentMethod === 'pay_at_hotel') {
+          toast.success('Booking confirmed! We look forward to seeing you.');
+          const confirmationNumber = bookingData.data.confirmationNumber || bookingData.data.booking?.confirmation_number;
+          const bookingId = bookingData.data.bookingId || bookingData.data.booking?.id;
+          router.push(`/booking/confirmation?confirmationNumber=${confirmationNumber || ''}&bookingId=${bookingId || ''}&email=${encodeURIComponent(formData.email)}`);
+          return;
         }
 
         // For other payment methods or if no redirect needed
         setTimeout(() => {
           const bookingId = bookingData.data.bookingId || bookingData.data.booking?.id;
-          router.push(`/booking/confirmation?bookingId=${bookingId}`);
+          const confirmationNumber = bookingData.data.confirmationNumber || bookingData.data.booking?.confirmation_number;
+          router.push(`/booking/confirmation?bookingId=${bookingId || ''}&confirmationNumber=${confirmationNumber || ''}`);
         }, 2000);
       } else {
         throw new Error(paymentData.message || 'Failed to initiate payment');
@@ -534,25 +540,35 @@ function BookingContent() {
                   <div className="pt-4 border-t border-stone-200 space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-stone-600">
-                        Stay Total ({nights} night{nights !== 1 ? 's' : ''})
+                        Room Rate ({nights} night{nights !== 1 ? 's' : ''})
                       </span>
                       <span className="font-medium text-stone-900">
-                        KES {formatNumber(total)}
+                        KES {formatNumber((roomDetails?.basePrice || 0) * nights)}
                       </span>
                     </div>
-                    <div className="flex justify-between text-[11px] text-stone-400 italic">
-                      <span>Includes 16% VAT & 10% Service Charge</span>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-stone-600">VAT (16%)</span>
+                      <span className="font-medium text-stone-900">
+                        KES {formatNumber(Math.round((roomDetails?.basePrice || 0) * nights * 0.16))}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-stone-600">Service Charge (10%)</span>
+                      <span className="font-medium text-stone-900">
+                        KES {formatNumber(Math.round((roomDetails?.basePrice || 0) * nights * 0.10))}
+                      </span>
                     </div>
                   </div>
 
                   {/* Total */}
                   <div className="pt-4 border-t border-stone-200">
                     <div className="flex justify-between items-center">
-                      <span className="text-base font-semibold text-stone-900">Amount Due</span>
+                      <span className="text-base font-semibold text-stone-900">Total</span>
                       <span className="text-2xl font-bold text-stone-900">
                         KES {formatNumber(total)}
                       </span>
                     </div>
+                    <p className="text-xs text-stone-500 mt-1 text-right">VAT inclusive</p>
                   </div>
 
                   {/* Submit Button - Desktop */}

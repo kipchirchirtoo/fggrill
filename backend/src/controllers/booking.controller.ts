@@ -416,7 +416,7 @@ export const getAvailableRooms = async (
       // Continue with empty booked IDs if there's an error
     }
 
-    const bookedIds = (booked || []).map(b => b.room_id).filter(Boolean);
+    const bookedIds = (booked || []).map((b: { room_id: string }) => b.room_id).filter(Boolean);
 
     // Find available rooms
     // Only show rooms that are:

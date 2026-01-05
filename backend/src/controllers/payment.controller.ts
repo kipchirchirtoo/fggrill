@@ -410,12 +410,32 @@ export const mpesaCallback = async (
         .from('reservations')
         .update({
           deposit_paid: true,
-          deposit_paid_at: new Date().toISOString()
+          deposit_paid_at: new Date().toISOString(),
+          status: 'confirmed'
         })
         .eq('id', payment.booking_id);
 
       // Send booking confirmation email
       await sendBookingConfirmationEmail(payment.booking_id);
+
+      // Record payment in folio
+      try {
+        const { Folio } = await import('../models/Folio');
+        const folio = await Folio.findByReservationId(payment.booking_id);
+        if (folio) {
+          await folio.addTransaction({
+            type: 'payment',
+            category: 'Accommodation',
+            amount: payment.amount,
+            description: `M-Pesa Payment (${metadata.mpesaReceiptNumber || 'Success'})`,
+            referenceNumber: payment.reference,
+            performedBy: 'SYSTEM'
+          });
+          logger.info(`Folio transaction added for M-Pesa booking ${payment.booking_id}`);
+        }
+      } catch (folioErr) {
+        logger.error('Failed to update folio after M-Pesa payment:', folioErr);
+      }
     }
 
     logger.info(`Payment ${payment.id} updated to status: ${status}`);
@@ -565,12 +585,32 @@ export const paystackWebhook = async (
             .from('reservations')
             .update({
               deposit_paid: true,
-              deposit_paid_at: new Date().toISOString()
+              deposit_paid_at: new Date().toISOString(),
+              status: 'confirmed'
             })
             .eq('id', payment.booking_id);
 
           // Send booking confirmation email
           await sendBookingConfirmationEmail(payment.booking_id);
+
+          // Record payment in folio
+          try {
+            const { Folio } = await import('../models/Folio');
+            const folio = await Folio.findByReservationId(payment.booking_id);
+            if (folio) {
+              await folio.addTransaction({
+                type: 'payment',
+                category: 'Accommodation',
+                amount: payment.amount,
+                description: `Paystack Card Payment`,
+                referenceNumber: payment.reference,
+                performedBy: 'SYSTEM'
+              });
+              logger.info(`Folio transaction added for Paystack booking ${payment.booking_id}`);
+            }
+          } catch (folioErr) {
+            logger.error('Failed to update folio after Paystack payment:', folioErr);
+          }
         }
 
         logger.info(`Paystack payment ${payment.id} completed successfully`);

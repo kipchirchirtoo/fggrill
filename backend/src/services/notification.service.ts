@@ -195,13 +195,20 @@ class NotificationService {
       const { data, error } = await query;
 
       if (error) {
-        logger.error('Error fetching notifications:', error);
+        logger.error(`Supabase error fetching notifications for user ${userId}:`, {
+          message: error.message,
+          code: error.code,
+          details: error.details
+        });
         return [];
       }
 
       return data || [];
-    } catch (error) {
-      logger.error('Exception fetching notifications:', error);
+    } catch (error: any) {
+      logger.error(`Unexpected exception fetching notifications for user ${userId}:`, {
+        message: error.message,
+        stack: error.stack
+      });
       return [];
     }
   }
@@ -248,15 +255,24 @@ class NotificationService {
       if (error) {
         // Table might not exist yet - that's okay
         if (error.code === '42P01') {
+          logger.warn(`Notifications table does not exist when fetching count for user ${userId}`);
           return 0;
         }
-        logger.error('Error counting notifications:', error.message);
+        logger.error(`Supabase error counting notifications for user ${userId}:`, {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        });
         return 0;
       }
 
       return count || 0;
-    } catch (error) {
-      logger.error('Exception counting notifications:', error);
+    } catch (error: any) {
+      logger.error(`Unexpected exception counting notifications for user ${userId}:`, {
+        message: error.message,
+        stack: error.stack
+      });
       return 0;
     }
   }
@@ -268,9 +284,9 @@ class NotificationService {
     try {
       const { error } = await supabase
         .from('notifications')
-        .update({ 
-          is_read: true, 
-          read_at: new Date().toISOString() 
+        .update({
+          is_read: true,
+          read_at: new Date().toISOString()
         })
         .eq('id', notificationId)
         .or(`user_id.eq.${userId},user_id.is.null`);
@@ -306,9 +322,9 @@ class NotificationService {
 
       const { data, error } = await supabase
         .from('notifications')
-        .update({ 
-          is_read: true, 
-          read_at: new Date().toISOString() 
+        .update({
+          is_read: true,
+          read_at: new Date().toISOString()
         })
         .eq('is_read', false)
         .or(`user_id.eq.${userId},role.eq.${userData.role},branch_id.eq.${userData.branch_id}`)
