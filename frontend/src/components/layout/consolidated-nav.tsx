@@ -1090,21 +1090,6 @@ export function ConsolidatedNav() {
         />
       </NavGroup>
 
-      <NavGroup label="Inventory" icon={Package}>
-        <NavItem
-          href="/dashboard/branch-manager/stock"
-          icon={Package}
-          label="Stock"
-          active={pathname === '/dashboard/branch-manager/stock'}
-        />
-        <NavItem
-          href="/dashboard/branch-manager/stock-out"
-          icon={ArrowDownUp}
-          label="Stock Out"
-          active={pathname === '/dashboard/branch-manager/stock-out'}
-        />
-      </NavGroup>
-
       <NavGroup label="Staff" icon={Users}>
         <NavItem
           href="/dashboard/branch-manager/staff"

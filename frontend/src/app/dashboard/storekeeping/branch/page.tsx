@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
@@ -112,7 +114,7 @@ export default function BranchStorekeeperPage() {
   const [selectedDispatch, setSelectedDispatch] = useState<IncomingDispatch | null>(null);
 
   // Form states
-  const [requestItems, setRequestItems] = useState<any[]>([]);
+  const [requestItems, setRequestItems] = useState<{ item_sku: string; requested_quantity: number }[]>([]);
   const [requestReason, setRequestReason] = useState('');
   const [requestType, setRequestType] = useState('ROUTINE');
   const [requestPriority, setRequestPriority] = useState('NORMAL');
@@ -145,15 +147,6 @@ export default function BranchStorekeeperPage() {
   });
   const [branchStaff, setBranchStaff] = useState<any[]>([]);
 
-  // Stock Update state
-  const [stockUpdates, setStockUpdates] = useState<Record<string, number>>({});
-  const [updateNotes, setUpdateNotes] = useState('');
-
-  // Request form
-  const [requestItems, setRequestItems] = useState<{ item_sku: string; requested_quantity: number }[]>([]);
-  const [requestType, setRequestType] = useState('ROUTINE');
-  const [requestPriority, setRequestPriority] = useState('NORMAL');
-  const [requestReason, setRequestReason] = useState('');
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -191,7 +184,7 @@ export default function BranchStorekeeperPage() {
       }
 
       // Calculate stats locally if dashboard endpoint isn't available or to ensure consistency
-      const lowStock = (stockData.data || []).filter((s: any) => s.quantity <= s.reorder_level).length;
+      const lowStock = (stockData.data || []).filter((s: BranchStock) => s.quantity <= (s.reorder_level || 10)).length;
       setStats({
         totalItems: stockData.data?.length || 0,
         lowStock,
@@ -356,9 +349,9 @@ export default function BranchStorekeeperPage() {
   };
 
   const addItemToRequest = (item: any) => {
-    const existing = requestItems.find(i => i.item_sku === item.sku);
+    const existing = requestItems.find((i: any) => i.item_sku === item.sku);
     if (existing) {
-      setRequestItems(requestItems.map(i =>
+      setRequestItems(requestItems.map((i: any) =>
         i.item_sku === item.sku
           ? { ...i, requested_quantity: i.requested_quantity + 1 }
           : i
@@ -380,7 +373,7 @@ export default function BranchStorekeeperPage() {
     }
   };
 
-  const filteredStock = branchStock.filter(stock =>
+  const filteredStock = branchStock.filter((stock: BranchStock) =>
     searchTerm === '' ||
     stock.item_sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
     stock.item?.item_name?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -597,7 +590,7 @@ export default function BranchStorekeeperPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {myRequests.map((request) => (
+                      {myRequests.map((request: any) => (
                         <tr key={request.id} className="hover:bg-gray-50">
                           <td className="px-4 py-4 font-mono text-sm">{request.request_number}</td>
                           <td className="px-4 py-4">{request.request_type}</td>
@@ -633,7 +626,7 @@ export default function BranchStorekeeperPage() {
             {activeTab === 'incoming' && (
               <div className="p-6">
                 <div className="space-y-4">
-                  {incomingDispatches.map((dispatch) => (
+                  {incomingDispatches.map((dispatch: IncomingDispatch) => (
                     <IOSCard key={dispatch.id} className="p-4">
                       <div className="flex items-center justify-between">
                         <div>
@@ -688,58 +681,56 @@ export default function BranchStorekeeperPage() {
                   </IOSButton>
                 </div>
 
-                <div className="space-y-4">
-                  {usageRecords.length > 0 ? (
-                    usageRecords.map((record) => (
-                      <IOSCard key={record.id} className="p-4 border-[rgba(60,60,67,0.12)]">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className="p-3 bg-gray-50 rounded-xl">
-                              <Utensils className="h-6 w-6 text-[#3C3C43]" />
-                            </div>
-                            <div>
-                              <p className="font-bold">{record.item?.item_name || record.item_sku}</p>
-                              <div className="flex gap-4 mt-1">
-                                <span className="text-xs text-gray-500 flex items-center gap-1">
-                                  <Package className="h-3 w-3" /> Issued: {record.received_quantity}
-                                </span>
-                                <span className="text-xs text-gray-500 flex items-center gap-1">
-                                  <User className="h-3 w-3" /> Staff: {record.responsible_staff_name || 'Not assigned'}
-                                </span>
-                                <span className="text-xs text-gray-500 flex items-center gap-1">
-                                  <Calendar className="h-3 w-3" /> Date: {new Date(record.created_at).toLocaleDateString()}
-                                </span>
-                              </div>
-                            </div>
+                {usageRecords.length > 0 ? (
+                  usageRecords.map((record: any) => (
+                    <IOSCard key={record.id} className="p-4 border-[rgba(60,60,67,0.12)]">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 bg-gray-50 rounded-xl">
+                            <Utensils className="h-6 w-6 text-[#3C3C43]" />
                           </div>
-                          <div className="text-right">
-                            <IOSBadge className={record.status === 'OPEN' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>
-                              {record.status}
-                            </IOSBadge>
-                            <div className="mt-2">
-                              <IOSButton variant="ghost" size="sm" onClick={() => router.push(`/dashboard/storekeeping/branch/usage/${record.id}`)}>
-                                View Details
-                              </IOSButton>
+                          <div>
+                            <p className="font-bold">{record.item?.item_name || record.item_sku}</p>
+                            <div className="flex gap-4 mt-1">
+                              <span className="text-xs text-gray-500 flex items-center gap-1">
+                                <Package className="h-3 w-3" /> Issued: {record.received_quantity}
+                              </span>
+                              <span className="text-xs text-gray-500 flex items-center gap-1">
+                                <User className="h-3 w-3" /> Staff: {record.responsible_staff_name || 'Not assigned'}
+                              </span>
+                              <span className="text-xs text-gray-500 flex items-center gap-1">
+                                <Calendar className="h-3 w-3" /> Date: {new Date(record.created_at).toLocaleDateString()}
+                              </span>
                             </div>
                           </div>
                         </div>
-                      </IOSCard>
-                    ))
-                  ) : (
-                    <div className="text-center py-20 border-2 border-dashed rounded-xl">
-                      <Utensils className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                      <p className="text-gray-500">No active kitchen usage records.</p>
-                      <p className="text-sm text-gray-400 mt-1">Issue items to the kitchen to begin tracking.</p>
-                      <IOSButton
-                        variant="ghost"
-                        className="mt-4"
-                        onClick={() => setIsUsageModalOpen(true)}
-                      >
-                        Issue Now
-                      </IOSButton>
-                    </div>
-                  )}
-                </div>
+                        <div className="text-right">
+                          <IOSBadge className={record.status === 'OPEN' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>
+                            {record.status}
+                          </IOSBadge>
+                          <div className="mt-2">
+                            <IOSButton variant="ghost" size="sm" onClick={() => router.push(`/dashboard/storekeeping/branch/usage/${record.id}`)}>
+                              View Details
+                            </IOSButton>
+                          </div>
+                        </div>
+                      </div>
+                    </IOSCard>
+                  ))
+                ) : (
+                  <div className="text-center py-20 border-2 border-dashed rounded-xl">
+                    <Utensils className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                    <p className="text-gray-500">No active kitchen usage records.</p>
+                    <p className="text-sm text-gray-400 mt-1">Issue items to the kitchen to begin tracking.</p>
+                    <IOSButton
+                      variant="ghost"
+                      className="mt-4"
+                      onClick={() => setIsUsageModalOpen(true)}
+                    >
+                      Issue Now
+                    </IOSButton>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1298,7 +1289,7 @@ export default function BranchStorekeeperPage() {
                       rows={2}
                       placeholder="Comment on condition, delivery person, etc."
                       value={deliveryNotes}
-                      onChange={(e) => setDeliveryNotes(e.target.value)}
+                      onChange={(e: any) => setDeliveryNotes(e.target.value)}
                     />
                   </div>
                 </>
