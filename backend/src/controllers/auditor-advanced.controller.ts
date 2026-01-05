@@ -19,11 +19,16 @@ export const getConsumptionConfigs = async (req: Request, res: Response, next: N
                 inventory_item:simple_items!inner(sku, item_name)
             `);
 
-        if (error) throw error;
+        if (error) {
+            logger.warn('audit_config_consumption table error:', error.message);
+            res.status(200).json({ success: true, data: [], message: 'Audit configuration table not found.' });
+            return;
+        }
 
         res.status(200).json({ success: true, data });
     } catch (error) {
-        next(error);
+        logger.error('Unexpected error in getConsumptionConfigs:', error);
+        res.status(200).json({ success: true, data: [] });
     }
 };
 
@@ -86,11 +91,29 @@ export const getConsumptionVariances = async (req: Request, res: Response, next:
         if (salesError) throw salesError;
 
         // 2. Get consumption mapping
-        const { data: mappings, error: mappingError } = await supabase
-            .from('audit_config_consumption')
-            .select('*');
+        let mappings = [];
+        try {
+            const { data, error: mappingError } = await supabase
+                .from('audit_config_consumption')
+                .select('*');
 
-        if (mappingError) throw mappingError;
+            if (mappingError) {
+                logger.warn('audit_config_consumption table missing or inaccessible:', mappingError.message);
+            } else {
+                mappings = data || [];
+            }
+        } catch (err) {
+            logger.warn('Failed to fetch audit_config_consumption:', err);
+        }
+
+        if (mappings.length === 0) {
+            res.status(200).json({
+                success: true,
+                data: [],
+                message: 'No consumption mappings found. Audit tracking might not be configured.'
+            });
+            return;
+        }
 
         // 3. Aggregate mapping
         const theoretical: Record<string, number> = {};

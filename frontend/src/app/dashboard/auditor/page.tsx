@@ -19,27 +19,42 @@ export default function AuditorDashboard() {
     const [isLoading, setIsLoading] = useState(true);
     const [stats, setStats] = useState({ totalAudits: 0, pendingReviews: 0, complianceScore: 92, recentFindings: 0, voidedOrders: 0 });
 
+    const [recentLogs, setRecentLogs] = useState<any[]>([]);
+    const router = useRouter();
+    const { activeBranch } = useBranch();
+
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
+            // Use undefined for branchId if activeBranchId is 0 or null to fetch all
+            const effectiveBranchId = activeBranchId === 0 ? undefined : (activeBranchId || undefined);
+
             const [logsRes, requestsRes, ordersRes] = await Promise.all([
-                auditAPI.getAuditLogs({ branchId: activeBranchId || undefined }),
-                storeAPI.getBranchRequests(activeBranchId ? 'PENDING' : undefined, activeBranchId || undefined),
-                restaurantAPI.getOrders({ status: 'cancelled', branchId: activeBranchId || undefined })
+                auditAPI.getAuditLogs({ branchId: effectiveBranchId }),
+                storeAPI.getBranchRequests('PENDING', effectiveBranchId),
+                restaurantAPI.getOrders({ status: 'cancelled', branchId: effectiveBranchId })
             ]);
 
             if (logsRes.success) {
-                const data = logsRes.data || [];
+                const logs = logsRes.data || [];
                 const pendingCount = requestsRes.success ? (requestsRes.data || []).length : 0;
                 const voidedCount = ordersRes.success ? (ordersRes.data || []).length : 0;
+                const highRisks = logs.filter((l: any) => l.severity === 'high').length;
 
-                setStats(prev => ({
-                    ...prev,
-                    totalAudits: data.length,
+                // Dynamic compliance score calculation
+                const score = logs.length > 0
+                    ? Math.max(60, 100 - (highRisks * 10) - (logs.filter((l: any) => l.severity === 'medium').length * 2))
+                    : 100;
+
+                setStats({
+                    totalAudits: logs.length,
                     pendingReviews: pendingCount,
-                    recentFindings: data.filter((l: any) => l.severity === 'high').length,
+                    complianceScore: Math.round(score),
+                    recentFindings: highRisks,
                     voidedOrders: voidedCount
-                }));
+                });
+
+                setRecentLogs(logs.slice(0, 5));
             }
         } catch (e) {
             console.error("Auditor fetch failed:", e);
@@ -69,8 +84,8 @@ export default function AuditorDashboard() {
     return (
         <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
             <BranchAwareDashboardLayout
-                title="Internal Audit"
-                subtitle="Control and compliance overview"
+                title="Internal Audit Oversight"
+                subtitle={activeBranchId === 0 ? "Viewing all branches" : `Monitoring ${activeBranch?.name || 'Loading...'}`}
                 requireBranchContext={false}
             >
                 <div className="space-y-6">
@@ -81,8 +96,8 @@ export default function AuditorDashboard() {
                             disabled={isLoading}
                             className="btn-secondary"
                         >
-                            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                            <span>Refresh Data</span>
+                            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                            <span>Refresh Audit Data</span>
                         </button>
                     </div>
 
@@ -103,8 +118,8 @@ export default function AuditorDashboard() {
                     <div className="card-elevated p-6">
                         <div className="section-header mb-4">
                             <div>
-                                <h2 className="section-title">Quick Actions</h2>
-                                <p className="section-subtitle">Core audit functions</p>
+                                <h2 className="section-title">Audit Modules</h2>
+                                <p className="section-subtitle">Core compliance tracking</p>
                             </div>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -126,36 +141,42 @@ export default function AuditorDashboard() {
                     <div className="grid lg:grid-cols-2 gap-5">
                         <div className="card-elevated p-5">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-[15px] font-semibold text-stone-900">Risk Map</h3>
+                                <h3 className="text-[15px] font-semibold text-stone-900">Live Risk Indicators</h3>
                             </div>
                             <div className="space-y-3">
-                                <RiskItem title="Voided Orders" value={stats.voidedOrders.toString()} risk={stats.voidedOrders > 5 ? 'high' : 'medium'} />
-                                <RiskItem title="Unconfirmed Deliveries" value="5" risk="medium" />
-                                <RiskItem title="Payroll Variances" value="None" risk="low" />
+                                <RiskItem title="Voided Orders (Today)" value={stats.voidedOrders.toString()} risk={stats.voidedOrders > 5 ? 'high' : stats.voidedOrders > 0 ? 'medium' : 'low'} />
+                                <RiskItem title="Pending Stock Requests" value={stats.pendingReviews.toString()} risk={stats.pendingReviews > 10 ? 'high' : stats.pendingReviews > 0 ? 'medium' : 'low'} />
+                                <RiskItem title="Audit Exceptions" value={stats.recentFindings.toString()} risk={stats.recentFindings > 0 ? 'high' : 'low'} />
                             </div>
                         </div>
 
                         <div className="card-elevated p-5">
-                            <h3 className="text-[15px] font-semibold text-stone-900 mb-4">Recent Activity</h3>
+                            <h3 className="section-title mb-4">Recent Audit Activity</h3>
                             <div className="space-y-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center">
-                                        <RefreshCw className="h-4 w-4 text-stone-500" />
+                                {recentLogs.length > 0 ? (
+                                    recentLogs.map((log: any) => (
+                                        <div key={log.id} className="flex items-start gap-3">
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${log.severity === 'high' ? 'bg-rose-50' : 'bg-stone-100'
+                                                }`}>
+                                                {log.severity === 'high' ? (
+                                                    <AlertTriangle className="h-4 w-4 text-rose-500" />
+                                                ) : (
+                                                    <RefreshCw className="h-4 w-4 text-stone-500" />
+                                                )}
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-medium text-stone-900">{log.action}</p>
+                                                <p className="text-xs text-stone-500">
+                                                    {log.module} • {new Date(log.performed_at).toLocaleTimeString()}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="text-center py-8 text-stone-400">
+                                        No recent activity detected
                                     </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-stone-900">Stock count updated</p>
-                                        <p className="text-xs text-stone-500">Kapsoit Branch • 2 mins ago</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-start gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center">
-                                        <AlertTriangle className="h-4 w-4 text-rose-500" />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-stone-900">High variance detected</p>
-                                        <p className="text-xs text-stone-500">Sales vs Bank • 1 hour ago</p>
-                                    </div>
-                                </div>
+                                )}
                             </div>
                         </div>
                     </div>

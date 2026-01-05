@@ -46,35 +46,44 @@ export function BranchProvider({ children }: { children: ReactNode }) {
   // Calculate the active branch object
   const activeBranch = activeBranchId
     ? branches.find(branch => branch.id === activeBranchId) || null
-    : null;
+    : activeBranchId === 0
+      ? { id: 0, name: 'All Branches', code: 'ALL', location: 'Multiple Locations', is_main_branch: false } as Branch
+      : null;
 
-  // Fetch branches on mount or when user changes
+  // Set initial active branch
   useEffect(() => {
-    if (user) {
-      fetchBranches();
-    }
-  }, [user]);
-
-  // Set the initial active branch from local storage or user's primary branch
-  useEffect(() => {
-    if (branches.length && user) {
+    if (branches.length && user && !activeBranchId) {
       const storedBranchId = localStorage.getItem('activeBranchId');
 
-      if (storedBranchId && isBranchAvailable(parseInt(storedBranchId))) {
+      if (storedBranchId === '0' && canAccessAllBranches(user)) {
+        setActiveBranchId(0);
+      } else if (storedBranchId && isBranchAvailable(parseInt(storedBranchId))) {
         setActiveBranchId(parseInt(storedBranchId));
       } else if (user.branch_id && isBranchAvailable(user.branch_id)) {
-        // Use user's assigned branch
         setActiveBranchId(user.branch_id);
       } else if (userBranches.length > 0) {
-        // Fallback to first accessible branch
         setActiveBranchId(userBranches[0].id);
       }
     }
   }, [branches, user, userBranches]);
 
+  // Helper to check if user can access all branches
+  const canAccessAllBranches = (u: any): boolean => {
+    return ['super_admin', 'general_manager', 'central_operations_manager', 'central_storekeeper', 'accountant', 'auditor', 'branch_operations_manager'].includes(u?.role);
+  };
+
   // Check if a branch is available for the user
   const isBranchAvailable = (branchId: number): boolean => {
+    if (branchId === 0) return canAccessAllBranches(user);
     return userBranches.some(branch => branch.id === branchId);
+  };
+
+  // Set active branch
+  const setActiveBranch = (branchId: number) => {
+    if (isBranchAvailable(branchId) || branchId === 0) {
+      setActiveBranchId(branchId);
+      localStorage.setItem('activeBranchId', branchId.toString());
+    }
   };
 
   // Check if a branch is active
@@ -157,20 +166,19 @@ export function BranchProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Set active branch and store in local storage
-  const setActiveBranch = (branchId: number) => {
-    if (isBranchAvailable(branchId)) {
-      setActiveBranchId(branchId);
-      localStorage.setItem('activeBranchId', branchId.toString());
-    }
-  };
-
   // Check if user has access to branch
   const hasAccessToBranch = (branchId: number): boolean => {
     return userBranches.some(branch => branch.id === branchId);
   };
 
-  // Refresh branches list
+  // Fetch branches on mount or when user changes
+  useEffect(() => {
+    if (user) {
+      fetchBranches();
+    }
+  }, [user]);
+
+  // Refresh branches
   const refreshBranches = async () => {
     return fetchBranches();
   };
@@ -232,25 +240,24 @@ const SINGLE_BRANCH_ROLES = [
   'pos_kitchen',
   'bartender',
   'branch_storekeeper',
+  'pos_kitchen',
+  'kitchen'
 ];
 
 // Branch selector component
 export function BranchSelector() {
-  const { branches, userBranches, activeBranchId, activeBranch, setActiveBranch, isLoading } = useBranch();
+  const { branches, userBranches, activeBranchId, setActiveBranch, isLoading } = useBranch();
   const { user } = useAuth();
 
   if (isLoading) {
     return <div className="h-8 w-48 bg-gray-100 animate-pulse rounded-md"></div>;
   }
 
-  // Use all branches if user has access to multiple, otherwise show current branch
   const branchesToShow = userBranches.length > 0 ? userBranches : branches;
-
-  // Hide for single-branch roles
   const isSingleBranchRole = user?.role && SINGLE_BRANCH_ROLES.includes(user.role);
+  const canSeeAll = ['super_admin', 'general_manager', 'central_operations_manager', 'auditor', 'accountant'].includes(user?.role || '');
 
-  // Hide if: no branches, no user, single-branch role, or only one branch
-  if (branchesToShow.length === 0 || !user || isSingleBranchRole || branchesToShow.length <= 1) {
+  if (branchesToShow.length === 0 || !user || isSingleBranchRole || (branchesToShow.length <= 1 && !canSeeAll)) {
     return null;
   }
 
@@ -258,10 +265,13 @@ export function BranchSelector() {
     <div className="flex items-center space-x-2">
       <label className="text-sm font-medium text-gray-700">Branch:</label>
       <select
-        value={activeBranchId || ''}
+        value={activeBranchId === null ? '' : activeBranchId}
         onChange={(e) => setActiveBranch(parseInt(e.target.value))}
         className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
       >
+        {canSeeAll && (
+          <option value={0}>All Branches</option>
+        )}
         {branchesToShow.map((branch) => (
           <option key={branch.id} value={branch.id}>
             {branch.name}

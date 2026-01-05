@@ -34,7 +34,7 @@ router.post('/export', exportReport);
 router.use(protect);
 
 // Admin and Manager routes
-router.use(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]));
+router.use(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]));
 
 // Dashboard & Analytics
 router.get('/dashboard', getDashboardReport);

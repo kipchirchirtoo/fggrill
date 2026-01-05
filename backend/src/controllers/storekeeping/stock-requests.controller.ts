@@ -21,7 +21,7 @@ export const getStockRequests = async (
         const status = req.query.status as string;
 
         // Allow central roles to fetch all requests (branchId is optional)
-        const isCentralRole = ['super_admin', 'general_manager', 'central_storekeeper', 'central_operations_manager'].includes(req.user?.role || '');
+        const isCentralRole = ['super_admin', 'general_manager', 'central_storekeeper', 'central_operations_manager', 'auditor'].includes(req.user?.role || '');
 
         if (branchId === null) {
             if (!isCentralRole) {

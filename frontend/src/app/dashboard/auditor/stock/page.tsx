@@ -5,7 +5,7 @@ import { BranchAwareDashboardLayout } from '@/components/layout/branch-aware-das
 import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
-import { Package, AlertTriangle, ArrowRight, Check, X, Filter, ArrowLeft, RefreshCw, Box } from 'lucide-react';
+import { Package, AlertTriangle, ArrowRight, Check, X, Filter, ArrowLeft, RefreshCw, Box, Clock, FileText } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { auditAPI, storeAPI } from '@/lib/api';
 import { toast } from 'sonner';
@@ -20,19 +20,25 @@ export default function StockAuditPage() {
     const fetchStockData = async () => {
         setIsLoading(true);
         try {
-            // 1. Fetch Consumption Variances
             const today = new Date();
             const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
             const lastDay = today.toISOString();
 
-            // Use activeBranchId
-            const branchId = activeBranchId || 1; // Default to 1 if not set, though BranchAware should handle it
+            // Handle All Branches (0) or specific branch
+            const effectiveBranchId = activeBranchId === 0 ? undefined : activeBranchId;
 
-            const varRes = await auditAPI.getConsumptionVariances({ branch_id: branchId, from_date: firstDay, to_date: lastDay });
+            // 1. Fetch Consumption Variances
+            // Note: Currently the backend might require a branch_id for variances. 
+            // If activeBranchId is 0, we'll try to fetch for branch 1 as fallback or handle empty
+            const varRes = await auditAPI.getConsumptionVariances({
+                branch_id: effectiveBranchId || 1,
+                from_date: firstDay,
+                to_date: lastDay
+            });
             if (varRes.success) setConsumptionData(varRes.data || []);
 
             // 2. Fetch Pending Requisitions
-            const reqRes = await storeAPI.getBranchRequests('PENDING', activeBranchId || undefined);
+            const reqRes = await storeAPI.getBranchRequests('PENDING', effectiveBranchId || undefined);
             if (reqRes.success) setPendingRequests(reqRes.data || []);
 
         } catch (e) {
@@ -65,23 +71,19 @@ export default function StockAuditPage() {
     return (
         <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN]}>
             <BranchAwareDashboardLayout
-                title="Stock & Inventory"
-                subtitle="Verify levels and approve movements"
+                title="Inventory Quality Control"
+                subtitle={activeBranchId === 0 ? "Consolidated view of all branches" : "Branch-specific stock audit"}
             >
                 <div className="space-y-6">
                     {/* Header Actions */}
                     <div className="flex justify-end gap-2">
                         <button onClick={() => router.back()} className="btn-secondary">
                             <ArrowLeft className="h-4 w-4" />
-                            <span>Back</span>
+                            <span>Dashboard</span>
                         </button>
                         <button onClick={fetchStockData} disabled={isLoading} className="btn-secondary">
-                            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                            <span>Refresh</span>
-                        </button>
-                        <button className="btn-primary bg-stone-900">
-                            <Package className="h-4 w-4" />
-                            <span>Spot Check</span>
+                            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                            <span>Sync Stock Data</span>
                         </button>
                     </div>
 
@@ -90,39 +92,50 @@ export default function StockAuditPage() {
                         <div className="lg:col-span-2 space-y-6">
                             <div className="card-elevated p-6">
                                 <div className="flex justify-between items-center mb-4">
-                                    <h3 className="section-title">Pending Requisitions</h3>
+                                    <h3 className="section-title">Critical Requisitions</h3>
                                     <span className="bg-amber-100 text-amber-800 text-xs font-bold px-2 py-1 rounded-full">
-                                        {pendingRequests.length} Pending
+                                        {pendingRequests.length} Waiting Review
                                     </span>
                                 </div>
                                 <div className="divide-y divide-stone-100">
                                     {pendingRequests.length === 0 ? (
-                                        <p className="text-stone-500 text-sm py-4 italic text-center">No pending requisitions.</p>
+                                        <div className="py-12 text-center text-stone-400">
+                                            <Package className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                                            <p className="text-sm italic">No pending requisitions for this selection.</p>
+                                        </div>
                                     ) : (
                                         pendingRequests.map((req) => (
-                                            <div key={req.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                                <div className="flex items-start gap-3">
-                                                    <div className="p-2 bg-stone-100 rounded-lg text-stone-500">
+                                            <div key={req.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 group">
+                                                <div className="flex items-start gap-4">
+                                                    <div className="p-3 bg-stone-100 rounded-xl text-stone-500 group-hover:bg-stone-200 transition-colors">
                                                         <Box className="h-5 w-5" />
                                                     </div>
                                                     <div>
-                                                        <p className="font-medium text-stone-900">{req.items?.[0]?.item_name || 'Stock Request'} {req.items?.length > 1 ? `+${req.items.length - 1} more` : ''}</p>
-                                                        <p className="text-xs text-stone-500">Requested by {req.requester_name || 'Staff'} • {new Date(req.created_at).toLocaleDateString()}</p>
-                                                        <p className="text-xs text-stone-500 mt-1">Note: {req.reason || 'Restock'}</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="font-semibold text-stone-900">{req.items?.[0]?.item_name || 'Multi-item Request'} {req.items?.length > 1 ? `(+${req.items.length - 1})` : ''}</p>
+                                                            <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded font-bold uppercase">
+                                                                {req.requesting_branch?.name || 'Unknown Branch'}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-xs text-stone-500 mt-0.5 italic">"{(req.reason || 'Routine replenishment').slice(0, 60)}{req.reason?.length > 60 ? '...' : ''}"</p>
+                                                        <div className="flex items-center gap-3 mt-1.5 text-[11px] text-stone-400">
+                                                            <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {new Date(req.created_at).toLocaleDateString()}</span>
+                                                            <span>By: {req.requester_name || 'Branch Storekeeper'}</span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-2 self-end sm:self-auto">
                                                     <button
                                                         onClick={() => handleAction(req.id, 'REJECT')}
-                                                        className="p-1.5 hover:bg-red-50 text-red-600 rounded-lg transition-colors text-xs font-medium flex items-center gap-1"
+                                                        className="p-2 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors text-xs font-bold flex items-center gap-1"
                                                     >
                                                         <X className="h-3.5 w-3.5" /> Reject
                                                     </button>
                                                     <button
                                                         onClick={() => handleAction(req.id, 'APPROVE')}
-                                                        className="py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium flex items-center gap-1 shadow-sm"
+                                                        className="py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition-all"
                                                     >
-                                                        <Check className="h-3.5 w-3.5" /> Approve
+                                                        <Check className="h-3.5 w-3.5" /> Review & Approve
                                                     </button>
                                                 </div>
                                             </div>
@@ -132,40 +145,48 @@ export default function StockAuditPage() {
                             </div>
 
                             {/* Consumption Analysis Table */}
-                            <div className="card-elevated overflow-hidden">
+                            <div className="card-elevated overflow-hidden border-t-2 border-t-stone-200">
                                 <div className="p-4 border-b border-stone-100 bg-stone-50/50 flex justify-between items-center">
-                                    <h3 className="section-title text-sm">Consumption Variances (This Month)</h3>
+                                    <h3 className="section-title text-sm">Consumption Variances (Monthly Analysis)</h3>
+                                    {activeBranchId === 0 && (
+                                        <span className="text-[10px] text-amber-600 font-medium bg-amber-50 px-2 py-0.5 rounded">Partial View: Branch 1 Only</span>
+                                    )}
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-sm text-left">
-                                        <thead className="bg-stone-50 text-stone-500 text-xs uppercase font-semibold">
+                                        <thead className="bg-stone-50 text-stone-500 text-xs uppercase font-bold tracking-wider">
                                             <tr>
-                                                <th className="px-4 py-3">Item</th>
-                                                <th className="px-4 py-3 text-right">Theoretical</th>
-                                                <th className="px-4 py-3 text-right">Actual</th>
-                                                <th className="px-4 py-3 text-right">Variance</th>
-                                                <th className="px-4 py-3 text-center">Status</th>
+                                                <th className="px-4 py-4">Item Catalog</th>
+                                                <th className="px-4 py-4 text-right">Expected</th>
+                                                <th className="px-4 py-4 text-right">Actual Used</th>
+                                                <th className="px-4 py-4 text-right">Variance</th>
+                                                <th className="px-4 py-4 text-center">Audit Status</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-stone-100">
                                             {consumptionData.length === 0 ? (
-                                                <tr><td colSpan={5} className="p-4 text-center text-stone-500 italic">No variance data available.</td></tr>
+                                                <tr><td colSpan={5} className="p-8 text-center text-stone-400 italic">No variance data available for auditing. Please configure consumption maps.</td></tr>
                                             ) : (
                                                 consumptionData.map((item, i) => (
-                                                    <tr key={i} className="hover:bg-stone-50 transition-colors">
-                                                        <td className="px-4 py-3 font-medium text-stone-900">{item.item_name || item.item_sku}</td>
-                                                        <td className="px-4 py-3 text-right text-stone-600">{item.theoretical}</td>
-                                                        <td className="px-4 py-3 text-right text-stone-600">{item.actual}</td>
-                                                        <td className={`px-4 py-3 text-right font-medium ${item.variance < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                                    <tr key={i} className="hover:bg-stone-50/80 transition-colors border-l-2 border-l-transparent hover:border-l-blue-500">
+                                                        <td className="px-4 py-4">
+                                                            <div className="font-medium text-stone-900">{item.item_name || 'Inventory SKU'}</div>
+                                                            <div className="text-[10px] text-stone-400 font-mono">{item.item_sku}</div>
+                                                        </td>
+                                                        <td className="px-4 py-4 text-right text-stone-600 font-medium">{item.theoretical}</td>
+                                                        <td className="px-4 py-4 text-right text-stone-600 font-medium">{item.actual}</td>
+                                                        <td className={`px-4 py-4 text-right font-bold ${item.variance < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                                                             {item.variance > 0 ? '+' : ''}{item.variance}
                                                         </td>
-                                                        <td className="px-4 py-3 text-center">
-                                                            {Math.abs(item.variance) > (item.theoretical * 0.1) ? ( // 10% tolerance
-                                                                <span className="inline-flex items-center gap-1 text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded font-bold">
+                                                        <td className="px-4 py-4 text-center">
+                                                            {Math.abs(item.variance) > ((item.theoretical || 1) * 0.1) ? ( // 10% tolerance
+                                                                <span className="inline-flex items-center gap-1.5 text-[10px] bg-rose-50 text-rose-700 px-3 py-1 rounded-full font-bold border border-rose-100">
                                                                     <AlertTriangle className="h-3 w-3" /> INVESTIGATE
                                                                 </span>
                                                             ) : (
-                                                                <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-bold">OK</span>
+                                                                <span className="inline-flex items-center gap-1.5 text-[10px] bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full font-bold border border-emerald-100">
+                                                                    <Check className="h-3 w-3" /> VERIFIED
+                                                                </span>
                                                             )}
                                                         </td>
                                                     </tr>
