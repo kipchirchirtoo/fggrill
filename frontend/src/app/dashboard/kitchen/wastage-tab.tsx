@@ -272,11 +272,11 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <p className="text-xs text-gray-500 mb-1">Spoilage</p>
-          <p className="text-xl font-semibold text-gray-900">{(stats.byReason['spoilage'] as any)?.count || 0}</p>
+          <p className="text-xl font-semibold text-gray-900">{typeof stats.byReason['spoilage'] === 'object' ? (stats.byReason['spoilage'] as any)?.count || 0 : stats.byReason['spoilage'] || 0}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <p className="text-xs text-gray-500 mb-1">Overcooking</p>
-          <p className="text-xl font-semibold text-gray-900">{(stats.byReason['overcooking'] as any)?.count || 0}</p>
+          <p className="text-xl font-semibold text-gray-900">{typeof stats.byReason['overcooking'] === 'object' ? (stats.byReason['overcooking'] as any)?.count || 0 : stats.byReason['overcooking'] || 0}</p>
         </div>
       </div>
 
