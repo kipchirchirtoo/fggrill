@@ -45,7 +45,7 @@ export function BranchAwareDashboardLayout({
 }: BranchAwareDashboardLayoutProps) {
   const { activeBranch, activeBranchId, isLoading: branchLoading, refreshBranches, userBranches } = useBranch();
   const { user } = useAuth();
-  
+
   // Auto-hide branch selector for single-branch roles or if user has only one branch
   const isSingleBranchRole = user?.role && SINGLE_BRANCH_ROLES.includes(user.role as UserRole);
   const hasOnlyOneBranch = userBranches.length <= 1;
@@ -109,8 +109,8 @@ export function BranchAwareDashboardLayout({
                 {!hideBranchSelector && <BranchSelector />}
                 {actionButton}
                 {!hideBranchSelector && (
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="sm"
                     onClick={handleRefreshBranch}
                     disabled={isBranchRefreshing}
@@ -122,12 +122,14 @@ export function BranchAwareDashboardLayout({
               </div>
             </div>
           )}
-          
+
           {/* Custom header content if provided */}
           {headerContent}
-          
+
           {/* Main content */}
-          {children}
+          <div className="px-4 sm:px-6 lg:px-8">
+            {children}
+          </div>
         </div>
       </DashboardLayout>
     </BranchInitializer>

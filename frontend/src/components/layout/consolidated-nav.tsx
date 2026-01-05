@@ -12,7 +12,7 @@ import {
   Building, Wrench, Brush, CheckCircle, FileSpreadsheet, ShieldCheck,
   Home, ArrowDownUp, LifeBuoy, Calendar, Store, TrendingUp, LineChart, Award,
   UserCheck, Utensils, Wine, Receipt, CreditCard, PieChart, FileText,
-  BookOpen, ChefHat, ShoppingCart, Wallet, Scale, AlertCircle, UtensilsCrossed, Trash2, Clock, Shield
+  BookOpen, ChefHat, ShoppingCart, Wallet, Scale, AlertCircle, UtensilsCrossed, Trash2, Clock, Shield, Menu, X
 } from 'lucide-react';
 
 interface NavItemProps {
@@ -77,8 +77,14 @@ export function ConsolidatedNav() {
   const { user } = useAuth();
   const { activeBranchId } = useBranch();
   const pathname = usePathname();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   if (!user) return null;
+
+  // Close mobile menu when route changes
+  React.useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
 
   // Define navigation items based on user role
 
@@ -614,6 +620,12 @@ export function ConsolidatedNav() {
           icon={Package}
           label="Inventory Audit"
           active={pathname === '/dashboard/auditor/stock'}
+        />
+        <NavItem
+          href="/dashboard/auditor/sold-items"
+          icon={BarChart3}
+          label="Sold Items Analytics"
+          active={pathname === '/dashboard/auditor/sold-items'}
         />
         <NavItem
           href="/dashboard/auditor/reports"
@@ -1190,8 +1202,39 @@ export function ConsolidatedNav() {
   };
 
   return (
-    <div className="space-y-1">
-      {renderNavigation()}
-    </div>
+    <>
+      {/* Mobile Menu Button - Only visible on small screens */}
+      <button
+        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-lg shadow-lg border border-stone-200 hover:bg-stone-50 transition-colors"
+        aria-label="Toggle menu"
+      >
+        {isMobileMenuOpen ? (
+          <X className="h-5 w-5 text-stone-700" />
+        ) : (
+          <Menu className="h-5 w-5 text-stone-700" />
+        )}
+      </button>
+
+      {/* Mobile Overlay */}
+      {isMobileMenuOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Navigation Drawer */}
+      <div
+        className={cn(
+          "fixed lg:relative inset-y-0 left-0 z-40 w-64 bg-white border-r border-stone-200 transform transition-transform duration-300 ease-in-out overflow-y-auto",
+          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        )}
+      >
+        <div className="p-4 space-y-1">
+          {renderNavigation()}
+        </div>
+      </div>
+    </>
   );
 }

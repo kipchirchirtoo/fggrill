@@ -2307,7 +2307,13 @@ export const auditAPI = {
     if (params.branch_id) query.append('branch_id', String(params.branch_id));
     query.append('period_month', params.period_month);
     return fetchAPI<any>(`/auditor/payroll/variances?${query}`);
-  }
+  },
+
+  // Advanced Intelligence Reports
+  getReconciliationAudit: (params: { branch_id?: number; from_date?: string; to_date?: string }) =>
+    reportsService.getReportData('reconciliation_audit', params),
+  getSoldItemsAnalytics: (params: { branch_id?: number; from_date?: string; to_date?: string }) =>
+    reportsService.getReportData('sold_items_analytics', params),
 };
 
 
@@ -2419,6 +2425,18 @@ export const reportsService = {
   // Health check
   healthCheck: async () => {
     const response = await fetch(`${REPORTS_SERVICE_URL}/health`);
+    return response.json();
+  },
+
+  // Get raw report data
+  getReportData: async (reportType: string, filters: Record<string, any> = {}) => {
+    const query = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        query.append(key, String(value));
+      }
+    });
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/data?type=${reportType}&${query}`);
     return response.json();
   },
 

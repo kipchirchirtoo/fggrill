@@ -5,10 +5,138 @@ import { BranchAwareDashboardLayout } from '@/components/layout/branch-aware-das
 import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
-import { Package, AlertTriangle, ArrowRight, Check, X, Filter, ArrowLeft, RefreshCw, Box, Clock, FileText } from 'lucide-react';
+import { Package, AlertTriangle, ArrowRight, Check, X, Filter, ArrowLeft, RefreshCw, Box, Clock, FileText, Eye } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { auditAPI, storeAPI } from '@/lib/api';
 import { toast } from 'sonner';
+
+const RequisitionDetailsModal = ({ request, isOpen, onClose, onAction }: { request: any, isOpen: boolean, onClose: () => void, onAction: (id: string, action: 'APPROVE' | 'REJECT') => void }) => {
+    if (!isOpen || !request) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-stone-900/40 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto border border-stone-100 animate-in fade-in zoom-in duration-200">
+                <div className="px-6 py-4 border-b border-stone-100 flex justify-between items-center bg-stone-50/50">
+                    <div>
+                        <h3 className="text-[16px] font-bold text-stone-900">Requisition Details</h3>
+                        <p className="text-[11px] text-stone-500">{request.requesting_branch?.name || 'Local'} • {new Date(request.created_at).toLocaleDateString()}</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-stone-200 rounded-full transition-colors">
+                        <X className="h-4 w-4 text-stone-500" />
+                    </button>
+                </div>
+
+                <div className="p-6 space-y-5">
+                    <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Reason for Request</p>
+                        <p className="text-[13px] text-stone-900 bg-stone-50 p-3 rounded-lg border border-stone-100 italic">"{request.reason || 'Routine replenishment'}"</p>
+                    </div>
+
+                    <div className="space-y-3">
+                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Requested Items</p>
+                        <div className="bg-stone-50 rounded-xl border border-stone-100 divide-y divide-stone-100 overflow-hidden">
+                            {(request.items || []).map((item: any, idx: number) => (
+                                <div key={idx} className="px-4 py-3 flex justify-between items-center">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded bg-white border border-stone-100 flex items-center justify-center">
+                                            <Package className="h-4 w-4 text-stone-400" />
+                                        </div>
+                                        <div>
+                                            <p className="text-[13px] font-medium text-stone-800">{item.item_name}</p>
+                                            <p className="text-[11px] text-stone-400">Current Branch Stock: {item.current_stock || 0}</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[14px] font-bold text-stone-900">{item.quantity} {item.unit || 'pcs'}</p>
+                                        <p className="text-[10px] text-stone-400 uppercase font-bold tracking-tight">Requested</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="px-6 py-4 bg-stone-50/50 flex justify-end gap-3 shadow-[inset_0_1px_0_0_rgba(0,0,0,0.05)]">
+                    <button onClick={() => onAction(request.id, 'REJECT')} className="btn-secondary text-rose-600 border-rose-100 hover:bg-rose-50 px-4 py-2 text-[12px] font-bold">Reject</button>
+                    <button onClick={() => onAction(request.id, 'APPROVE')} className="btn-primary bg-stone-900 hover:bg-black px-6 py-2 text-[12px] font-bold">Approve Stock Release</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ConsumptionAuditModal = ({ item, isOpen, onClose }: { item: any, isOpen: boolean, onClose: () => void }) => {
+    if (!isOpen || !item) return null;
+
+    const diff = item.actual - item.theoretical;
+    const isLeakage = diff > 0;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-stone-900/40 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto border border-stone-100 animate-in fade-in zoom-in duration-200">
+                <div className="px-6 py-4 border-b border-stone-100 flex justify-between items-center bg-stone-50/50">
+                    <div>
+                        <h3 className="text-[16px] font-bold text-stone-900">Consumption Audit</h3>
+                        <p className="text-[11px] text-stone-500">{item.item_name}</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-stone-200 rounded-full transition-colors">
+                        <X className="h-4 w-4 text-stone-500" />
+                    </button>
+                </div>
+
+                <div className="p-6 space-y-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="p-4 bg-stone-50 rounded-2xl border border-stone-100">
+                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1">Theoretical Use</p>
+                            <p className="text-[20px] font-bold text-stone-900">{item.theoretical} <span className="text-[12px] font-medium text-stone-400 font-mono">{item.unit || 'units'}</span></p>
+                            <p className="text-[10px] text-stone-400 mt-1 italic">Based on recorded sales</p>
+                        </div>
+                        <div className="p-4 bg-stone-50 rounded-2xl border border-stone-100">
+                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1">Actual Consumption</p>
+                            <p className="text-[20px] font-bold text-stone-900">{item.actual} <span className="text-[12px] font-medium text-stone-400 font-mono">{item.unit || 'units'}</span></p>
+                            <p className="text-[10px] text-stone-400 mt-1 italic">Based on stock count</p>
+                        </div>
+                    </div>
+
+                    <div className={`p-5 rounded-2xl border ${isLeakage ? 'bg-rose-50 border-rose-100' : 'bg-emerald-50 border-emerald-100'}`}>
+                        <div className="flex items-center justify-between mb-3">
+                            <h4 className={`text-[13px] font-bold ${isLeakage ? 'text-rose-700' : 'text-emerald-700'} uppercase tracking-wider`}>Variance Analysis</h4>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isLeakage ? 'bg-rose-200 text-rose-800' : 'bg-emerald-200 text-emerald-800'}`}>
+                                {isLeakage ? 'Leakage Detected' : 'Optimal'}
+                            </span>
+                        </div>
+                        <div className="flex items-end justify-between">
+                            <div>
+                                <p className={`text-[24px] font-black ${isLeakage ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                    {isLeakage ? '+' : ''}{diff}
+                                </p>
+                                <p className="text-[11px] text-stone-500 font-medium">Net variance in {item.unit || 'units'}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[18px] font-bold text-stone-900">KES {(Math.abs(diff) * (item.unit_cost || 500)).toLocaleString()}</p>
+                                <p className="text-[11px] text-stone-500 font-medium uppercase tracking-tight">Est. Value Impact</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Audit Recommendations</p>
+                        <ul className="space-y-2">
+                            <li className="flex items-start gap-2 text-[12px] text-stone-600">
+                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                                <span>{isLeakage ? "Verify portion control and check for unrecorded wastage." : "Consumption matches sales patterns. No action required."}</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div className="px-6 py-4 bg-stone-50/50 flex justify-end">
+                    <button onClick={onClose} className="btn-secondary px-8 py-2 text-[12px] font-bold">Done</button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 export default function StockAuditPage() {
     const router = useRouter();
@@ -16,6 +144,10 @@ export default function StockAuditPage() {
     const [consumptionData, setConsumptionData] = useState<any[]>([]);
     const [pendingRequests, setPendingRequests] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [selectedRequest, setSelectedRequest] = useState<any>(null);
+    const [selectedAuditItem, setSelectedAuditItem] = useState<any>(null);
+    const [isReqModalOpen, setIsReqModalOpen] = useState(false);
+    const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
 
     const fetchStockData = async () => {
         setIsLoading(true);
@@ -138,6 +270,16 @@ export default function StockAuditPage() {
                                                 </div>
                                                 <div className="flex items-center gap-1.5 self-end sm:self-auto opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <button
+                                                        onClick={() => {
+                                                            setSelectedRequest(req);
+                                                            setIsReqModalOpen(true);
+                                                        }}
+                                                        className="p-2 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors text-[11px] font-bold flex items-center gap-1"
+                                                        title="View Details"
+                                                    >
+                                                        <Eye className="h-3.5 w-3.5" /> Items
+                                                    </button>
+                                                    <button
                                                         onClick={() => handleAction(req.id, 'REJECT')}
                                                         className="p-2 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors text-[11px] font-bold flex items-center gap-1"
                                                     >
@@ -189,9 +331,21 @@ export default function StockAuditPage() {
                                                 consumptionData.map((item, i) => (
                                                     <tr key={i} className="hover:bg-stone-50 transition-colors group">
                                                         <td className="py-3 px-5">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-[13px] font-medium text-stone-900">{item.item_name || 'Inventory SKU'}</span>
-                                                                <span className="text-[11px] text-stone-400 font-mono tracking-tighter">{item.item_sku}</span>
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-[13px] font-medium text-stone-900">{item.item_name || 'Inventory SKU'}</span>
+                                                                    <span className="text-[11px] text-stone-400 font-mono tracking-tighter">{item.item_sku}</span>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setSelectedAuditItem(item);
+                                                                        setIsAuditModalOpen(true);
+                                                                    }}
+                                                                    className="p-1.5 hover:bg-stone-100 rounded-lg text-stone-400 hover:text-stone-900 transition-colors opacity-0 group-hover:opacity-100"
+                                                                    title="Audit Details"
+                                                                >
+                                                                    <Eye className="h-3.5 w-3.5" />
+                                                                </button>
                                                             </div>
                                                         </td>
                                                         <td className="py-3 px-5 text-right text-stone-600 font-mono text-[13px]">{item.theoretical}</td>
@@ -246,6 +400,22 @@ export default function StockAuditPage() {
                         </div>
                     </div>
                 </div>
+
+                <RequisitionDetailsModal
+                    isOpen={isReqModalOpen}
+                    request={selectedRequest}
+                    onClose={() => setIsReqModalOpen(false)}
+                    onAction={(id, action) => {
+                        handleAction(id, action);
+                        setIsReqModalOpen(false);
+                    }}
+                />
+
+                <ConsumptionAuditModal
+                    isOpen={isAuditModalOpen}
+                    item={selectedAuditItem}
+                    onClose={() => setIsAuditModalOpen(false)}
+                />
             </BranchAwareDashboardLayout>
         </ProtectedRoute>
     );

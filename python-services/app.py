@@ -263,8 +263,44 @@ def get_report_types():
         {
             'id': 'inventory_status',
             'name': 'Inventory Status',
-            'category': 'inventory',
-            'description': 'Current inventory levels'
+            'category': 'stock',
+            'description': 'Current stock levels and value'
+        },
+        {
+            'id': 'financial_variance',
+            'name': 'Financial Variance',
+            'category': 'audit',
+            'description': 'Revenue leakage and deposit variances'
+        },
+        {
+            'id': 'inventory_discrepancy',
+            'name': 'Inventory Discrepancy',
+            'category': 'audit',
+            'description': 'Theoretical vs actual stock analysis'
+        },
+        {
+            'id': 'procurement_analysis',
+            'name': 'Procurement Analysis',
+            'category': 'audit',
+            'description': 'Supplier trends and pricing audits'
+        },
+        {
+            'id': 'exception_logs',
+            'name': 'Exception Activity',
+            'category': 'audit',
+            'description': 'Voids, cancellations, and risk activity'
+        },
+        {
+            'id': 'reconciliation_audit',
+            'name': 'Reconciliation Audit',
+            'category': 'audit',
+            'description': 'Stock vs Sales gap analysis'
+        },
+        {
+            'id': 'sold_items_analytics',
+            'name': 'Sold Items Analytics',
+            'category': 'audit',
+            'description': 'Aggregated item performance'
         },
         {
             'id': 'stock_movement',

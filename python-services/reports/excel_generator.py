@@ -50,6 +50,10 @@ class ExcelReportGenerator:
             'staff_overview': self._create_staff_overview_report,
             'compliance': self._create_compliance_report,
             'branch_comparison': self._create_branch_comparison_report,
+            'financial_variance': self._create_financial_variance_report,
+            'inventory_discrepancy': self._create_inventory_discrepancy_report,
+            'procurement_analysis': self._create_procurement_analysis_report,
+            'exception_logs': self._create_exception_logs_report,
         }
         
         generator = generators.get(report_type, self._create_generic_report)
@@ -1463,6 +1467,160 @@ class ExcelReportGenerator:
         row += 1
         ws.merge_cells(f'A{row}:D{row}')
         ws.cell(row, 1, "Rankings are based on current data and may change over time.").font = Font(italic=True)
+
+    def _create_financial_variance_report(self, ws, data):
+        """Create financial variance report in Excel"""
+        start_row = 6
+        ws.cell(row=start_row, column=1, value="Financial Variance Summary").font = Font(bold=True, size=12)
+        
+        metrics = [
+            ('Expected Revenue', data.get('expected_revenue', 0)),
+            ('Actual Collected', data.get('actual_collected', 0)),
+            ('Variance', data.get('variance', 0)),
+        ]
+        
+        row = start_row + 1
+        for metric, value in metrics:
+            ws.cell(row=row, column=1, value=metric).border = self.border
+            cell = ws.cell(row=row, column=2, value=value)
+            cell.border = self.border
+            cell.number_format = '#,##0.00'
+            if metric == 'Variance' and value < 0:
+                cell.font = Font(color="FF0000")
+            row += 1
+            
+        row += 1
+        ws.cell(row=row, column=1, value="Variances by Source").font = Font(bold=True, size=12)
+        row += 1
+        
+        headers = ['Source', 'Expected', 'Actual', 'Variance']
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=row, column=col, value=header)
+            cell.fill = self.header_fill
+            cell.font = self.header_font
+            cell.border = self.border
+            
+        row += 1
+        for s in data.get('variances_by_source', []):
+            ws.cell(row=row, column=1, value=s.get('source', 'Unknown')).border = self.border
+            ws.cell(row=row, column=2, value=s.get('expected', 0)).border = self.border
+            ws.cell(row=row, column=3, value=s.get('actual', 0)).border = self.border
+            var = s.get('actual', 0) - s.get('expected', 0)
+            v_cell = ws.cell(row=row, column=4, value=var)
+            v_cell.border = self.border
+            if var < 0: v_cell.font = Font(color="FF0000")
+            row += 1
+
+    def _create_inventory_discrepancy_report(self, ws, data):
+        """Create inventory discrepancy report in Excel"""
+        start_row = 6
+        ws.cell(row=start_row, column=1, value="Inventory Discrepancy Analysis").font = Font(bold=True, size=12)
+        
+        row = start_row + 1
+        ws.cell(row=row, column=1, value=f"Total Value Loss: KES {data.get('total_value_loss', 0):,.2f}").font = Font(bold=True, color="FF0000")
+        
+        row += 2
+        headers = ['Item Name', 'Theoretical', 'Actual', 'Variance', 'Variance %', 'Value Impact']
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=row, column=col, value=header)
+            cell.fill = self.header_fill
+            cell.font = self.header_font
+            cell.border = self.border
+            
+        row += 1
+        for item in data.get('discrepancy_items', []):
+            ws.cell(row=row, column=1, value=item.get('name', '')).border = self.border
+            ws.cell(row=row, column=2, value=item.get('theoretical', 0)).border = self.border
+            ws.cell(row=row, column=3, value=item.get('actual', 0)).border = self.border
+            ws.cell(row=row, column=4, value=item.get('variance', 0)).border = self.border
+            ws.cell(row=row, column=5, value=f"{item.get('variance_pct', 0):.1f}%").border = self.border
+            ws.cell(row=row, column=6, value=item.get('value_impact', 0)).border = self.border
+            row += 1
+
+    def _create_procurement_analysis_report(self, ws, data):
+        """Create procurement analysis report in Excel"""
+        start_row = 6
+        ws.cell(row=start_row, column=1, value="Procurement & Supplier Analysis").font = Font(bold=True, size=12)
+        
+        row = start_row + 2
+        ws.cell(row=row, column=1, value="Top Suppliers by Spend").font = Font(bold=True)
+        row += 1
+        headers = ['Supplier Name', 'Total Spend (KES)']
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=row, column=col, value=header)
+            cell.fill = self.header_fill
+            cell.font = self.header_font
+            cell.border = self.border
+            
+        row += 1
+        for s in data.get('top_suppliers', []):
+            ws.cell(row=row, column=1, value=s.get('name', '')).border = self.border
+            ws.cell(row=row, column=2, value=s.get('total_spend', 0)).border = self.border
+            ws.cell(row=row, column=2).number_format = '#,##0.00'
+            row += 1
+            
+        row += 2
+        ws.cell(row=row, column=1, value="Item Price Trends").font = Font(bold=True)
+        row += 1
+        headers = ['Item', 'Avg Price', 'Min Price', 'Max Price']
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=row, column=col, value=header)
+            cell.fill = self.header_fill
+            cell.font = self.header_font
+            cell.border = self.border
+            
+        row += 1
+        for p in data.get('price_trends', []):
+            ws.cell(row=row, column=1, value=p.get('item', '')).border = self.border
+            ws.cell(row=row, column=2, value=p.get('avg_price', 0)).border = self.border
+            ws.cell(row=row, column=3, value=p.get('min', 0)).border = self.border
+            ws.cell(row=row, column=4, value=p.get('max', 0)).border = self.border
+            row += 1
+
+    def _create_exception_logs_report(self, ws, data):
+        """Create exception logs report in Excel"""
+        start_row = 6
+        ws.cell(row=start_row, column=1, value="Audit Exceptions & Risk Activity").font = Font(bold=True, size=12)
+        
+        row = start_row + 1
+        ws.cell(row=row, column=1, value=f"Total Exception Value: KES {data.get('total_exception_value', 0):,.2f}").font = Font(bold=True, color="FF0000")
+        
+        row += 2
+        ws.cell(row=row, column=1, value="Voided/Cancelled Orders").font = Font(bold=True)
+        row += 1
+        headers = ['Order ID', 'Type', 'Reason', 'Amount', 'Timestamp']
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=row, column=col, value=header)
+            cell.fill = self.header_fill
+            cell.font = self.header_font
+            cell.border = self.border
+            
+        row += 1
+        for v in data.get('voided_orders', []):
+            ws.cell(row=row, column=1, value=v.get('id', '')).border = self.border
+            ws.cell(row=row, column=2, value=v.get('type', '')).border = self.border
+            ws.cell(row=row, column=3, value=v.get('reason', '')).border = self.border
+            ws.cell(row=row, column=4, value=v.get('amount', 0)).border = self.border
+            ws.cell(row=row, column=5, value=v.get('timestamp', '')).border = self.border
+            row += 1
+            
+        row += 2
+        ws.cell(row=row, column=1, value="Cancelled Bookings").font = Font(bold=True)
+        row += 1
+        headers = ['Booking ID', 'Guest', 'Amount', 'Date']
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=row, column=col, value=header)
+            cell.fill = self.header_fill
+            cell.font = self.header_font
+            cell.border = self.border
+            
+        row += 1
+        for c in data.get('cancelled_bookings', []):
+            ws.cell(row=row, column=1, value=c.get('id', '')).border = self.border
+            ws.cell(row=row, column=2, value=c.get('guest', '')).border = self.border
+            ws.cell(row=row, column=3, value=c.get('amount', 0)).border = self.border
+            ws.cell(row=row, column=4, value=c.get('date', '')).border = self.border
+            row += 1
 
     def _adjust_column_widths(self, ws):
         """Auto-adjust column widths"""

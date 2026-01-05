@@ -6,9 +6,76 @@ import { BranchAwareDashboardLayout } from '@/components/layout/branch-aware-das
 import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
-import { AlertTriangle, ShoppingBag, Filter, Download, ArrowLeft, Check, X, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ShoppingBag, Filter, Download, ArrowLeft, Check, X, RefreshCw, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+
+const OrderDetailsModal = ({ order, isOpen, onClose }: { order: any, isOpen: boolean, onClose: () => void }) => {
+    if (!isOpen || !order) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-stone-900/40 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto border border-stone-100 animate-in fade-in zoom-in duration-200">
+                <div className="px-6 py-4 border-b border-stone-100 flex justify-between items-center bg-stone-50/50">
+                    <div>
+                        <h3 className="text-[16px] font-bold text-stone-900">Order Details</h3>
+                        <p className="text-[11px] text-stone-500">{order.order_number || `#${order.id?.substr(0, 8)}`}</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-stone-200 rounded-full transition-colors">
+                        <X className="h-4 w-4 text-stone-500" />
+                    </button>
+                </div>
+
+                <div className="p-6 space-y-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="space-y-1">
+                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Guest</p>
+                            <p className="text-[13px] font-medium text-stone-900">{order.guest_name || 'Walk-in Guest'}</p>
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Time</p>
+                            <p className="text-[13px] font-medium text-stone-900">{new Date(order.created_at).toLocaleString()}</p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-3">
+                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Items Ordered</p>
+                        <div className="bg-stone-50 rounded-xl border border-stone-100 divide-y divide-stone-100 overflow-hidden">
+                            {(order.items || []).length > 0 ? (
+                                order.items.map((item: any, idx: number) => (
+                                    <div key={idx} className="px-4 py-2.5 flex justify-between items-center">
+                                        <div>
+                                            <p className="text-[13px] font-medium text-stone-800">{item.menu_item?.name || 'Unknown Item'}</p>
+                                            <p className="text-[11px] text-stone-400">Qty: {item.quantity}</p>
+                                        </div>
+                                        <p className="text-[13px] font-bold text-stone-900">KES {(item.quantity * (item.unit_price || 0)).toLocaleString()}</p>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="px-4 py-8 text-center text-stone-400 text-[12px] italic">
+                                    No item breakdown available for this order.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-stone-100 flex justify-between items-center text-[15px]">
+                        <span className="font-medium text-stone-500">Total Amount</span>
+                        <span className="font-bold text-stone-900">KES {(order.total_amount || order.total || 0).toLocaleString()}</span>
+                    </div>
+                </div>
+
+                <div className="px-6 py-4 bg-stone-50/50 flex justify-end gap-3">
+                    <button onClick={onClose} className="btn-secondary text-[12px]">Close</button>
+                    <button className="btn-primary bg-emerald-600 hover:bg-emerald-700 text-[12px] py-1.5 px-4 shadow-sm">
+                        <Check className="h-3.5 w-3.5" />
+                        <span>Confirm Sale</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 export default function SalesAuditPage() {
     const router = useRouter();
@@ -16,6 +83,8 @@ export default function SalesAuditPage() {
     const [orders, setOrders] = useState<any[]>([]);
     const [stats, setStats] = useState({ expected: 0, reported: 0, variance: 0 });
     const [isLoading, setIsLoading] = useState(false);
+    const [selectedOrder, setSelectedOrder] = useState<any>(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
 
     const fetchSalesData = async () => {
         setIsLoading(true);
@@ -124,69 +193,88 @@ export default function SalesAuditPage() {
                                 <Download className="h-3.5 w-3.5" /> Export
                             </button>
                         </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead>
-                                    <tr className="border-b border-stone-100">
-                                        <th className="text-left py-3 px-5 text-[11px] font-medium text-stone-500 uppercase tracking-wider">Order</th>
-                                        <th className="text-left py-3 px-5 text-[11px] font-medium text-stone-500 uppercase tracking-wider">Guest & Time</th>
-                                        <th className="text-right py-3 px-5 text-[11px] font-medium text-stone-500 uppercase tracking-wider">Amount</th>
-                                        <th className="text-center py-3 px-5 text-[11px] font-medium text-stone-500 uppercase tracking-wider">Status</th>
-                                        <th className="text-right py-3 px-5 text-[11px] font-medium text-stone-500 uppercase tracking-wider tracking-wider">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-stone-50">
-                                    {orders.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={5} className="py-12 text-center text-stone-400 text-sm italic">
-                                                {isLoading ? (
-                                                    <div className="flex flex-col items-center gap-2">
-                                                        <RefreshCw className="h-5 w-5 animate-spin opacity-50" />
-                                                        <span>Syncing transaction data...</span>
-                                                    </div>
-                                                ) : 'No transactions found for today.'}
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        orders.map((order) => (
-                                            <tr key={order.id} className="hover:bg-stone-50 transition-colors group">
-                                                <td className="py-3 px-5 font-medium text-stone-900 text-[13px]">
-                                                    {order.order_number || `#${order.id?.substr(0, 6)}`}
-                                                </td>
-                                                <td className="py-3 px-5">
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[13px] text-stone-800">{order.guest_name || order.customer_name || 'Walk-in Guest'}</span>
-                                                        <span className="text-[11px] text-stone-400 font-mono">{new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="py-3 px-5 text-right font-semibold text-stone-900 text-[13px]">
-                                                    KES {(order.total_amount || order.total || 0).toLocaleString()}
-                                                </td>
-                                                <td className="py-3 px-5 text-center">
-                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter ${order.status === 'cancelled' ? 'bg-rose-100 text-rose-700' :
-                                                        order.status === 'completed' || order.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
-                                                            'bg-amber-100 text-amber-700'
-                                                        }`}>
-                                                        {order.status}
-                                                    </span>
-                                                </td>
-                                                <td className="py-3 px-5 text-right">
-                                                    <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <button className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-600 transition-colors" title="Confirm Details">
-                                                            <Check className="h-3.5 w-3.5" />
-                                                        </button>
-                                                        <button className="p-1.5 hover:bg-rose-50 rounded-lg text-rose-600 transition-colors" title="Flag Issue">
-                                                            <X className="h-3.5 w-3.5" />
-                                                        </button>
-                                                    </div>
-                                                </td>
+                        <div className="overflow-x-auto -mx-6 sm:mx-0">
+                            <div className="inline-block min-w-full align-middle">
+                                <div className="overflow-hidden">
+                                    <table className="min-w-full w-full">
+                                        <thead>
+                                            <tr className="border-b border-stone-100">
+                                                <th className="text-left py-3 px-5 text-[11px] font-medium text-stone-500 uppercase tracking-wider">Order</th>
+                                                <th className="text-left py-3 px-5 text-[11px] font-medium text-stone-500 uppercase tracking-wider">Guest & Time</th>
+                                                <th className="text-right py-3 px-5 text-[11px] font-medium text-stone-500 uppercase tracking-wider">Amount</th>
+                                                <th className="text-center py-3 px-5 text-[11px] font-medium text-stone-500 uppercase tracking-wider">Status</th>
+                                                <th className="text-right py-3 px-5 text-[11px] font-medium text-stone-500 uppercase tracking-wider tracking-wider">Actions</th>
                                             </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-stone-50">
+                                            {orders.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={5} className="py-12 text-center text-stone-400 text-sm italic">
+                                                        {isLoading ? (
+                                                            <div className="flex flex-col items-center gap-2">
+                                                                <RefreshCw className="h-5 w-5 animate-spin opacity-50" />
+                                                                <span>Syncing transaction data...</span>
+                                                            </div>
+                                                        ) : 'No transactions found for today.'}
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                orders.map((order) => (
+                                                    <tr key={order.id} className="hover:bg-stone-50 transition-colors group">
+                                                        <td className="py-3 px-5 font-medium text-stone-900 text-[13px]">
+                                                            {order.order_number || `#${order.id?.substr(0, 6)}`}
+                                                        </td>
+                                                        <td className="py-3 px-5">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[13px] text-stone-800">{order.guest_name || order.customer_name || 'Walk-in Guest'}</span>
+                                                                <span className="text-[11px] text-stone-400 font-mono">{new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="py-3 px-5 text-right font-semibold text-stone-900 text-[13px]">
+                                                            KES {(order.total_amount || order.total || 0).toLocaleString()}
+                                                        </td>
+                                                        <td className="py-3 px-5 text-center">
+                                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter ${order.status === 'cancelled' ? 'bg-rose-100 text-rose-700' :
+                                                                order.status === 'completed' || order.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
+                                                                    'bg-amber-100 text-amber-700'
+                                                                }`}>
+                                                                {order.status}
+                                                            </span>
+                                                        </td>
+                                                        <td className="py-3 px-5 text-right">
+                                                            <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setSelectedOrder(order);
+                                                                        setIsModalOpen(true);
+                                                                    }}
+                                                                    className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600 transition-colors" title="View Items"
+                                                                >
+                                                                    <Eye className="h-3.5 w-3.5" />
+                                                                </button>
+                                                                <button className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-600 transition-colors" title="Confirm Details">
+                                                                    <Check className="h-3.5 w-3.5" />
+                                                                </button>
+                                                                <button className="p-1.5 hover:bg-rose-50 rounded-lg text-rose-600 transition-colors" title="Flag Issue">
+                                                                    <X className="h-3.5 w-3.5" />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
+
+                    <OrderDetailsModal
+                        isOpen={isModalOpen}
+                        order={selectedOrder}
+                        onClose={() => setIsModalOpen(false)}
+                    />
                 </div>
             </BranchAwareDashboardLayout>
         </ProtectedRoute>

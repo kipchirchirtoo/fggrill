@@ -259,6 +259,10 @@ class BrandedPDFGenerator:
             'branch_comparison': self._generate_branch_comparison_report,
             'kpi_dashboard': self._generate_kpi_dashboard_report,
             'employee_attendance': self._generate_attendance_report,
+            'financial_variance': self._generate_financial_variance_report,
+            'inventory_discrepancy': self._generate_inventory_discrepancy_report,
+            'procurement_analysis': self._generate_procurement_analysis_report,
+            'exception_logs': self._generate_exception_logs_report,
         }
         
         generator = generators.get(report_type, self._generate_generic_report)
@@ -2259,8 +2263,99 @@ class BrandedPDFGenerator:
         elements.append(Paragraph("Report data:", self.styles['SectionHeader']))
         
         # Display data as key-value pairs
-        for key, value in data.items():
-            if not isinstance(value, (list, dict)):
-                elements.append(Paragraph(f"<b>{key}:</b> {value}", self.styles['Normal']))
+        return self._create_pdf(elements)
+
+    def _generate_financial_variance_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Financial Variance Report PDF"""
+        elements = []
+        elements.extend(self._create_header("FINANCIAL VARIANCE REPORT", 
+            f"Period: {filters.get('start_date', 'Today')} - {filters.get('end_date', 'Today')}"))
+        
+        # Summary Table
+        summary_data = [
+            [Paragraph("<b>Metric</b>", self.styles['TableHeader']), Paragraph("<b>Amount (KES)</b>", self.styles['TableHeader'])],
+            ["Expected Revenue", self._format_currency(data.get('expected_revenue', 0))],
+            ["Actual Collected", self._format_currency(data.get('actual_collected', 0))],
+            ["Total Variance", Paragraph(f"<font color='red'>{self._format_currency(data.get('variance', 0))}</font>" if data.get('variance', 0) < 0 else self._format_currency(data.get('variance', 0)), self.styles['TableCell'])]
+        ]
+        elements.append(Table(summary_data, colWidths=[3*inch, 3*inch], style=self._get_table_style()))
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Source Breakdown
+        elements.append(Paragraph("Revenue Source Breakdown", self.styles['SectionHeader']))
+        source_data = [[Paragraph("<b>Source</b>", self.styles['TableHeader']), Paragraph("<b>Expected</b>", self.styles['TableHeader']), Paragraph("<b>Actual</b>", self.styles['TableHeader'])]]
+        for s in data.get('variances_by_source', []):
+            source_data.append([s.get('source'), self._format_currency(s.get('expected', 0)), self._format_currency(s.get('actual', 0))])
+        elements.append(Table(source_data, colWidths=[2*inch, 2*inch, 2*inch], style=self._get_table_style()))
+        
+        return self._create_pdf(elements)
+
+    def _generate_inventory_discrepancy_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Inventory Discrepancy Report PDF"""
+        elements = []
+        elements.extend(self._create_header("INVENTORY DISCREPANCY ANALYSIS", f"Branch ID: {filters.get('branch_id', 'All')}"))
+        
+        elements.append(Paragraph(f"Total Estimated Loss: <font color='red'>{self._format_currency(data.get('total_value_loss', 0))}</font>", self.styles['Heading2']))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # Discrepancy List
+        headers = ["Item Name", "Theoretical", "Actual", "Variance", "Impact"]
+        table_data = [[Paragraph(f"<b>{h}</b>", self.styles['TableHeader']) for h in headers]]
+        for item in data.get('discrepancy_items', []):
+            table_data.append([
+                item.get('name'),
+                str(item.get('theoretical')),
+                str(item.get('actual')),
+                f"{item.get('variance')} ({item.get('variance_pct', 0):.1f}%)",
+                self._format_currency(item.get('value_impact', 0))
+            ])
+        elements.append(Table(table_data, colWidths=[2*inch, 1*inch, 1*inch, 1.2*inch, 1.3*inch], style=self._get_table_style()))
+        
+        return self._create_pdf(elements)
+
+    def _generate_procurement_analysis_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Procurement Analysis Report PDF"""
+        elements = []
+        elements.extend(self._create_header("PROCUREMENT & SUPPLIER REPORT", f"Generated: {datetime.now().strftime('%d/%m/%Y')}"))
+        
+        # Top Suppliers
+        elements.append(Paragraph("Top Suppliers by Spend", self.styles['SectionHeader']))
+        supp_data = [[Paragraph("<b>Supplier</b>", self.styles['TableHeader']), Paragraph("<b>Total Spend</b>", self.styles['TableHeader'])]]
+        for s in data.get('top_suppliers', []):
+            supp_data.append([s.get('name'), self._format_currency(s.get('total_spend', 0))])
+        elements.append(Table(supp_data, colWidths=[4*inch, 2.5*inch], style=self._get_table_style()))
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Price Trends
+        elements.append(Paragraph("Item Price Trends", self.styles['SectionHeader']))
+        price_data = [[Paragraph("<b>Item</b>", self.styles['TableHeader']), Paragraph("<b>Avg Price</b>", self.styles['TableHeader']), Paragraph("<b>Min</b>", self.styles['TableHeader']), Paragraph("<b>Max</b>", self.styles['TableHeader'])]]
+        for p in data.get('price_trends', []):
+            price_data.append([p.get('item'), self._format_currency(p.get('avg_price', 0)), self._format_currency(p.get('min', 0)), self._format_currency(p.get('max', 0))])
+        elements.append(Table(price_data, colWidths=[2.5*inch, 1.5*inch, 1*inch, 1*inch], style=self._get_table_style()))
+        
+        return self._create_pdf(elements)
+
+    def _generate_exception_logs_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Exception Logs Report PDF"""
+        elements = []
+        elements.extend(self._create_header("AUDIT EXCEPTION LOGS", "Confidential Audit Intelligence"))
+        
+        elements.append(Paragraph(f"Total High-Risk Activity Value: {self._format_currency(data.get('total_exception_value', 0))}", self.styles['Heading2']))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # Voided Orders
+        elements.append(Paragraph("Voided & Cancelled Orders", self.styles['SectionHeader']))
+        void_data = [[Paragraph("<b>ID</b>", self.styles['TableHeader']), Paragraph("<b>Reason</b>", self.styles['TableHeader']), Paragraph("<b>Amount</b>", self.styles['TableHeader'])]]
+        for v in data.get('voided_orders', []):
+            void_data.append([v.get('id'), v.get('reason'), self._format_currency(v.get('amount', 0))])
+        elements.append(Table(void_data, colWidths=[1.5*inch, 3*inch, 2*inch], style=self._get_table_style()))
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Cancelled Bookings
+        elements.append(Paragraph("Cancelled Bookings", self.styles['SectionHeader']))
+        cancel_data = [[Paragraph("<b>ID</b>", self.styles['TableHeader']), Paragraph("<b>Guest</b>", self.styles['TableHeader']), Paragraph("<b>Amount</b>", self.styles['TableHeader'])]]
+        for c in data.get('cancelled_bookings', []):
+            cancel_data.append([c.get('id'), c.get('guest'), self._format_currency(c.get('amount', 0))])
+        elements.append(Table(cancel_data, colWidths=[1.5*inch, 3.5*inch, 1.5*inch], style=self._get_table_style()))
         
         return self._create_pdf(elements)

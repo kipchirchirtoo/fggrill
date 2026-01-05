@@ -113,6 +113,28 @@
     @apply w-full overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0;
     -webkit-overflow-scrolling: touch;
   }
+
+  /* Mobile Touch Targets - minimum 44px */
+  @media (max-width: 768px) {
+    button, a.btn, .btn {
+      min-height: 44px;
+      min-width: 44px;
+    }
+    
+    /* Increase tap area for small interactive elements */
+    .nav-item {
+      min-height: 44px;
+    }
+    
+    /* Better spacing on mobile */
+    .stat-card {
+      @apply p-4;
+    }
+    
+    .action-card {
+      @apply p-3;
+    }
+  }
 }
 
 /* ============================================

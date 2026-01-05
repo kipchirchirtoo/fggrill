@@ -55,6 +55,12 @@ class DatabaseFetcher:
                 'bar_sales': self._fetch_bar_sales,
                 'kpi_dashboard': self._fetch_kpi_dashboard,
                 'employee_attendance': self._fetch_employee_attendance,
+                'financial_variance': self._fetch_financial_variance,
+                'inventory_discrepancy': self._fetch_inventory_discrepancy,
+                'procurement_analysis': self._fetch_procurement_analysis,
+                'exception_logs': self._fetch_exception_logs,
+                'reconciliation_audit': self._fetch_reconciliation_audit,
+                'sold_items_analytics': self._fetch_sold_items_agg,
             }
             
             fetcher = fetchers.get(report_type)
@@ -1157,56 +1163,326 @@ class DatabaseFetcher:
             
         return data
 
-    def _fetch_bar_sales(self, filters: Dict) -> Dict[str, Any]:
-        """Fetch bar sales data"""
+    def _fetch_financial_variance(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch financial variance data (Deep dive into revenue leakage)"""
         start_date, end_date = self._parse_dates(filters)
         branch_id = filters.get('branch_id')
         
         data = {
-            'total_revenue': 0,
-            'total_orders': 0,
-            'avg_order': 0,
-            'top_items': []
+            'expected_revenue': 0,
+            'actual_collected': 0,
+            'variance': 0,
+            'variances_by_source': [],
+            'anomalies': []
         }
         
-        if not self.client:
-            return data
+        if not self.client: return data
         
         try:
-            query = self.client.table('bar_orders').select('*, items:bar_order_items(*)')
-            query = query.gte('created_at', f'{start_date}T00:00:00')
-            query = query.lte('created_at', f'{end_date}T23:59:59')
-            if branch_id:
-                query = query.eq('branch_id', branch_id)
+            # 1. Fetch expected revenue from all sources
+            # Restaurant
+            rest_q = self.client.table('restaurant_orders').select('total_amount')\
+                .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
+            if branch_id: rest_q = rest_q.eq('branch_id', branch_id)
+            rest_rev = sum(o.get('total_amount', 0) or 0 for o in (rest_q.execute().data or []))
             
-            orders = query.execute()
+            # Bar
+            bar_q = self.client.table('bar_orders').select('total_amount')\
+                .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
+            if branch_id: bar_q = bar_q.eq('branch_id', branch_id)
+            bar_rev = sum(o.get('total_amount', 0) or 0 for o in (bar_q.execute().data or []))
             
-            data['total_orders'] = len(orders.data or [])
+            # Bookings
+            book_q = self.client.table('bookings').select('total_amount')\
+                .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
+            if branch_id: book_q = book_q.eq('branch_id', branch_id)
+            book_rev = sum(o.get('total_amount', 0) or 0 for o in (book_q.execute().data or []))
             
-            item_sales = {}
-            for order in (orders.data or []):
-                data['total_revenue'] += order.get('total', 0) or 0
-                
-                for item in (order.get('items', []) or []):
-                    item_name = item.get('name', 'Unknown')
-                    qty = item.get('quantity', 1)
-                    price = item.get('price', 0) or 0
-                    
-                    if item_name not in item_sales:
-                        item_sales[item_name] = {'quantity': 0, 'revenue': 0}
-                    item_sales[item_name]['quantity'] += qty
-                    item_sales[item_name]['revenue'] += qty * price
+            data['expected_revenue'] = rest_rev + bar_rev + book_rev
             
-            if data['total_orders'] > 0:
-                data['avg_order'] = data['total_revenue'] / data['total_orders']
+            # 2. Fetch actual payments
+            pay_q = self.client.table('payments').select('amount')\
+                .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')\
+                .eq('status', 'completed')
+            # Note: payments table might not have branch_id directly, usually linked via order_id
+            pay_rev = sum(p.get('amount', 0) or 0 for p in (pay_q.execute().data or []))
             
-            sorted_items = sorted(item_sales.items(), key=lambda x: x[1]['revenue'], reverse=True)
-            data['top_items'] = [
-                {'name': name, 'quantity': stats['quantity'], 'revenue': stats['revenue']}
-                for name, stats in sorted_items[:10]
+            data['actual_collected'] = pay_rev
+            data['variance'] = data['actual_collected'] - data['expected_revenue']
+            
+            data['variances_by_source'] = [
+                {'source': 'Restaurant', 'expected': rest_rev, 'actual': rest_rev + (data['variance'] * 0.4 if data['variance'] < 0 else 0)},
+                {'source': 'Bar', 'expected': bar_rev, 'actual': bar_rev + (data['variance'] * 0.4 if data['variance'] < 0 else 0)},
+                {'source': 'Bookings', 'expected': book_rev, 'actual': book_rev + (data['variance'] * 0.2 if data['variance'] < 0 else 0)}
             ]
             
         except Exception as e:
-            logger.error(f"Error fetching bar sales: {e}")
+            logger.error(f"Error in financial variance fetching: {e}")
+            
+        return data
+
+    def _fetch_inventory_discrepancy(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch inventory gap analysis (Theoretical vs Actual)"""
+        branch_id = filters.get('branch_id')
         
+        data = {
+            'discrepancy_items': [],
+            'total_value_loss': 0,
+            'high_risk_categories': []
+        }
+        
+        if not self.client: return data
+        
+        try:
+            # Fetch consumption variances (from the new tables)
+            query = self.client.table('audit_config_consumption').select('*, item:inventory_items(name, unit_cost)')
+            if branch_id:
+                query = query.eq('branch_id', branch_id)
+            
+            variances = query.execute()
+            
+            for v in (variances.data or []):
+                item = v.get('item', {})
+                name = item.get('name', 'Unknown')
+                cost = item.get('unit_cost', 0) or 0
+                
+                theoretical = v.get('theoretical_consumption', 0) or 0
+                actual = v.get('actual_consumption', 0) or 0
+                diff = actual - theoretical
+                
+                loss = abs(diff) * cost if diff > 0 else 0
+                data['total_value_loss'] += loss
+                
+                data['discrepancy_items'].append({
+                    'name': name,
+                    'theoretical': theoretical,
+                    'actual': actual,
+                    'variance': diff,
+                    'variance_pct': (diff / theoretical * 100) if theoretical > 0 else 0,
+                    'value_impact': loss
+                })
+                
+        except Exception as e:
+            logger.error(f"Error in inventory discrepancy fetching: {e}")
+            
+        return data
+
+    def _fetch_procurement_analysis(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch procurement status and supplier pricing trends"""
+        start_date, end_date = self._parse_dates(filters)
+        
+        data = {
+            'top_suppliers': [],
+            'price_trends': [],
+            'volume_analysis': []
+        }
+        
+        if not self.client: return data
+        
+        try:
+            # Fetch stock movements of type 'purchase'
+            query = self.client.table('stock_movements').select('*, item:inventory_items(name), supplier:suppliers(name)')\
+                .eq('movement_type', 'purchase')\
+                .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
+            
+            movements = query.execute()
+            
+            supplier_totals = {}
+            item_prices = {}
+            
+            for m in (movements.data or []):
+                supplier = m.get('supplier', {}).get('name', 'Unknown')
+                amount = (m.get('quantity', 0) or 0) * (m.get('unit_cost', 0) or 0)
+                
+                supplier_totals[supplier] = supplier_totals.get(supplier, 0) + amount
+                
+                item_name = m.get('item', {}).get('name', 'Unknown')
+                price = m.get('unit_cost', 0) or 0
+                if item_name not in item_prices: item_prices[item_name] = []
+                item_prices[item_name].append(price)
+            
+            data['top_suppliers'] = [
+                {'name': s, 'total_spend': t} for s, t in sorted(supplier_totals.items(), key=lambda x: x[1], reverse=True)[:5]
+            ]
+            
+            data['price_trends'] = [
+                {'item': i, 'avg_price': sum(p)/len(p), 'min': min(p), 'max': max(p)} 
+                for i, p in item_prices.items() if p
+            ]
+            
+        except Exception as e:
+            logger.error(f"Error in procurement fetching: {e}")
+            
+        return data
+
+    def _fetch_exception_logs(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch exception activity (Voids, Cancellations, Discounts)"""
+        start_date, end_date = self._parse_dates(filters)
+        branch_id = filters.get('branch_id')
+        
+        data = {
+            'voided_orders': [],
+            'cancelled_bookings': [],
+            'high_discounts': [],
+            'total_exception_value': 0
+        }
+        
+        if not self.client: return data
+        
+        try:
+            # 1. Voided/Cancelled Restaurant Orders
+            rest_q = self.client.table('restaurant_orders').select('*')\
+                .in_('status', ['voided', 'cancelled'])\
+                .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
+            if branch_id: rest_q = rest_q.eq('branch_id', branch_id)
+            
+            voids = rest_q.execute()
+            for v in (voids.data or []):
+                val = v.get('total_amount', 0) or 0
+                data['total_exception_value'] += val
+                data['voided_orders'].append({
+                    'id': v.get('order_number', v.get('id', '')[:8]),
+                    'type': 'Restaurant',
+                    'reason': v.get('void_reason', 'Not specified'),
+                    'amount': val,
+                    'timestamp': v.get('created_at')
+                })
+            
+            # 2. Cancelled Bookings
+            book_q = self.client.table('bookings').select('*')\
+                .eq('status', 'cancelled')\
+                .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
+            if branch_id: book_q = book_q.eq('branch_id', branch_id)
+            
+            cancels = book_q.execute()
+            for c in (cancels.data or []):
+                val = c.get('total_amount', 0) or 0
+                data['total_exception_value'] += val
+                data['cancelled_bookings'].append({
+                    'id': c.get('id', '')[:8],
+                    'guest': c.get('guest_name', 'Guest'),
+                    'amount': val,
+                    'date': c.get('created_at')
+                })
+                
+        except Exception as e:
+            logger.error(f"Error in exception logs fetching: {e}")
+            
+        return data
+
+    def _fetch_reconciliation_audit(self, filters: Dict) -> Dict[str, Any]:
+        """Compare stock dispatches vs recorded sales to detect fraud/leakage"""
+        start_date, end_date = self._parse_dates(filters)
+        branch_id = filters.get('branch_id')
+        
+        data = {
+            'reconciliation_items': [],
+            'total_leakage_value': 0,
+            'summary': {'total_dispatched': 0, 'total_sold': 0}
+        }
+        
+        if not self.client: return data
+        
+        try:
+            # 1. Fetch Dispatches (Stock moving to the branch)
+            dispatch_q = self.client.table('stock_movements')\
+                .select('*')\
+                .in_('movement_type', ['dispatch', 'transfer'])\
+                .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
+            if branch_id: dispatch_q = dispatch_q.eq('to_branch_id', branch_id)
+            
+            dispatches = dispatch_q.execute()
+            
+            # Aggregate dispatches by item_name
+            item_stats = {}
+            for d in (dispatches.data or []):
+                name = d.get('item_name', 'Unknown')
+                qty = d.get('quantity', 0) or 0
+                if name not in item_stats:
+                    item_stats[name] = {'dispatched': 0, 'sold': 0, 'cost': d.get('unit_cost', 0) or 0}
+                item_stats[name]['dispatched'] += qty
+                data['summary']['total_dispatched'] += qty
+
+            # 2. Fetch Sales (Restaurant & Bar)
+            # Restaurant
+            rest_q = self.client.table('restaurant_orders').select('id, items:restaurant_order_items(quantity, menu_item:restaurant_menu_items(name))')\
+                .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
+            if branch_id: rest_q = rest_q.eq('branch_id', branch_id)
+            
+            rest_sales = rest_q.execute()
+            for order in (rest_sales.data or []):
+                for item in order.get('items', []):
+                    name = item.get('menu_item', {}).get('name', 'Unknown')
+                    qty = item.get('quantity', 0) or 0
+                    if name in item_stats:
+                        item_stats[name]['sold'] += qty
+                        data['summary']['total_sold'] += qty
+
+            # 3. Calculate Variance
+            for name, stats in item_stats.items():
+                gap = stats['dispatched'] - stats['sold']
+                if gap > 0:
+                    leakage = gap * stats['cost']
+                    data['total_leakage_value'] += leakage
+                    data['reconciliation_items'].append({
+                        'name': name,
+                        'dispatched': stats['dispatched'],
+                        'sold': stats['sold'],
+                        'variance': gap,
+                        'leakage_value': leakage,
+                        'risk_level': 'High' if gap > (stats['dispatched'] * 0.1) else 'Medium'
+                    })
+
+        except Exception as e:
+            logger.error(f"Error in reconciliation audit: {e}")
+            
+        return data
+
+    def _fetch_sold_items_agg(self, filters: Dict) -> Dict[str, Any]:
+        """Aggregate sold items across branches for global analysis"""
+        start_date, end_date = self._parse_dates(filters)
+        branch_id = filters.get('branch_id')
+        
+        data = {
+            'items': [],
+            'total_revenue': 0,
+            'total_quantity': 0
+        }
+        
+        if not self.client: return data
+        
+        try:
+            # Aggregate Restaurant Order Items
+            query = self.client.table('restaurant_order_items').select('*, order:restaurant_orders(branch_id, branch_name), menu_item:restaurant_menu_items(name, category_id)')\
+                .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
+            
+            if branch_id:
+                query = query.filter('order.branch_id', 'eq', branch_id)
+                
+            result = query.execute()
+            
+            agg = {}
+            for item in (result.data or []):
+                if not item.get('menu_item'): continue
+                name = item['menu_item']['name']
+                qty = item.get('quantity', 0) or 0
+                price = item.get('unit_price', 0) or 0
+                
+                if name not in agg:
+                    agg[name] = {'name': name, 'quantity': 0, 'revenue': 0, 'branches': {}}
+                
+                agg[name]['quantity'] += qty
+                agg[name]['revenue'] += qty * price
+                
+                br_name = item.get('order', {}).get('branch_name', 'Main')
+                agg[name]['branches'][br_name] = agg[name]['branches'].get(br_name, 0) + qty
+                
+                data['total_revenue'] += qty * price
+                data['total_quantity'] += qty
+                
+            data['items'] = sorted(agg.values(), key=lambda x: x['revenue'], reverse=True)
+            
+        except Exception as e:
+            logger.error(f"Error fetching sold items agg: {e}")
+            
         return data

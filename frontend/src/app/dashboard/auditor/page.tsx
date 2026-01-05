@@ -17,7 +17,14 @@ import { useRouter } from 'next/navigation';
 export default function AuditorDashboard() {
     const { activeBranchId } = useBranch();
     const [isLoading, setIsLoading] = useState(true);
-    const [stats, setStats] = useState({ totalAudits: 0, pendingReviews: 0, complianceScore: 92, recentFindings: 0, voidedOrders: 0 });
+    const [stats, setStats] = useState({
+        totalAudits: 0,
+        pendingReviews: 0,
+        complianceScore: 92,
+        recentFindings: 0,
+        voidedOrders: 0,
+        estimatedLeakage: 0
+    });
 
     const [recentLogs, setRecentLogs] = useState<any[]>([]);
     const router = useRouter();
@@ -29,17 +36,19 @@ export default function AuditorDashboard() {
             // Use undefined for branchId if activeBranchId is 0 or null to fetch all
             const effectiveBranchId = activeBranchId === 0 ? undefined : (activeBranchId || undefined);
 
-            const [logsRes, requestsRes, ordersRes] = await Promise.all([
+            const [logsRes, requestsRes, ordersRes, reconRes] = await Promise.all([
                 auditAPI.getAuditLogs({ branchId: effectiveBranchId }),
                 storeAPI.getBranchRequests('PENDING', effectiveBranchId),
-                restaurantAPI.getOrders({ status: 'cancelled', branchId: effectiveBranchId })
+                restaurantAPI.getOrders({ status: 'cancelled', branchId: effectiveBranchId }),
+                auditAPI.getReconciliationAudit({ branch_id: effectiveBranchId })
             ]);
 
             if (logsRes.success) {
                 const logs = logsRes.data || [];
                 const pendingCount = requestsRes.success ? (requestsRes.data || []).length : 0;
                 const voidedCount = ordersRes.success ? (ordersRes.data || []).length : 0;
-                const highRisks = logs.filter((l: any) => l.severity === 'high').length;
+                const leakageValue = reconRes.success ? (reconRes.data?.total_leakage_value || 0) : 0;
+                const highRisks = logs.filter((l: any) => l.severity === 'high').length + (leakageValue > 5000 ? 1 : 0);
 
                 // Dynamic compliance score calculation
                 const score = logs.length > 0
@@ -51,7 +60,8 @@ export default function AuditorDashboard() {
                     pendingReviews: pendingCount,
                     complianceScore: Math.round(score),
                     recentFindings: highRisks,
-                    voidedOrders: voidedCount
+                    voidedOrders: voidedCount,
+                    estimatedLeakage: leakageValue
                 });
 
                 setRecentLogs(logs.slice(0, 5));
@@ -77,8 +87,8 @@ export default function AuditorDashboard() {
     const quickLinks = [
         { href: '/dashboard/auditor/sales', icon: ShoppingBag, label: 'Sales Audit', desc: 'Verify daily revenue' },
         { href: '/dashboard/auditor/stock', icon: Package, label: 'Stock Audit', desc: 'Inventory & variance' },
-        { href: '/dashboard/auditor/orders', icon: Calculator, label: 'Orders & Pay', desc: 'Reconcile payments' },
-        { href: '/dashboard/auditor/reports', icon: BarChart3, label: 'Reports', desc: 'Analytics generation' },
+        { href: '/dashboard/auditor/sold-items', icon: BarChart3, label: 'Global Analytics', desc: 'Aggregated performance' },
+        { href: '/dashboard/auditor/reports', icon: ClipboardList, label: 'Reports', desc: 'Analytics generation' },
     ];
 
     return (
@@ -102,7 +112,7 @@ export default function AuditorDashboard() {
                     </div>
 
                     {/* Stats Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                         {statCards.map((stat, i) => (
                             <div key={i} className="stat-card">
                                 <div className="stat-icon">
@@ -122,7 +132,7 @@ export default function AuditorDashboard() {
                                 <p className="section-subtitle">Core compliance tracking</p>
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
                             {quickLinks.map((link) => (
                                 <Link key={link.href} href={link.href}>
                                     <div className="action-card group py-3">
@@ -138,7 +148,7 @@ export default function AuditorDashboard() {
                     </div>
 
                     {/* Risk & Activities Grid */}
-                    <div className="grid lg:grid-cols-2 gap-5">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                         <div className="card-elevated p-5">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-[15px] font-semibold text-stone-900">Live Risk Indicators</h3>
@@ -146,6 +156,7 @@ export default function AuditorDashboard() {
                             <div className="space-y-3">
                                 <RiskItem title="Voided Orders (Today)" value={stats.voidedOrders.toString()} risk={stats.voidedOrders > 5 ? 'high' : stats.voidedOrders > 0 ? 'medium' : 'low'} />
                                 <RiskItem title="Pending Stock Requests" value={stats.pendingReviews.toString()} risk={stats.pendingReviews > 10 ? 'high' : stats.pendingReviews > 0 ? 'medium' : 'low'} />
+                                <RiskItem title="Stock vs Sales Leakage" value={`KES ${stats.estimatedLeakage.toLocaleString()}`} risk={stats.estimatedLeakage > 5000 ? 'high' : stats.estimatedLeakage > 0 ? 'medium' : 'low'} />
                                 <RiskItem title="Audit Exceptions" value={stats.recentFindings.toString()} risk={stats.recentFindings > 0 ? 'high' : 'low'} />
                             </div>
                         </div>
