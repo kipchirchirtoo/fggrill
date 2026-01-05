@@ -235,6 +235,14 @@ export const storeAPI = {
     if (params?.to_date) query.append('to_date', params.to_date);
     return fetchAPI<any>(`/store/stock-movements?${query}`);
   },
+  updateBranchStock: (data: { item_sku: string; quantity: number; movement_type?: string; notes?: string }) =>
+    fetchAPI<any>('/store/branch-stock/adjustment', { method: 'POST', body: JSON.stringify(data) }),
+  recordStockOut: (data: { item_sku: string; quantity: number; movement_type?: string; reason?: string; notes?: string }) =>
+    fetchAPI<any>('/store/branch-stock/out', { method: 'POST', body: JSON.stringify(data) }),
+  getLowStockItems: (branchId?: number) => {
+    const query = branchId ? `?branch_id=${branchId}` : '';
+    return fetchAPI<any>(`/store/branch-stock/low${query}`);
+  },
 
   // Stock Requests
   createStockRequest: (data: {
@@ -412,6 +420,22 @@ export const storeAPI = {
     if (params?.to_date) query.append('to_date', params.to_date);
     return fetchAPI<any>(`/store/kitchen-usage/summary?${query}`);
   },
+
+  // Kitchen Usage (New Methods)
+  getTrackableItems: () => fetchAPI<any>('/store/kitchen-usage/trackable-items'),
+  createUsageRecord: (data: { item_sku: string; quantity: number; accountability_id?: string; notes?: string }) =>
+    fetchAPI<any>('/store/kitchen-usage', { method: 'POST', body: JSON.stringify(data) }),
+  recordUsageEntry: (usageRecordId: string, data: {
+    usage_type: 'CONSUMED' | 'SPOILT' | 'LOST' | 'DAMAGED' | 'EXPIRED' | 'RETURNED';
+    quantity: number;
+    notes?: string;
+    responsible_staff_id?: string;
+    responsible_staff_name?: string;
+  }) =>
+    fetchAPI<any>(`/store/kitchen-usage/${usageRecordId}/entries`, { method: 'POST', body: JSON.stringify(data) }),
+  getUsageEntries: (usageRecordId: string) => fetchAPI<any>(`/store/kitchen-usage/${usageRecordId}/entries`),
+  closeUsageRecord: (usageRecordId: string) => fetchAPI<any>(`/store/kitchen-usage/${usageRecordId}/close`, { method: 'PUT' }),
+  getKitchenUsageStaff: () => fetchAPI<any>('/store/kitchen-usage/staff'),
 };
 
 // =====================================================

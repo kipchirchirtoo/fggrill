@@ -1,7 +1,5 @@
-'use client';
-
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -16,16 +14,21 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
-import { 
+import {
   Package, Store, Truck, ClipboardList, AlertTriangle,
   Search, Plus, Check, X, Send, RefreshCw, Minus,
   ChevronRight, Clock, ArrowDownToLine, History, Box,
-  ArrowUpRight, ArrowDownLeft, TrendingUp, TrendingDown
+  ArrowUpRight, ArrowDownLeft, TrendingUp, TrendingDown,
+  ChevronDown, Filter, FileText, CheckCircle2,
+  PackageSearch, BarChart3, User, Calendar, Utensils
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { storeAPI } from '@/lib/api';
+import { format } from 'date-fns';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -68,10 +71,26 @@ interface IncomingDispatch {
 
 export default function BranchStorekeeperPage() {
   const { user, isLoading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<'stock' | 'requests' | 'incoming' | 'movements'>('stock');
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const [activeTab, setActiveTab] = useState<'overview' | 'stock' | 'requests' | 'receive' | 'usage' | 'history' | 'reports'>('overview');
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  
+
+  // Tab handling from URL
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && ['overview', 'stock', 'requests', 'receive', 'usage', 'history', 'reports'].includes(tab)) {
+      setActiveTab(tab as any);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab as any);
+    router.push(`/dashboard/storekeeping/branch?tab=${tab}`);
+  };
+
   // Data
   const [stats, setStats] = useState({
     totalItems: 0,
@@ -84,24 +103,57 @@ export default function BranchStorekeeperPage() {
   const [incomingDispatches, setIncomingDispatches] = useState<IncomingDispatch[]>([]);
   const [masterCatalog, setMasterCatalog] = useState<any[]>([]);
   const [stockMovements, setStockMovements] = useState<any[]>([]);
-  
+
   // Modal states
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+  const [isStockUpdateModalOpen, setIsStockUpdateModalOpen] = useState(false);
   const [isStockOutModalOpen, setIsStockOutModalOpen] = useState(false);
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
   const [selectedDispatch, setSelectedDispatch] = useState<IncomingDispatch | null>(null);
-  
-  // Request form
-  const [requestItems, setRequestItems] = useState<{item_sku: string; requested_quantity: number}[]>([]);
+
+  // Form states
+  const [requestItems, setRequestItems] = useState<any[]>([]);
+  const [requestReason, setRequestReason] = useState('');
   const [requestType, setRequestType] = useState('ROUTINE');
   const [requestPriority, setRequestPriority] = useState('NORMAL');
-  const [requestReason, setRequestReason] = useState('');
 
-  // Stock out form
   const [stockOutSku, setStockOutSku] = useState('');
   const [stockOutQuantity, setStockOutQuantity] = useState(0);
   const [stockOutType, setStockOutType] = useState('USAGE');
   const [stockOutReason, setStockOutReason] = useState('');
+
+  const [stockUpdates, setStockUpdates] = useState<Record<string, number>>({});
+  const [updateNotes, setUpdateNotes] = useState('');
+
+  const [receivedItems, setReceivedItems] = useState<Record<string, {
+    quantity: number,
+    damaged: number,
+    missing: number,
+    note: string
+  }>>({});
+  const [deliveryNotes, setDeliveryNotes] = useState('');
+
+  // Kitchen Usage states
+  const [usageRecords, setUsageRecords] = useState<any[]>([]);
+  const [trackableItems, setTrackableItems] = useState<any[]>([]);
+  const [isUsageModalOpen, setIsUsageModalOpen] = useState(false);
+  const [usageDetails, setUsageDetails] = useState({
+    item_sku: '',
+    quantity: 0,
+    staff_id: '',
+    notes: ''
+  });
+  const [branchStaff, setBranchStaff] = useState<any[]>([]);
+
+  // Stock Update state
+  const [stockUpdates, setStockUpdates] = useState<Record<string, number>>({});
+  const [updateNotes, setUpdateNotes] = useState('');
+
+  // Request form
+  const [requestItems, setRequestItems] = useState<{ item_sku: string; requested_quantity: number }[]>([]);
+  const [requestType, setRequestType] = useState('ROUTINE');
+  const [requestPriority, setRequestPriority] = useState('NORMAL');
+  const [requestReason, setRequestReason] = useState('');
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -112,53 +164,40 @@ export default function BranchStorekeeperPage() {
   const fetchDashboardData = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      };
-
-      // Add branch_id if available in user context
-      const queryParams = user?.branch_id ? `?branch_id=${user.branch_id}` : '';
-
-      const [dashboardRes, stockRes, requestsRes, incomingRes, catalogRes, movementsRes] = await Promise.all([
-        fetch(`${API_URL}/api/store/dashboard/branch${queryParams}`, { headers }),
-        fetch(`${API_URL}/api/store/branch-stock${queryParams}`, { headers }),
-        fetch(`${API_URL}/api/store/stock-requests${queryParams}`, { headers }),
-        fetch(`${API_URL}/api/store/incoming-dispatches${queryParams}`, { headers }),
-        fetch(`${API_URL}/api/store/master-catalog`, { headers }),
-        fetch(`${API_URL}/api/store/stock-movements${queryParams}`, { headers }).catch(() => ({ ok: false }))
+      // Use storeAPI instead of raw fetch
+      const [stockData, requestsData, incomingData, catalogData, movementsData] = await Promise.all([
+        storeAPI.getBranchStock(),
+        storeAPI.getBranchRequests(),
+        storeAPI.getIncomingDispatches(),
+        storeAPI.getMasterCatalog(),
+        storeAPI.getStockMovements().catch(() => ({ data: [] }))
       ]);
 
-      if (dashboardRes.ok) {
-        const data = await dashboardRes.json();
-        setStats(data.data?.stats || stats);
+      setBranchStock(stockData.data || []);
+      setMyRequests(requestsData.data || []);
+      setIncomingDispatches(incomingData.data || []);
+      setMasterCatalog(catalogData.data || []);
+      setStockMovements(movementsData.data || []);
+
+      if (activeTab === 'usage') {
+        const [usageData, trackableData, staffData] = await Promise.all([
+          storeAPI.getKitchenUsageRecords(),
+          storeAPI.getTrackableItems(),
+          storeAPI.getKitchenUsageStaff()
+        ]);
+        setUsageRecords(usageData.data || []);
+        setTrackableItems(trackableData.data || []);
+        setBranchStaff(staffData.data || []);
       }
 
-      if (stockRes.ok) {
-        const data = await stockRes.json();
-        setBranchStock(data.data || []);
-      }
-
-      if (requestsRes.ok) {
-        const data = await requestsRes.json();
-        setMyRequests(data.data || []);
-      }
-
-      if (incomingRes.ok) {
-        const data = await incomingRes.json();
-        setIncomingDispatches(data.data || []);
-      }
-
-      if (catalogRes.ok) {
-        const data = await catalogRes.json();
-        setMasterCatalog(data.data || []);
-      }
-
-      if (movementsRes.ok) {
-        const data = await movementsRes.json();
-        setStockMovements(data.data || []);
-      }
+      // Calculate stats locally if dashboard endpoint isn't available or to ensure consistency
+      const lowStock = (stockData.data || []).filter((s: any) => s.quantity <= s.reorder_level).length;
+      setStats({
+        totalItems: stockData.data?.length || 0,
+        lowStock,
+        pendingRequests: (requestsData.data || []).filter((r: any) => r.status === 'PENDING').length,
+        incomingDispatches: (incomingData.data || []).filter((d: any) => d.status === 'IN_TRANSIT').length
+      });
 
     } catch (error) {
       console.error('Error fetching dashboard:', error);
@@ -175,31 +214,18 @@ export default function BranchStorekeeperPage() {
     }
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/stock-requests`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          items: requestItems,
-          request_type: requestType,
-          priority: requestPriority,
-          reason: requestReason
-        })
+      const response = await storeAPI.createStockRequest({
+        items: requestItems,
+        request_type: requestType,
+        priority: requestPriority,
+        reason: requestReason
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        toast.success(`Request ${data.data.request_number} created`);
-        setIsRequestModalOpen(false);
-        setRequestItems([]);
-        setRequestReason('');
-        fetchDashboardData();
-      } else {
-        throw new Error('Failed to create request');
-      }
+      toast.success(`Request ${response.data.request_number} created`);
+      setIsRequestModalOpen(false);
+      setRequestItems([]);
+      setRequestReason('');
+      fetchDashboardData();
     } catch (error) {
       toast.error('Failed to create stock request');
     }
@@ -212,33 +238,89 @@ export default function BranchStorekeeperPage() {
     }
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/branch-stock/out`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          item_sku: stockOutSku,
-          quantity: stockOutQuantity,
-          movement_type: stockOutType,
-          reason: stockOutReason
-        })
+      setIsLoading(true);
+      await storeAPI.recordStockOut({
+        item_sku: stockOutSku,
+        quantity: stockOutQuantity,
+        reason: stockOutType,
+        notes: stockOutReason
       });
 
-      if (response.ok) {
-        toast.success('Stock out recorded');
-        setIsStockOutModalOpen(false);
-        setStockOutSku('');
-        setStockOutQuantity(0);
-        setStockOutReason('');
-        fetchDashboardData();
-      } else {
-        throw new Error('Failed to record stock out');
-      }
+      toast.success('Stock out recorded');
+      setIsStockOutModalOpen(false);
+      setStockOutSku('');
+      setStockOutQuantity(0);
+      setStockOutReason('');
+      fetchDashboardData();
     } catch (error) {
       toast.error('Failed to record stock out');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleStockUpdate = async () => {
+    const itemsToUpdate = Object.entries(stockUpdates).filter(([_, qty]) => qty !== undefined);
+
+    if (itemsToUpdate.length === 0) {
+      toast.error('No updates to save');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      for (const [sku, quantity] of itemsToUpdate) {
+        const item = branchStock.find(s => s.item_sku === sku);
+        if (item) {
+          const theoreticalStock = item.quantity || 0;
+          const adjustment = Number(quantity) - theoreticalStock;
+
+          if (adjustment !== 0) {
+            await storeAPI.updateBranchStock({
+              item_sku: sku,
+              quantity: adjustment,
+              movement_type: 'MORNING_COUNT',
+              notes: updateNotes || 'Morning stock count'
+            });
+          }
+        }
+      }
+
+      toast.success('Stock levels updated');
+      setIsStockUpdateModalOpen(false);
+      setStockUpdates({});
+      setUpdateNotes('');
+      fetchDashboardData();
+    } catch (error) {
+      toast.error('Failed to update stock levels');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleIssueToKitchen = async () => {
+    if (!usageDetails.item_sku || usageDetails.quantity <= 0) {
+      toast.error('Select item and quantity');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await storeAPI.createKitchenUsageRecord({
+        item_sku: usageDetails.item_sku,
+        received_quantity: usageDetails.quantity,
+        accountability_id: usageDetails.staff_id,
+        notes: usageDetails.notes
+      } as any);
+
+      toast.success('Items issued to kitchen');
+      setIsUsageModalOpen(false);
+      setUsageDetails({ item_sku: '', quantity: 0, staff_id: '', notes: '' });
+      fetchDashboardData();
+    } catch (error) {
+      toast.error('Failed to issue items');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -246,32 +328,28 @@ export default function BranchStorekeeperPage() {
     if (!selectedDispatch) return;
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/dispatch-notes/${selectedDispatch.id}/confirm`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          received_items: selectedDispatch.items.map(item => ({
+      const payload = {
+        received_items: selectedDispatch.items.map(item => {
+          const verification = receivedItems[item.id] || { quantity: item.dispatched_quantity, damaged: 0, missing: 0, note: '' };
+          return {
             id: item.id,
-            received_quantity: item.dispatched_quantity,
-            damaged_quantity: 0,
-            missing_quantity: 0
-          })),
-          delivery_notes: ''
-        })
-      });
+            received_quantity: verification.quantity,
+            damaged_quantity: verification.damaged,
+            missing_quantity: verification.missing,
+            discrepancy_reason: verification.note
+          };
+        }),
+        delivery_notes: deliveryNotes
+      };
 
-      if (response.ok) {
-        toast.success('Delivery confirmed');
-        setIsReceiveModalOpen(false);
-        setSelectedDispatch(null);
-        fetchDashboardData();
-      } else {
-        throw new Error('Failed to confirm delivery');
-      }
+      await storeAPI.confirmDelivery(selectedDispatch.id, payload);
+
+      toast.success('Delivery confirmed and stock updated');
+      setIsReceiveModalOpen(false);
+      setSelectedDispatch(null);
+      setReceivedItems({});
+      setDeliveryNotes('');
+      fetchDashboardData();
     } catch (error) {
       toast.error('Failed to confirm delivery');
     }
@@ -280,8 +358,8 @@ export default function BranchStorekeeperPage() {
   const addItemToRequest = (item: any) => {
     const existing = requestItems.find(i => i.item_sku === item.sku);
     if (existing) {
-      setRequestItems(requestItems.map(i => 
-        i.item_sku === item.sku 
+      setRequestItems(requestItems.map(i =>
+        i.item_sku === item.sku
           ? { ...i, requested_quantity: i.requested_quantity + 1 }
           : i
       ));
@@ -302,7 +380,7 @@ export default function BranchStorekeeperPage() {
     }
   };
 
-  const filteredStock = branchStock.filter(stock => 
+  const filteredStock = branchStock.filter(stock =>
     searchTerm === '' ||
     stock.item_sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
     stock.item?.item_name?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -411,11 +489,10 @@ export default function BranchStorekeeperPage() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`pb-4 px-1 flex items-center gap-2 ${
-                    activeTab === tab.id
-                      ? 'border-b-2 border-[rgba(60,60,67,0.12)] text-[#3C3C43]'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
+                  className={`pb-4 px-1 flex items-center gap-2 ${activeTab === tab.id
+                    ? 'border-b-2 border-[rgba(60,60,67,0.12)] text-[#3C3C43]'
+                    : 'text-gray-500 hover:text-gray-700'
+                    }`}
                 >
                   <tab.icon className="h-4 w-4" />
                   {tab.label}
@@ -426,7 +503,7 @@ export default function BranchStorekeeperPage() {
 
           {/* Tab Content */}
           <div className="bg-[#FFFFFF] rounded-xl shadow-none 0_1px_3px_rgba(0,0,0,0.04)] border">
-            
+
             {/* Current Stock Tab */}
             {activeTab === 'stock' && (
               <div className="p-6">
@@ -440,6 +517,20 @@ export default function BranchStorekeeperPage() {
                       className="pl-9"
                     />
                   </div>
+                  <IOSButton
+                    variant="outline"
+                    onClick={() => {
+                      const initialUpdates: Record<string, number> = {};
+                      branchStock.forEach(item => {
+                        initialUpdates[item.item_sku] = item.quantity;
+                      });
+                      setStockUpdates(initialUpdates);
+                      setIsStockUpdateModalOpen(true);
+                    }}
+                    leftIcon={<PackageSearch />}
+                  >
+                    Morning Stock Count
+                  </IOSButton>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -513,8 +604,8 @@ export default function BranchStorekeeperPage() {
                           <td className="px-4 py-4">
                             <IOSBadge className={
                               request.priority === 'URGENT' ? 'bg-[#F2F2F7]0' :
-                              request.priority === 'HIGH' ? 'bg-[#F2F2F7]' :
-                              'bg-[#F2F2F7]0'
+                                request.priority === 'HIGH' ? 'bg-[#F2F2F7]' :
+                                  'bg-[#F2F2F7]0'
                             }>{request.priority}</IOSBadge>
                           </td>
                           <td className="px-4 py-4">{request.items?.length || 0} items</td>
@@ -553,8 +644,8 @@ export default function BranchStorekeeperPage() {
                         <div className="text-right">
                           <IOSBadge className={getStatusColor(dispatch.status)}>{dispatch.status}</IOSBadge>
                           {dispatch.status === 'IN_TRANSIT' && (
-                            <IOSButton 
-                              className="mt-2 bg-[#3C3C43] hover:bg-[#3C3C43]" 
+                            <IOSButton
+                              className="mt-2 bg-[#3C3C43] hover:bg-[#3C3C43]"
                               size="sm"
                               onClick={() => {
                                 setSelectedDispatch(dispatch);
@@ -573,6 +664,79 @@ export default function BranchStorekeeperPage() {
                     <div className="text-center py-12 text-gray-500">
                       <Truck className="h-12 w-12 mx-auto mb-3 opacity-30" />
                       <p>No incoming dispatches</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Kitchen Usage Tab */}
+            {activeTab === 'usage' && (
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-lg font-bold">Kitchen Usage Tracking</h3>
+                    <p className="text-sm text-gray-500">Track items issued to the kitchen and record consumption.</p>
+                  </div>
+                  <IOSButton
+                    size="sm"
+                    leftIcon={<Plus />}
+                    className="bg-[#3C3C43] hover:bg-[#3C3C43]"
+                    onClick={() => setIsUsageModalOpen(true)}
+                  >
+                    Issue to Kitchen
+                  </IOSButton>
+                </div>
+
+                <div className="space-y-4">
+                  {usageRecords.length > 0 ? (
+                    usageRecords.map((record) => (
+                      <IOSCard key={record.id} className="p-4 border-[rgba(60,60,67,0.12)]">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="p-3 bg-gray-50 rounded-xl">
+                              <Utensils className="h-6 w-6 text-[#3C3C43]" />
+                            </div>
+                            <div>
+                              <p className="font-bold">{record.item?.item_name || record.item_sku}</p>
+                              <div className="flex gap-4 mt-1">
+                                <span className="text-xs text-gray-500 flex items-center gap-1">
+                                  <Package className="h-3 w-3" /> Issued: {record.received_quantity}
+                                </span>
+                                <span className="text-xs text-gray-500 flex items-center gap-1">
+                                  <User className="h-3 w-3" /> Staff: {record.responsible_staff_name || 'Not assigned'}
+                                </span>
+                                <span className="text-xs text-gray-500 flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" /> Date: {new Date(record.created_at).toLocaleDateString()}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <IOSBadge className={record.status === 'OPEN' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>
+                              {record.status}
+                            </IOSBadge>
+                            <div className="mt-2">
+                              <IOSButton variant="ghost" size="sm" onClick={() => router.push(`/dashboard/storekeeping/branch/usage/${record.id}`)}>
+                                View Details
+                              </IOSButton>
+                            </div>
+                          </div>
+                        </div>
+                      </IOSCard>
+                    ))
+                  ) : (
+                    <div className="text-center py-20 border-2 border-dashed rounded-xl">
+                      <Utensils className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                      <p className="text-gray-500">No active kitchen usage records.</p>
+                      <p className="text-sm text-gray-400 mt-1">Issue items to the kitchen to begin tracking.</p>
+                      <IOSButton
+                        variant="ghost"
+                        className="mt-4"
+                        onClick={() => setIsUsageModalOpen(true)}
+                      >
+                        Issue Now
+                      </IOSButton>
                     </div>
                   )}
                 </div>
@@ -640,8 +804,139 @@ export default function BranchStorekeeperPage() {
                 </div>
               </div>
             )}
+            {/* Reports Tab */}
+            {activeTab === 'reports' && (
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <IOSCard className="p-6">
+                    <h3 className="font-bold flex items-center gap-2 mb-4">
+                      <BarChart3 className="h-5 w-5" /> Stock Value Summary
+                    </h3>
+                    <div className="h-64 flex items-center justify-center bg-gray-50 rounded-xl border border-dashed">
+                      <p className="text-gray-400">Stock value chart coming soon...</p>
+                    </div>
+                  </IOSCard>
+
+                  <IOSCard className="p-6">
+                    <h3 className="font-bold flex items-center gap-2 mb-4">
+                      <TrendingUp className="h-5 w-5" /> Usage Patterns
+                    </h3>
+                    <div className="h-64 flex items-center justify-center bg-gray-50 rounded-xl border border-dashed">
+                      <p className="text-gray-400">Usage trends chart coming soon...</p>
+                    </div>
+                  </IOSCard>
+                </div>
+
+                <div className="mt-6">
+                  <h3 className="font-bold mb-4">Recent Stock Movements Summary</h3>
+                  <div className="bg-gray-50 p-4 rounded-xl">
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase">Received (30d)</p>
+                        <p className="text-2xl font-bold text-green-600">0</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase">Consumed (30d)</p>
+                        <p className="text-2xl font-bold text-blue-600">0</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase">Wastage (30d)</p>
+                        <p className="text-2xl font-bold text-red-600">0</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Kitchen Issue Modal */}
+        <Dialog open={isUsageModalOpen} onOpenChange={setIsUsageModalOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Utensils className="h-5 w-5" />
+                Issue to Kitchen
+              </DialogTitle>
+              <DialogDescription>
+                Transfer items from store to kitchen for tracking.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 pt-4">
+              <div>
+                <Label>Select Item</Label>
+                <Select
+                  value={usageDetails.item_sku}
+                  onValueChange={(val) => setUsageDetails({ ...usageDetails, item_sku: val })}
+                >
+                  <SelectTrigger><SelectValue placeholder="Choose item..." /></SelectTrigger>
+                  <SelectContent>
+                    {branchStock.map((item) => (
+                      <SelectItem key={item.item_sku} value={item.item_sku}>
+                        {item.item?.item_name || item.item_sku} ({item.quantity} in stock)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Quantity to Issue</Label>
+                <Input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={usageDetails.quantity || ''}
+                  onChange={(e) => setUsageDetails({ ...usageDetails, quantity: parseFloat(e.target.value) || 0 })}
+                  placeholder="e.g. 10.5"
+                />
+              </div>
+
+              <div>
+                <Label>Accountable Staff</Label>
+                <Select
+                  value={usageDetails.staff_id}
+                  onValueChange={(val) => setUsageDetails({ ...usageDetails, staff_id: val })}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select staff member..." /></SelectTrigger>
+                  <SelectContent>
+                    {branchStaff.map((staff) => (
+                      <SelectItem key={staff.id} value={staff.id}>
+                        {staff.first_name} {staff.last_name} ({staff.role})
+                        {staff.first_name} {staff.last_name} ({staff.role})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Notes</Label>
+                <Input
+                  value={usageDetails.notes}
+                  onChange={(e) => setUsageDetails({ ...usageDetails, notes: e.target.value })}
+                  placeholder="Specific instructions or notes..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-6 border-t">
+                <IOSButton variant="outline" onClick={() => setIsUsageModalOpen(false)}>
+                  Cancel
+                </IOSButton>
+                <IOSButton
+                  className="bg-[#3C3C43] hover:bg-[#3C3C43]"
+                  onClick={handleIssueToKitchen}
+                  disabled={!usageDetails.item_sku || usageDetails.quantity <= 0}
+                  leftIcon={<Check />}
+                >
+                  Issue Items
+                </IOSButton>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Create Request Modal */}
         <Dialog open={isRequestModalOpen} onOpenChange={setIsRequestModalOpen}>
@@ -683,8 +978,8 @@ export default function BranchStorekeeperPage() {
 
               <div>
                 <Label>Reason (optional)</Label>
-                <Input 
-                  value={requestReason} 
+                <Input
+                  value={requestReason}
                   onChange={(e) => setRequestReason(e.target.value)}
                   placeholder="Reason for request..."
                 />
@@ -695,8 +990,8 @@ export default function BranchStorekeeperPage() {
                 <Label className="mb-2 block">Add Items from Catalog</Label>
                 <div className="border rounded-ios-lg max-h-48 overflow-y-auto">
                   {masterCatalog.slice(0, 20).map((item) => (
-                    <div 
-                      key={item.sku} 
+                    <div
+                      key={item.sku}
                       className="flex items-center justify-between p-3 hover:bg-gray-50 border-b cursor-pointer"
                       onClick={() => addItemToRequest(item)}
                     >
@@ -734,8 +1029,8 @@ export default function BranchStorekeeperPage() {
                               }}
                               className="w-20"
                             />
-                            <IOSButton 
-                              variant="ghost" 
+                            <IOSButton
+                              variant="ghost"
                               size="sm"
                               onClick={() => setRequestItems(requestItems.filter((_, i) => i !== idx))}
                             >
@@ -754,11 +1049,11 @@ export default function BranchStorekeeperPage() {
                 <IOSButton variant="outline" onClick={() => setIsRequestModalOpen(false)}>
                   Cancel
                 </IOSButton>
-                <IOSButton 
-                  className="bg-[#3C3C43] hover:bg-[#3C3C43]" 
+                <IOSButton
+                  className="bg-[#3C3C43] hover:bg-[#3C3C43]"
                   onClick={handleCreateRequest}
                   disabled={requestItems.length === 0}
-                 leftIcon={<Send />}>Submit Request
+                  leftIcon={<Send />}>Submit Request
                 </IOSButton>
               </div>
             </div>
@@ -835,44 +1130,189 @@ export default function BranchStorekeeperPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Receive Delivery Modal */}
+        {/* Morning Stock Count Modal */}
+        <Dialog open={isStockUpdateModalOpen} onOpenChange={setIsStockUpdateModalOpen}>
+          <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <PackageSearch className="h-5 w-5" />
+                Morning Stock Count
+              </DialogTitle>
+              <DialogDescription>
+                Record the actual physical count of items in the store this morning.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex-1 overflow-y-auto py-4 space-y-4">
+              <div className="grid grid-cols-12 gap-4 px-2 text-xs font-bold uppercase text-gray-500">
+                <div className="col-span-6">Item</div>
+                <div className="col-span-3 text-center">System Qty</div>
+                <div className="col-span-3 text-center">Actual Count</div>
+              </div>
+              <div className="space-y-2">
+                {branchStock.map((item) => (
+                  <div key={item.id} className="grid grid-cols-12 gap-4 items-center p-3 bg-gray-50 rounded-ios-lg">
+                    <div className="col-span-6">
+                      <p className="font-medium text-sm">{item.item?.item_name || item.item_sku}</p>
+                      <p className="text-xs text-gray-500 font-mono">{item.item_sku}</p>
+                    </div>
+                    <div className="col-span-3 text-center">
+                      <span className="text-sm font-sf-pro-display text-[#3A3A3C]">{item.quantity}</span>
+                    </div>
+                    <div className="col-span-3">
+                      <Input
+                        type="number"
+                        className="text-center font-bold"
+                        value={stockUpdates[item.item_sku] ?? ''}
+                        onChange={(e) => setStockUpdates({
+                          ...stockUpdates,
+                          [item.item_sku]: parseInt(e.target.value) || 0
+                        })}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-4 px-2">
+                <Label>Notes</Label>
+                <textarea
+                  className="w-full mt-1 p-3 border rounded-ios-lg focus:ring-1 focus:ring-black outline-none"
+                  rows={2}
+                  placeholder="Any discrepancies or notes..."
+                  value={updateNotes}
+                  onChange={(e) => setUpdateNotes(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t mt-4">
+              <IOSButton variant="outline" onClick={() => setIsStockUpdateModalOpen(false)}>
+                Cancel
+              </IOSButton>
+              <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleStockUpdate} leftIcon={<Check />}>
+                Save Counts
+              </IOSButton>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Receive Delivery Modal (Detailed) */}
         <Dialog open={isReceiveModalOpen} onOpenChange={setIsReceiveModalOpen}>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <ArrowDownToLine className="h-5 w-5" />
-                Confirm Delivery
+                Confirm Incoming Delivery
               </DialogTitle>
+              <DialogDescription>
+                Verify each item received against the dispatch note. Report any damages or missing items.
+              </DialogDescription>
             </DialogHeader>
 
-            {selectedDispatch && (
-              <div className="space-y-4">
-                <div className="bg-gray-50 p-4 rounded-ios-lg">
-                  <p className="font-mono font-medium">{selectedDispatch.dispatch_number}</p>
-                  <p className="text-sm text-gray-500">{selectedDispatch.items?.length || 0} items</p>
-                </div>
+            <div className="flex-1 overflow-y-auto py-4 space-y-6">
+              {selectedDispatch && (
+                <>
+                  <div className="bg-[#F2F2F7] p-4 rounded-ios-lg space-y-1">
+                    <p className="font-mono font-bold text-[#3C3C43]">{selectedDispatch.dispatch_number}</p>
+                    <p className="text-sm text-gray-600">From: {selectedDispatch.from_branch?.name || 'Central Warehouse'}</p>
+                    <p className="text-sm text-gray-600">Sent: {new Date(selectedDispatch.dispatched_at).toLocaleString()}</p>
+                  </div>
 
-                <div className="space-y-2">
-                  {selectedDispatch.items?.map((item: any) => (
-                    <div key={item.id} className="flex items-center justify-between p-3 border rounded-ios-lg">
-                      <div>
-                        <p className="font-medium">{item.item?.item_name || item.item_sku}</p>
-                        <p className="text-xs text-gray-500 font-mono">{item.item_sku}</p>
-                      </div>
-                      <p className="font-bold">{item.dispatched_quantity}</p>
-                    </div>
-                  ))}
-                </div>
+                  <div className="space-y-4">
+                    {selectedDispatch.items?.map((item: any) => {
+                      const details = receivedItems[item.id] || { quantity: item.dispatched_quantity, damaged: 0, missing: 0, note: '' };
+                      return (
+                        <div key={item.id} className="border rounded-ios-lg overflow-hidden shadow-sm">
+                          <div className="bg-gray-50 p-3 border-b flex justify-between items-center">
+                            <div>
+                              <p className="font-bold text-sm">{item.item?.item_name || item.item_sku}</p>
+                              <p className="text-xs text-gray-500">{item.item_sku}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs text-gray-500 uppercase font-bold">Dispatched</p>
+                              <p className="text-lg font-bold">{item.dispatched_quantity}</p>
+                            </div>
+                          </div>
 
-                <div className="flex justify-end gap-3 pt-4 border-t">
-                  <IOSButton variant="outline" onClick={() => setIsReceiveModalOpen(false)}>
-                    Cancel
-                  </IOSButton>
-                  <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleConfirmDelivery} leftIcon={<Check />}>Confirm All Received
-                  </IOSButton>
-                </div>
-              </div>
-            )}
+                          <div className="p-4 grid grid-cols-3 gap-4">
+                            <div>
+                              <Label className="text-[10px] uppercase text-gray-400">Received OK</Label>
+                              <Input
+                                type="number"
+                                value={details.quantity}
+                                onChange={(e) => setReceivedItems({
+                                  ...receivedItems,
+                                  [item.id]: { ...details, quantity: parseInt(e.target.value) || 0 }
+                                })}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[10px] uppercase text-gray-400">Damaged</Label>
+                              <Input
+                                type="number"
+                                className="border-red-100 bg-red-50/10"
+                                value={details.damaged}
+                                onChange={(e) => setReceivedItems({
+                                  ...receivedItems,
+                                  [item.id]: { ...details, damaged: parseInt(e.target.value) || 0 }
+                                })}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[10px] uppercase text-gray-400">Missing</Label>
+                              <Input
+                                type="number"
+                                className="border-amber-100 bg-amber-50/10"
+                                value={details.missing}
+                                onChange={(e) => setReceivedItems({
+                                  ...receivedItems,
+                                  [item.id]: { ...details, missing: parseInt(e.target.value) || 0 }
+                                })}
+                              />
+                            </div>
+                          </div>
+
+                          {(details.damaged > 0 || details.missing > 0) && (
+                            <div className="px-4 pb-4">
+                              <Input
+                                placeholder="Discrepancy reason..."
+                                className="text-sm bg-[#F2F2F7] border-0"
+                                value={details.note}
+                                onChange={(e) => setReceivedItems({
+                                  ...receivedItems,
+                                  [item.id]: { ...details, note: e.target.value }
+                                })}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="px-2">
+                    <Label>General Delivery Notes</Label>
+                    <textarea
+                      className="w-full mt-1 p-3 border rounded-ios-lg focus:ring-1 focus:ring-black outline-none"
+                      rows={2}
+                      placeholder="Comment on condition, delivery person, etc."
+                      value={deliveryNotes}
+                      onChange={(e) => setDeliveryNotes(e.target.value)}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t mt-4">
+              <IOSButton variant="outline" onClick={() => setIsReceiveModalOpen(false)}>
+                Cancel
+              </IOSButton>
+              <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleConfirmDelivery} leftIcon={<Check />}>
+                Confirm & Add to Stock
+              </IOSButton>
+            </div>
           </DialogContent>
         </Dialog>
       </DashboardLayout>

@@ -173,6 +173,7 @@ router.get('/master-catalog', authorize(staffRoles), getMasterCatalog);
 router.get('/branch-stock', authorize(branchRoles), getBranchStock);
 router.get('/branch-stock/low', authorize(branchRoles), getLowStockItems);
 router.post('/branch-stock/out', authorize(branchRoles), recordStockOut);
+router.post('/branch-stock/adjustment', authorize(branchRoles), updateBranchStock);
 router.get('/stock-movements', authorize(branchRoles), getStockMovements);
 
 // Stock requests (Branch → Central)

@@ -789,56 +789,56 @@ export function ConsolidatedNav() {
     </>
   );
 
-  // Branch Storekeeper Navigation (Legacy)
+  // Branch Storekeeper Navigation (Consolidated)
   const branchStoreNav = (
     <>
       <NavItem
-        href="/dashboard/branch-store"
+        href="/dashboard/storekeeping/branch"
         icon={Package}
         label="Overview"
-        active={pathname === '/dashboard/branch-store'}
+        active={pathname === '/dashboard/storekeeping/branch' && !pathname.includes('tab=')}
       />
 
-      <NavGroup label="Stock" icon={Package} defaultOpen>
+      <NavGroup label="Inventory" icon={Package} defaultOpen>
         <NavItem
-          href="/dashboard/branch-store/stock"
+          href="/dashboard/storekeeping/branch?tab=stock"
           icon={Package}
-          label="Stock Levels"
-          active={pathname === '/dashboard/branch-store/stock'}
+          label="Morning Stock Count"
+          active={pathname === '/dashboard/storekeeping/branch' && pathname.includes('tab=stock')}
         />
         <NavItem
-          href="/dashboard/branch-store/stock-takes"
+          href="/dashboard/storekeeping/branch?tab=receive"
           icon={CheckCircle}
-          label="Stock Takes"
-          active={pathname === '/dashboard/branch-store/stock-takes'}
+          label="Receive Goods"
+          active={pathname === '/dashboard/storekeeping/branch' && pathname.includes('tab=receive')}
         />
         <NavItem
-          href="/dashboard/branch-store/stock-out"
-          icon={ArrowDownUp}
-          label="Stock Out"
-          active={pathname === '/dashboard/branch-store/stock-out'}
+          href="/dashboard/storekeeping/branch?tab=requests"
+          icon={ClipboardList}
+          label="Stock Requests"
+          active={pathname === '/dashboard/storekeeping/branch' && pathname.includes('tab=requests')}
         />
       </NavGroup>
 
       <NavItem
-        href="/dashboard/branch-store/receive"
-        icon={CheckCircle}
-        label="Receive"
-        active={pathname === '/dashboard/branch-store/receive'}
-      />
-
-      <NavItem
-        href="/dashboard/branch-store/kitchen-usage"
+        href="/dashboard/storekeeping/branch?tab=usage"
         icon={Utensils}
         label="Kitchen Usage"
-        active={pathname === '/dashboard/branch-store/kitchen-usage'}
+        active={pathname === '/dashboard/storekeeping/branch' && pathname.includes('tab=usage')}
       />
 
       <NavItem
-        href="/dashboard/branch-store/reports"
+        href="/dashboard/storekeeping/branch?tab=history"
+        icon={Clock}
+        label="Movement History"
+        active={pathname === '/dashboard/storekeeping/branch' && pathname.includes('tab=history')}
+      />
+
+      <NavItem
+        href="/dashboard/storekeeping/branch?tab=reports"
         icon={BarChart3}
         label="Reports"
-        active={pathname === '/dashboard/branch-store/reports'}
+        active={pathname === '/dashboard/storekeeping/branch' && pathname.includes('tab=reports')}
       />
     </>
   );

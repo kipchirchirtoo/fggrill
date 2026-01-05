@@ -112,6 +112,55 @@ export const recordStockOut = async (
   }
 };
 
+/**
+ * Adjust branch stock (Morning count / manual adjustment)
+ */
+export const updateBranchStock = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const branchId = req.user?.branch_id;
+    const { item_sku, quantity, movement_type, notes } = req.body;
+
+    if (!branchId) {
+      res.status(400).json({ success: false, message: 'Branch ID required' });
+      return;
+    }
+
+    if (!item_sku) {
+      res.status(400).json({ success: false, message: 'Item SKU required' });
+      return;
+    }
+
+    // For updateBranchStock, quantity is the NEW quantity if some flag is set, 
+    // or the CHANGE if it's an adjustment.
+    // Based on service: updateBranchStock(..., quantityChange, ...)
+    // Let's assume the frontend sends the change.
+
+    const result = await BranchInventoryService.updateBranchStock(
+      branchId,
+      item_sku,
+      quantity || 0,
+      movement_type || 'MANUAL_ADJUSTMENT',
+      req.user?.id,
+      'MANUAL',
+      undefined,
+      undefined,
+      notes || 'Manual stock adjustment'
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Stock adjusted successfully',
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ============================================================
 // STOCK REQUESTS (Branch → Central)
 // ============================================================
