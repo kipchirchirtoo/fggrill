@@ -1123,7 +1123,7 @@ export default function BranchStorekeeperPage() {
 
         {/* Morning Stock Count Modal */}
         <Dialog open={isStockUpdateModalOpen} onOpenChange={setIsStockUpdateModalOpen}>
-          <DialogContent className="max-w-xl max-h-[70vh] flex flex-col">
+          <DialogContent className="max-w-md max-h-[60vh] flex flex-col p-4">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <PackageSearch className="h-5 w-5" />
@@ -1134,7 +1134,7 @@ export default function BranchStorekeeperPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="flex-1 overflow-y-auto py-4 space-y-4">
+            <div className="flex-1 overflow-y-auto py-2 space-y-1.5">
               <div className="grid grid-cols-12 gap-4 px-2 text-xs font-bold uppercase text-gray-500">
                 <div className="col-span-6">Item</div>
                 <div className="col-span-3 text-center">System Qty</div>
@@ -1142,18 +1142,18 @@ export default function BranchStorekeeperPage() {
               </div>
               <div className="space-y-2">
                 {branchStock.map((item) => (
-                  <div key={item.id} className="grid grid-cols-12 gap-4 items-center p-3 bg-gray-50 rounded-ios-lg">
+                  <div key={item.id} className="grid grid-cols-12 gap-4 items-center p-1.5 bg-gray-50 rounded-ios-lg">
                     <div className="col-span-6">
-                      <p className="font-medium text-sm">{item.item?.item_name || item.item_sku}</p>
-                      <p className="text-xs text-gray-500 font-mono">{item.item_sku}</p>
+                      <p className="font-medium text-xs">{item.item?.item_name || item.item_sku}</p>
+                      <p className="text-[10px] text-gray-500 font-mono leading-none">{item.item_sku}</p>
                     </div>
                     <div className="col-span-3 text-center">
-                      <span className="text-sm font-sf-pro-display text-[#3A3A3C]">{item.quantity}</span>
+                      <span className="text-xs font-sf-pro-display text-[#3A3A3C]">{item.quantity}</span>
                     </div>
                     <div className="col-span-3">
                       <Input
                         type="number"
-                        className="text-center font-bold"
+                        className="text-center font-bold h-8 py-1 text-xs"
                         value={stockUpdates[item.item_sku] ?? ''}
                         onChange={(e) => setStockUpdates({
                           ...stockUpdates,
@@ -1165,11 +1165,11 @@ export default function BranchStorekeeperPage() {
                 ))}
               </div>
 
-              <div className="pt-4 px-2">
-                <Label>Notes</Label>
+              <div className="pt-2 px-2">
+                <Label className="text-xs">Notes</Label>
                 <textarea
-                  className="w-full mt-1 p-3 border rounded-ios-lg focus:ring-1 focus:ring-black outline-none"
-                  rows={2}
+                  className="w-full mt-1 p-2 border rounded-ios-lg focus:ring-1 focus:ring-black outline-none text-sm"
+                  rows={1}
                   placeholder="Any discrepancies or notes..."
                   value={updateNotes}
                   onChange={(e) => setUpdateNotes(e.target.value)}
@@ -1177,7 +1177,7 @@ export default function BranchStorekeeperPage() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-4 border-t mt-4">
+            <div className="flex justify-end gap-3 pt-2 border-t mt-2">
               <IOSButton variant="outline" onClick={() => setIsStockUpdateModalOpen(false)}>
                 Cancel
               </IOSButton>
