@@ -17,11 +17,11 @@ router.use(protect);
 // =====================================================
 
 router.route('/logs')
-  .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), getAuditLogs)
-  .post(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]), createAuditLog);
+  .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]), getAuditLogs)
+  .post(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]), createAuditLog);
 
 router.get('/stats',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
   getAuditStats
 );
 

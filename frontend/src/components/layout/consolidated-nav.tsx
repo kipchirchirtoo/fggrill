@@ -589,42 +589,37 @@ export function ConsolidatedNav() {
         href="/dashboard/auditor"
         icon={Shield}
         label="Auditor Overview"
-        active={pathname === '/dashboard/auditor' && !pathname.includes('?tab=')}
+        active={pathname === '/dashboard/auditor'}
       />
 
       <NavGroup label="Monitoring" icon={ClipboardList} defaultOpen>
         <NavItem
-          href="/dashboard/auditor?tab=logs"
-          icon={ClipboardList}
-          label="System Logs"
-          active={pathname === '/dashboard/auditor' && pathname.includes('tab=logs')}
-        />
-        <NavItem
-          href="/dashboard/auditor?tab=compliance"
+          href="/dashboard/auditor/orders"
           icon={CheckCircle}
-          label="Compliance"
-          active={pathname === '/dashboard/auditor' && pathname.includes('tab=compliance')}
+          label="Orders & Payments"
+          active={pathname === '/dashboard/auditor/orders'}
         />
+        {/* Placeholder for future logs if needed */}
       </NavGroup>
 
-      <NavGroup label="Audits" icon={Scale}>
+      <NavGroup label="Audits" icon={Scale} defaultOpen>
         <NavItem
-          href="/dashboard/auditor?tab=financial"
+          href="/dashboard/auditor/sales"
           icon={DollarSign}
           label="Financial Audit"
-          active={pathname === '/dashboard/auditor' && pathname.includes('tab=financial')}
+          active={pathname === '/dashboard/auditor/sales'}
         />
         <NavItem
-          href="/dashboard/auditor?tab=inventory"
+          href="/dashboard/auditor/stock"
           icon={Package}
           label="Inventory Audit"
-          active={pathname === '/dashboard/auditor' && pathname.includes('tab=inventory')}
+          active={pathname === '/dashboard/auditor/stock'}
         />
         <NavItem
-          href="/dashboard/auditor?tab=reports"
+          href="/dashboard/auditor/reports"
           icon={FileText}
           label="Audit Reports"
-          active={pathname === '/dashboard/auditor' && pathname.includes('tab=reports')}
+          active={pathname === '/dashboard/auditor/reports'}
         />
       </NavGroup>
     </>

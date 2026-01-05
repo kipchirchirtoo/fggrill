@@ -1,7 +1,5 @@
-'use client';
-
-import React from 'react';
-import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { BranchAwareDashboardLayout } from '@/components/layout/branch-aware-dashboard-layout';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
 import { FileText, Download, ArrowLeft, Calendar, BarChart3, PieChart } from 'lucide-react';
@@ -9,6 +7,7 @@ import { useRouter } from 'next/navigation';
 
 export default function AuditorReportsPage() {
     const router = useRouter();
+    const { activeBranchId } = useBranch();
 
     const ReportCard = ({ title, description, icon: Icon }: any) => (
         <div className="card-elevated p-5 flex flex-col h-full hover:shadow-md transition-shadow cursor-pointer group">
@@ -27,19 +26,13 @@ export default function AuditorReportsPage() {
     );
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.AUDITOR]}>
-            <DashboardLayout>
+        <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
+            <BranchAwareDashboardLayout
+                title="Audit Reports"
+                subtitle="Analytics & Intelligence"
+            >
                 <div className="space-y-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                            <button onClick={() => router.back()} className="p-2 hover:bg-stone-100 rounded-lg transition-colors">
-                                <ArrowLeft className="h-5 w-5 text-stone-500" />
-                            </button>
-                            <div>
-                                <h1 className="text-[22px] font-semibold text-stone-900">Audit Reports</h1>
-                                <p className="text-stone-500 text-sm">Analytics & Intelligence</p>
-                            </div>
-                        </div>
+                    <div className="flex justify-end">
                         <button className="btn-secondary">
                             <Calendar className="h-4 w-4" />
                             <span>This Month</span>
@@ -74,7 +67,7 @@ export default function AuditorReportsPage() {
                             <div>
                                 <h2 className="text-lg font-bold mb-1">Custom Analysis Data</h2>
                                 <p className="text-stone-400 text-sm max-w-lg">
-                                    Configure parameters to generate a raw CSV export of audit data.
+                                    Configure parameters to generate a raw CSV export of audit data. Selected Branch ID: {activeBranchId || 'All'}
                                 </p>
                             </div>
                             <button className="px-4 py-2 bg-white text-stone-900 rounded-lg text-sm font-medium hover:bg-stone-100 transition-colors">
@@ -83,7 +76,7 @@ export default function AuditorReportsPage() {
                         </div>
                     </div>
                 </div>
-            </DashboardLayout>
+            </BranchAwareDashboardLayout>
         </ProtectedRoute>
     );
 }

@@ -76,12 +76,12 @@ export const getConsumptionVariances = async (req: Request, res: Response, next:
             .select(`
                 menu_item_id,
                 quantity,
-                orders!inner(branch_id, created_at, status)
+                restaurant_orders!inner(branch_id, created_at, status)
             `)
-            .eq('orders.branch_id', branch_id)
-            .eq('orders.status', 'completed')
-            .gte('orders.created_at', from_date)
-            .lte('orders.created_at', to_date);
+            .eq('restaurant_orders.branch_id', branch_id)
+            .eq('restaurant_orders.status', 'completed')
+            .gte('restaurant_orders.created_at', from_date)
+            .lte('restaurant_orders.created_at', to_date);
 
         if (salesError) throw salesError;
 

@@ -1,7 +1,6 @@
-'use client';
-
 import React, { useState, useEffect } from 'react';
-import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { BranchAwareDashboardLayout } from '@/components/layout/branch-aware-dashboard-layout';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
 import { ShoppingBag, CreditCard, Calendar, ArrowLeft, Filter, CheckCircle, Calculator, RefreshCw, Beer } from 'lucide-react';
@@ -11,6 +10,7 @@ import { toast } from 'sonner';
 
 export default function OrdersAuditPage() {
     const router = useRouter();
+    const { activeBranchId } = useBranch();
     const [activeTab, setActiveTab] = useState<'restaurant' | 'bar' | 'bookings'>('restaurant');
     const [orders, setOrders] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -41,11 +41,11 @@ export default function OrdersAuditPage() {
             let res;
 
             if (activeTab === 'restaurant') {
-                res = await restaurantAPI.getOrders({ from_date, to_date });
+                res = await restaurantAPI.getOrders({ from_date, to_date, branchId: activeBranchId || undefined });
             } else if (activeTab === 'bar') {
-                res = await barAPI.getOrders({ status: 'paid', from_date, to_date }); // Prioritize paid but maybe allow all for audit
+                res = await barAPI.getOrders({ status: 'paid', from_date, to_date, branchId: activeBranchId || undefined });
             } else if (activeTab === 'bookings') {
-                res = await bookingsAPI.getBookings({ checkIn: from_date, checkOut: to_date, limit: 50 });
+                res = await bookingsAPI.getBookings({ checkIn: from_date, checkOut: to_date, limit: 50, branch_id: activeBranchId || undefined });
             }
 
             if (res && res.success) {
@@ -62,9 +62,6 @@ export default function OrdersAuditPage() {
                     details: activeTab === 'bookings' ? `${item.guest_name} (Room ${item.room_number})` : `Table ${item.table_number || 'N/A'}`
                 }));
                 setOrders(data);
-
-                // Reset confirmed if filter changes (optional, but safer)
-                // setConfirmedOrders(new Set()); 
 
                 // Recalculate stats based on fetched data
                 const total = data.reduce((sum: number, o: any) => sum + o.amount, 0);
@@ -83,7 +80,7 @@ export default function OrdersAuditPage() {
 
     useEffect(() => {
         fetchOrders();
-    }, [activeTab, filter]); // Re-fetch when tab or filter changes
+    }, [activeTab, filter, activeBranchId]); // Re-fetch when tab, filter, or branch changes
 
     const toggleConfirm = (id: string) => {
         const newSet = new Set(confirmedOrders);
@@ -106,7 +103,10 @@ export default function OrdersAuditPage() {
 
     return (
         <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN]}>
-            <DashboardLayout>
+            <BranchAwareDashboardLayout
+                title="Orders & Reconciliation"
+                subtitle="Match orders to payments"
+            >
                 <div className="space-y-6">
                     {/* Header */}
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -258,7 +258,7 @@ export default function OrdersAuditPage() {
                         </div>
                     </div>
                 </div>
-            </DashboardLayout>
+            </BranchAwareDashboardLayout>
         </ProtectedRoute>
     );
 }

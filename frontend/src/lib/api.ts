@@ -267,9 +267,12 @@ export const storeAPI = {
       body: JSON.stringify(payload),
     });
   },
-  getBranchRequests: (status?: string) => {
-    const query = status && status !== 'all' ? `?status=${status}` : '';
-    return fetchAPI<any>(`/store/stock-requests${query}`);
+  getBranchRequests: (status?: string, branch_id?: number) => {
+    const query = new URLSearchParams();
+    if (status && status !== 'all') query.append('status', status);
+    if (branch_id) query.append('branch_id', String(branch_id));
+    const qs = query.toString();
+    return fetchAPI<any>(`/store/stock-requests${qs ? `?${qs}` : ''}`);
   },
   getPendingRequests: () => fetchAPI<any>('/store/stock-requests/pending'),
   reviewStockRequest: (id: string, data: { action: 'APPROVE' | 'REJECT'; notes?: string }) =>
@@ -1684,6 +1687,14 @@ export const restaurantAPI = {
   createOrder: (data: any) => fetchAPI<any>('/restaurant/orders', { method: 'POST', body: JSON.stringify(data) }),
   updateOrder: (id: string, data: any) => fetchAPI<any>(`/restaurant/orders/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   updateOrderStatus: (id: string, status: string) => fetchAPI<any>(`/restaurant/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+  getTodayOrders: (branchId?: number) => {
+    const today = new Date().toISOString().split('T')[0];
+    const query = new URLSearchParams();
+    query.append('from_date', today);
+    query.append('to_date', today);
+    if (branchId) query.append('branch_id', String(branchId));
+    return fetchAPI<any>(`/restaurant/orders?${query}`);
+  },
 
   // Menu Categories
   getCategories: () => fetchAPI<any>('/restaurant/menu/categories'),
@@ -1804,14 +1815,6 @@ export const restaurantAPI = {
     description?: string;
   }) => fetchAPI<any>(`/restaurant/wastage/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteWastageRecord: (id: string) => fetchAPI<any>(`/restaurant/wastage/${id}`, { method: 'DELETE' }),
-
-  // Today's Orders Log
-  getTodayOrders: (branchId?: number) => {
-    const query = new URLSearchParams();
-    if (branchId) query.append('branch_id', String(branchId));
-    query.append('date', new Date().toISOString().split('T')[0]);
-    return fetchAPI<any>(`/restaurant/orders?${query}`);
-  },
 };
 
 export const wastageAPI = {
@@ -2262,11 +2265,12 @@ export const reportsAPI = {
 
 
 export const auditAPI = {
-  getAuditLogs: (params?: { module?: string; from_date?: string; to_date?: string }) => {
+  getAuditLogs: (params?: { module?: string; from_date?: string; to_date?: string; branchId?: number | null }) => {
     const query = new URLSearchParams();
     if (params?.module) query.append('module', params.module);
     if (params?.from_date) query.append('from_date', params.from_date);
     if (params?.to_date) query.append('to_date', params.to_date);
+    if (params?.branchId) query.append('branch_id', String(params.branchId));
     return fetchAPI<any>(`/audit/logs?${query}`);
   },
   getInventoryAudit: () => fetchAPI<any>('/auditor/inventory'), // Assuming this should also be auditor? or maybe it doesn't exist yet

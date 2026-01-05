@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { BranchAwareDashboardLayout } from '@/components/layout/branch-aware-dashboard-layout';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
 import { Package, AlertTriangle, ArrowRight, Check, X, Filter, ArrowLeft, RefreshCw, Box } from 'lucide-react';
@@ -11,6 +12,7 @@ import { toast } from 'sonner';
 
 export default function StockAuditPage() {
     const router = useRouter();
+    const { activeBranchId } = useBranch();
     const [consumptionData, setConsumptionData] = useState<any[]>([]);
     const [pendingRequests, setPendingRequests] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -19,19 +21,18 @@ export default function StockAuditPage() {
         setIsLoading(true);
         try {
             // 1. Fetch Consumption Variances
-            // Hardcoded branch/dates for now - should be dynamic in full implementation
             const today = new Date();
             const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
             const lastDay = today.toISOString();
-            // Assuming branch_id 1 for main branch if not selectable yet
-            // In a real scenario, we might get this from user context or a selector
-            const branchId = 1;
+
+            // Use activeBranchId
+            const branchId = activeBranchId || 1; // Default to 1 if not set, though BranchAware should handle it
 
             const varRes = await auditAPI.getConsumptionVariances({ branch_id: branchId, from_date: firstDay, to_date: lastDay });
             if (varRes.success) setConsumptionData(varRes.data || []);
 
             // 2. Fetch Pending Requisitions
-            const reqRes = await storeAPI.getBranchRequests('PENDING'); // or 'requested' depending on backend enum
+            const reqRes = await storeAPI.getBranchRequests('PENDING', activeBranchId || undefined);
             if (reqRes.success) setPendingRequests(reqRes.data || []);
 
         } catch (e) {
@@ -44,7 +45,7 @@ export default function StockAuditPage() {
 
     useEffect(() => {
         fetchStockData();
-    }, []);
+    }, [activeBranchId]);
 
     const handleAction = async (id: string, action: 'APPROVE' | 'REJECT') => {
         try {
@@ -63,29 +64,25 @@ export default function StockAuditPage() {
 
     return (
         <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN]}>
-            <DashboardLayout>
+            <BranchAwareDashboardLayout
+                title="Stock & Inventory"
+                subtitle="Verify levels and approve movements"
+            >
                 <div className="space-y-6">
-                    {/* Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                            <button onClick={() => router.back()} className="p-2 hover:bg-stone-100 rounded-lg transition-colors">
-                                <ArrowLeft className="h-5 w-5 text-stone-500" />
-                            </button>
-                            <div>
-                                <h1 className="text-[22px] font-semibold text-stone-900">Stock & Inventory</h1>
-                                <p className="text-stone-500 text-sm">Verify levels and approve movements</p>
-                            </div>
-                        </div>
-                        <div className="flex gap-2">
-                            <button onClick={fetchStockData} disabled={isLoading} className="btn-secondary">
-                                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                                <span>Refresh</span>
-                            </button>
-                            <button className="btn-primary bg-stone-900">
-                                <Package className="h-4 w-4" />
-                                <span>Spot Check</span>
-                            </button>
-                        </div>
+                    {/* Header Actions */}
+                    <div className="flex justify-end gap-2">
+                        <button onClick={() => router.back()} className="btn-secondary">
+                            <ArrowLeft className="h-4 w-4" />
+                            <span>Back</span>
+                        </button>
+                        <button onClick={fetchStockData} disabled={isLoading} className="btn-secondary">
+                            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                            <span>Refresh</span>
+                        </button>
+                        <button className="btn-primary bg-stone-900">
+                            <Package className="h-4 w-4" />
+                            <span>Spot Check</span>
+                        </button>
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -192,14 +189,14 @@ export default function StockAuditPage() {
                             <div className="stat-card border-l-4 border-l-red-500 bg-red-50/50">
                                 <div>
                                     <p className="stat-label text-red-800">High Variance Items</p>
-                                    <p className="stat-value text-red-700">{consumptionData.filter(i => Math.abs(i.variance) > 5).length}</p>
+                                    <p className="stat-value text-red-700">{consumptionData.filter(i => Math.abs(i.variance) > (i.theoretical * 0.1)).length}</p>
                                 </div>
                                 <AlertTriangle className="h-5 w-5 text-red-500" />
                             </div>
                         </div>
                     </div>
                 </div>
-            </DashboardLayout>
+            </BranchAwareDashboardLayout>
         </ProtectedRoute>
     );
 }

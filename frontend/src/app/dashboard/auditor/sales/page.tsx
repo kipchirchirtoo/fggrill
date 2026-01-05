@@ -2,16 +2,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { restaurantAPI } from '@/lib/api';
-import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { BranchAwareDashboardLayout } from '@/components/layout/branch-aware-dashboard-layout';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
 import { AlertTriangle, ShoppingBag, Filter, Download, ArrowLeft, Check, X, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 export default function SalesAuditPage() {
     const router = useRouter();
+    const { activeBranchId } = useBranch();
     const [orders, setOrders] = useState<any[]>([]);
     const [stats, setStats] = useState({ expected: 0, reported: 0, variance: 0 });
     const [isLoading, setIsLoading] = useState(false);
@@ -20,7 +21,7 @@ export default function SalesAuditPage() {
         setIsLoading(true);
         try {
             // Fetch today's orders
-            const ordersRes = await restaurantAPI.getTodayOrders();
+            const ordersRes = await restaurantAPI.getTodayOrders(activeBranchId || undefined);
             if (ordersRes.success) {
                 setOrders(ordersRes.data || []);
 
@@ -30,8 +31,8 @@ export default function SalesAuditPage() {
                 );
 
                 // Fetch daily sales report for reconciliation (reported deposits)
-                const reportRes = await restaurantAPI.getDailySales();
-                const reported = reportRes.success ? (reportRes.data?.total_sales || totalRevenue) : totalRevenue; // Fallback to matched for now
+                const reportRes = await restaurantAPI.getDailySales(activeBranchId || undefined);
+                const reported = reportRes.success ? (reportRes.data?.total_sales || totalRevenue) : totalRevenue;
 
                 setStats({
                     expected: totalRevenue,
@@ -47,33 +48,29 @@ export default function SalesAuditPage() {
         }
     };
 
-    useEffect(() => { fetchSalesData(); }, []);
+    useEffect(() => { fetchSalesData(); }, [activeBranchId]);
 
     return (
         <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN]}>
-            <DashboardLayout>
+            <BranchAwareDashboardLayout
+                title="Sales Confirmation"
+                subtitle="Verify daily transactions"
+            >
                 <div className="space-y-6">
-                    {/* Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                            <button onClick={() => router.back()} className="p-2 hover:bg-stone-100 rounded-lg transition-colors">
-                                <ArrowLeft className="h-5 w-5 text-stone-500" />
-                            </button>
-                            <div>
-                                <h1 className="text-[22px] font-semibold text-stone-900">Sales Confirmation</h1>
-                                <p className="text-stone-500 text-sm">Verify daily transactions</p>
-                            </div>
-                        </div>
-                        <div className="flex gap-2">
-                            <button onClick={fetchSalesData} disabled={isLoading} className="btn-secondary">
-                                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                                <span>Refresh</span>
-                            </button>
-                            <button className="btn-primary bg-emerald-600 hover:bg-emerald-700">
-                                <Check className="h-4 w-4" />
-                                <span>Confirm All</span>
-                            </button>
-                        </div>
+                    {/* Actions */}
+                    <div className="flex justify-end gap-2">
+                        <button onClick={() => router.back()} className="btn-secondary">
+                            <ArrowLeft className="h-4 w-4" />
+                            <span>Back</span>
+                        </button>
+                        <button onClick={fetchSalesData} disabled={isLoading} className="btn-secondary">
+                            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                            <span>Refresh</span>
+                        </button>
+                        <button className="btn-primary bg-emerald-600 hover:bg-emerald-700">
+                            <Check className="h-4 w-4" />
+                            <span>Confirm All</span>
+                        </button>
                     </div>
 
                     {/* Stats */}
@@ -122,7 +119,7 @@ export default function SalesAuditPage() {
                                     {orders.length === 0 ? (
                                         <tr>
                                             <td colSpan={5} className="px-4 py-8 text-center text-stone-500 italic">
-                                                No transactions found for today.
+                                                {isLoading ? 'Loading...' : 'No transactions found for today.'}
                                             </td>
                                         </tr>
                                     ) : (
@@ -139,8 +136,8 @@ export default function SalesAuditPage() {
                                                 <td className="px-4 py-3 text-right font-medium">KES {(order.total_amount || order.total || 0).toLocaleString()}</td>
                                                 <td className="px-4 py-3">
                                                     <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase ${order.status === 'cancelled' ? 'bg-red-100 text-red-700' :
-                                                            order.status === 'completed' || order.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
-                                                                'bg-amber-100 text-amber-700'
+                                                        order.status === 'completed' || order.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
+                                                            'bg-amber-100 text-amber-700'
                                                         }`}>{order.status}</span>
                                                 </td>
                                                 <td className="px-4 py-3 text-right">
@@ -157,7 +154,7 @@ export default function SalesAuditPage() {
                         </div>
                     </div>
                 </div>
-            </DashboardLayout>
+            </BranchAwareDashboardLayout>
         </ProtectedRoute>
     );
 }

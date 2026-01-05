@@ -7,13 +7,15 @@ import {
     Truck, ArrowUpRight, ChevronRight, Calculator
 } from 'lucide-react';
 import { auditAPI, storeAPI, restaurantAPI } from '@/lib/api';
-import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { BranchAwareDashboardLayout } from '@/components/layout/branch-aware-dashboard-layout';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 export default function AuditorDashboard() {
+    const { activeBranchId } = useBranch();
     const [isLoading, setIsLoading] = useState(true);
     const [stats, setStats] = useState({ totalAudits: 0, pendingReviews: 0, complianceScore: 92, recentFindings: 0, voidedOrders: 0 });
 
@@ -21,9 +23,9 @@ export default function AuditorDashboard() {
         setIsLoading(true);
         try {
             const [logsRes, requestsRes, ordersRes] = await Promise.all([
-                auditAPI.getAuditLogs(),
-                storeAPI.getBranchRequests('PENDING'),
-                restaurantAPI.getOrders({ status: 'cancelled' })
+                auditAPI.getAuditLogs({ branchId: activeBranchId || undefined }),
+                storeAPI.getBranchRequests(activeBranchId ? 'PENDING' : undefined, activeBranchId || undefined),
+                restaurantAPI.getOrders({ status: 'cancelled', branchId: activeBranchId || undefined })
             ]);
 
             if (logsRes.success) {
@@ -44,7 +46,7 @@ export default function AuditorDashboard() {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [activeBranchId]);
 
     useEffect(() => {
         fetchData();
@@ -66,21 +68,21 @@ export default function AuditorDashboard() {
 
     return (
         <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
-            <DashboardLayout>
+            <BranchAwareDashboardLayout
+                title="Internal Audit"
+                subtitle="Control and compliance overview"
+                requireBranchContext={false}
+            >
                 <div className="space-y-6">
-                    {/* Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                        <div>
-                            <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Internal Audit</h1>
-                            <p className="text-stone-500 mt-0.5">Control and compliance overview</p>
-                        </div>
+                    {/* Refresh Header */}
+                    <div className="flex justify-end">
                         <button
                             onClick={fetchData}
                             disabled={isLoading}
-                            className="btn-secondary self-start sm:self-auto"
+                            className="btn-secondary"
                         >
                             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                            <span>Refresh</span>
+                            <span>Refresh Data</span>
                         </button>
                     </div>
 
@@ -158,7 +160,7 @@ export default function AuditorDashboard() {
                         </div>
                     </div>
                 </div>
-            </DashboardLayout>
+            </BranchAwareDashboardLayout>
         </ProtectedRoute>
     );
 }
