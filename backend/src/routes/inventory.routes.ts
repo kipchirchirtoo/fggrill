@@ -38,7 +38,9 @@ router.use(authorize([
   UserRole.GENERAL_MANAGER,
   UserRole.HOUSEKEEPING,
   UserRole.MAINTENANCE,
-  UserRole.RESTAURANT
+  UserRole.RESTAURANT,
+  UserRole.CENTRAL_STOREKEEPER,
+  UserRole.BRANCH_STOREKEEPER
 ]));
 
 router.route('/items')

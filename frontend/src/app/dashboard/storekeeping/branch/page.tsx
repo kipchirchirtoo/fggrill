@@ -1123,7 +1123,7 @@ export default function BranchStorekeeperPage() {
 
         {/* Morning Stock Count Modal */}
         <Dialog open={isStockUpdateModalOpen} onOpenChange={setIsStockUpdateModalOpen}>
-          <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+          <DialogContent className="max-w-xl max-h-[70vh] flex flex-col">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <PackageSearch className="h-5 w-5" />

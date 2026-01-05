@@ -843,21 +843,47 @@ export const getStockMovements = async (
       return;
     }
 
-    const { data, error } = await supabase
+    // Fetch movements first
+    const { data: movements, error: moveError } = await supabase
       .from('branch_stock_movements')
-      .select(`
-        *,
-        item:simple_items(sku, item_name, category)
-      `)
+      .select('*')
       .eq('branch_id', branchId)
       .order('created_at', { ascending: false })
       .limit(limit);
 
-    if (error) throw error;
+    if (moveError) throw moveError;
+
+    if (!movements || movements.length === 0) {
+      res.status(200).json({ success: true, count: 0, data: [] });
+      return;
+    }
+
+    // Get unique SKUs
+    const skus = Array.from(new Set(movements.map(m => m.item_sku).filter(Boolean)));
+
+    // Fetch items for these SKUs
+    const { data: items, error: itemsError } = await supabase
+      .from('simple_items')
+      .select('sku, item_name, category')
+      .in('sku', skus);
+
+    if (itemsError) throw itemsError;
+
+    // Create lookup map
+    const itemMap = (items || []).reduce((acc: any, item: any) => {
+      acc[item.sku] = item;
+      return acc;
+    }, {});
+
+    // Join manually
+    const data = movements.map(m => ({
+      ...m,
+      item: itemMap[m.item_sku] || null
+    }));
 
     res.status(200).json({
       success: true,
-      count: data?.length || 0,
+      count: data.length,
       data
     });
   } catch (error) {
