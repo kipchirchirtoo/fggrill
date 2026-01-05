@@ -90,52 +90,64 @@ export default function StockAuditPage() {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {/* Pending Requisitions */}
                         <div className="lg:col-span-2 space-y-6">
-                            <div className="card-elevated p-6">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="section-title">Critical Requisitions</h3>
-                                    <span className="bg-amber-100 text-amber-800 text-xs font-bold px-2 py-1 rounded-full">
-                                        {pendingRequests.length} Waiting Review
+                            <div className="card-elevated">
+                                <div className="px-5 py-4 border-b border-stone-100 flex justify-between items-center">
+                                    <div>
+                                        <h3 className="text-[15px] font-semibold text-stone-900">Critical Requisitions</h3>
+                                        <p className="text-[11px] text-stone-500 mt-0.5">Pending stock replenishment reviews</p>
+                                    </div>
+                                    <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                        {pendingRequests.length} Pending
                                     </span>
                                 </div>
-                                <div className="divide-y divide-stone-100">
+                                <div className="divide-y divide-stone-50">
                                     {pendingRequests.length === 0 ? (
-                                        <div className="py-12 text-center text-stone-400">
-                                            <Package className="h-12 w-12 mx-auto mb-3 opacity-20" />
-                                            <p className="text-sm italic">No pending requisitions for this selection.</p>
+                                        <div className="py-12 text-center text-stone-400 text-sm italic">
+                                            <Package className="h-10 w-10 mx-auto mb-3 opacity-20" />
+                                            <p>No pending requisitions for this selection.</p>
                                         </div>
                                     ) : (
                                         pendingRequests.map((req) => (
-                                            <div key={req.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 group">
+                                            <div key={req.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 group hover:bg-stone-50/50 transition-colors">
                                                 <div className="flex items-start gap-4">
-                                                    <div className="p-3 bg-stone-100 rounded-xl text-stone-500 group-hover:bg-stone-200 transition-colors">
+                                                    <div className="w-10 h-10 rounded-lg bg-stone-100 flex items-center justify-center text-stone-500 group-hover:bg-stone-200 transition-colors">
                                                         <Box className="h-5 w-5" />
                                                     </div>
-                                                    <div>
-                                                        <div className="flex items-center gap-2">
-                                                            <p className="font-semibold text-stone-900">{req.items?.[0]?.item_name || 'Multi-item Request'} {req.items?.length > 1 ? `(+${req.items.length - 1})` : ''}</p>
-                                                            <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded font-bold uppercase">
-                                                                {req.requesting_branch?.name || 'Unknown Branch'}
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <p className="text-[14px] font-semibold text-stone-900 truncate">
+                                                                {req.items?.[0]?.item_name || 'Multi-item Request'}
+                                                                {req.items?.length > 1 ? <span className="text-stone-400 font-normal ml-1">(+{req.items.length - 1} more)</span> : ''}
+                                                            </p>
+                                                            <span className="text-[9px] px-1.5 py-0.5 bg-stone-200 text-stone-700 rounded-md font-bold uppercase tracking-tighter">
+                                                                {req.requesting_branch?.name || 'Local'}
                                                             </span>
                                                         </div>
-                                                        <p className="text-xs text-stone-500 mt-0.5 italic">"{(req.reason || 'Routine replenishment').slice(0, 60)}{req.reason?.length > 60 ? '...' : ''}"</p>
-                                                        <div className="flex items-center gap-3 mt-1.5 text-[11px] text-stone-400">
-                                                            <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {new Date(req.created_at).toLocaleDateString()}</span>
-                                                            <span>By: {req.requester_name || 'Branch Storekeeper'}</span>
+                                                        <p className="text-[12px] text-stone-500 mt-0.5 italic line-clamp-1 truncate">
+                                                            "{req.reason || 'Routine replenishment'}"
+                                                        </p>
+                                                        <div className="flex items-center gap-3 mt-1.5">
+                                                            <span className="flex items-center gap-1 text-[10px] text-stone-400 tracking-tight">
+                                                                <Clock className="h-3 w-3" />
+                                                                {new Date(req.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                            </span>
+                                                            <span className="text-[10px] text-stone-400">•</span>
+                                                            <span className="text-[10px] text-stone-400 font-medium">By {req.requester_name || 'Staff'}</span>
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-2 self-end sm:self-auto">
+                                                <div className="flex items-center gap-1.5 self-end sm:self-auto opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <button
                                                         onClick={() => handleAction(req.id, 'REJECT')}
-                                                        className="p-2 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors text-xs font-bold flex items-center gap-1"
+                                                        className="p-2 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors text-[11px] font-bold flex items-center gap-1"
                                                     >
                                                         <X className="h-3.5 w-3.5" /> Reject
                                                     </button>
                                                     <button
                                                         onClick={() => handleAction(req.id, 'APPROVE')}
-                                                        className="py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition-all"
+                                                        className="py-1.5 px-3 bg-stone-900 hover:bg-black text-white rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-sm transition-all"
                                                     >
-                                                        <Check className="h-3.5 w-3.5" /> Review & Approve
+                                                        <Check className="h-3.5 w-3.5" /> Approve
                                                     </button>
                                                 </div>
                                             </div>
@@ -145,46 +157,55 @@ export default function StockAuditPage() {
                             </div>
 
                             {/* Consumption Analysis Table */}
-                            <div className="card-elevated overflow-hidden border-t-2 border-t-stone-200">
-                                <div className="p-4 border-b border-stone-100 bg-stone-50/50 flex justify-between items-center">
-                                    <h3 className="section-title text-sm">Consumption Variances (Monthly Analysis)</h3>
+                            <div className="card-elevated">
+                                <div className="px-5 py-4 border-b border-stone-100 flex justify-between items-center">
+                                    <div>
+                                        <h3 className="text-[15px] font-semibold text-stone-900">Consumption variances</h3>
+                                        <p className="text-[11px] text-stone-500 mt-0.5">Monthly variance analysis and audit status</p>
+                                    </div>
                                     {activeBranchId === 0 && (
-                                        <span className="text-[10px] text-amber-600 font-medium bg-amber-50 px-2 py-0.5 rounded">Partial View: Branch 1 Only</span>
+                                        <span className="text-[10px] text-amber-600 font-medium bg-amber-50 px-2 py-0.5 rounded tracking-tighter">Branch 1 Sample Data</span>
                                     )}
                                 </div>
                                 <div className="overflow-x-auto">
-                                    <table className="w-full text-sm text-left">
-                                        <thead className="bg-stone-50 text-stone-500 text-xs uppercase font-bold tracking-wider">
-                                            <tr>
-                                                <th className="px-4 py-4">Item Catalog</th>
-                                                <th className="px-4 py-4 text-right">Expected</th>
-                                                <th className="px-4 py-4 text-right">Actual Used</th>
-                                                <th className="px-4 py-4 text-right">Variance</th>
-                                                <th className="px-4 py-4 text-center">Audit Status</th>
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr className="border-b border-stone-100">
+                                                <th className="text-left py-3 px-5 text-[11px] font-medium text-stone-500 uppercase tracking-wider">Item Catalog</th>
+                                                <th className="text-right py-3 px-5 text-[11px] font-medium text-stone-500 uppercase tracking-wider">Expected</th>
+                                                <th className="text-right py-3 px-5 text-[11px] font-medium text-stone-500 uppercase tracking-wider">Actual Used</th>
+                                                <th className="text-right py-3 px-5 text-[11px] font-medium text-stone-500 uppercase tracking-wider">Variance</th>
+                                                <th className="text-center py-3 px-5 text-[11px] font-medium text-stone-500 uppercase tracking-wider">Audit Status</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-stone-100">
+                                        <tbody className="divide-y divide-stone-50">
                                             {consumptionData.length === 0 ? (
-                                                <tr><td colSpan={5} className="p-8 text-center text-stone-400 italic">No variance data available for auditing. Please configure consumption maps.</td></tr>
+                                                <tr>
+                                                    <td colSpan={5} className="py-12 text-center text-stone-400 text-sm italic">
+                                                        No variance data available for auditing. Please configure consumption maps.
+                                                    </td>
+                                                </tr>
                                             ) : (
                                                 consumptionData.map((item, i) => (
-                                                    <tr key={i} className="hover:bg-stone-50/80 transition-colors border-l-2 border-l-transparent hover:border-l-blue-500">
-                                                        <td className="px-4 py-4">
-                                                            <div className="font-medium text-stone-900">{item.item_name || 'Inventory SKU'}</div>
-                                                            <div className="text-[10px] text-stone-400 font-mono">{item.item_sku}</div>
+                                                    <tr key={i} className="hover:bg-stone-50 transition-colors group">
+                                                        <td className="py-3 px-5">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[13px] font-medium text-stone-900">{item.item_name || 'Inventory SKU'}</span>
+                                                                <span className="text-[11px] text-stone-400 font-mono tracking-tighter">{item.item_sku}</span>
+                                                            </div>
                                                         </td>
-                                                        <td className="px-4 py-4 text-right text-stone-600 font-medium">{item.theoretical}</td>
-                                                        <td className="px-4 py-4 text-right text-stone-600 font-medium">{item.actual}</td>
-                                                        <td className={`px-4 py-4 text-right font-bold ${item.variance < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                        <td className="py-3 px-5 text-right text-stone-600 font-mono text-[13px]">{item.theoretical}</td>
+                                                        <td className="py-3 px-5 text-right text-stone-600 font-mono text-[13px]">{item.actual}</td>
+                                                        <td className={`py-3 px-5 text-right font-bold text-[13px] font-mono ${item.variance < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                                                             {item.variance > 0 ? '+' : ''}{item.variance}
                                                         </td>
-                                                        <td className="px-4 py-4 text-center">
-                                                            {Math.abs(item.variance) > ((item.theoretical || 1) * 0.1) ? ( // 10% tolerance
-                                                                <span className="inline-flex items-center gap-1.5 text-[10px] bg-rose-50 text-rose-700 px-3 py-1 rounded-full font-bold border border-rose-100">
+                                                        <td className="py-3 px-5 text-center">
+                                                            {Math.abs(item.variance) > ((item.theoretical || 1) * 0.1) ? (
+                                                                <span className="inline-flex items-center gap-1.5 text-[9px] bg-rose-50 text-rose-700 px-2.5 py-1 rounded-full font-bold border border-rose-100 uppercase tracking-tighter">
                                                                     <AlertTriangle className="h-3 w-3" /> INVESTIGATE
                                                                 </span>
                                                             ) : (
-                                                                <span className="inline-flex items-center gap-1.5 text-[10px] bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full font-bold border border-emerald-100">
+                                                                <span className="inline-flex items-center gap-1.5 text-[9px] bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full font-bold border border-emerald-100 uppercase tracking-tighter">
                                                                     <Check className="h-3 w-3" /> VERIFIED
                                                                 </span>
                                                             )}
@@ -199,20 +220,28 @@ export default function StockAuditPage() {
                         </div>
 
                         {/* Inventory Value Stats */}
-                        <div className="space-y-4">
-                            <div className="stat-card border-l-4 border-l-stone-900">
-                                <div>
-                                    <p className="stat-label">Total Inventory Value</p>
-                                    <p className="stat-value">KES 1.2M</p>
+                        <div className="space-y-3">
+                            <div className="stat-card">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="stat-icon bg-stone-100">
+                                        <Package className="h-5 w-5 text-stone-600" />
+                                    </div>
                                 </div>
-                                <Package className="h-5 w-5 text-stone-400" />
+                                <p className="stat-label">Inventory Value</p>
+                                <p className="stat-value text-stone-900 text-[22px]">KES 1.2M</p>
                             </div>
-                            <div className="stat-card border-l-4 border-l-red-500 bg-red-50/50">
-                                <div>
-                                    <p className="stat-label text-red-800">High Variance Items</p>
-                                    <p className="stat-value text-red-700">{consumptionData.filter(i => Math.abs(i.variance) > (i.theoretical * 0.1)).length}</p>
+
+                            <div className={`stat-card ${consumptionData.filter(i => Math.abs(i.variance) > (i.theoretical * 0.1)).length > 0 ? 'bg-rose-50/50' : ''}`}>
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="stat-icon bg-rose-100">
+                                        <AlertTriangle className="h-5 w-5 text-rose-600" />
+                                    </div>
+                                    <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-full">High Variance</span>
                                 </div>
-                                <AlertTriangle className="h-5 w-5 text-red-500" />
+                                <p className="stat-label text-rose-800">Flagged Items</p>
+                                <p className="stat-value text-rose-700 text-[22px]">
+                                    {consumptionData.filter(i => Math.abs(i.variance) > (i.theoretical * 0.1)).length}
+                                </p>
                             </div>
                         </div>
                     </div>

@@ -241,7 +241,7 @@ export const getBranchRequests = async (
     });
 
     // Allow central roles to fetch all requests (branchId is optional)
-    const isCentralRole = ['super_admin', 'general_manager', 'central_storekeeper', 'central_operations_manager'].includes(req.user?.role || '');
+    const isCentralRole = ['super_admin', 'general_manager', 'central_storekeeper', 'central_operations_manager', 'auditor'].includes(req.user?.role || '');
 
     console.log('isCentralRole:', isCentralRole);
 
@@ -393,7 +393,7 @@ export const createDispatch = async (
     }
 
     // Check if user has permission to create dispatch from central warehouse
-    if (req.user.branch_id !== central.id && !['SUPER_ADMIN', 'GENERAL_MANAGER', 'CENTRAL_STOREKEEPER'].includes(req.user.role)) {
+    if (req.user.branch_id !== central.id && !['super_admin', 'general_manager', 'central_storekeeper', 'auditor'].includes(req.user.role)) {
       res.status(403).json({
         success: false,
         message: 'You do not have permission to create dispatches from central warehouse'
@@ -513,7 +513,7 @@ export const dispatchItems = async (
     }
 
     // Check if user has permission to dispatch from this branch
-    if (req.user.branch_id !== central.id && !['SUPER_ADMIN', 'GENERAL_MANAGER', 'CENTRAL_STOREKEEPER'].includes(req.user.role)) {
+    if (req.user.branch_id !== central.id && !['super_admin', 'general_manager', 'central_storekeeper', 'auditor'].includes(req.user.role)) {
       res.status(403).json({
         success: false,
         message: 'You do not have permission to dispatch from central warehouse'

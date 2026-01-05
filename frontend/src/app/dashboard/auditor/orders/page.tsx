@@ -149,14 +149,14 @@ export default function OrdersAuditPage() {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {/* Main list */}
                         <div className="lg:col-span-2 card-elevated p-6">
-                            <div className="flex gap-2 mb-6 border-b border-stone-100 pb-1 overflow-x-auto">
+                            <div className="flex gap-1.5 p-1 bg-stone-100 rounded-lg w-fit mb-6">
                                 {tabs.map((tab) => (
                                     <button
                                         key={tab.id}
                                         onClick={() => setActiveTab(tab.id as any)}
-                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${activeTab === tab.id
-                                            ? 'bg-stone-100 text-stone-900'
-                                            : 'text-stone-500 hover:text-stone-900'
+                                        className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-[13px] font-medium transition-all whitespace-nowrap ${activeTab === tab.id
+                                            ? 'bg-white text-stone-900 shadow-sm'
+                                            : 'text-stone-500 hover:text-stone-800'
                                             }`}
                                     >
                                         <tab.icon className="h-4 w-4" />
@@ -165,54 +165,61 @@ export default function OrdersAuditPage() {
                                 ))}
                             </div>
 
-                            <div className="flex justify-between items-center bg-stone-50 p-4 rounded-lg mb-4">
+                            <div className="flex justify-between items-center bg-stone-50 border border-stone-100 p-4 rounded-xl mb-6">
                                 <div>
-                                    <span className="text-sm font-medium text-stone-600 block">Total Value ({activeTab})</span>
-                                    <span className="text-xl font-bold text-stone-900">KES {stats.totalOrders.toLocaleString()}</span>
+                                    <span className="text-[11px] font-bold text-stone-500 uppercase tracking-tight block">Total Pipeline Value</span>
+                                    <span className="text-[22px] font-semibold text-stone-900">KES {stats.totalOrders.toLocaleString()}</span>
                                 </div>
                                 <div className="text-right">
-                                    <span className="text-sm font-medium text-stone-600 block">Confirmed</span>
-                                    <span className="text-lg font-bold text-emerald-600">
-                                        {confirmedOrders.size} / {orders.length}
+                                    <span className="text-[11px] font-bold text-stone-500 uppercase tracking-tight block">Confirmation Log</span>
+                                    <span className="text-[18px] font-semibold text-stone-900">
+                                        {confirmedOrders.size} <span className="text-stone-400 font-normal">/ {orders.length}</span>
                                     </span>
                                 </div>
                             </div>
 
-                            <div className="divide-y divide-stone-100">
+                            <div className="divide-y divide-stone-50">
                                 {orders.length === 0 ? (
-                                    <p className="py-8 text-center text-stone-400 italic">
-                                        {isLoading ? 'Loading records...' : 'No records found for this period.'}
-                                    </p>
+                                    <div className="py-12 text-center text-stone-400 text-sm italic">
+                                        {isLoading ? (
+                                            <div className="flex flex-col items-center gap-2">
+                                                <RefreshCw className="h-5 w-5 animate-spin opacity-50" />
+                                                <span>Synchronizing ledger...</span>
+                                            </div>
+                                        ) : 'No records found for this period.'}
+                                    </div>
                                 ) : (
                                     orders.map((order, i) => {
                                         const isConfirmed = confirmedOrders.has(order.id);
                                         return (
-                                            <div key={i} className={`py-3 flex items-center justify-between group rounded px-2 transition-colors ${isConfirmed ? 'bg-emerald-50/50' : 'hover:bg-stone-50'}`}>
+                                            <div key={i} className={`py-3.5 flex items-center justify-between group rounded-lg px-2 transition-colors ${isConfirmed ? 'bg-emerald-50/40' : 'hover:bg-stone-50/80'}`}>
                                                 <div className="flex items-center gap-4">
                                                     <button
                                                         onClick={() => toggleConfirm(order.id)}
-                                                        className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isConfirmed ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-stone-300 text-transparent hover:border-emerald-500'
+                                                        className={`w-4.5 h-4.5 rounded flex items-center justify-center transition-all ${isConfirmed ? 'bg-stone-900 border-stone-900 text-white shadow-sm' : 'border border-stone-300 text-transparent hover:border-stone-900'
                                                             }`}
                                                     >
-                                                        <CheckCircle className="h-3.5 w-3.5" />
+                                                        <CheckCircle className="h-3 w-3" />
                                                     </button>
-
-                                                    <div className="h-9 w-9 rounded-lg bg-white border border-stone-200 flex items-center justify-center text-stone-500 font-bold text-xs">
+                                                    1
+                                                    <div className="h-9 w-9 rounded-lg bg-stone-100 flex items-center justify-center text-stone-600 font-bold text-[13px] uppercase">
                                                         {(order.order_number || order.id).substr(0, 1)}
                                                     </div>
                                                     <div>
-                                                        <p className="font-medium text-stone-900 text-sm">{order.order_number || order.id}</p>
-                                                        <p className="text-xs text-stone-500">{order.branch} • {order.details}</p>
+                                                        <p className="font-semibold text-stone-900 text-[13px]">{order.order_number || `#${order.id.substr(0, 6)}`}</p>
+                                                        <p className="text-[11px] text-stone-400 font-medium tracking-tight uppercase">
+                                                            {order.branch} <span className="mx-1">•</span> {order.details}
+                                                        </p>
                                                     </div>
                                                 </div>
                                                 <div className="text-right">
-                                                    <p className="font-medium text-stone-900 text-sm">KES {order.amount.toLocaleString()}</p>
+                                                    <p className="font-bold text-stone-900 text-[14px]">KES {order.amount.toLocaleString()}</p>
                                                     {order.amount !== order.paid_amount && (
-                                                        <p className="text-[10px] text-stone-500">Paid: {order.paid_amount?.toLocaleString() || 0}</p>
+                                                        <p className="text-[10px] text-rose-500 font-medium tracking-tight">Paid: {order.paid_amount?.toLocaleString() || 0}</p>
                                                     )}
-                                                    <div className="flex items-center justify-end gap-1.5 mt-0.5">
-                                                        <span className="text-[10px] text-stone-400 uppercase">{order.payment_method}</span>
-                                                        <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${order.status === 'Paid' || order.status === 'completed' || order.status === 'checked_out' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                                                    <div className="flex items-center justify-end gap-1.5 mt-1">
+                                                        <span className="text-[9px] font-bold text-stone-400 uppercase bg-stone-100 px-1.5 py-0.5 rounded tracking-tighter">{order.payment_method}</span>
+                                                        <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full tracking-tighter ${order.status === 'Paid' || order.status === 'completed' || order.status === 'checked_out' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
                                                             }`}>{order.status}</span>
                                                     </div>
                                                 </div>
@@ -224,36 +231,44 @@ export default function OrdersAuditPage() {
                         </div>
 
                         {/* Summary / Reconciliation Card */}
-                        <div className="card-elevated p-6 h-fit">
-                            <h3 className="section-title mb-4 flex items-center gap-2">
-                                <CreditCard className="h-4 w-4" /> Payment Summary
-                            </h3>
+                        <div className="card-elevated p-5 h-fit">
+                            <div className="flex items-center gap-2 mb-4">
+                                <div className="p-1.5 bg-stone-100 rounded-lg">
+                                    <CreditCard className="h-4 w-4 text-stone-600" />
+                                </div>
+                                <h3 className="text-[15px] font-semibold text-stone-900">Payment Summary</h3>
+                            </div>
                             <div className="space-y-4">
-                                <div className="space-y-2">
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-stone-600">Total Orders</span>
-                                        <span className="font-medium">KES {stats.totalOrders.toLocaleString()}</span>
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center text-[13px]">
+                                        <span className="text-stone-500">Gross Pipeline</span>
+                                        <span className="font-bold text-stone-900">KES {stats.totalOrders.toLocaleString()}</span>
                                     </div>
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-stone-600">Total Collected</span>
-                                        <span className="font-medium text-emerald-600">KES {stats.totalCollected.toLocaleString()}</span>
+                                    <div className="flex justify-between items-center text-[13px]">
+                                        <span className="text-stone-500">Total Collected</span>
+                                        <span className="font-bold text-emerald-600">KES {stats.totalCollected.toLocaleString()}</span>
                                     </div>
-                                    <div className="h-2 bg-stone-100 rounded-full overflow-hidden mt-2">
-                                        <div
-                                            className="h-full bg-emerald-500 transition-all duration-500"
-                                            style={{ width: `${stats.totalOrders > 0 ? (stats.totalCollected / stats.totalOrders * 100) : 0}%` }}
-                                        />
+                                    <div className="space-y-1.5">
+                                        <div className="h-2 bg-stone-100 rounded-full overflow-hidden shadow-inner">
+                                            <div
+                                                className="h-full bg-emerald-500 transition-all duration-700 ease-out shadow-sm"
+                                                style={{ width: `${stats.totalOrders > 0 ? (stats.totalCollected / stats.totalOrders * 100) : 0}%` }}
+                                            />
+                                        </div>
+                                        <p className="text-[10px] text-stone-500 font-bold uppercase tracking-tight text-right">
+                                            {stats.totalOrders > 0 ? ((stats.totalCollected / stats.totalOrders * 100).toFixed(1)) : 0}% Efficiency
+                                        </p>
                                     </div>
-                                    <p className="text-[10px] text-stone-400 text-right mt-1">
-                                        {stats.totalOrders > 0 ? ((stats.totalCollected / stats.totalOrders * 100).toFixed(1)) : 0}% Collected
-                                    </p>
                                 </div>
 
-                                <div className="p-4 bg-amber-50 rounded-lg border border-amber-100">
-                                    <p className="text-[11px] font-bold text-amber-800 uppercase tracking-wide mb-2">Note</p>
-                                    <p className="text-xs text-amber-800">
-                                        Transactions displayed here are fetched directly from live records.
-                                        Ensure physical receipts match these system totals.
+                                <div className="p-4 bg-stone-50 border border-stone-100 rounded-xl">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <div className="w-1 h-3 bg-stone-400 rounded-full" />
+                                        <p className="text-[11px] font-bold text-stone-700 uppercase tracking-wide">Verification Note</p>
+                                    </div>
+                                    <p className="text-[12px] text-stone-500 leading-relaxed">
+                                        These records are pulled from live restaurant, bar, and booking transactions.
+                                        Cross-verify with physical till reports before final sign-off.
                                     </p>
                                 </div>
                             </div>

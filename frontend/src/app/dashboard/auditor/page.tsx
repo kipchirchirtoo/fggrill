@@ -102,14 +102,14 @@ export default function AuditorDashboard() {
                     </div>
 
                     {/* Stats Grid */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         {statCards.map((stat, i) => (
                             <div key={i} className="stat-card">
                                 <div className="stat-icon">
                                     <stat.icon className="h-5 w-5" />
                                 </div>
-                                <p className="stat-value">{stat.value}</p>
-                                <p className="stat-label mt-1">{stat.label}</p>
+                                <p className="stat-value text-[22px]">{stat.value}</p>
+                                <p className="stat-label text-[12px] mt-1">{stat.label}</p>
                             </div>
                         ))}
                     </div>
@@ -122,14 +122,14 @@ export default function AuditorDashboard() {
                                 <p className="section-subtitle">Core compliance tracking</p>
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                             {quickLinks.map((link) => (
                                 <Link key={link.href} href={link.href}>
-                                    <div className="action-card group">
-                                        <div className="action-card-icon">
-                                            <link.icon className="h-5 w-5" />
+                                    <div className="action-card group py-3">
+                                        <div className="action-card-icon w-10 h-10">
+                                            <link.icon className="h-4 w-4" />
                                         </div>
-                                        <p className="action-card-label">{link.label}</p>
+                                        <p className="action-card-label text-[12px]">{link.label}</p>
                                         <p className="text-[11px] text-stone-400 mt-0.5">{link.desc}</p>
                                     </div>
                                 </Link>
@@ -151,29 +151,32 @@ export default function AuditorDashboard() {
                         </div>
 
                         <div className="card-elevated p-5">
-                            <h3 className="section-title mb-4">Recent Audit Activity</h3>
-                            <div className="space-y-4">
+                            <h3 className="text-[15px] font-semibold text-stone-900 mb-4">Recent Audit Activity</h3>
+                            <div className="space-y-3">
                                 {recentLogs.length > 0 ? (
                                     recentLogs.map((log: any) => (
-                                        <div key={log.id} className="flex items-start gap-3">
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${log.severity === 'high' ? 'bg-rose-50' : 'bg-stone-100'
-                                                }`}>
-                                                {log.severity === 'high' ? (
-                                                    <AlertTriangle className="h-4 w-4 text-rose-500" />
-                                                ) : (
-                                                    <RefreshCw className="h-4 w-4 text-stone-500" />
-                                                )}
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-medium text-stone-900">{log.action}</p>
-                                                <p className="text-xs text-stone-500">
-                                                    {log.module} • {new Date(log.performed_at).toLocaleTimeString()}
-                                                </p>
+                                        <div key={log.id} className="p-3 rounded-lg bg-stone-50 hover:bg-stone-100 transition-colors cursor-pointer group">
+                                            <div className="flex items-start gap-3">
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${log.severity === 'high' ? 'bg-rose-100/50' : 'bg-stone-200'
+                                                    }`}>
+                                                    {log.severity === 'high' ? (
+                                                        <AlertTriangle className="h-4 w-4 text-rose-600" />
+                                                    ) : (
+                                                        <RefreshCw className="h-4 w-4 text-stone-600" />
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-[12px] font-medium text-stone-800 truncate">{log.action}</p>
+                                                    <p className="text-[10px] text-stone-400 mt-0.5">
+                                                        {log.module} • {new Date(log.performed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </p>
+                                                </div>
+                                                <ChevronRight className="h-3.5 w-3.5 text-stone-300 group-hover:text-stone-400 transition-colors mt-1" />
                                             </div>
                                         </div>
                                     ))
                                 ) : (
-                                    <div className="text-center py-8 text-stone-400">
+                                    <div className="text-center py-8 text-stone-400 text-sm">
                                         No recent activity detected
                                     </div>
                                 )}
