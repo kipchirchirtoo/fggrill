@@ -232,6 +232,24 @@ class BrandedPDFGenerator:
         except:
             return "0%"
 
+    def _get_table_style(self):
+        """Get standard table style for reports"""
+        return TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GRAY),
+            ('TEXTCOLOR', (0, 0), (-1, 0), FG_BLACK),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 0), (-1, 0), 8),
+            ('BACKGROUND', (0, 1), (-1, -1), FG_WHITE),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ])
+
     def generate_report(self, report_type: str, data: Dict[str, Any], filters: Dict[str, Any] = None) -> str:
         """Generate PDF report based on type"""
         filters = filters or {}
