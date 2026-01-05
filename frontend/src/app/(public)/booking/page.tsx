@@ -556,27 +556,15 @@ function BookingContent() {
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
-<<<<<<< HEAD
                       <span className="text-stone-600">Service Charge (10%)</span>
                       <span className="font-medium text-stone-900">
                         KES {formatNumber(Math.round((roomDetails?.basePrice || 0) * nights * 0.10))}
-=======
-                      <span className="text-stone-600">VAT (16%)</span>
-      <span className="font-medium text-stone-900">
-        KES {formatNumber((roomDetails?.pricePerNight * nights || 0) * 0.16)}
-      </span>
-    </div>
-    <div className="flex justify-between text-sm">
-      <span className="text-stone-600">Service Charge (10%)</span>
-      <span className="font-medium text-stone-900">
-        KES {formatNumber((roomDetails?.pricePerNight * nights || 0) * 0.10)}
->>>>>>> A
-      </span>
-    </div>
+                      </span>
+                    </div>
                   </div >
 
-    {/* Total */ }
-    < div className = "pt-4 border-t border-stone-200" >
+                  {/* Total */}
+                  < div className="pt-4 border-t border-stone-200" >
                     <div className="flex justify-between items-center">
                       <span className="text-base font-semibold text-stone-900">Total</span>
                       <span className="text-2xl font-bold text-stone-900">
@@ -586,31 +574,31 @@ function BookingContent() {
                     <p className="text-xs text-stone-500 mt-1 text-right">VAT inclusive</p>
                   </div >
 
-    {/* Submit Button - Desktop */ }
-    < div className = "hidden lg:block pt-2" >
-      <button
-        type="submit"
-        onClick={handleSubmit}
-        disabled={isProcessing}
-        className="w-full px-6 py-4 bg-stone-900 text-white rounded-xl font-medium hover:bg-stone-800 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {isProcessing ? (
-          <>
-            <Loader2 className="w-5 h-5 animate-spin" />
-            Processing...
-          </>
-        ) : (
-          <>
-            Confirm & Pay
-          </>
-        )}
-      </button>
+                  {/* Submit Button - Desktop */}
+                  < div className="hidden lg:block pt-2" >
+                    <button
+                      type="submit"
+                      onClick={handleSubmit}
+                      disabled={isProcessing}
+                      className="w-full px-6 py-4 bg-stone-900 text-white rounded-xl font-medium hover:bg-stone-800 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isProcessing ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          Confirm & Pay
+                        </>
+                      )}
+                    </button>
                   </div >
                 </div >
               </motion.div >
 
-    {/* Trust Badges */ }
-    < div className = "mt-4 flex items-center justify-center gap-6 text-xs text-stone-500" >
+              {/* Trust Badges */}
+              < div className="mt-4 flex items-center justify-center gap-6 text-xs text-stone-500" >
                 <div className="flex items-center gap-1.5">
                   <Shield className="w-4 h-4" />
                   <span>Secure</span>
