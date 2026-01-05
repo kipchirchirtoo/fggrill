@@ -1,4 +1,4 @@
-'use strict';
+'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { BranchAwareDashboardLayout } from '@/components/layout/branch-aware-dashboard-layout';
