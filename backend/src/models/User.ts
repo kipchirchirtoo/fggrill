@@ -62,7 +62,6 @@ export enum UserRole {
   FINANCE_MANAGER = 'finance_manager',
   HR_MANAGER = 'hr_manager',
   PAYROLL_CLERK = 'payroll_clerk',
-  CASHIER = 'cashier',
 
   // Store & Inventory
   CENTRAL_STOREKEEPER = 'central_storekeeper',
@@ -228,17 +227,6 @@ export class User implements IUser {
   }
 
   async delete(): Promise<void> {
-    // 1. Delete associated guest profile if exists
-    const { error: profileError } = await supabase
-      .from('guest_profiles')
-      .delete()
-      .eq('user_id', this.id);
-
-    if (profileError) {
-      console.error('Error deleting guest profile during user deletion:', profileError);
-    }
-
-    // 2. Delete the user
     const { error } = await supabase
       .from('users')
       .delete()

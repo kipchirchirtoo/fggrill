@@ -407,7 +407,12 @@ export const getAvailableRooms = async (
     const { data: booked, error: bookedError } = await supabase
       .from('reservations')
       .select('room_id')
+<<<<<<< HEAD
       .not('status', 'in', '(cancelled,checked_out)')
+=======
+      .neq('status', 'cancelled')
+      .neq('status', 'checked_out')
+>>>>>>> A
       .lt('check_in_date', checkOut as string)
       .gt('check_out_date', checkIn as string);
 

@@ -50,7 +50,7 @@ __pycache__/
 # Reports and temporary files
 *.pdf
 *.xlsx
-
+*.sql
 test_aggregation.ts
 test_verification.ts
 backend/test_aggregation.ts
