@@ -113,7 +113,7 @@ export default function BranchManagerWastagePage() {
     .slice(0, 5);
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
+    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
           {/* Header */}
@@ -130,8 +130,8 @@ export default function BranchManagerWastagePage() {
                     key={p}
                     onClick={() => setPeriod(p)}
                     className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${period === p
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
                       }`}
                   >
                     {p.charAt(0).toUpperCase() + p.slice(1)}

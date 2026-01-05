@@ -45,7 +45,7 @@ const ROOM_TYPES = [
 ];
 
 const AMENITIES = [
-  'WiFi', 'Air Conditioning', 'TV', 'Mini Bar', 'Safe', 'Balcony', 
+  'WiFi', 'Air Conditioning', 'TV', 'Mini Bar', 'Safe', 'Balcony',
   'Ocean View', 'City View', 'Kitchenette', 'Jacuzzi', 'Work Desk'
 ];
 
@@ -102,7 +102,7 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
 
   const handleImageUpload = useCallback((files: FileList | null) => {
     if (!files) return;
-    
+
     const validFiles = Array.from(files).filter(file => {
       if (!file.type.startsWith('image/')) {
         toast.error(`${file.name} is not an image file`);
@@ -130,7 +130,7 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
 
   const uploadImagesToSupabase = async (roomId: string): Promise<string[]> => {
     const uploadedUrls: string[] = [];
-    
+
     for (let i = 0; i < formData.images.length; i++) {
       const file = formData.images[i];
       const fileExt = file.name.split('.').pop();
@@ -167,7 +167,7 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
   };
 
   const handleSubmit = async () => {
-    if (!formData.room_number.trim()) {
+    if (!(formData.room_number || '').trim()) {
       toast.error('Room number is required');
       return;
     }
@@ -190,7 +190,7 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
         };
 
         const response = await roomsAPI.updateRoom(editRoom.id, updateData);
-        
+
         if (response.success) {
           toast.success('Room updated successfully');
           onRoomAdded(); // This will refresh the room list
@@ -215,7 +215,7 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
         };
 
         const response = await roomsAPI.createRoom(roomData);
-        
+
         if (response.success) {
           if (formData.images.length > 0) {
             setUploadingImages(true);
@@ -284,7 +284,7 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
   const canProceed = () => {
     switch (currentStep) {
       case 1:
-        return formData.room_number.trim() && formData.floor > 0;
+        return (formData.room_number || '').trim() && formData.floor > 0;
       case 2:
         return formData.base_price > 0;
       case 3:
@@ -311,7 +311,7 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
                 </label>
                 <Input
                   value={formData.room_number}
-                  onChange={(e) => setFormData({...formData, room_number: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, room_number: e.target.value })}
                   placeholder="e.g., 101, 201A"
                   className="h-11"
                   required
@@ -326,7 +326,7 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
                   min="1"
                   max="50"
                   value={formData.floor}
-                  onChange={(e) => setFormData({...formData, floor: parseInt(e.target.value) || 1})}
+                  onChange={(e) => setFormData({ ...formData, floor: parseInt(e.target.value) || 1 })}
                   className="h-11"
                   required
                 />
@@ -341,12 +341,11 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
                   <button
                     key={type.id}
                     type="button"
-                    onClick={() => setFormData({...formData, room_type_id: type.id})}
-                    className={`p-4 rounded-lg border-2 text-left transition-all ${
-                      formData.room_type_id === type.id
+                    onClick={() => setFormData({ ...formData, room_type_id: type.id })}
+                    className={`p-4 rounded-lg border-2 text-left transition-all ${formData.room_type_id === type.id
                         ? 'border-blue-600 bg-blue-50'
                         : 'border-slate-200 hover:border-slate-300'
-                    }`}
+                      }`}
                   >
                     <div className="font-semibold text-slate-800">{type.name}</div>
                     <div className="text-sm text-slate-500">{type.description}</div>
@@ -374,7 +373,7 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
                   min="0"
                   step="100"
                   value={formData.base_price || ''}
-                  onChange={(e) => setFormData({...formData, base_price: parseFloat(e.target.value) || 0})}
+                  onChange={(e) => setFormData({ ...formData, base_price: parseFloat(e.target.value) || 0 })}
                   placeholder="Enter price per night"
                   className="h-11"
                   required
@@ -386,10 +385,10 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
                 </label>
                 <select
                   value={formData.max_occupancy}
-                  onChange={(e) => setFormData({...formData, max_occupancy: parseInt(e.target.value)})}
+                  onChange={(e) => setFormData({ ...formData, max_occupancy: parseInt(e.target.value) })}
                   className="w-full h-11 px-3 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {[1,2,3,4,5,6,7,8,9,10].map(num => (
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
                     <option key={num} value={num}>{num} guest{num > 1 ? 's' : ''}</option>
                   ))}
                 </select>
@@ -428,11 +427,10 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
                     key={amenity}
                     type="button"
                     onClick={() => toggleAmenity(amenity)}
-                    className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
-                      formData.amenities.includes(amenity)
+                    className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${formData.amenities.includes(amenity)
                         ? 'border-blue-600 bg-blue-600 text-white'
                         : 'border-slate-200 text-slate-700 hover:border-slate-300'
-                    }`}
+                      }`}
                   >
                     {amenity}
                   </button>
@@ -448,7 +446,7 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
               </label>
               <textarea
                 value={formData.description}
-                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Describe the room features, view, or special characteristics..."
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
                 rows={4}
@@ -517,99 +515,96 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[95vh] overflow-hidden p-8">
-          <DialogTitle className="text-3xl font-bold text-slate-800 mb-8">
-            {mode === 'edit' ? `Edit Room ${editRoom?.room_number}` : 'Add New Room'}
-          </DialogTitle>
-          
-          <div className="relative">
-            {/* Progress Line */}
-            <div className="absolute top-5 left-0 right-0 h-0.5 bg-slate-200">
-              <div 
-                className="h-full bg-blue-600 transition-all duration-500"
-                style={{ width: `${((currentStep - 1) / (WIZARD_STEPS.length - 1)) * 100}%` }}
-              />
-            </div>
+        <DialogTitle className="text-3xl font-bold text-slate-800 mb-8">
+          {mode === 'edit' ? `Edit Room ${editRoom?.room_number}` : 'Add New Room'}
+        </DialogTitle>
 
-            {/* Steps */}
-            <div className="relative flex justify-between mb-12">
-              {WIZARD_STEPS.map((step) => (
-                <div key={step.id} className="flex flex-col items-center">
-                  <button
-                    onClick={() => setCurrentStep(step.id)}
-                    className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-all duration-300 ${
-                      currentStep > step.id
-                        ? 'bg-blue-600 text-white'
-                        : currentStep === step.id
+        <div className="relative">
+          {/* Progress Line */}
+          <div className="absolute top-5 left-0 right-0 h-0.5 bg-slate-200">
+            <div
+              className="h-full bg-blue-600 transition-all duration-500"
+              style={{ width: `${((currentStep - 1) / (WIZARD_STEPS.length - 1)) * 100}%` }}
+            />
+          </div>
+
+          {/* Steps */}
+          <div className="relative flex justify-between mb-12">
+            {WIZARD_STEPS.map((step) => (
+              <div key={step.id} className="flex flex-col items-center">
+                <button
+                  onClick={() => setCurrentStep(step.id)}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-all duration-300 ${currentStep > step.id
+                      ? 'bg-blue-600 text-white'
+                      : currentStep === step.id
                         ? 'bg-blue-600 text-white ring-4 ring-blue-100'
                         : 'bg-white text-slate-400 border-2 border-slate-200'
                     }`}
-                  >
-                    {currentStep > step.id ? (
-                      <Check className="w-5 h-5" />
-                    ) : (
-                      step.id
-                    )}
-                  </button>
-                  <div className="mt-3 text-center">
-                    <div className={`text-sm font-semibold ${
-                      currentStep >= step.id ? 'text-slate-800' : 'text-slate-400'
+                >
+                  {currentStep > step.id ? (
+                    <Check className="w-5 h-5" />
+                  ) : (
+                    step.id
+                  )}
+                </button>
+                <div className="mt-3 text-center">
+                  <div className={`text-sm font-semibold ${currentStep >= step.id ? 'text-slate-800' : 'text-slate-400'
                     }`}>
-                      {step.title}
-                    </div>
-                    <div className="text-xs text-slate-500 mt-1">
-                      {step.description}
-                    </div>
+                    {step.title}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    {step.description}
                   </div>
                 </div>
-              ))}
-            </div>
-
-            {/* Step Content */}
-            <div className="mb-6 min-h-[400px]">
-              {renderStep()}
-            </div>
-
-            {/* Navigation Buttons */}
-            <div className="flex justify-between">
-              <button
-                onClick={prevStep}
-                disabled={currentStep === 1}
-                className={`px-6 py-2.5 rounded-lg font-medium transition-all ${
-                  currentStep === 1
-                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                    : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                }`}
-              >
-                Previous
-              </button>
-              <div className="flex gap-3">
-                <button
-                  onClick={onClose}
-                  disabled={isSubmitting || uploadingImages}
-                  className="px-6 py-2.5 rounded-lg font-medium transition-all bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                {currentStep === WIZARD_STEPS.length ? (
-                  <button
-                    onClick={handleSubmit}
-                    disabled={isSubmitting || uploadingImages || !canProceed()}
-                    className="px-6 py-2.5 rounded-lg font-medium transition-all bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-                  >
-                    {isSubmitting ? 'Creating Room...' : uploadingImages ? 'Uploading Images...' : 'Complete'}
-                  </button>
-                ) : (
-                  <button
-                    onClick={nextStep}
-                    disabled={!canProceed()}
-                    className="px-6 py-2.5 rounded-lg font-medium transition-all bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                )}
               </div>
+            ))}
+          </div>
+
+          {/* Step Content */}
+          <div className="mb-6 min-h-[400px]">
+            {renderStep()}
+          </div>
+
+          {/* Navigation Buttons */}
+          <div className="flex justify-between">
+            <button
+              onClick={prevStep}
+              disabled={currentStep === 1}
+              className={`px-6 py-2.5 rounded-lg font-medium transition-all ${currentStep === 1
+                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                }`}
+            >
+              Previous
+            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                disabled={isSubmitting || uploadingImages}
+                className="px-6 py-2.5 rounded-lg font-medium transition-all bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              {currentStep === WIZARD_STEPS.length ? (
+                <button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting || uploadingImages || !canProceed()}
+                  className="px-6 py-2.5 rounded-lg font-medium transition-all bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Creating Room...' : uploadingImages ? 'Uploading Images...' : 'Complete'}
+                </button>
+              ) : (
+                <button
+                  onClick={nextStep}
+                  disabled={!canProceed()}
+                  className="px-6 py-2.5 rounded-lg font-medium transition-all bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Next
+                </button>
+              )}
             </div>
           </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

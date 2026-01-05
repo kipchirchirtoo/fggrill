@@ -5,7 +5,7 @@ import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { storeAPI } from '@/lib/api';
-import { 
+import {
   Package, Truck, ClipboardList, RefreshCw, AlertTriangle,
   FileText, Building2
 } from 'lucide-react';
@@ -13,20 +13,18 @@ import Link from 'next/link';
 
 export default function CentralStoreDashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState({ totalItems: 0, lowStock: 0, pendingRequests: 0, inTransit: 0 });
+  const [stats, setStats] = useState({ totalItems: 0, lowStock: 0, inTransit: 0 });
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [dashboardRes, requestsRes] = await Promise.allSettled([
+      const [dashboardRes] = await Promise.allSettled([
         storeAPI.getCentralDashboard(),
-        storeAPI.getPendingRequests(),
       ]);
       setStats({
         totalItems: dashboardRes.status === 'fulfilled' ? dashboardRes.value?.data?.totalItems || 0 : 0,
         lowStock: dashboardRes.status === 'fulfilled' ? dashboardRes.value?.data?.lowStockItems || 0 : 0,
-        pendingRequests: requestsRes.status === 'fulfilled' ? requestsRes.value?.data?.length || 0 : 0,
         inTransit: dashboardRes.status === 'fulfilled' ? dashboardRes.value?.data?.inTransit || 0 : 0,
       });
     } catch (error) { console.error('Error:', error); }
@@ -37,7 +35,6 @@ export default function CentralStoreDashboard() {
 
   const quickLinks = [
     { href: '/dashboard/central-store/inventory', icon: Package, label: 'Inventory', desc: 'All items' },
-    { href: '/dashboard/central-store/requests', icon: ClipboardList, label: 'Requests', desc: 'Branch requests' },
     { href: '/dashboard/central-store/dispatch', icon: Truck, label: 'Dispatch', desc: 'Send stock' },
     { href: '/dashboard/central-store/suppliers', icon: Building2, label: 'Suppliers', desc: 'Manage vendors' },
     { href: '/dashboard/central-store/stock-takes', icon: ClipboardList, label: 'Stock Takes', desc: 'Audits' },
@@ -47,7 +44,6 @@ export default function CentralStoreDashboard() {
   const statCards = [
     { label: 'Total Items', value: stats.totalItems, icon: Package },
     { label: 'Low Stock', value: stats.lowStock, icon: AlertTriangle },
-    { label: 'Pending Requests', value: stats.pendingRequests, icon: ClipboardList },
     { label: 'In Transit', value: stats.inTransit, icon: Truck },
   ];
 

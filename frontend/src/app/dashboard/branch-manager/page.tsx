@@ -6,7 +6,7 @@ import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { financeAPI, bookingsAPI, staffAPI, housekeepingAPI, notificationsAPI } from '@/lib/api';
-import { 
+import {
   DollarSign, Users, Bed, TrendingUp, RefreshCw, Calendar,
   UserCheck, Utensils, Wrench, Package, ClipboardList, ArrowUpRight, ArrowDownRight,
   Soup, ChevronRight, Clock, Building2, Plus, AlertTriangle, CheckCircle, Eye, Info
@@ -27,7 +27,7 @@ export default function BranchManagerDashboard() {
 
   const fetchData = useCallback(async () => {
     if (!currentBranchId) return;
-    
+
     setIsLoading(true);
     try {
       const [financeRes, bookingsRes, staffRes, tasksRes, notificationsRes] = await Promise.allSettled([
@@ -41,10 +41,10 @@ export default function BranchManagerDashboard() {
       const today = new Date().toISOString().split('T')[0];
       const bookings = bookingsRes.status === 'fulfilled' ? bookingsRes.value?.data || [] : [];
       setRecentBookings(bookings.slice(0, 5));
-      
+
       // Calculate occupancy from bookings if available
       const checkedInBookings = bookings.filter((b: any) => b.status === 'checked_in').length;
-      
+
       setStats({
         revenue: financeRes.status === 'fulfilled' ? financeRes.value?.data?.totalRevenue || 0 : 0,
         occupancy: 0, // Will be calculated from rooms data when available
@@ -89,14 +89,17 @@ export default function BranchManagerDashboard() {
     { href: '/dashboard/branch-manager/rooms', icon: Bed, label: 'Rooms', desc: 'Inventory' },
     { href: '/dashboard/branch-manager/staff', icon: Users, label: 'Staff', desc: 'Team' },
     { href: '/dashboard/branch-manager/housekeeping', icon: ClipboardList, label: 'Housekeeping', desc: 'Tasks' },
-    { href: '/dashboard/branch-manager/restaurant', icon: Utensils, label: 'Restaurant', desc: 'F&B' },
-    { href: '/dashboard/branch-manager/maintenance', icon: Wrench, label: 'Maintenance', desc: 'Repairs' },
     { href: '/dashboard/branch-manager/stock', icon: Package, label: 'Inventory', desc: 'Stock' },
-    { href: '/dashboard/branch-manager/reports', icon: TrendingUp, label: 'Reports', desc: 'Analytics' },
   ];
 
   const statCards = [
-    { label: 'Revenue', value: stats.revenue > 0 ? `KES ${(stats.revenue / 1000).toFixed(0)}K` : 'KES 0', icon: DollarSign },
+    {
+      label: 'Revenue',
+      value: (user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER)
+        ? (stats.revenue > 0 ? `KES ${(stats.revenue / 1000).toFixed(0)}K` : 'KES 0')
+        : '***',
+      icon: DollarSign
+    },
     { label: 'Occupancy', value: stats.totalRooms > 0 ? `${Math.round((stats.occupiedRooms / stats.totalRooms) * 100)}%` : '0%', icon: Bed },
     { label: 'Staff On Duty', value: stats.staff.toString(), icon: Users },
     { label: 'Pending Tasks', value: stats.pendingTasks.toString(), icon: ClipboardList },
@@ -114,7 +117,7 @@ export default function BranchManagerDashboard() {
               <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Branch Dashboard</h1>
               <p className="text-stone-500 mt-0.5">{activeBranch?.name || user?.branch_name || 'Your Branch'}</p>
             </div>
-            <button 
+            <button
               onClick={fetchData}
               disabled={isLoading}
               className="btn-secondary"
@@ -267,12 +270,11 @@ export default function BranchManagerDashboard() {
                           </p>
                         </td>
                         <td className="py-3 px-3">
-                          <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                            booking.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
+                          <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${booking.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
                             booking.status === 'checked_in' ? 'bg-sky-100 text-sky-700' :
-                            booking.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                            'bg-stone-100 text-stone-600'
-                          }`}>
+                              booking.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                                'bg-stone-100 text-stone-600'
+                            }`}>
                             {booking.status?.replace('_', ' ') || 'Unknown'}
                           </span>
                         </td>

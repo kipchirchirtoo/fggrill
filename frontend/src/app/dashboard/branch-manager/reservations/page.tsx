@@ -47,7 +47,7 @@ export default function BranchReservationsPage() {
     setIsLoading(true);
     try {
       const response = await bookingsAPI.getBookings({ branch_id: currentBranchId });
-      
+
       if (response.success) {
         // Ensure data is an array before setting state
         if (Array.isArray(response.data)) {
@@ -60,7 +60,7 @@ export default function BranchReservationsPage() {
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
   }, [currentBranchId]);
-  
+
   const handleCreateBooking = () => {
     // Redirect to booking creation form
     window.location.href = '/dashboard/branch-manager/reservations/new';
@@ -153,18 +153,20 @@ export default function BranchReservationsPage() {
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="text-right">
-                          <p className="font-bold mb-2">KES {(booking.total || 0).toLocaleString()}</p>
+                          {(user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER) && (
+                            <p className="font-bold mb-2">KES {(booking.total || 0).toLocaleString()}</p>
+                          )}
                           <IOSBadge className={`${status.bg} ${status.color}`}>{status.label}</IOSBadge>
                         </div>
                       </div>
                     </div>
-                    
+
                     {/* Action Buttons */}
                     <div className="flex gap-2 mt-3">
-                      <IOSButton 
-                        variant="secondary" 
-                        size="sm" 
-                        className="flex-1" 
+                      <IOSButton
+                        variant="secondary"
+                        size="sm"
+                        className="flex-1"
                         onClick={() => {
                           setSelectedBooking(booking);
                           setShowDetailsModal(true);
@@ -172,32 +174,32 @@ export default function BranchReservationsPage() {
                       >
                         View Details
                       </IOSButton>
-                      
+
                       {booking.status === 'confirmed' && (
                         <>
-                          <IOSButton 
-                            variant="secondary" 
-                            size="sm" 
+                          <IOSButton
+                            variant="secondary"
+                            size="sm"
                             leftIcon={<CheckSquare />}
                             onClick={() => handleCheckIn(booking.id)}
                           >
                             Check In
                           </IOSButton>
-                          <IOSButton 
-                            variant="secondary" 
-                            size="sm" 
-                            className="bg-red-50 hover:bg-red-100 text-red-600" 
+                          <IOSButton
+                            variant="secondary"
+                            size="sm"
+                            className="bg-red-50 hover:bg-red-100 text-red-600"
                             onClick={() => handleCancelBooking(booking.id)}
                           >
                             Cancel
                           </IOSButton>
                         </>
                       )}
-                      
+
                       {booking.status === 'checked_in' && (
-                        <IOSButton 
-                          variant="secondary" 
-                          size="sm" 
+                        <IOSButton
+                          variant="secondary"
+                          size="sm"
                           leftIcon={<LogOut />}
                           onClick={() => handleCheckOut(booking.id)}
                         >
@@ -222,7 +224,7 @@ export default function BranchReservationsPage() {
                   ✕
                 </button>
               </div>
-              
+
               <div className="space-y-4">
                 <div className="flex items-center justify-between pb-4 border-b">
                   <div>
@@ -262,21 +264,23 @@ export default function BranchReservationsPage() {
                 </div>
 
                 <div className="pt-4 border-t">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500">Total Amount</span>
-                    <span className="text-2xl font-bold text-green-600">KES {(selectedBooking.total || 0).toLocaleString()}</span>
-                  </div>
+                  {(user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER) && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Total Amount</span>
+                      <span className="text-2xl font-bold text-green-600">KES {(selectedBooking.total || 0).toLocaleString()}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-2 pt-4">
                   <IOSButton variant="secondary" className="flex-1" onClick={() => setShowDetailsModal(false)}>
                     Close
                   </IOSButton>
-                  
+
                   {selectedBooking.status === 'confirmed' && (
                     <>
-                      <IOSButton 
-                        className="flex-1" 
+                      <IOSButton
+                        className="flex-1"
                         onClick={() => {
                           handleCheckIn(selectedBooking.id);
                           setShowDetailsModal(false);
@@ -285,7 +289,7 @@ export default function BranchReservationsPage() {
                       >
                         Check In
                       </IOSButton>
-                      <IOSButton 
+                      <IOSButton
                         variant="destructive"
                         onClick={() => {
                           handleCancelBooking(selectedBooking.id);
@@ -296,10 +300,10 @@ export default function BranchReservationsPage() {
                       </IOSButton>
                     </>
                   )}
-                  
+
                   {selectedBooking.status === 'checked_in' && (
-                    <IOSButton 
-                      className="flex-1" 
+                    <IOSButton
+                      className="flex-1"
                       onClick={() => {
                         handleCheckOut(selectedBooking.id);
                         setShowDetailsModal(false);

@@ -101,9 +101,9 @@ export default function AuditDashboard() {
           <div className="card-elevated p-5">
             <h2 className="text-[15px] font-semibold text-stone-900 mb-4">Compliance Overview</h2>
             <div className="h-3 bg-stone-100 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-stone-400 rounded-full transition-all duration-500" 
-                style={{ width: `${stats.complianceScore}%` }} 
+              <div
+                className="h-full bg-stone-400 rounded-full transition-all duration-500"
+                style={{ width: `${stats.complianceScore}%` }}
               />
             </div>
             <div className="flex items-center justify-between mt-3">

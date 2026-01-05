@@ -90,8 +90,18 @@ export default function BranchStockPage() {
               </p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchItems} leftIcon={<RefreshCw />}>Refresh</IOSButton>
-              <Link href="/dashboard/branch-manager/requests"><IOSButton leftIcon={<ShoppingCart />}>Requests</IOSButton></Link>
+              <button
+                onClick={fetchItems}
+                className="px-3 py-2 border border-gray-300 text-gray-700 rounded text-sm font-medium hover:bg-gray-50 flex items-center gap-2"
+              >
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+              {user?.role === UserRole.SUPER_ADMIN && (
+                <Link href="/dashboard/branch-manager/requests">
+                  <IOSButton leftIcon={<ShoppingCart />}>Requests</IOSButton>
+                </Link>
+              )}
             </div>
           </div>
 
@@ -106,7 +116,15 @@ export default function BranchStockPage() {
               <div className="flex items-center gap-2 mb-3"><AlertTriangle className="h-5 w-5 text-yellow-600" /><p className="font-medium text-yellow-800">Low Stock Alert ({lowStockItems.length})</p></div>
               <div className="flex flex-wrap gap-2">
                 {lowStockItems.slice(0, 5).map((item) => (
-                  <IOSButton key={item.id} size="sm" variant="secondary" onClick={() => handleRequestStock(item)}>{item.name} ({item.quantity})</IOSButton>
+                  <IOSButton
+                    key={item.id}
+                    size="sm"
+                    variant="secondary"
+                    onClick={user?.role === UserRole.SUPER_ADMIN ? () => handleRequestStock(item) : undefined}
+                    className={user?.role !== UserRole.SUPER_ADMIN ? "cursor-default opacity-70" : ""}
+                  >
+                    {item.name} ({item.quantity})
+                  </IOSButton>
                 ))}
               </div>
             </IOSCard>
@@ -134,7 +152,9 @@ export default function BranchStockPage() {
                     </div>
                     <div className="flex items-end justify-between mt-4">
                       <div><p className="text-2xl font-bold">{item.quantity}</p><p className="text-xs text-gray-500">Min: {item.min_quantity} {item.unit}</p></div>
-                      {(isLow || isOut) && <IOSButton size="sm" onClick={() => handleRequestStock(item)}>Request</IOSButton>}
+                      {(isLow || isOut) && user?.role === UserRole.SUPER_ADMIN && (
+                        <IOSButton size="sm" onClick={() => handleRequestStock(item)}>Request</IOSButton>
+                      )}
                     </div>
                   </IOSCard>
                 );

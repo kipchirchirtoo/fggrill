@@ -100,18 +100,6 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/branch-operations/inventory'}
         />
         <NavItem
-          href="/dashboard/branch-operations/inventory/requests"
-          icon={ClipboardList}
-          label="Stock Requests"
-          active={pathname === '/dashboard/branch-operations/inventory/requests'}
-        />
-        <NavItem
-          href="/dashboard/branch-operations/inventory/incoming"
-          icon={Truck}
-          label="Incoming Stock"
-          active={pathname === '/dashboard/branch-operations/inventory/incoming'}
-        />
-        <NavItem
           href="/dashboard/branch-operations/inventory/stock-takes"
           icon={CheckCircle}
           label="Stock Takes"
@@ -152,12 +140,6 @@ export function ConsolidatedNav() {
           icon={Bed}
           label="Rooms"
           active={pathname === '/dashboard/branch-operations/operations/rooms'}
-        />
-        <NavItem
-          href="/dashboard/branch-operations/operations/requests"
-          icon={ClipboardList}
-          label="Guest Requests"
-          active={pathname === '/dashboard/branch-operations/operations/requests'}
         />
       </NavGroup>
 
@@ -207,12 +189,6 @@ export function ConsolidatedNav() {
           icon={Package}
           label="Master Inventory"
           active={pathname === '/dashboard/central-operations/warehouse/inventory'}
-        />
-        <NavItem
-          href="/dashboard/central-operations/warehouse/requests"
-          icon={ClipboardList}
-          label="Stock Requests"
-          active={pathname === '/dashboard/central-operations/warehouse/requests'}
         />
         <NavItem
           href="/dashboard/central-operations/warehouse/dispatches"
@@ -775,12 +751,6 @@ export function ConsolidatedNav() {
 
       <NavGroup label="Requests" icon={ClipboardList}>
         <NavItem
-          href="/dashboard/central-store/requests"
-          icon={ClipboardList}
-          label="All Requests"
-          active={pathname === '/dashboard/central-store/requests'}
-        />
-        <NavItem
           href="/dashboard/central-store/dispatch"
           icon={Truck}
           label="Dispatch"
@@ -850,26 +820,12 @@ export function ConsolidatedNav() {
         />
       </NavGroup>
 
-      <NavGroup label="Requests" icon={ClipboardList}>
-        <NavItem
-          href="/dashboard/branch-store/requests"
-          icon={ClipboardList}
-          label="Requests"
-          active={pathname === '/dashboard/branch-store/requests'}
-        />
-        <NavItem
-          href="/dashboard/branch-store/incoming"
-          icon={Truck}
-          label="Incoming"
-          active={pathname === '/dashboard/branch-store/incoming'}
-        />
-        <NavItem
-          href="/dashboard/branch-store/receive"
-          icon={CheckCircle}
-          label="Receive"
-          active={pathname === '/dashboard/branch-store/receive'}
-        />
-      </NavGroup>
+      <NavItem
+        href="/dashboard/branch-store/receive"
+        icon={CheckCircle}
+        label="Receive"
+        active={pathname === '/dashboard/branch-store/receive'}
+      />
 
       <NavItem
         href="/dashboard/branch-store/kitchen-usage"
@@ -1134,39 +1090,12 @@ export function ConsolidatedNav() {
         />
       </NavGroup>
 
-      <NavGroup label="Menu Management" icon={BookOpen}>
-        <NavItem
-          href="/dashboard/branch-manager/menu"
-          icon={Utensils}
-          label="Restaurant Menu"
-          active={pathname === '/dashboard/branch-manager/menu'}
-        />
-        <NavItem
-          href="/dashboard/branch-manager/bar-menu"
-          icon={Wine}
-          label="Bar Menu"
-          active={pathname === '/dashboard/branch-manager/bar-menu'}
-        />
-      </NavGroup>
-
       <NavGroup label="Inventory" icon={Package}>
         <NavItem
           href="/dashboard/branch-manager/stock"
           icon={Package}
           label="Stock"
           active={pathname === '/dashboard/branch-manager/stock'}
-        />
-        <NavItem
-          href="/dashboard/branch-manager/requests"
-          icon={ClipboardList}
-          label="Requests"
-          active={pathname === '/dashboard/branch-manager/requests'}
-        />
-        <NavItem
-          href="/dashboard/branch-manager/incoming"
-          icon={Truck}
-          label="Incoming"
-          active={pathname === '/dashboard/branch-manager/incoming'}
         />
         <NavItem
           href="/dashboard/branch-manager/stock-out"
@@ -1191,25 +1120,14 @@ export function ConsolidatedNav() {
         />
       </NavGroup>
 
-      <NavItem
-        href="/dashboard/branch-manager/wastage"
-        icon={Trash2}
-        label="Wastage Reports"
-        active={pathname === '/dashboard/branch-manager/wastage'}
-      />
-
-      <NavItem
-        href="/dashboard/branch-manager/reports"
-        icon={BarChart3}
-        label="Reports"
-        active={pathname === '/dashboard/branch-manager/reports'}
-      />
-      <NavItem
-        href="/dashboard/cashier"
-        icon={CreditCard}
-        label="Cashier Station"
-        active={pathname === '/dashboard/cashier'}
-      />
+      {(user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER) && (
+        <NavItem
+          href="/dashboard/branch-manager/wastage"
+          icon={Trash2}
+          label="Wastage Reports"
+          active={pathname === '/dashboard/branch-manager/wastage'}
+        />
+      )}
     </>
   );
 

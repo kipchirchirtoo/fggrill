@@ -28,8 +28,6 @@ function BranchOperationsDashboardContent() {
     pendingTasks: 0,
     arrivals: 0,
     departures: 0,
-    stockRequests: 0,
-    incomingStock: [] as any[],
     upcomingReservations: [] as any[]
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -65,8 +63,6 @@ function BranchOperationsDashboardContent() {
           pendingTasks: response.data?.stats?.requests?.pending || 0,
           arrivals: response.data?.stats?.reservations?.checkingInToday || 0,
           departures: response.data?.stats?.reservations?.checkingOutToday || 0,
-          stockRequests: response.data?.stats?.inventory?.lowStock || 0,
-          incomingStock: response.data?.incomingStock || [],
           upcomingReservations: response.data?.upcomingReservations || []
         });
       }
@@ -83,10 +79,8 @@ function BranchOperationsDashboardContent() {
     { href: '/dashboard/branch-operations/inventory', icon: Package, label: 'Inventory', color: 'bg-blue-50 text-blue-600' },
     { href: '/dashboard/branch-operations/staff', icon: Users, label: 'Staff', color: 'bg-purple-50 text-purple-600' },
     { href: '/dashboard/branch-operations/operations/reservations', icon: Calendar, label: 'Reservations', color: 'bg-green-50 text-green-600' },
-    { href: '/dashboard/branch-operations/inventory/requests', icon: ClipboardList, label: 'Stock Requests', color: 'bg-yellow-50 text-yellow-600' },
     { href: '/dashboard/branch-operations/operations/rooms', icon: Bed, label: 'Rooms', color: 'bg-indigo-50 text-indigo-600' },
     { href: '/dashboard/branch-operations/financials/reports', icon: TrendingUp, label: 'Reports', color: 'bg-pink-50 text-pink-600' },
-    { href: '/dashboard/branch-operations/inventory/incoming', icon: Boxes, label: 'Incoming Stock', color: 'bg-cyan-50 text-cyan-600' },
     { href: '/dashboard/branch-operations/communications', icon: Send, label: 'Communications', color: 'bg-amber-50 text-amber-600' },
   ];
 
@@ -156,7 +150,7 @@ function BranchOperationsDashboardContent() {
           </div>
 
           {/* Second Row Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-2 gap-4 max-w-md">
             <IOSCard className="p-4">
               <ArrowUpRight className="h-5 w-5 text-green-600 mb-2" />
               <p className="text-sm text-stone-500">Arrivals Today</p>
@@ -167,18 +161,6 @@ function BranchOperationsDashboardContent() {
               <UserCheck className="h-5 w-5 text-blue-600 mb-2" />
               <p className="text-sm text-stone-500">Departures Today</p>
               <p className="text-lg font-bold">{stats.departures}</p>
-            </IOSCard>
-
-            <IOSCard className="p-4">
-              <Send className="h-5 w-5 text-orange-600 mb-2" />
-              <p className="text-sm text-stone-500">Stock Requests</p>
-              <p className="text-lg font-bold">{stats.stockRequests}</p>
-            </IOSCard>
-
-            <IOSCard className="p-4">
-              <Boxes className="h-5 w-5 text-cyan-600 mb-2" />
-              <p className="text-sm text-stone-500">Incoming Stock</p>
-              <p className="text-lg font-bold text-cyan-600">{stats.incomingStock.length}</p>
             </IOSCard>
           </div>
 
@@ -262,56 +244,17 @@ function BranchOperationsDashboardContent() {
             {/* Pending Stock Items */}
             <IOSCard className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold font-sf-pro-display">Pending Stock Items</h3>
-                <Link href="/dashboard/branch-operations/inventory/incoming">
+                <h3 className="font-semibold font-sf-pro-display">Recent Operations</h3>
+                <Link href="/dashboard/branch-operations/communications">
                   <IOSButton variant="ghost" size="sm">
-                    View All <ChevronRight className="h-4 w-4 ml-1" />
+                    View Communications <ChevronRight className="h-4 w-4 ml-1" />
                   </IOSButton>
                 </Link>
               </div>
-
-              {isLoading ? (
-                <div className="animate-pulse space-y-3">
-                  <div className="h-16 bg-stone-100 rounded-lg"></div>
-                  <div className="h-16 bg-stone-100 rounded-lg"></div>
-                  <div className="h-16 bg-stone-100 rounded-lg"></div>
-                </div>
-              ) : stats.incomingStock && stats.incomingStock.length > 0 ? (
-                <div className="space-y-2">
-                  {stats.incomingStock.slice(0, 3).map((dispatch: any) => (
-                    <div key={dispatch.id} className="p-4 border rounded-lg">
-                      <div className="flex justify-between">
-                        <div>
-                          <p className="font-medium">{dispatch.dispatch_number || `Dispatch #${dispatch.id}`}</p>
-                          <p className="text-sm text-stone-500">
-                            {dispatch.items?.length || 0} items {dispatch.source ? `from ${dispatch.source}` : ''}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <span className={`px-2 py-1 text-xs rounded-full ${dispatch.status === 'in_transit' ? 'bg-yellow-100 text-yellow-800' :
-                            dispatch.status === 'approved' ? 'bg-blue-100 text-blue-800' :
-                              'bg-stone-100 text-stone-800'
-                            }`}>
-                            {dispatch.status === 'in_transit' ? 'In Transit' :
-                              dispatch.status === 'approved' ? 'Approved' :
-                                dispatch.status || 'Pending'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Boxes className="h-12 w-12 text-stone-300 mx-auto mb-2" />
-                  <p className="text-stone-500 text-sm">No incoming stock</p>
-                  <Link href="/dashboard/branch-operations/inventory/requests">
-                    <IOSButton variant="secondary" size="sm" className="mt-3">
-                      Request Stock
-                    </IOSButton>
-                  </Link>
-                </div>
-              )}
+              <div className="text-center py-8">
+                <Send className="h-12 w-12 text-stone-300 mx-auto mb-2" />
+                <p className="text-stone-500 text-sm">No recent notifications</p>
+              </div>
             </IOSCard>
           </div>
         </div>

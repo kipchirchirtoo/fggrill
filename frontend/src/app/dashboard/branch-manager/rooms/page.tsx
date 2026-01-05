@@ -58,7 +58,7 @@ export default function BranchRoomsPage() {
 
   const handleDeleteRoom = async () => {
     if (!deletingRoom) return;
-    
+
     setIsDeleting(true);
     try {
       const response = await roomsAPI.deleteRoom(deletingRoom.id);
@@ -106,13 +106,15 @@ export default function BranchRoomsPage() {
               </p>
             </div>
             <div className="flex gap-2">
-              <IOSButton 
-                onClick={handleAddRoom}
-                className="bg-[#3C3C43] hover:bg-[#000000] text-white"
-                leftIcon={<Plus />}
-              >
-                Add Room
-              </IOSButton>
+              {user?.role === UserRole.SUPER_ADMIN && (
+                <IOSButton
+                  onClick={handleAddRoom}
+                  className="bg-[#3C3C43] hover:bg-[#000000] text-white"
+                  leftIcon={<Plus />}
+                >
+                  Add Room
+                </IOSButton>
+              )}
               <IOSButton variant="secondary" onClick={fetchRooms} leftIcon={<RefreshCw />}>Refresh</IOSButton>
             </div>
           </div>
@@ -147,38 +149,42 @@ export default function BranchRoomsPage() {
                         <p className="text-sm text-gray-500">{room.room_type}</p>
                       </div>
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                        <IOSButton
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleEditRoom(room)}
-                          className="p-2 hover:bg-blue-50"
-                        >
-                          <Edit className="h-4 w-4 text-blue-600" />
-                        </IOSButton>
-                        <IOSButton
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setDeletingRoom(room)}
-                          className="p-2 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4 text-red-600" />
-                        </IOSButton>
+                        {user?.role === UserRole.SUPER_ADMIN && (
+                          <>
+                            <IOSButton
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleEditRoom(room)}
+                              className="p-2 hover:bg-blue-50"
+                            >
+                              <Edit className="h-4 w-4 text-blue-600" />
+                            </IOSButton>
+                            <IOSButton
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setDeletingRoom(room)}
+                              className="p-2 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4 text-red-600" />
+                            </IOSButton>
+                          </>
+                        )}
                       </div>
                     </div>
-                    
+
                     <div className="space-y-2 mb-4">
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-500">Floor:</span>
                         <span className="font-medium">{room.floor}</span>
                       </div>
-                      {room.price && (
+                      {room.price && user?.role === UserRole.SUPER_ADMIN && (
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-gray-500">Rate:</span>
                           <span className="font-medium">KES {room.price.toLocaleString()}/night</span>
                         </div>
                       )}
                     </div>
-                    
+
                     <div className="flex items-center justify-center gap-2 p-2 rounded-lg bg-gray-50">
                       <StatusIcon className={`h-4 w-4 ${status.color}`} />
                       <span className={`text-sm font-medium ${status.color}`}>{status.label}</span>

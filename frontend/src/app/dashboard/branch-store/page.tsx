@@ -5,7 +5,7 @@ import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { storeAPI } from '@/lib/api';
-import { 
+import {
   Package, Truck, ClipboardList, RefreshCw, AlertTriangle,
   TrendingDown, FileText, ShoppingCart, Utensils
 } from 'lucide-react';
@@ -13,22 +13,18 @@ import Link from 'next/link';
 
 export default function BranchStoreDashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState({ totalItems: 0, lowStock: 0, pendingRequests: 0, incoming: 0 });
+  const [stats, setStats] = useState({ totalItems: 0, lowStock: 0 });
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [dashboardRes, requestsRes, incomingRes] = await Promise.all([
+      const [dashboardRes] = await Promise.all([
         storeAPI.getBranchDashboard(),
-        storeAPI.getBranchRequests(),
-        storeAPI.getIncomingDispatches(),
       ]);
       setStats({
         totalItems: dashboardRes.data?.totalItems || 0,
         lowStock: dashboardRes.data?.lowStockItems || 0,
-        pendingRequests: (requestsRes.data || []).filter((r: any) => r.status === 'pending').length,
-        incoming: (incomingRes.data || []).length,
       });
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
@@ -38,8 +34,6 @@ export default function BranchStoreDashboard() {
 
   const quickLinks = [
     { href: '/dashboard/branch-store/stock', icon: Package, label: 'Stock', desc: 'Current inventory' },
-    { href: '/dashboard/branch-store/requests', icon: ShoppingCart, label: 'Requests', desc: 'Stock requests' },
-    { href: '/dashboard/branch-store/incoming', icon: Truck, label: 'Incoming', desc: 'Receive stock' },
     { href: '/dashboard/branch-store/stock-out', icon: TrendingDown, label: 'Stock Out', desc: 'Issue items' },
     { href: '/dashboard/branch-store/kitchen-usage', icon: Utensils, label: 'Kitchen', desc: 'Kitchen usage' },
     { href: '/dashboard/branch-store/reports', icon: FileText, label: 'Reports', desc: 'Analytics' },
@@ -48,8 +42,6 @@ export default function BranchStoreDashboard() {
   const statCards = [
     { label: 'Total Items', value: stats.totalItems, icon: Package },
     { label: 'Low Stock', value: stats.lowStock, icon: AlertTriangle },
-    { label: 'Pending Requests', value: stats.pendingRequests, icon: ClipboardList },
-    { label: 'Incoming', value: stats.incoming, icon: Truck },
   ];
 
   return (

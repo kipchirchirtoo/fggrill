@@ -120,6 +120,9 @@ export default function BranchStaffPage() {
     role: 'employee'
   });
 
+  const STAFF_LIMIT = 10;
+  const isLimitReached = user?.role === UserRole.BRANCH_MANAGER && staff.length >= STAFF_LIMIT;
+
   // Use active branch from context, fallback to user's branch
   const currentBranchId = activeBranchId || user?.branch_id;
 
@@ -260,6 +263,11 @@ export default function BranchStaffPage() {
       return;
     }
 
+    if (!editingStaff && isLimitReached) {
+      toast.error(`Staff limit reached. Branch managers can only add up to ${STAFF_LIMIT} staff members.`);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       // Map frontend field names to backend expected field names
@@ -356,13 +364,21 @@ export default function BranchStaffPage() {
               </p>
             </div>
             <div className="flex gap-2">
-              <button
-                onClick={handleAddStaff}
-                className="px-3 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 flex items-center gap-2"
-              >
-                <UserPlus className="h-4 w-4" />
-                Add Staff
-              </button>
+              {!isLimitReached && (
+                <button
+                  onClick={handleAddStaff}
+                  className="px-3 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 flex items-center gap-2"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Add Staff
+                </button>
+              )}
+              {isLimitReached && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 text-amber-700 rounded border border-amber-200 text-xs font-medium">
+                  <AlertCircle className="h-4 w-4" />
+                  Staff Limit Reached (10)
+                </div>
+              )}
               <button
                 onClick={fetchStaff}
                 className="px-3 py-2 border border-gray-300 text-gray-700 rounded text-sm font-medium hover:bg-gray-50 flex items-center gap-2"

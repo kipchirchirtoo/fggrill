@@ -8,7 +8,7 @@ import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription }
 import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { motion } from 'framer-motion';
-import { 
+import {
   BarChart3, ArrowLeft, DollarSign, TrendingUp, AlertCircle, RefreshCw,
   CheckCircle, XCircle, Clock, Eye, Search, Download, AlertTriangle,
   Flag, Target, Activity, Scale, ArrowUpRight, ArrowDownRight
@@ -50,7 +50,7 @@ export default function FinancialAuditPage() {
 
   const stats = { total: 1247, pending: 34, discrepancies: 7, flagged: 12, compliance: 94.2 };
 
-  const filtered = transactions.filter(t => 
+  const filtered = transactions.filter(t =>
     (statusFilter === 'all' || t.status === statusFilter) &&
     (t.desc.toLowerCase().includes(searchQuery.toLowerCase()) || t.ref.includes(searchQuery))
   );
@@ -83,7 +83,7 @@ export default function FinancialAuditPage() {
               </div>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="outline" size="sm"leftIcon={<Download />}>Export</IOSButton>
+              <IOSButton variant="outline" size="sm" leftIcon={<Download />}>Export</IOSButton>
               <IOSButton size="sm" className="bg-[#F2F2F7] hover:bg-[#F2F2F7]" leftIcon={<RefreshCw />}>Sync</IOSButton>
             </div>
           </div>
