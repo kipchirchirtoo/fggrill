@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../server';
-import { Room, RoomStatus } from '../../models/Room';
+import { Room, RoomStatus, RoomType } from '../../models/Room';
 import { HousekeepingTask, TaskStatus, TaskType } from '../../models/HousekeepingTask';
 import { getTestUserWithToken } from '../../test/helpers';
 import { mockSocketService } from '../../test/mocks/services';
@@ -15,18 +15,17 @@ describe('Housekeeping Controller', () => {
 
   beforeEach(async () => {
     // Create a test room
-    room = await Room.create({
+    const testRoom = new Room({
       roomNumber: '101',
-      type: 'standard',
+      type: RoomType.STANDARD,
       floor: 1,
       status: RoomStatus.CLEANING,
-      basePrice: 5000,
-      currentPrice: 5000,
       maxOccupancy: 2,
-      beds: { single: 2, double: 0, queen: 0, king: 0 },
-      area: 25,
-      isActive: true
+      bedConfiguration: { single: 2, double: 0, queen: 0, king: 0 },
+      squareMeters: 25,
+      amenities: ['WiFi', 'TV'],
     });
+    room = await testRoom.save();
   });
 
   describe('GET /api/housekeeping/tasks', () => {
@@ -46,24 +45,21 @@ describe('Housekeeping Controller', () => {
       const { token } = await getTestUserWithToken(UserRole.HOUSEKEEPING);
 
       // Create some tasks
-      await HousekeepingTask.create([
-        {
-          taskNumber: 'HSK001',
-          roomId: room.id,
-          roomNumber: room.roomNumber,
-          taskType: TaskType.CHECK_OUT_CLEAN,
-          status: TaskStatus.PENDING,
-          estimatedDuration: 30
-        },
-        {
-          taskNumber: 'HSK002',
-          roomId: room.id,
-          roomNumber: room.roomNumber,
-          taskType: TaskType.DAILY_CLEAN,
-          status: TaskStatus.COMPLETED,
-          estimatedDuration: 20
-        }
-      ]);
+      await new HousekeepingTask({
+        taskNumber: 'HSK001',
+        roomId: room.id,
+        taskType: TaskType.CHECK_OUT_CLEAN,
+        status: TaskStatus.PENDING,
+        estimatedDuration: 30
+      }).save();
+
+      await new HousekeepingTask({
+        taskNumber: 'HSK002',
+        roomId: room.id,
+        taskType: TaskType.STAY_OVER_CLEAN,
+        status: TaskStatus.COMPLETED,
+        estimatedDuration: 20
+      }).save();
 
       const response = await request(app)
         .get('/api/housekeeping/tasks')
@@ -82,7 +78,7 @@ describe('Housekeeping Controller', () => {
       const { token, user } = await getTestUserWithToken(UserRole.HOUSEKEEPING);
 
       const taskData = {
-        roomNumber: room.roomNumber,
+        roomId: room.id,
         taskType: TaskType.CHECK_OUT_CLEAN,
         priority: 'high',
         estimatedDuration: 30,
@@ -118,7 +114,7 @@ describe('Housekeeping Controller', () => {
         .post('/api/housekeeping/tasks')
         .set('Authorization', `Bearer ${token}`)
         .send({
-          roomNumber: '999',
+          roomId: '999',
           taskType: TaskType.CHECK_OUT_CLEAN,
           priority: 'high',
           estimatedDuration: 30
@@ -134,18 +130,17 @@ describe('Housekeeping Controller', () => {
     let task: any;
 
     beforeEach(async () => {
-      task = await HousekeepingTask.create({
+      task = await new HousekeepingTask({
         taskNumber: 'HSK001',
         roomId: room.id,
-        roomNumber: room.roomNumber,
         taskType: TaskType.CHECK_OUT_CLEAN,
         status: TaskStatus.PENDING,
         estimatedDuration: 30,
         checklist: [
-          { item: 'Make bed', completed: false },
-          { item: 'Clean bathroom', completed: false }
+          { id: '1', item: 'Make bed', completed: false },
+          { id: '2', item: 'Clean bathroom', completed: false }
         ]
-      });
+      }).save();
     });
 
     it('should update task status', async () => {
@@ -198,133 +193,126 @@ describe('Housekeeping Controller', () => {
     });
   });
 
-  describe('DELETE /api/housekeeping/tasks/:id', () => {
-    it('should delete task (admin only)', async () => {
-      const { token } = await getTestUserWithToken(UserRole.SUPER_ADMIN);
+  it('should delete task (admin only)', async () => {
+    const { token } = await getTestUserWithToken(UserRole.SUPER_ADMIN);
 
-      const task = await HousekeepingTask.create({
-        taskNumber: 'HSK001',
-        roomId: room.id,
-        roomNumber: room.roomNumber,
-        taskType: TaskType.CHECK_OUT_CLEAN,
-        status: TaskStatus.PENDING,
-        estimatedDuration: 30
-      });
+    const task = await new HousekeepingTask({
+      taskNumber: 'HSK001',
+      roomId: room.id,
+      taskType: TaskType.CHECK_OUT_CLEAN,
+      status: TaskStatus.PENDING,
+      estimatedDuration: 30
+    }).save();
 
-      const response = await request(app)
-        .delete(`/api/housekeeping/tasks/${task.id}`)
-        .set('Authorization', `Bearer ${token}`);
+    const response = await request(app)
+      .delete(`/api/housekeeping/tasks/${task.id}`)
+      .set('Authorization', `Bearer ${token}`);
 
-      expect(response.status).toBe(200);
-      expect(response.body.success).toBe(true);
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
 
-      // Verify task was deleted
-      const deletedTask = await HousekeepingTask.findById(task.id);
-      expect(deletedTask).toBeNull();
+    // Verify task was deleted
+    const deletedTask = await HousekeepingTask.findById(task.id);
+    expect(deletedTask).toBeNull();
 
-      // Verify socket event was emitted
-      expect(mockSocketService.emitToRoom).toHaveBeenCalledWith(
-        'housekeeping',
-        'housekeeping:taskDeleted',
-        task.id
-      );
-    });
-
-    it('should not allow non-admin to delete task', async () => {
-      const { token } = await getTestUserWithToken(UserRole.HOUSEKEEPING);
-
-      const task = await HousekeepingTask.create({
-        taskNumber: 'HSK001',
-        roomId: room.id,
-        roomNumber: room.roomNumber,
-        taskType: TaskType.CHECK_OUT_CLEAN,
-        status: TaskStatus.PENDING,
-        estimatedDuration: 30
-      });
-
-      const response = await request(app)
-        .delete(`/api/housekeeping/tasks/${task.id}`)
-        .set('Authorization', `Bearer ${token}`);
-
-      expect(response.status).toBe(403);
-      expect(response.body.success).toBe(false);
-    });
+    // Verify socket event was emitted
+    expect(mockSocketService.emitToRoom).toHaveBeenCalledWith(
+      'housekeeping',
+      'housekeeping:taskDeleted',
+      task.id
+    );
   });
 
-  describe('GET /api/housekeeping/rooms/:roomNumber/status', () => {
-    it('should get room cleaning status', async () => {
-      const { token } = await getTestUserWithToken(UserRole.HOUSEKEEPING);
+  it('should not allow non-admin to delete task', async () => {
+    const { token } = await getTestUserWithToken(UserRole.HOUSEKEEPING);
 
-      // Create a task for the room
-      await HousekeepingTask.create({
-        taskNumber: 'HSK001',
-        roomId: room.id,
-        roomNumber: room.roomNumber,
-        taskType: TaskType.CHECK_OUT_CLEAN,
-        status: TaskStatus.IN_PROGRESS,
-        estimatedDuration: 30
-      });
+    const task = await new HousekeepingTask({
+      taskNumber: 'HSK001',
+      roomId: room.id,
+      taskType: TaskType.CHECK_OUT_CLEAN,
+      status: TaskStatus.PENDING,
+      estimatedDuration: 30
+    }).save();
 
-      const response = await request(app)
-        .get(`/api/housekeeping/rooms/${room.roomNumber}/status`)
-        .set('Authorization', `Bearer ${token}`);
+    const response = await request(app)
+      .delete(`/api/housekeeping/tasks/${task.id}`)
+      .set('Authorization', `Bearer ${token}`);
 
-      expect(response.status).toBe(200);
-      expect(response.body.success).toBe(true);
-      expect(response.body.data.roomStatus).toBe(RoomStatus.CLEANING);
-      expect(response.body.data.currentTask).toBeDefined();
-      expect(response.body.data.currentTask.status).toBe(TaskStatus.IN_PROGRESS);
-    });
+    expect(response.status).toBe(403);
+    expect(response.body.success).toBe(false);
+  });
+});
 
-    it('should return 404 for non-existent room', async () => {
-      const { token } = await getTestUserWithToken(UserRole.HOUSEKEEPING);
+describe('GET /api/housekeeping/rooms/:roomNumber/status', () => {
+  it('should get room cleaning status', async () => {
+    const { token } = await getTestUserWithToken(UserRole.HOUSEKEEPING);
 
-      const response = await request(app)
-        .get('/api/housekeeping/rooms/999/status')
-        .set('Authorization', `Bearer ${token}`);
+    // Create a task for the room
+    await new HousekeepingTask({
+      taskNumber: 'HSK001',
+      roomId: room.id,
+      taskType: TaskType.CHECK_OUT_CLEAN,
+      status: TaskStatus.IN_PROGRESS,
+      estimatedDuration: 30
+    }).save();
 
-      expect(response.status).toBe(404);
-      expect(response.body.success).toBe(false);
-      expect(response.body.message).toBe('Room not found');
-    });
+    const response = await request(app)
+      .get(`/api/housekeeping/rooms/${room.roomNumber}/status`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.roomStatus).toBe(RoomStatus.CLEANING);
+    expect(response.body.data.currentTask).toBeDefined();
+    expect(response.body.data.currentTask.status).toBe(TaskStatus.IN_PROGRESS);
   });
 
-  describe('GET /api/housekeeping/staff/workload', () => {
-    it('should get staff workload', async () => {
-      const { token, user } = await getTestUserWithToken(UserRole.HOUSEKEEPING);
+  it('should return 404 for non-existent room', async () => {
+    const { token } = await getTestUserWithToken(UserRole.HOUSEKEEPING);
 
-      // Create tasks assigned to user
-      await HousekeepingTask.create([
-        {
-          taskNumber: 'HSK001',
-          roomId: room.id,
-          roomNumber: room.roomNumber,
-          taskType: TaskType.CHECK_OUT_CLEAN,
-          status: TaskStatus.ASSIGNED,
-          assignedTo: user.id,
-          estimatedDuration: 30
-        },
-        {
-          taskNumber: 'HSK002',
-          roomId: room.id,
-          roomNumber: room.roomNumber,
-          taskType: TaskType.DAILY_CLEAN,
-          status: TaskStatus.IN_PROGRESS,
-          assignedTo: user.id,
-          estimatedDuration: 20
-        }
-      ]);
+    const response = await request(app)
+      .get('/api/housekeeping/rooms/999/status')
+      .set('Authorization', `Bearer ${token}`);
 
-      const response = await request(app)
-        .get('/api/housekeeping/staff/workload')
-        .set('Authorization', `Bearer ${token}`);
-
-      expect(response.status).toBe(200);
-      expect(response.body.success).toBe(true);
-      expect(Array.isArray(response.body.data)).toBe(true);
-      expect(response.body.data).toHaveLength(1);
-      expect(response.body.data[0].totalTasks).toBe(2);
-      expect(response.body.data[0].staffName).toBeDefined();
-    });
+    expect(response.status).toBe(404);
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toBe('Room not found');
   });
+});
+
+describe('GET /api/housekeeping/staff/workload', () => {
+  it('should get staff workload', async () => {
+    const { token, user } = await getTestUserWithToken(UserRole.HOUSEKEEPING);
+
+    // Create tasks assigned to user
+    await new HousekeepingTask({
+      taskNumber: 'HSK001',
+      roomId: room.id,
+      taskType: TaskType.CHECK_OUT_CLEAN,
+      status: TaskStatus.ASSIGNED,
+      assignedTo: user.id,
+      estimatedDuration: 30
+    }).save();
+
+    await new HousekeepingTask({
+      taskNumber: 'HSK002',
+      roomId: room.id,
+      taskType: TaskType.STAY_OVER_CLEAN,
+      status: TaskStatus.IN_PROGRESS,
+      assignedTo: user.id,
+      estimatedDuration: 20
+    }).save();
+
+    const response = await request(app)
+      .get('/api/housekeeping/staff/workload')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(Array.isArray(response.body.data)).toBe(true);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].totalTasks).toBe(2);
+    expect(response.body.data[0].staffName).toBeDefined();
+  });
+});
 });

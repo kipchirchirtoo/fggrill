@@ -11,6 +11,13 @@ export enum BookingStatus {
   MODIFIED = 'modified'
 }
 
+export enum PaymentStatus {
+  PENDING = 'pending',
+  PAID = 'paid',
+  PARTIAL = 'partial',
+  REFUNDED = 'refunded'
+}
+
 export interface IBooking {
   id: string;
   confirmationNumber: string;
@@ -21,6 +28,7 @@ export interface IBooking {
   checkInDate: Date;
   checkOutDate: Date;
   status: BookingStatus;
+  paymentStatus: PaymentStatus;
 
   // Guest Details
   adults: number;
@@ -74,6 +82,7 @@ export class Booking implements IBooking {
   checkInDate: Date;
   checkOutDate: Date;
   status: BookingStatus;
+  paymentStatus: PaymentStatus;
 
   adults: number;
   children: number;
@@ -137,7 +146,8 @@ export class Booking implements IBooking {
     this.depositAmount = data.depositAmount || 0;
     this.depositPaid = data.depositPaid || false;
     this.depositPaidAt = data.depositPaidAt;
-    this.paymentMethod = data.paymentMethod;
+    this.paymentStatus = data.paymentStatus || PaymentStatus.PENDING;
+    this.paymentMethod = data.paymentMethod || 'cash';
 
     this.bookingSource = data.bookingSource || 'WALK_IN';
     this.channelManagerRef = data.channelManagerRef;
@@ -169,18 +179,18 @@ export class Booking implements IBooking {
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const day = now.getDate().toString().padStart(2, '0');
     const dateStr = `${year}${month}${day}`;
-    
+
     // Get today's booking count to generate sequential number
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfDay = new Date(startOfDay);
     endOfDay.setDate(endOfDay.getDate() + 1);
-    
+
     const { count } = await supabase
       .from('reservations')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', startOfDay.toISOString())
       .lt('created_at', endOfDay.toISOString());
-    
+
     const sequentialNumber = ((count || 0) + 1).toString().padStart(4, '0');
     return `HTL${dateStr}-${sequentialNumber}`;
   }
@@ -236,7 +246,7 @@ export class Booking implements IBooking {
       roomId: this.roomId,
       roomTypeId: this.roomTypeId
     });
-    
+
     // Validate UUID fields
     if (!this.guestId || this.guestId.trim() === '') {
       throw new Error('Guest ID is required and cannot be empty');
@@ -247,7 +257,7 @@ export class Booking implements IBooking {
     if (!this.roomTypeId || this.roomTypeId.trim() === '') {
       throw new Error('Room Type ID is required and cannot be empty');
     }
-    
+
     const { data, error } = await supabase
       .from('reservations')
       .upsert([
@@ -278,6 +288,7 @@ export class Booking implements IBooking {
           deposit_paid: this.depositPaid,
           deposit_paid_at: this.depositPaidAt,
           payment_method: this.paymentMethod,
+          payment_status: this.paymentStatus,
 
           // booking_source: this.bookingSource, // Column missing in DB
           // channel_manager_ref: this.channelManagerRef,

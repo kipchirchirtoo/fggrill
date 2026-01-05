@@ -33,22 +33,17 @@ describe('Booking Controller', () => {
 
   beforeEach(async () => {
     // Create a test room
-    room = await Room.create({
+    const testRoom = new Room({
       roomNumber: '101',
       type: RoomType.STANDARD,
       floor: 1,
       status: RoomStatus.AVAILABLE,
-      basePrice: 5000,
-      currentPrice: 5000,
       maxOccupancy: 2,
-      beds: { single: 2, double: 0, queen: 0, king: 0 },
-      area: 25,
-      amenities: [
-        { name: 'WiFi', icon: 'wifi' },
-        { name: 'TV', icon: 'tv' }
-      ],
-      isActive: true
+      bedConfiguration: { single: 2, double: 0, queen: 0, king: 0 },
+      squareMeters: 25,
+      amenities: ['WiFi', 'TV'],
     });
+    room = await testRoom.save();
   });
 
   describe('GET /api/bookings', () => {
@@ -82,7 +77,7 @@ describe('Booking Controller', () => {
         .set('Authorization', `Bearer ${token}`)
         .send({
           ...bookingData,
-          roomNumber: room.roomNumber
+          roomId: room.id
         });
 
       expect(response.status).toBe(201);
@@ -100,16 +95,15 @@ describe('Booking Controller', () => {
       const { token } = await getTestUserWithToken(UserRole.RECEPTIONIST);
 
       // Make room unavailable
-      await Room.findByIdAndUpdate(room.id, {
-        status: RoomStatus.OCCUPIED
-      });
+      const roomToUpdate = await Room.findById(room.id);
+      await roomToUpdate?.setStatus(RoomStatus.OCCUPIED);
 
       const response = await request(app)
         .post('/api/bookings')
         .set('Authorization', `Bearer ${token}`)
         .send({
           ...bookingData,
-          roomNumber: room.roomNumber
+          roomId: room.id
         });
 
       expect(response.status).toBe(400);
@@ -123,13 +117,12 @@ describe('Booking Controller', () => {
       const { token } = await getTestUserWithToken(UserRole.RECEPTIONIST);
 
       // Create a booking first
-      const booking = await Booking.create({
+      const booking = await new Booking({
         ...bookingData,
-        roomNumber: room.roomNumber,
-        bookingNumber: 'BK123456',
+        roomId: room.id,
+        confirmationNumber: 'BK123456',
         status: BookingStatus.CONFIRMED,
-        paymentStatus: PaymentStatus.PENDING
-      });
+      }).save();
 
       const response = await request(app)
         .get(`/api/bookings/${booking.id}`)
@@ -137,7 +130,7 @@ describe('Booking Controller', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      expect(response.body.data.bookingNumber).toBe(booking.bookingNumber);
+      expect(response.body.data.confirmationNumber).toBe('BK123456');
     });
 
     it('should return 404 for non-existent booking', async () => {
@@ -156,13 +149,12 @@ describe('Booking Controller', () => {
     let booking: any;
 
     beforeEach(async () => {
-      booking = await Booking.create({
+      booking = await new Booking({
         ...bookingData,
-        roomNumber: room.roomNumber,
-        bookingNumber: 'BK123456',
+        roomId: room.id,
+        confirmationNumber: 'BK123456',
         status: BookingStatus.CONFIRMED,
-        paymentStatus: PaymentStatus.PENDING
-      });
+      }).save();
     });
 
     it('should update booking details', async () => {
@@ -208,13 +200,12 @@ describe('Booking Controller', () => {
     it('should delete booking (admin only)', async () => {
       const { token } = await getTestUserWithToken(UserRole.SUPER_ADMIN);
 
-      const booking = await Booking.create({
+      const booking = await new Booking({
         ...bookingData,
-        roomNumber: room.roomNumber,
-        bookingNumber: 'BK123456',
+        roomId: room.id,
+        confirmationNumber: 'BK123456',
         status: BookingStatus.CONFIRMED,
-        paymentStatus: PaymentStatus.PENDING
-      });
+      }).save();
 
       const response = await request(app)
         .delete(`/api/bookings/${booking.id}`)
@@ -231,13 +222,12 @@ describe('Booking Controller', () => {
     it('should not allow non-admin to delete booking', async () => {
       const { token } = await getTestUserWithToken(UserRole.RECEPTIONIST);
 
-      const booking = await Booking.create({
+      const booking = await new Booking({
         ...bookingData,
-        roomNumber: room.roomNumber,
-        bookingNumber: 'BK123456',
+        roomId: room.id,
+        confirmationNumber: 'BK123456',
         status: BookingStatus.CONFIRMED,
-        paymentStatus: PaymentStatus.PENDING
-      });
+      }).save();
 
       const response = await request(app)
         .delete(`/api/bookings/${booking.id}`)
@@ -252,14 +242,13 @@ describe('Booking Controller', () => {
     let booking: any;
 
     beforeEach(async () => {
-      booking = await Booking.create({
+      booking = await new Booking({
         ...bookingData,
-        roomNumber: room.roomNumber,
-        bookingNumber: 'BK123456',
+        roomId: room.id,
+        confirmationNumber: 'BK123456',
         status: BookingStatus.CONFIRMED,
-        paymentStatus: PaymentStatus.PENDING,
         totalAmount: 15000
-      });
+      }).save();
     });
 
     it('should process full payment', async () => {

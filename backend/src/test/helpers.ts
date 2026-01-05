@@ -36,8 +36,6 @@ export const createTestRoom = async (
     type,
     floor: Math.floor(Math.random() * 5) + 1,
     status: RoomStatus.AVAILABLE,
-    basePrice: 5000,
-    currentPrice: 5000,
     maxOccupancy: 2,
     bedConfiguration: {
       single: 2,
@@ -47,7 +45,6 @@ export const createTestRoom = async (
     },
     squareMeters: 25,
     amenities: ['WiFi', 'TV', 'AC'],
-    description: 'Test room',
     accessible: false,
     smoking: false,
     maintenanceHistory: [],

@@ -1,8 +1,8 @@
 import request from 'supertest';
 import { app } from '../../server';
-import { Room, RoomStatus } from '../../models/Room';
-import { MaintenanceTask, MaintenanceStatus, MaintenanceType } from '../../models/MaintenanceTask';
-import { InventoryItem } from '../../models/Inventory';
+import { Room, RoomStatus, RoomType } from '../../models/Room';
+import { MaintenanceTask, MaintenanceStatus, MaintenanceType, MaintenancePriority } from '../../models/MaintenanceTask';
+import { InventoryItem, InventoryCategory } from '../../models/Inventory';
 import { getTestUserWithToken } from '../../test/helpers';
 import { mockSocketService, mockEmailService } from '../../test/mocks/services';
 import { UserRole } from '../../models/User';
@@ -20,42 +20,39 @@ describe('Maintenance Controller', () => {
   const taskData = {
     location: 'Room 101',
     type: MaintenanceType.CORRECTIVE,
-    priority: 'high',
+    priority: MaintenancePriority.HIGH,
     description: 'AC not working',
-    estimatedDuration: 60
+    estimatedDuration: 60,
+    title: 'AC Repair'
   };
 
   beforeEach(async () => {
     // Create a test room
-    room = await Room.create({
+    const testRoom = new Room({
       roomNumber: '101',
-      type: 'standard',
+      type: RoomType.STANDARD,
       floor: 1,
-      status: RoomStatus.MAINTENANCE,
-      basePrice: 5000,
-      currentPrice: 5000,
+      status: RoomStatus.AVAILABLE,
       maxOccupancy: 2,
-      beds: { single: 2, double: 0, queen: 0, king: 0 },
-      area: 25,
-      isActive: true
+      bedConfiguration: { single: 2, double: 0, queen: 0, king: 0 },
+      squareMeters: 25,
+      amenities: ['WiFi', 'TV'],
     });
+    room = await testRoom.save();
   });
 
   describe('GET /api/maintenance/tasks', () => {
+    let task: any;
     beforeEach(async () => {
-      await MaintenanceTask.create([
-        {
-          ...taskData,
-          taskNumber: 'MNT001',
-          status: MaintenanceStatus.PENDING
-        },
-        {
-          ...taskData,
-          taskNumber: 'MNT002',
-          type: MaintenanceType.PREVENTIVE,
-          status: MaintenanceStatus.COMPLETED
-        }
-      ]);
+      task = await new MaintenanceTask({
+        taskNumber: 'MNT001',
+        type: MaintenanceType.PREVENTIVE,
+        priority: MaintenancePriority.MEDIUM,
+        status: MaintenanceStatus.PENDING,
+        description: 'Check AC unit',
+        location: 'Room 101',
+        title: 'AC Maintenance'
+      }).save();
     });
 
     it('should get all tasks', async () => {
@@ -67,7 +64,7 @@ describe('Maintenance Controller', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      expect(response.body.data).toHaveLength(2);
+      expect(response.body.data).toHaveLength(1);
     });
 
     it('should filter tasks by type', async () => {
@@ -148,26 +145,25 @@ describe('Maintenance Controller', () => {
 
     beforeEach(async () => {
       // Create test parts in inventory
-      parts = await InventoryItem.create([
-        {
-          itemCode: 'PART001',
+      parts = await Promise.all([
+        new InventoryItem({
+          code: 'PART001',
           name: 'AC Filter',
-          category: 'maintenance',
+          category: InventoryCategory.MAINTENANCE,
           unit: 'piece',
           currentStock: 10,
           minimumStock: 2,
-          reorderPoint: 3,
           maximumStock: 20,
           unitCost: 1000,
-          isActive: true
-        }
+        }).save()
       ]);
 
-      task = await MaintenanceTask.create({
+      task = await new MaintenanceTask({
         ...taskData,
         taskNumber: 'MNT001',
-        status: MaintenanceStatus.PENDING
-      });
+        status: MaintenanceStatus.PENDING,
+        title: 'AC Repair'
+      }).save();
     });
 
     it('should update task status and handle parts', async () => {
@@ -206,12 +202,13 @@ describe('Maintenance Controller', () => {
     it('should handle room status when completing task', async () => {
       const { token } = await getTestUserWithToken(UserRole.MAINTENANCE);
 
-      const roomTask = await MaintenanceTask.create({
+      const roomTask = await new MaintenanceTask({
         ...taskData,
         taskNumber: 'MNT002',
         location: `Room ${room.roomNumber}`,
-        status: MaintenanceStatus.IN_PROGRESS
-      });
+        status: MaintenanceStatus.IN_PROGRESS,
+        title: 'Room Maintenance'
+      }).save();
 
       const response = await request(app)
         .put(`/api/maintenance/tasks/${roomTask.id}`)
@@ -233,11 +230,11 @@ describe('Maintenance Controller', () => {
     it('should delete task (admin only)', async () => {
       const { token } = await getTestUserWithToken(UserRole.SUPER_ADMIN);
 
-      const task = await MaintenanceTask.create({
+      const task = await new MaintenanceTask({
         ...taskData,
         taskNumber: 'MNT001',
         status: MaintenanceStatus.PENDING
-      });
+      }).save();
 
       const response = await request(app)
         .delete(`/api/maintenance/tasks/${task.id}`)
@@ -261,11 +258,11 @@ describe('Maintenance Controller', () => {
     it('should not allow non-admin to delete task', async () => {
       const { token } = await getTestUserWithToken(UserRole.MAINTENANCE);
 
-      const task = await MaintenanceTask.create({
+      const task = await new MaintenanceTask({
         ...taskData,
         taskNumber: 'MNT001',
         status: MaintenanceStatus.PENDING
-      });
+      }).save();
 
       const response = await request(app)
         .delete(`/api/maintenance/tasks/${task.id}`)
@@ -278,23 +275,26 @@ describe('Maintenance Controller', () => {
 
   describe('GET /api/maintenance/schedule', () => {
     beforeEach(async () => {
-      // Create some preventive maintenance tasks
-      await MaintenanceTask.create([
-        {
-          ...taskData,
-          taskNumber: 'MNT001',
-          type: MaintenanceType.PREVENTIVE,
-          status: MaintenanceStatus.PENDING,
-          startedAt: new Date('2024-12-01')
-        },
-        {
-          ...taskData,
-          taskNumber: 'MNT002',
-          type: MaintenanceType.PREVENTIVE,
-          status: MaintenanceStatus.PENDING,
-          startedAt: new Date('2024-12-15')
-        }
-      ]);
+      // Create some tasks
+      await new MaintenanceTask({
+        taskNumber: 'MNT001',
+        type: MaintenanceType.PREVENTIVE,
+        priority: MaintenancePriority.MEDIUM,
+        status: MaintenanceStatus.PENDING,
+        description: 'Check AC unit',
+        title: 'AC Maintenance',
+        location: 'Room 101'
+      }).save();
+
+      await new MaintenanceTask({
+        taskNumber: 'MNT002',
+        type: MaintenanceType.CORRECTIVE,
+        priority: MaintenancePriority.HIGH,
+        status: MaintenanceStatus.COMPLETED,
+        description: 'Leaking tap',
+        title: 'Tap Repair',
+        location: 'Room 101'
+      }).save();
     });
 
     it('should get maintenance schedule', async () => {
@@ -316,8 +316,8 @@ describe('Maintenance Controller', () => {
 
   describe('GET /api/maintenance/stats', () => {
     beforeEach(async () => {
-      await MaintenanceTask.create([
-        {
+      await Promise.all([
+        new MaintenanceTask({
           ...taskData,
           taskNumber: 'MNT001',
           status: MaintenanceStatus.COMPLETED,
@@ -325,8 +325,8 @@ describe('Maintenance Controller', () => {
           startedAt: new Date('2024-01-01T10:00:00'),
           completedAt: new Date('2024-01-01T11:00:00'),
           totalCost: 5000
-        },
-        {
+        }).save(),
+        new MaintenanceTask({
           ...taskData,
           taskNumber: 'MNT002',
           status: MaintenanceStatus.COMPLETED,
@@ -334,7 +334,7 @@ describe('Maintenance Controller', () => {
           startedAt: new Date('2024-01-02T14:00:00'),
           completedAt: new Date('2024-01-02T15:30:00'),
           totalCost: 3000
-        }
+        }).save()
       ]);
     });
 

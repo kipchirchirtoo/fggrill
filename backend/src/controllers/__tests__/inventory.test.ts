@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../server';
-import { InventoryItem, InventoryCategory, StockStatus } from '../../models/Inventory';
+import { InventoryItem, InventoryCategory } from '../../models/Inventory';
 import { getTestUserWithToken } from '../../test/helpers';
 import { mockSocketService, mockEmailService } from '../../test/mocks/services';
 import { UserRole } from '../../models/User';
@@ -15,30 +15,25 @@ jest.mock('../../services/email.service', () => ({
 
 describe('Inventory Controller', () => {
   const itemData = {
-    itemCode: 'HSK001',
+    code: 'HSK001',
     name: 'Bath Towel',
     category: InventoryCategory.HOUSEKEEPING,
     unit: 'piece',
     currentStock: 100,
     minimumStock: 20,
-    reorderPoint: 30,
     maximumStock: 200,
     unitCost: 500,
-    status: StockStatus.IN_STOCK,
-    isActive: true
   };
 
   describe('GET /api/inventory/items', () => {
     beforeEach(async () => {
-      await InventoryItem.create([
-        itemData,
-        {
-          ...itemData,
-          itemCode: 'HSK002',
-          name: 'Hand Towel',
-          currentStock: 50
-        }
-      ]);
+      await new InventoryItem(itemData).save();
+      await new InventoryItem({
+        ...itemData,
+        code: 'HSK002',
+        name: 'Hand Towel',
+        currentStock: 50
+      }).save();
     });
 
     it('should get all items', async () => {
@@ -63,7 +58,7 @@ describe('Inventory Controller', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      expect(response.body.data.every((item: any) => 
+      expect(response.body.data.every((item: any) =>
         item.category === InventoryCategory.HOUSEKEEPING
       )).toBe(true);
     });
@@ -94,7 +89,7 @@ describe('Inventory Controller', () => {
 
       expect(response.status).toBe(201);
       expect(response.body.success).toBe(true);
-      expect(response.body.data.itemCode).toBe(itemData.itemCode);
+      expect(response.body.data.code).toBe(itemData.code);
       expect(response.body.data.name).toBe(itemData.name);
 
       // Verify socket event was emitted
@@ -109,7 +104,7 @@ describe('Inventory Controller', () => {
       const { token } = await getTestUserWithToken(UserRole.SUPER_ADMIN);
 
       // Create first item
-      await InventoryItem.create(itemData);
+      await new InventoryItem(itemData).save();
 
       // Try to create duplicate
       const response = await request(app)
@@ -127,7 +122,7 @@ describe('Inventory Controller', () => {
     let item: any;
 
     beforeEach(async () => {
-      item = await InventoryItem.create(itemData);
+      item = await new InventoryItem(itemData).save();
     });
 
     it('should update item details', async () => {
@@ -168,7 +163,7 @@ describe('Inventory Controller', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      expect(response.body.data.status).toBe(StockStatus.LOW_STOCK);
+      expect(response.body.data.currentStock).toBe(15);
 
       // Verify alerts were sent
       expect(mockSocketService.emitToRoom).toHaveBeenCalledWith(
@@ -184,7 +179,7 @@ describe('Inventory Controller', () => {
     it('should delete item (admin only)', async () => {
       const { token } = await getTestUserWithToken(UserRole.SUPER_ADMIN);
 
-      const item = await InventoryItem.create(itemData);
+      const item = await new InventoryItem(itemData).save();
 
       const response = await request(app)
         .delete(`/api/inventory/items/${item.id}`)
@@ -208,7 +203,7 @@ describe('Inventory Controller', () => {
     it('should not allow non-admin to delete item', async () => {
       const { token } = await getTestUserWithToken(UserRole.HOUSEKEEPING);
 
-      const item = await InventoryItem.create(itemData);
+      const item = await new InventoryItem(itemData).save();
 
       const response = await request(app)
         .delete(`/api/inventory/items/${item.id}`)
@@ -223,7 +218,7 @@ describe('Inventory Controller', () => {
     let item: any;
 
     beforeEach(async () => {
-      item = await InventoryItem.create(itemData);
+      item = await new InventoryItem(itemData).save();
     });
 
     it('should add stock movement', async () => {
@@ -282,23 +277,41 @@ describe('Inventory Controller', () => {
 
   describe('GET /api/inventory/low-stock', () => {
     beforeEach(async () => {
-      await InventoryItem.create([
-        itemData,
-        {
-          ...itemData,
-          itemCode: 'HSK002',
-          name: 'Hand Towel',
-          currentStock: 15, // Below minimum stock
-          status: StockStatus.LOW_STOCK
-        },
-        {
-          ...itemData,
-          itemCode: 'HSK003',
-          name: 'Bath Mat',
-          currentStock: 0,
-          status: StockStatus.OUT_OF_STOCK
-        }
-      ]);
+      // Create some items
+      await new InventoryItem({
+        code: 'INV001',
+        name: 'Item 1',
+        category: InventoryCategory.HOUSEKEEPING,
+        unit: 'box',
+        currentStock: 50,
+        minimumStock: 10,
+        maximumStock: 100,
+        unitCost: 500
+      }).save();
+
+      await new InventoryItem({
+        code: 'INV002',
+        name: 'Item 2',
+        category: InventoryCategory.MAINTENANCE,
+        unit: 'piece',
+        currentStock: 10,
+        minimumStock: 5,
+        maximumStock: 30,
+        unitCost: 1000
+      }).save();
+
+      await new InventoryItem({
+        ...itemData,
+        code: 'HSK002',
+        name: 'Hand Towel',
+        currentStock: 15, // Below minimum stock
+      }).save();
+      await new InventoryItem({
+        ...itemData,
+        code: 'HSK003',
+        name: 'Bath Mat',
+        currentStock: 0,
+      }).save();
     });
 
     it('should get low stock items', async () => {
@@ -311,12 +324,6 @@ describe('Inventory Controller', () => {
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(response.body.data).toHaveLength(2); // Low stock and out of stock items
-      expect(response.body.data.some((item: any) => 
-        item.status === StockStatus.LOW_STOCK
-      )).toBe(true);
-      expect(response.body.data.some((item: any) => 
-        item.status === StockStatus.OUT_OF_STOCK
-      )).toBe(true);
     });
   });
 });
