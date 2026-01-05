@@ -654,10 +654,12 @@ export const roomsAPI = {
     // Transform frontend format to backend expected format
     const backendData = {
       room_number: data.roomNumber || data.room_number,
+      room_type: data.roomType || data.room_type || data.type,  // Backend requires room_type name
       type_id: data.typeId || data.type_id,
       floor: data.floor,
       status: data.status,
       base_price: data.basePrice || data.base_price,
+      rate_per_night: data.ratePerNight || data.rate_per_night || data.basePrice || data.base_price,
       description: data.description,
       amenities: data.amenities,
       max_occupancy: data.maxOccupancy || data.max_occupancy,
@@ -666,7 +668,8 @@ export const roomsAPI = {
       view: data.view,
       accessible: data.accessible,
       smoking: data.smoking,
-      branch_id: data.branchId || data.branch_id
+      branch_id: data.branchId || data.branch_id,
+      capacity: data.capacity
     };
     return fetchAPI<any>('/branch-operations/rooms', { method: 'POST', body: JSON.stringify(backendData) });
   },
