@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 export default function BranchManagerDashboard() {
   const { user } = useAuth();
   const { activeBranchId, activeBranch } = useBranch();
-  const [stats, setStats] = useState({ revenue: 0, occupancy: 0, staff: 0, pendingTasks: 0, arrivals: 0, departures: 0, totalRooms: 0, occupiedRooms: 0 });
+  const [stats, setStats] = useState({ occupancy: 0, staff: 0, pendingTasks: 0, arrivals: 0, departures: 0, totalRooms: 0, occupiedRooms: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [recentBookings, setRecentBookings] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<{ type: string; message: string; time: string }[]>([]);
@@ -46,7 +46,6 @@ export default function BranchManagerDashboard() {
       const checkedInBookings = bookings.filter((b: any) => b.status === 'checked_in').length;
 
       setStats({
-        revenue: financeRes.status === 'fulfilled' ? financeRes.value?.data?.totalRevenue || 0 : 0,
         occupancy: 0, // Will be calculated from rooms data when available
         staff: staffRes.status === 'fulfilled' ? staffRes.value?.data?.length || 0 : 0,
         pendingTasks: tasksRes.status === 'fulfilled' ? (tasksRes.value?.data || []).filter((t: any) => t.status === 'pending').length : 0,
@@ -93,13 +92,6 @@ export default function BranchManagerDashboard() {
   ];
 
   const statCards = [
-    {
-      label: 'Revenue',
-      value: (user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER)
-        ? (stats.revenue > 0 ? `KES ${(stats.revenue / 1000).toFixed(0)}K` : 'KES 0')
-        : '***',
-      icon: DollarSign
-    },
     { label: 'Occupancy', value: stats.totalRooms > 0 ? `${Math.round((stats.occupiedRooms / stats.totalRooms) * 100)}%` : '0%', icon: Bed },
     { label: 'Staff On Duty', value: stats.staff.toString(), icon: Users },
     { label: 'Pending Tasks', value: stats.pendingTasks.toString(), icon: ClipboardList },
@@ -128,7 +120,7 @@ export default function BranchManagerDashboard() {
           </div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             {statCards.map((stat, i) => (
               <div key={i} className="stat-card">
                 <div className="stat-icon">

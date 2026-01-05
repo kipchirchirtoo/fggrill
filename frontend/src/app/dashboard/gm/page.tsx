@@ -7,7 +7,7 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { financeAPI, staffAPI } from '@/lib/api';
 import { BranchSelector } from '@/components/ui/branch-selector';
-import { 
+import {
   Building2, DollarSign, Users, Bed, TrendingUp, RefreshCw,
   BarChart3, Calendar, ArrowUpRight, ArrowDownRight, ChevronRight,
   AlertCircle, CheckCircle, Clock, Activity, Target, Zap
@@ -15,8 +15,6 @@ import {
 import Link from 'next/link';
 
 interface DashboardStats {
-  totalRevenue: number;
-  revenueChange: number;
   occupancyRate: number;
   totalStaff: number;
   pendingLeave: number;
@@ -27,7 +25,7 @@ export default function GMDashboard() {
   const { user } = useAuth();
   const { userBranches } = useBranch();
   const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
-  const [stats, setStats] = useState<DashboardStats>({ totalRevenue: 0, revenueChange: 0, occupancyRate: 0, totalStaff: 0, pendingLeave: 0, branches: 0 });
+  const [stats, setStats] = useState<DashboardStats>({ occupancyRate: 0, totalStaff: 0, pendingLeave: 0, branches: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [branchPerformance, setBranchPerformance] = useState<{ name: string; revenue: number; occupancy: number; target: number }[]>([]);
   const [pendingActions, setPendingActions] = useState<{ id: number; type: string; title: string; time: string; urgent: boolean }[]>([]);
@@ -43,8 +41,6 @@ export default function GMDashboard() {
       ]);
 
       setStats({
-        totalRevenue: financeRes.status === 'fulfilled' ? financeRes.value?.data?.totalRevenue || 0 : 0,
-        revenueChange: financeRes.status === 'fulfilled' ? financeRes.value?.data?.revenueChange || 0 : 0,
         occupancyRate: 0,
         totalStaff: staffRes.status === 'fulfilled' ? staffRes.value?.data?.length || 0 : 0,
         pendingLeave: leaveRes.status === 'fulfilled' ? leaveRes.value?.data?.length || 0 : 0,
@@ -66,12 +62,10 @@ export default function GMDashboard() {
   ];
 
   const statCards = [
-    { label: 'Revenue', value: `KES ${(stats.totalRevenue / 1000000).toFixed(1)}M`, icon: DollarSign, trend: stats.revenueChange },
     { label: 'Occupancy', value: `${stats.occupancyRate}%`, icon: Bed },
     { label: 'Branches', value: stats.branches.toString(), icon: Building2 },
     { label: 'Staff', value: stats.totalStaff.toString(), icon: Users },
     { label: 'Leave Requests', value: stats.pendingLeave.toString(), icon: Calendar },
-    { label: 'Growth', value: `+${stats.revenueChange}%`, icon: TrendingUp },
   ];
 
   return (
@@ -87,8 +81,8 @@ export default function GMDashboard() {
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <BranchSelector 
-                size="sm" 
+              <BranchSelector
+                size="sm"
                 showAllOption={true}
                 allOptionLabel="All Branches"
                 value={selectedBranchId}
@@ -102,7 +96,7 @@ export default function GMDashboard() {
           </div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3">
             {statCards.map((stat, i) => (
               <div key={i} className="stat-card">
                 <div className="flex items-center justify-between mb-2">
@@ -127,7 +121,7 @@ export default function GMDashboard() {
             <div className="section-header mb-4">
               <h2 className="section-title">Quick Access</h2>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               {quickLinks.map((link) => (
                 <Link key={link.href} href={link.href}>
                   <div className="action-card group">
@@ -162,7 +156,7 @@ export default function GMDashboard() {
                         </div>
                         <div>
                           <p className="text-[13px] font-medium text-stone-800">{branch.name}</p>
-                          <p className="text-[11px] text-stone-500">KES {(branch.revenue / 1000000).toFixed(2)}M revenue</p>
+                          <p className="text-[11px] text-stone-500">Performance Overview</p>
                         </div>
                       </div>
                       <div className="text-right">
@@ -172,11 +166,10 @@ export default function GMDashboard() {
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="flex-1 bg-stone-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full transition-all ${
-                            branch.occupancy >= branch.target ? 'bg-emerald-500' : 
-                            branch.occupancy >= branch.target * 0.8 ? 'bg-amber-500' : 'bg-red-500'
-                          }`}
+                        <div
+                          className={`h-2 rounded-full transition-all ${branch.occupancy >= branch.target ? 'bg-emerald-500' :
+                              branch.occupancy >= branch.target * 0.8 ? 'bg-amber-500' : 'bg-red-500'
+                            }`}
                           style={{ width: `${Math.min(branch.occupancy, 100)}%` }}
                         />
                       </div>
@@ -199,9 +192,8 @@ export default function GMDashboard() {
                 {pendingActions.map((action) => (
                   <div key={action.id} className="p-3 rounded-lg bg-stone-50 hover:bg-stone-100 transition-colors cursor-pointer group">
                     <div className="flex items-start gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                        action.urgent ? 'bg-red-100' : 'bg-stone-200'
-                      }`}>
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${action.urgent ? 'bg-red-100' : 'bg-stone-200'
+                        }`}>
                         {action.type === 'leave' && <Calendar className={`h-4 w-4 ${action.urgent ? 'text-red-600' : 'text-stone-600'}`} />}
                         {action.type === 'approval' && <CheckCircle className={`h-4 w-4 ${action.urgent ? 'text-red-600' : 'text-stone-600'}`} />}
                         {action.type === 'review' && <BarChart3 className={`h-4 w-4 ${action.urgent ? 'text-red-600' : 'text-stone-600'}`} />}

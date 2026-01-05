@@ -22,7 +22,6 @@ function BranchOperationsDashboardContent() {
   const { user } = useAuth();
   const { activeBranch, activeBranchId } = useBranch();
   const [stats, setStats] = useState({
-    revenue: 0,
     occupancy: 0,
     staff: { total: 0, active: 0 },
     pendingTasks: 0,
@@ -54,7 +53,6 @@ function BranchOperationsDashboardContent() {
 
       if (response.success) {
         setStats({
-          revenue: response.data?.stats?.revenue || 0,
           occupancy: response.data?.stats?.rooms?.occupancyRate || 0,
           staff: {
             total: response.data?.stats?.staff?.total || 0,
@@ -121,13 +119,7 @@ function BranchOperationsDashboardContent() {
             </IOSCard>
           )}
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <IOSCard className="p-4">
-              <DollarSign className="h-5 w-5 text-green-600 mb-2" />
-              <p className="text-sm text-stone-500">Revenue (Today)</p>
-              <p className="text-lg font-bold">KES {(stats.revenue / 1000).toFixed(0)}K</p>
-            </IOSCard>
-
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <IOSCard className="p-4">
               <Bed className="h-5 w-5 text-blue-600 mb-2" />
               <p className="text-sm text-stone-500">Occupancy</p>

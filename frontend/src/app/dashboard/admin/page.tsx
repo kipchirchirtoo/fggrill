@@ -5,7 +5,7 @@ import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { financeAPI, staffAPI, systemAPI } from '@/lib/api';
-import { 
+import {
   DollarSign, Users, Building2, Bed, RefreshCw,
   UserCog, Package, FileText, Wrench, Utensils, ClipboardList, Settings,
   TrendingUp, ArrowUpRight, ChevronRight
@@ -14,7 +14,7 @@ import Link from 'next/link';
 
 export default function AdminDashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState({ revenue: 0, staff: 0, branches: 0, rooms: 0 });
+  const [stats, setStats] = useState({ staff: 0, branches: 0, rooms: 0 });
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -26,7 +26,6 @@ export default function AdminDashboard() {
         systemAPI.getBranches(),
       ]);
       setStats({
-        revenue: financeRes.data?.totalRevenue || 0,
         staff: staffRes.data?.length || 0,
         branches: branchesRes.data?.length || 0,
         rooms: 0,
@@ -51,7 +50,6 @@ export default function AdminDashboard() {
   ];
 
   const statCards = [
-    { label: 'Total Revenue', value: stats.revenue > 0 ? `KES ${(stats.revenue / 1000000).toFixed(1)}M` : 'KES 0', icon: DollarSign },
     { label: 'Total Staff', value: stats.staff.toString(), icon: Users },
     { label: 'Branches', value: stats.branches.toString(), icon: Building2 },
     { label: 'Total Rooms', value: stats.rooms.toString(), icon: Bed },
@@ -67,7 +65,7 @@ export default function AdminDashboard() {
               <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Admin Dashboard</h1>
               <p className="text-stone-500 mt-0.5">System administration and overview</p>
             </div>
-            <button 
+            <button
               onClick={fetchData}
               disabled={isLoading}
               className="btn-secondary self-start sm:self-auto"
@@ -78,7 +76,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
             {statCards.map((stat, i) => (
               <div key={i} className="stat-card">
                 <div className="stat-icon">

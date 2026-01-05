@@ -16,11 +16,8 @@ import { BranchSelector } from '@/components/finance/BranchSelector';
 import { DateRangeSelector, DateRangePreset } from '@/components/finance/DateRangeSelector';
 
 interface DashboardData {
-  totalRevenue: number;
   totalExpenses: number;
-  netProfit: number;
   pendingPayments: number;
-  revenueChange: number;
   expenseChange: number;
 }
 
@@ -37,7 +34,7 @@ interface FinancialRatios {
 
 export default function FinanceDashboard() {
   const { user } = useAuth();
-  const [data, setData] = useState<DashboardData>({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, pendingPayments: 0, revenueChange: 0, expenseChange: 0 });
+  const [data, setData] = useState<DashboardData>({ totalExpenses: 0, pendingPayments: 0, expenseChange: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
@@ -76,14 +73,10 @@ export default function FinanceDashboard() {
     { href: '/dashboard/finance/invoices', icon: FileText, label: 'Invoices & Billing', desc: 'Customer invoices' },
     { href: '/dashboard/finance/ar-ap', icon: Scale, label: 'Accounts Receivable/Payable', desc: 'Outstanding balances' },
     { href: '/dashboard/finance/budget-analysis', icon: Wallet, label: 'Budget Analysis', desc: 'Budget vs actual' },
-    { href: '/dashboard/finance/revenue-branches', icon: PieChart, label: 'Revenue by Branch', desc: 'Branch performance' },
-    { href: '/dashboard/finance/kpis', icon: Calculator, label: 'Financial KPIs', desc: 'Key performance indicators' },
-    { href: '/dashboard/finance/tax-summary', icon: Percent, label: 'Tax Summary', desc: 'VAT, PAYE, withholding' },
-    { href: '/dashboard/finance/forecast', icon: TrendingUp, label: 'Financial Forecast', desc: 'Future projections' },
     { href: '/dashboard/finance/reports', icon: FileText, label: 'Financial Reports', desc: 'Generate reports' },
   ];
 
-  const profitMargin = data.totalRevenue > 0 ? ((data.netProfit / data.totalRevenue) * 100).toFixed(1) : '0.0';
+
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
@@ -130,19 +123,7 @@ export default function FinanceDashboard() {
           </div>
 
           {/* Main Stats Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="stat-card">
-              <div className="flex items-center justify-between mb-3">
-                <div className="stat-icon"><DollarSign className="h-5 w-5" /></div>
-                <span className="flex items-center text-[11px] font-medium text-stone-500">
-                  {(data.revenueChange || 0) >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                  {Math.abs(data.revenueChange || 0)}%
-                </span>
-              </div>
-              <p className="stat-label">Revenue</p>
-              <p className="stat-value text-[20px]">KES {formatNumber(data.totalRevenue || 0)}</p>
-            </div>
-
+          <div className="grid grid-cols-2 lg:grid-cols-2 gap-4">
             <div className="stat-card">
               <div className="flex items-center justify-between mb-3">
                 <div className="stat-icon"><TrendingDown className="h-5 w-5" /></div>
@@ -156,20 +137,8 @@ export default function FinanceDashboard() {
             </div>
 
             <div className="stat-card">
-              <div className="stat-icon mb-3"><TrendingUp className="h-5 w-5" /></div>
-              <p className="stat-label">Net Profit</p>
-              <p className="stat-value text-[20px]">KES {formatNumber(data.netProfit || 0)}</p>
-            </div>
-
-            <div className="stat-card">
-              <div className="stat-icon mb-3"><Percent className="h-5 w-5" /></div>
-              <p className="stat-label">Profit Margin</p>
-              <p className="stat-value text-[20px]">{profitMargin}%</p>
-            </div>
-
-            <div className="stat-card">
               <div className="stat-icon mb-3"><CreditCard className="h-5 w-5" /></div>
-              <p className="stat-label">Pending</p>
+              <p className="stat-label">Pending Payments</p>
               <p className="stat-value text-[20px]">KES {formatNumber(data.pendingPayments || 0)}</p>
             </div>
           </div>
@@ -205,35 +174,22 @@ export default function FinanceDashboard() {
               </div>
             </div>
 
-            {/* Period Comparison */}
+            {/* Expense Overview */}
             <div className="card-elevated">
               <div className="px-5 py-4 border-b border-stone-100">
-                <h2 className="text-[15px] font-semibold text-stone-900">Period Comparison (30 Days)</h2>
+                <h2 className="text-[15px] font-semibold text-stone-900">Expense Analysis</h2>
               </div>
-              {comparison ? (
-                <div className="p-5">
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    <div className="p-4 bg-stone-50 rounded-lg border border-stone-100">
-                      <p className="text-[11px] font-medium text-stone-500 uppercase tracking-wider">Current Period</p>
-                      <p className="text-[18px] font-semibold text-stone-900 mt-1">KES {formatNumber(comparison.current_period?.revenue || 0)}</p>
-                      <p className="text-[11px] text-stone-400">Revenue</p>
-                    </div>
-                    <div className="p-4 bg-stone-50 rounded-lg border border-stone-100">
-                      <p className="text-[11px] font-medium text-stone-500 uppercase tracking-wider">Previous Period</p>
-                      <p className="text-[18px] font-semibold text-stone-900 mt-1">KES {formatNumber(comparison.previous_period?.revenue || 0)}</p>
-                      <p className="text-[11px] text-stone-400">Revenue</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between p-4 bg-stone-50 rounded-lg border border-stone-100">
-                    <span className="text-[13px] font-medium text-stone-700">Revenue Change</span>
-                    <span className="text-[14px] font-semibold text-stone-700">
-                      {(comparison.changes?.revenue || 0) >= 0 ? '+' : ''}{comparison.changes?.revenue || 0}%
-                    </span>
-                  </div>
+              <div className="p-5">
+                <div className="flex items-center justify-between p-4 bg-stone-50 rounded-lg border border-stone-100">
+                  <span className="text-[13px] font-medium text-stone-700">Expense Trend</span>
+                  <span className="text-[14px] font-semibold text-stone-700">
+                    {(data.expenseChange || 0) <= 0 ? 'Decreasing' : 'Increasing'}
+                  </span>
                 </div>
-              ) : (
-                <div className="p-5 text-center text-stone-500">No comparison data</div>
-              )}
+                <p className="text-[11px] text-stone-400 mt-3 p-1">
+                  Expense trends are calculated based on the selected date range compared to the previous period.
+                </p>
+              </div>
             </div>
           </div>
 

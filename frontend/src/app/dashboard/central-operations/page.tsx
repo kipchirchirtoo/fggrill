@@ -27,11 +27,6 @@ function CentralOperationsDashboardContent() {
   const [stats, setStats] = useState({
     totalBranches: 0,
     activeBranches: 0,
-    revenue: {
-      today: 0,
-      month: 0,
-      growth: 0
-    },
     inventory: {
       totalItems: 0,
       lowStockItems: 0,
@@ -154,12 +149,9 @@ function CentralOperationsDashboardContent() {
             </IOSCard>
 
             <IOSCard className="p-4 border border-stone-200">
-              <DollarSign className="h-5 w-5 text-stone-600 mb-2" />
-              <p className="text-sm text-stone-500">Total Revenue</p>
-              <p className="text-lg font-bold text-stone-900">KES {(stats.revenue.month / 1000).toFixed(0)}K</p>
-              <p className="text-xs text-stone-500">
-                {stats.revenue.growth > 0 ? '+' : ''}{stats.revenue.growth}% from last month
-              </p>
+              <ClipboardList className="h-5 w-5 text-stone-600 mb-2" />
+              <p className="text-sm text-stone-500">Pending Requests</p>
+              <p className="text-lg font-bold text-stone-900">{stats.requests.pending}</p>
             </IOSCard>
           </div>
 
@@ -285,16 +277,13 @@ function CentralOperationsDashboardContent() {
                     <div className="flex-1">
                       <div className="flex justify-between">
                         <p className="font-medium">{branch.name}</p>
-                        <p className="font-bold">KES {(branch.revenue / 1000).toFixed(0)}K</p>
+                        <p className="font-bold">{branch.performance || '100'}%</p>
                       </div>
                       <div className="relative mt-2 h-2 w-full bg-stone-100 rounded-full overflow-hidden">
                         <div
                           className="absolute top-0 left-0 h-full bg-stone-600"
                           style={{
-                            width: `${Math.min(
-                              (branch.revenue / (branchPerformance[0]?.revenue || 1)) * 100,
-                              100
-                            )}%`
+                            width: `${branch.performance || 100}%`
                           }}
                         ></div>
                       </div>
@@ -311,8 +300,8 @@ function CentralOperationsDashboardContent() {
               <h3 className="font-semibold font-sf-pro-display">Report Generation</h3>
               <div className="flex items-center gap-2">
                 <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${reportServiceStatus === 'online' ? 'border-stone-300 text-stone-700' :
-                    reportServiceStatus === 'offline' ? 'border-stone-300 text-stone-700' :
-                      'border-stone-200 text-stone-600'
+                  reportServiceStatus === 'offline' ? 'border-stone-300 text-stone-700' :
+                    'border-stone-200 text-stone-600'
                   }`}>
                   {reportServiceStatus === 'online' ? <CheckCircle className="h-3 w-3" /> :
                     reportServiceStatus === 'offline' ? <XCircle className="h-3 w-3" /> :
