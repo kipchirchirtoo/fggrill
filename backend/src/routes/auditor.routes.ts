@@ -9,7 +9,11 @@ import {
   getAuditTrail,
   createAuditPlan,
   createFinding,
-  getFindings
+  getFindings,
+  getSalesVerification,
+  getStockOversight,
+  getRequisitionAnalysis,
+  getPayrollAudit
 } from '../controllers/auditor.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -70,6 +74,27 @@ router.post('/findings',
 router.get('/findings',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
   getFindings
+);
+
+// Dashboard Analytics
+router.get('/analytics/sales-verification',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
+  getSalesVerification
+);
+
+router.get('/analytics/stock-oversight',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
+  getStockOversight
+);
+
+router.get('/analytics/requisition-analysis',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
+  getRequisitionAnalysis
+);
+
+router.get('/analytics/payroll-audit',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
+  getPayrollAudit
 );
 
 export default router;

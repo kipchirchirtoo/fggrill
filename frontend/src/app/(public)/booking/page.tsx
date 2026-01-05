@@ -96,7 +96,10 @@ function BookingContent() {
 
   const calculateTotal = () => {
     if (!roomDetails) return 0;
-    return roomDetails.pricePerNight * calculateNights();
+    const subtotal = roomDetails.pricePerNight * calculateNights();
+    const tax = subtotal * 0.16;
+    const serviceCharge = subtotal * 0.10;
+    return subtotal + tax + serviceCharge;
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -138,8 +141,8 @@ function BookingContent() {
           roomTypeId: selectedRoomTypeId,
           checkInDate: bookingDetails.checkIn,
           checkOutDate: bookingDetails.checkOut,
-          adults: bookingDetails.guests,
-          children: 0,
+          adults: bookingDetails.adults,
+          children: bookingDetails.children,
           guestId: null,
           specialRequests: formData.specialRequests,
           guestInfo: formData
@@ -546,16 +549,17 @@ function BookingContent() {
                         KES {formatNumber((roomDetails?.basePrice || 0) * nights)}
                       </span>
                     </div>
+
                     <div className="flex justify-between text-sm">
                       <span className="text-stone-600">VAT (16%)</span>
                       <span className="font-medium text-stone-900">
-                        KES {formatNumber(Math.round((roomDetails?.basePrice || 0) * nights * 0.16))}
+                        KES {formatNumber((roomDetails?.pricePerNight * nights || 0) * 0.16)}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-stone-600">Service Charge (10%)</span>
                       <span className="font-medium text-stone-900">
-                        KES {formatNumber(Math.round((roomDetails?.basePrice || 0) * nights * 0.10))}
+                        KES {formatNumber((roomDetails?.pricePerNight * nights || 0) * 0.10)}
                       </span>
                     </div>
                   </div>

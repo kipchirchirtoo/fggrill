@@ -1052,6 +1052,7 @@ export const bookingsAPI = {
           room_type: room.type?.name || room.room_type,
           room_type_id: room.room_type_id,
           price_per_night: room.price_override || room.type?.base_price || 0,
+          price_override: room.price_override,
           max_occupancy: room.type?.max_occupancy || room.max_occupancy || 0,
           status: room.status,
           type: room.type
@@ -2296,6 +2297,114 @@ export const auditAPI = {
   getRoleMigrations: () => fetchAPI<any>('/admin/role-migrations'),
   executeRoleMigration: (id: number) => fetchAPI<any>(`/admin/role-migrations/${id}/execute`, { method: 'POST' }),
   revertRoleMigration: (id: number) => fetchAPI<any>(`/admin/role-migrations/${id}/revert`, { method: 'POST' }),
+};
+
+// ============ AUDITOR API ============
+
+export const auditorAPI = {
+  // Night Audit
+  startNightAudit: (data: any) => fetchAPI<any>('/auditor/night-audit/start', { method: 'POST', body: JSON.stringify(data) }),
+  completeNightAudit: (id: string, data: any) => fetchAPI<any>(`/auditor/night-audit/${id}/complete`, { method: 'PUT', body: JSON.stringify(data) }),
+  getNightAudits: (params?: { start_date?: string; end_date?: string; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    if (params?.status) query.append('status', params.status);
+    return fetchAPI<any>(`/auditor/night-audit?${query}`);
+  },
+
+  // Exceptions
+  createException: (data: any) => fetchAPI<any>('/auditor/exceptions', { method: 'POST', body: JSON.stringify(data) }),
+  resolveException: (id: string, data: any) => fetchAPI<any>(`/auditor/exceptions/${id}/resolve`, { method: 'PUT', body: JSON.stringify(data) }),
+  getExceptions: (params?: { audit_session_id?: string; status?: string; severity?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.audit_session_id) query.append('audit_session_id', params.audit_session_id);
+    if (params?.status) query.append('status', params.status);
+    if (params?.severity) query.append('severity', params.severity);
+    return fetchAPI<any>(`/auditor/exceptions?${query}`);
+  },
+
+  // Audit Trail
+  getAuditTrail: (params?: { user_id?: string; entity_type?: string; entity_id?: string; start_date?: string; end_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.user_id) query.append('user_id', params.user_id);
+    if (params?.entity_type) query.append('entity_type', params.entity_type);
+    if (params?.entity_id) query.append('entity_id', params.entity_id);
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/auditor/trail?${query}`);
+  },
+
+  // Internal Audit
+  createAuditPlan: (data: any) => fetchAPI<any>('/auditor/plans', { method: 'POST', body: JSON.stringify(data) }),
+  createFinding: (data: any) => fetchAPI<any>('/auditor/findings', { method: 'POST', body: JSON.stringify(data) }),
+  getFindings: (params?: { audit_plan_id?: string; status?: string; severity?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.audit_plan_id) query.append('audit_plan_id', params.audit_plan_id);
+    if (params?.status) query.append('status', params.status);
+    if (params?.severity) query.append('severity', params.severity);
+    return fetchAPI<any>(`/auditor/findings?${query}`);
+  },
+
+  // Analytics
+  getSalesVerification: (params?: { date?: string; branch_id?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.date) query.append('date', params.date);
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    return fetchAPI<any>(`/auditor/analytics/sales-verification?${query}`);
+  },
+  getStockOversight: (branchId?: number) => {
+    const query = branchId ? `?branch_id=${branchId}` : '';
+    return fetchAPI<any>(`/auditor/analytics/stock-oversight${query}`);
+  },
+  getRequisitionAnalysis: (params?: { branch_id?: number; start_date?: string; end_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/auditor/analytics/requisition-analysis?${query}`);
+  },
+  getPayrollAudit: (params?: { month?: string; year?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.month) query.append('month', params.month);
+    if (params?.year) query.append('year', params.year);
+    return fetchAPI<any>(`/auditor/analytics/payroll-audit?${query}`);
+  },
+};
+
+export const stockRequestAPI = {
+  createRequest: (data: any) => fetchAPI<any>('/stock-requests', { method: 'POST', body: JSON.stringify(data) }),
+  getRequests: (params?: { branch_id?: number; status?: string; start_date?: string; end_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.status) query.append('status', params.status);
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/stock-requests?${query}`);
+  },
+  approveRequest: (id: string, data: any) => fetchAPI<any>(`/stock-requests/${id}/approve`, { method: 'PUT', body: JSON.stringify(data) }),
+  rejectRequest: (id: string, reason: string) => fetchAPI<any>(`/stock-requests/${id}/reject`, { method: 'PUT', body: JSON.stringify({ reason }) }),
+};
+
+export const staffCreditAPI = {
+  getLimits: (params?: { branch_id?: number; staff_id?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.staff_id) query.append('staff_id', params.staff_id);
+    return fetchAPI<any>(`/staff-credit/limits?${query}`);
+  },
+  setLimit: (data: any) => fetchAPI<any>('/staff-credit/limits', { method: 'POST', body: JSON.stringify(data) }),
+  addBill: (data: any) => fetchAPI<any>('/staff-credit/bills', { method: 'POST', body: JSON.stringify(data) }),
+  getBills: (params?: { branch_id?: number; staff_id?: string; status?: string; start_date?: string; end_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.staff_id) query.append('staff_id', params.staff_id);
+    if (params?.status) query.append('status', params.status);
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/staff-credit/bills?${query}`);
+  },
+  approveBill: (id: string, status: string) => fetchAPI<any>(`/staff-credit/bills/${id}/approve`, { method: 'PUT', body: JSON.stringify({ status }) }),
 };
 
 // =====================================================
