@@ -710,102 +710,103 @@ export default function InventoryPage() {
                     />
                   </div>
                 </div>
+              </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 ml-1">Category *</p>
-                    <select
-                      value={itemForm.category}
-                      onChange={(e) => setItemForm({ ...itemForm, category: e.target.value })}
-                      className="w-full h-11 px-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 text-sm font-bold text-stone-700"
-                    >
-                      {CATEGORIES.map(cat => (
-                        <option key={cat.code} value={cat.name}>{cat.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 ml-1">Unit of Measure</p>
-                    <select
-                      value={itemForm.unit_of_measure}
-                      onChange={(e) => setItemForm({ ...itemForm, unit_of_measure: e.target.value })}
-                      className="w-full h-11 px-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 text-sm font-bold text-stone-700"
-                    >
-                      {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div>
-                    <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 ml-1">Initial Qty</p>
-                    <input
-                      type="number"
-                      min="0"
-                      value={itemForm.quantity}
-                      onChange={(e) => setItemForm({ ...itemForm, quantity: parseInt(e.target.value) || 0 })}
-                      className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-bold text-stone-900"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 ml-1">Cost Price</p>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={itemForm.cost_price}
-                      onChange={(e) => setItemForm({ ...itemForm, cost_price: parseFloat(e.target.value) || 0 })}
-                      className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-bold text-stone-900"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 ml-1">Retail Price</p>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={itemForm.retail_price}
-                      onChange={(e) => setItemForm({ ...itemForm, retail_price: parseFloat(e.target.value) || 0 })}
-                      className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-bold text-stone-900"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 ml-1">Min. Level</p>
-                    <input
-                      type="number"
-                      min="0"
-                      value={itemForm.reorder_level}
-                      onChange={(e) => setItemForm({ ...itemForm, reorder_level: parseInt(e.target.value) || 10 })}
-                      className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-bold text-stone-900"
-                    />
-                  </div>
-                </div>
-
-                {/* Branch indicator */}
-                {selectedBranch && branches.length > 0 && (
-                  <div className="p-2 bg-blue-50 rounded-lg text-sm text-blue-700 flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    Adding to: <strong>{branches.find(b => b.id === selectedBranch)?.name || 'Unknown'}</strong>
-                  </div>
-                )}
-
-                <div className="flex gap-2 pt-4 border-t border-stone-100">
-                  <button
-                    onClick={() => setIsAddModalOpen(false)}
-                    className="flex-1 h-11 btn-secondary"
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 ml-1">Category *</p>
+                  <select
+                    value={itemForm.category}
+                    onChange={(e) => setItemForm({ ...itemForm, category: e.target.value })}
+                    className="w-full h-11 px-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 text-sm font-bold text-stone-700"
                   >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleAddItem}
-                    disabled={isSaving}
-                    className="flex-[2] h-11 btn-primary flex items-center justify-center gap-2"
+                    {CATEGORIES.map(cat => (
+                      <option key={cat.code} value={cat.name}>{cat.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 ml-1">Unit of Measure</p>
+                  <select
+                    value={itemForm.unit_of_measure}
+                    onChange={(e) => setItemForm({ ...itemForm, unit_of_measure: e.target.value })}
+                    className="w-full h-11 px-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 text-sm font-bold text-stone-700"
                   >
-                    {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                    <span>{isSaving ? 'Saving...' : 'Create Item'}</span>
-                  </button>
+                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
                 </div>
               </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 ml-1">Initial Qty</p>
+                  <input
+                    type="number"
+                    min="0"
+                    value={itemForm.quantity}
+                    onChange={(e) => setItemForm({ ...itemForm, quantity: parseInt(e.target.value) || 0 })}
+                    className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-bold text-stone-900"
+                  />
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 ml-1">Cost Price</p>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={itemForm.cost_price}
+                    onChange={(e) => setItemForm({ ...itemForm, cost_price: parseFloat(e.target.value) || 0 })}
+                    className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-bold text-stone-900"
+                  />
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 ml-1">Retail Price</p>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={itemForm.retail_price}
+                    onChange={(e) => setItemForm({ ...itemForm, retail_price: parseFloat(e.target.value) || 0 })}
+                    className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-bold text-stone-900"
+                  />
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 ml-1">Min. Level</p>
+                  <input
+                    type="number"
+                    min="0"
+                    value={itemForm.reorder_level}
+                    onChange={(e) => setItemForm({ ...itemForm, reorder_level: parseInt(e.target.value) || 10 })}
+                    className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-bold text-stone-900"
+                  />
+                </div>
+              </div>
+
+              {/* Branch indicator */}
+              {selectedBranch && branches.length > 0 && (
+                <div className="p-2 bg-blue-50 rounded-lg text-sm text-blue-700 flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Adding to: <strong>{branches.find(b => b.id === selectedBranch)?.name || 'Unknown'}</strong>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-4 border-t border-stone-100">
+                <button
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="flex-1 h-11 btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddItem}
+                  disabled={isSaving}
+                  className="flex-[2] h-11 btn-primary flex items-center justify-center gap-2"
+                >
+                  {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  <span>{isSaving ? 'Saving...' : 'Create Item'}</span>
+                </button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
 
