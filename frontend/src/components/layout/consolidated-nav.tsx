@@ -1132,12 +1132,7 @@ export function ConsolidatedNav() {
         />
       </NavGroup>
 
-      <NavItem
-        href="/dashboard/branch-accounting/reports"
-        icon={BarChart3}
-        label="Reports"
-        active={pathname === '/dashboard/branch-accounting/reports'}
-      />
+
     </>
   );
 

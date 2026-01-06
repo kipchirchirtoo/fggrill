@@ -418,6 +418,51 @@ export const storeAPI = {
 };
 
 // =====================================================
+// ACCOUNTING API
+// =====================================================
+
+export const accountingAPI = {
+  getDashboard: () => fetchAPI<any>('/accounting/dashboard'),
+
+  // Chart of Accounts
+  getAccounts: (params?: { type?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.type) query.append('account_type', params.type);
+    return fetchAPI<any>(`/accounting/accounts?${query}`);
+  },
+
+  // Invoices (AR)
+  getInvoices: (params?: { customer_id?: string; status?: string; overdue?: boolean }) => {
+    const query = new URLSearchParams();
+    if (params?.customer_id) query.append('customer_id', params.customer_id);
+    if (params?.status) query.append('status', params.status);
+    if (params?.overdue) query.append('overdue', 'true');
+    return fetchAPI<any>(`/accounting/invoices?${query}`);
+  },
+  createInvoice: (data: any) => fetchAPI<any>('/accounting/invoices', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Bills (AP - Expenses)
+  getBills: (params?: { vendor_id?: string; status?: string; overdue?: boolean }) => {
+    const query = new URLSearchParams();
+    if (params?.vendor_id) query.append('vendor_id', params.vendor_id);
+    if (params?.status) query.append('status', params.status);
+    if (params?.overdue) query.append('overdue', 'true');
+    return fetchAPI<any>(`/accounting/bills?${query}`);
+  },
+  createBill: (data: any) => fetchAPI<any>('/accounting/bills', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Banking (Payments)
+  getTransactions: (params?: { bank_account_id?: string; start_date?: string; end_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.bank_account_id) query.append('bank_account_id', params.bank_account_id);
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/accounting/bank-transactions?${query}`);
+  },
+  createTransaction: (data: any) => fetchAPI<any>('/accounting/bank-transactions', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+// =====================================================
 // SYSTEM API
 // =====================================================
 

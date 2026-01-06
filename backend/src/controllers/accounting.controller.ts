@@ -7,18 +7,18 @@ import { logger } from '../utils/logger';
 export const getChartOfAccounts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { account_type, is_active } = req.query;
-    
+
     let query = supabase
       .from('accounting_chart_of_accounts')
       .select('*')
       .order('account_code');
-    
+
     if (account_type) query = query.eq('account_type', account_type);
     if (is_active !== undefined) query = query.eq('is_active', is_active === 'true');
-    
+
     const { data, error } = await query;
     if (error) throw error;
-    
+
     res.status(200).json({ success: true, count: data?.length || 0, data });
   } catch (error) {
     next(error);
@@ -32,9 +32,9 @@ export const createAccount = async (req: Request, res: Response, next: NextFunct
       .insert([req.body])
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     res.status(201).json({ success: true, data });
     logger.info(`Account created: ${data.account_code}`);
   } catch (error) {
@@ -47,19 +47,19 @@ export const createAccount = async (req: Request, res: Response, next: NextFunct
 export const createJournalEntry = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { entry_date, description, reference, lines } = req.body;
-    
+
     // Calculate totals
     const total_debit = lines.reduce((sum: number, line: any) => sum + (line.debit_amount || 0), 0);
     const total_credit = lines.reduce((sum: number, line: any) => sum + (line.credit_amount || 0), 0);
-    
+
     if (Math.abs(total_debit - total_credit) > 0.01) {
       res.status(400).json({ success: false, message: 'Journal entry not balanced' });
       return;
     }
-    
+
     // Generate journal number
     const journal_number = `JE-${Date.now()}`;
-    
+
     // Create journal entry
     const { data: journal, error: journalError } = await supabase
       .from('accounting_journal_entries')
@@ -75,21 +75,21 @@ export const createJournalEntry = async (req: Request, res: Response, next: Next
       }])
       .select()
       .single();
-    
+
     if (journalError) throw journalError;
-    
+
     // Create journal lines
     const linesWithJournal = lines.map((line: any) => ({
       ...line,
       journal_entry_id: journal.id
     }));
-    
+
     const { error: linesError } = await supabase
       .from('accounting_journal_lines')
       .insert(linesWithJournal);
-    
+
     if (linesError) throw linesError;
-    
+
     res.status(201).json({ success: true, data: journal });
     logger.info(`Journal entry created: ${journal_number}`);
   } catch (error) {
@@ -100,7 +100,7 @@ export const createJournalEntry = async (req: Request, res: Response, next: Next
 export const postJournalEntry = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    
+
     const { data, error } = await supabase
       .from('accounting_journal_entries')
       .update({
@@ -111,9 +111,9 @@ export const postJournalEntry = async (req: Request, res: Response, next: NextFu
       .eq('id', id)
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     res.status(200).json({ success: true, data });
     logger.info(`Journal entry posted: ${data.journal_number}`);
   } catch (error) {
@@ -124,7 +124,7 @@ export const postJournalEntry = async (req: Request, res: Response, next: NextFu
 export const getJournalEntries = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { start_date, end_date, status } = req.query;
-    
+
     let query = supabase
       .from('accounting_journal_entries')
       .select(`
@@ -135,14 +135,14 @@ export const getJournalEntries = async (req: Request, res: Response, next: NextF
         )
       `)
       .order('entry_date', { ascending: false });
-    
+
     if (start_date) query = query.gte('entry_date', start_date);
     if (end_date) query = query.lte('entry_date', end_date);
     if (status) query = query.eq('status', status);
-    
+
     const { data, error } = await query;
     if (error) throw error;
-    
+
     res.status(200).json({ success: true, count: data?.length || 0, data });
   } catch (error) {
     next(error);
@@ -154,10 +154,10 @@ export const getJournalEntries = async (req: Request, res: Response, next: NextF
 export const createInvoice = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { customer_id, invoice_date, due_date, subtotal, tax_amount, reference, notes } = req.body;
-    
+
     const total_amount = subtotal + (tax_amount || 0);
     const invoice_number = `INV-${Date.now()}`;
-    
+
     const { data, error } = await supabase
       .from('accounting_ar_invoices')
       .insert([{
@@ -176,9 +176,9 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
       }])
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     res.status(201).json({ success: true, data });
     logger.info(`Invoice created: ${invoice_number}`);
   } catch (error) {
@@ -189,7 +189,7 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
 export const getInvoices = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { customer_id, status, overdue } = req.query;
-    
+
     let query = supabase
       .from('accounting_ar_invoices')
       .select(`
@@ -197,16 +197,16 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
         customer:accounting_customers(*)
       `)
       .order('invoice_date', { ascending: false });
-    
+
     if (customer_id) query = query.eq('customer_id', customer_id);
     if (status) query = query.eq('status', status);
     if (overdue === 'true') {
       query = query.lt('due_date', new Date().toISOString().split('T')[0]).eq('status', 'pending');
     }
-    
+
     const { data, error } = await query;
     if (error) throw error;
-    
+
     res.status(200).json({ success: true, count: data?.length || 0, data });
   } catch (error) {
     next(error);
@@ -218,10 +218,10 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
 export const createBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { vendor_id, bill_date, due_date, subtotal, tax_amount, reference, notes } = req.body;
-    
+
     const total_amount = subtotal + (tax_amount || 0);
     const bill_number = `BILL-${Date.now()}`;
-    
+
     const { data, error } = await supabase
       .from('accounting_ap_bills')
       .insert([{
@@ -240,9 +240,9 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
       }])
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     res.status(201).json({ success: true, data });
     logger.info(`Bill created: ${bill_number}`);
   } catch (error) {
@@ -253,24 +253,24 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
 export const getBills = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { vendor_id, status, overdue } = req.query;
-    
+
     let query = supabase
       .from('accounting_ap_bills')
       .select(`
         *,
         vendor:accounting_vendors(*)
       `)
-      .order('bill_date', { ascending: false});
-    
+      .order('bill_date', { ascending: false });
+
     if (vendor_id) query = query.eq('vendor_id', vendor_id);
     if (status) query = query.eq('status', status);
     if (overdue === 'true') {
       query = query.lt('due_date', new Date().toISOString().split('T')[0]).eq('status', 'pending');
     }
-    
+
     const { data, error } = await query;
     if (error) throw error;
-    
+
     res.status(200).json({ success: true, count: data?.length || 0, data });
   } catch (error) {
     next(error);
@@ -279,10 +279,56 @@ export const getBills = async (req: Request, res: Response, next: NextFunction):
 
 // ============ BANK RECONCILIATION ============
 
+export const createBankTransaction = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { bank_account_id, transaction_date, amount, transaction_type, reference, description } = req.body;
+
+    const { data, error } = await supabase
+      .from('accounting_bank_transactions')
+      .insert([{
+        bank_account_id,
+        transaction_date,
+        amount,
+        transaction_type, // 'credit' or 'debit'
+        reference,
+        description,
+        reconciled: false,
+        created_by: req.user?.id
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Update bank account balance
+    const { data: account } = await supabase
+      .from('accounting_bank_accounts')
+      .select('current_balance')
+      .eq('id', bank_account_id)
+      .single();
+
+    if (account) {
+      const newBalance = transaction_type === 'credit'
+        ? (account.current_balance || 0) + amount
+        : (account.current_balance || 0) - amount;
+
+      await supabase
+        .from('accounting_bank_accounts')
+        .update({ current_balance: newBalance })
+        .eq('id', bank_account_id);
+    }
+
+    res.status(201).json({ success: true, data });
+    logger.info(`Bank transaction created: ${reference}`);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getBankTransactions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { bank_account_id, start_date, end_date, reconciled } = req.query;
-    
+
     let query = supabase
       .from('accounting_bank_transactions')
       .select(`
@@ -290,15 +336,15 @@ export const getBankTransactions = async (req: Request, res: Response, next: Nex
         bank_account:accounting_bank_accounts(*)
       `)
       .order('transaction_date', { ascending: false });
-    
+
     if (bank_account_id) query = query.eq('bank_account_id', bank_account_id);
     if (start_date) query = query.gte('transaction_date', start_date);
     if (end_date) query = query.lte('transaction_date', end_date);
     if (reconciled !== undefined) query = query.eq('reconciled', reconciled === 'true');
-    
+
     const { data, error } = await query;
     if (error) throw error;
-    
+
     res.status(200).json({ success: true, count: data?.length || 0, data });
   } catch (error) {
     next(error);
@@ -310,7 +356,7 @@ export const getBankTransactions = async (req: Request, res: Response, next: Nex
 export const getBudgets = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { fiscal_year, department, status } = req.query;
-    
+
     let query = supabase
       .from('accounting_budgets')
       .select(`
@@ -318,14 +364,14 @@ export const getBudgets = async (req: Request, res: Response, next: NextFunction
         account:accounting_chart_of_accounts(*)
       `)
       .order('budget_name');
-    
+
     if (fiscal_year) query = query.eq('fiscal_year', fiscal_year);
     if (department) query = query.eq('department', department);
     if (status) query = query.eq('status', status);
-    
+
     const { data, error } = await query;
     if (error) throw error;
-    
+
     res.status(200).json({ success: true, count: data?.length || 0, data });
   } catch (error) {
     next(error);
@@ -340,19 +386,19 @@ export const getAccountingDashboard = async (req: Request, res: Response, next: 
     const { data: invoices } = await supabase
       .from('accounting_ar_invoices')
       .select('total_amount, paid_amount, balance, status, due_date');
-    
+
     // Get AP summary
     const { data: bills } = await supabase
       .from('accounting_ap_bills')
       .select('total_amount, paid_amount, balance, status, due_date');
-    
+
     // Get bank balances
     const { data: bankAccounts } = await supabase
       .from('accounting_bank_accounts')
       .select('current_balance, currency');
-    
+
     const today = new Date().toISOString().split('T')[0];
-    
+
     const dashboard = {
       receivables: {
         total: invoices?.reduce((sum, inv) => sum + (inv.balance || 0), 0) || 0,
@@ -373,7 +419,7 @@ export const getAccountingDashboard = async (req: Request, res: Response, next: 
         accounts: bankAccounts?.length || 0
       }
     };
-    
+
     res.status(200).json({ success: true, data: dashboard });
   } catch (error) {
     next(error);
