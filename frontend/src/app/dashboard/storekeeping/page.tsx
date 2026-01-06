@@ -155,194 +155,158 @@ export default function StorekeepingDashboard() {
       <DashboardLayout>
         <div className="space-y-6">
           {/* Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Storekeeping Dashboard</h1>
-              <p className="text-gray-600">
+              <h1 className="text-[22px] sm:text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Storekeeping</h1>
+              <p className="text-stone-500 text-sm mt-0.5">
                 {isCentral ? 'Central Warehouse Management' : (activeBranch?.name || 'Branch Stock Management')}
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-3">
               {isCentral && userBranches.length > 1 && (
-                <BranchSelector 
-                  size="sm" 
-                  showAllOption={true}
-                  allOptionLabel="All Branches"
-                  value={selectedBranchId}
-                  onChange={setSelectedBranchId}
-                />
+                <div className="flex-1 xs:flex-none">
+                  <BranchSelector
+                    size="sm"
+                    showAllOption={true}
+                    allOptionLabel="All Branches"
+                    value={selectedBranchId}
+                    onChange={setSelectedBranchId}
+                  />
+                </div>
               )}
-              <IOSButton variant="outline" onClick={fetchDashboardData} leftIcon={<RefreshCw />}>Refresh
-              </IOSButton>
-              <IOSButton onClick={() => router.push('/dashboard/storekeeping/inventory')} leftIcon={<Plus />}>
-                Add Item
-              </IOSButton>
+              <div className="flex gap-2 flex-1 xs:flex-none">
+                <button
+                  onClick={fetchDashboardData}
+                  disabled={isLoading}
+                  className="btn-secondary h-[40px] px-3 flex-1 flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                  <span className="hidden xs:inline">Refresh</span>
+                </button>
+                <button
+                  onClick={() => router.push('/dashboard/storekeeping/inventory')}
+                  className="btn-primary h-[40px] px-3 flex-1 flex items-center justify-center gap-2 whitespace-nowrap"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add Item</span>
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <IOSCard className="p-6 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition-shadow cursor-pointer" onClick={() => router.push('/dashboard/storekeeping/inventory')}>
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-[#F2F2F7] rounded-xl">
-                  <Package className="h-6 w-6 text-[#3C3C43]" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              { label: 'Total Items', value: stats.totalItems, icon: Package, color: 'text-stone-600', bg: 'bg-stone-50', path: '/dashboard/storekeeping/inventory' },
+              { label: 'Low Stock', value: stats.lowStockItems, icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50', path: '/dashboard/storekeeping/inventory' },
+              { label: 'Inventory Value', value: `KES ${stats.totalValue.toLocaleString()}`, icon: TrendingUp, color: 'text-green-600', bg: 'bg-green-50', path: '/dashboard/storekeeping/reports', span: true },
+              { label: 'Branches', value: stats.branches, icon: Building2, color: 'text-blue-600', bg: 'bg-blue-50', path: '/dashboard/storekeeping/central' },
+            ].map((stat, i) => (
+              <IOSCard
+                key={i}
+                className={`p-3 sm:p-4 shadow-sm hover:border-stone-300 transition-all cursor-pointer flex items-center gap-3 sm:gap-4 ${stat.span ? 'col-span-2 md:col-span-1' : ''}`}
+                onClick={() => router.push(stat.path)}
+              >
+                <div className={`h-10 w-10 rounded-xl ${stat.bg} flex items-center justify-center shrink-0`}>
+                  <stat.icon className={`h-5 w-5 ${stat.color}`} />
                 </div>
-                <div>
-                  <p className="text-sm text-gray-500">Total Items</p>
-                  <p className="text-2xl font-bold">{stats.totalItems}</p>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-0.5">{stat.label}</p>
+                  <p className="text-lg sm:text-xl font-bold text-stone-900 truncate">{stat.value}</p>
                 </div>
-              </div>
-            </IOSCard>
-
-            <IOSCard className="p-6 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition-shadow cursor-pointer" onClick={() => router.push('/dashboard/storekeeping/inventory')}>
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-[#F2F2F7] rounded-xl">
-                  <AlertTriangle className="h-6 w-6 text-[#3C3C43]" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Low Stock</p>
-                  <p className="text-2xl font-bold text-[#3C3C43]">{stats.lowStockItems}</p>
-                </div>
-              </div>
-            </IOSCard>
-
-            <IOSCard className="p-6 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition-shadow cursor-pointer" onClick={() => router.push('/dashboard/storekeeping/reports')}>
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-[#F2F2F7] rounded-xl">
-                  <TrendingUp className="h-6 w-6 text-[#3C3C43]" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Total Value</p>
-                  <p className="text-2xl font-bold">KES {stats.totalValue.toLocaleString()}</p>
-                </div>
-              </div>
-            </IOSCard>
-
-            <IOSCard className="p-6 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition-shadow cursor-pointer" onClick={() => router.push('/dashboard/storekeeping/central')}>
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-[#F2F2F7] rounded-xl">
-                  <Building2 className="h-6 w-6 text-[#3C3C43]" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Branches</p>
-                  <p className="text-2xl font-bold">{stats.branches}</p>
-                </div>
-              </div>
-            </IOSCard>
+              </IOSCard>
+            ))}
           </div>
 
           {/* Quick Actions */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <IOSCard className="p-6 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition-shadow cursor-pointer border-l-4 border-l-indigo-500" onClick={() => router.push('/dashboard/storekeeping/central')}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <Warehouse className="h-8 w-8 text-[#3C3C43]" />
-                  <div>
-                    <h3 className="font-semibold font-sf-pro-display">Central Warehouse</h3>
-                    <p className="text-sm text-gray-500">Manage central stock & dispatches</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {[
+              { title: 'Central Warehouse', desc: 'Manage central stock & dispatches', icon: Warehouse, color: 'border-l-indigo-500', path: '/dashboard/storekeeping/central' },
+              { title: 'Branch Stock', desc: 'View branch inventory levels', icon: Package, color: 'border-l-green-500', path: '/dashboard/storekeeping/branch' },
+              { title: 'Transfers', desc: 'Track dispatches & deliveries', icon: Truck, color: 'border-l-blue-500', path: '/dashboard/storekeeping/transfers' },
+            ].map((action, i) => (
+              <IOSCard
+                key={i}
+                className={`p-4 sm:p-5 hover:border-stone-300 transition-all cursor-pointer border-l-4 ${action.color}`}
+                onClick={() => router.push(action.path)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2 sm:p-3 bg-stone-50 rounded-xl">
+                      <action.icon className="h-6 w-6 sm:h-8 sm:w-8 text-stone-700" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-stone-900 truncate">{action.title}</h3>
+                      <p className="text-xs text-stone-500 mt-0.5">{action.desc}</p>
+                    </div>
                   </div>
+                  <ArrowRight className="h-5 w-5 text-stone-300 shrink-0" />
                 </div>
-                <ArrowRight className="h-5 w-5 text-gray-400" />
-              </div>
-            </IOSCard>
-
-            <IOSCard className="p-6 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition-shadow cursor-pointer border-l-4 border-l-green-500" onClick={() => router.push('/dashboard/storekeeping/branch')}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <Package className="h-8 w-8 text-[#3C3C43]" />
-                  <div>
-                    <h3 className="font-semibold font-sf-pro-display">Branch Stock</h3>
-                    <p className="text-sm text-gray-500">View branch inventory levels</p>
-                  </div>
-                </div>
-                <ArrowRight className="h-5 w-5 text-gray-400" />
-              </div>
-            </IOSCard>
-
-            <IOSCard className="p-6 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition-shadow cursor-pointer border-l-4 border-l-blue-500" onClick={() => router.push('/dashboard/storekeeping/transfers')}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <Truck className="h-8 w-8 text-[#3C3C43]" />
-                  <div>
-                    <h3 className="font-semibold font-sf-pro-display">Transfers</h3>
-                    <p className="text-sm text-gray-500">Track dispatches & deliveries</p>
-                  </div>
-                </div>
-                <ArrowRight className="h-5 w-5 text-gray-400" />
-              </div>
-            </IOSCard>
+              </IOSCard>
+            ))}
           </div>
 
           {/* Procurement & Receiving */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <IOSCard className="p-6 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition-shadow cursor-pointer border-l-4 border-l-[#3C3C43]" onClick={() => router.push('/dashboard/storekeeping/purchase-orders')}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <IOSCard
+              className="p-4 sm:p-5 hover:border-stone-300 transition-all cursor-pointer border-l-4 border-l-stone-900"
+              onClick={() => router.push('/dashboard/storekeeping/purchase-orders')}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="p-3 bg-[#F2F2F7] rounded-xl">
-                    <Package className="h-8 w-8 text-[#3C3C43]" />
+                  <div className="p-2 sm:p-3 bg-stone-50 rounded-xl">
+                    <ClipboardList className="h-6 w-6 sm:h-8 sm:w-8 text-stone-900" />
                   </div>
-                  <div>
-                    <h3 className="font-semibold font-sf-pro-display">Purchase Orders</h3>
-                    <p className="text-sm text-gray-500">Create & manage stock procurement</p>
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-stone-900">Purchase Orders</h3>
+                    <p className="text-xs text-stone-500 mt-0.5">Manage stock procurement</p>
                   </div>
                 </div>
-                <ArrowRight className="h-5 w-5 text-gray-400" />
+                <ArrowRight className="h-5 w-5 text-stone-300 shrink-0" />
               </div>
             </IOSCard>
 
-            <IOSCard className="p-6 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition-shadow cursor-pointer border-l-4 border-l-teal-500" onClick={() => router.push('/dashboard/storekeeping/grn')}>
+            <IOSCard
+              className="p-4 sm:p-5 hover:border-stone-300 transition-all cursor-pointer border-l-4 border-l-teal-500"
+              onClick={() => router.push('/dashboard/storekeeping/grn')}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="p-3 bg-[#F2F2F7] rounded-xl">
-                    <ClipboardList className="h-8 w-8 text-[#3C3C43]" />
+                  <div className="p-2 sm:p-3 bg-stone-50 rounded-xl">
+                    <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-teal-600" />
                   </div>
-                  <div>
-                    <h3 className="font-semibold font-sf-pro-display">Goods Received (GRN)</h3>
-                    <p className="text-sm text-gray-500">Record incoming stock receipts</p>
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-stone-900">Goods Received (GRN)</h3>
+                    <p className="text-xs text-stone-500 mt-0.5">Record incoming stock receipts</p>
                   </div>
                 </div>
-                <ArrowRight className="h-5 w-5 text-gray-400" />
+                <ArrowRight className="h-5 w-5 text-stone-300 shrink-0" />
               </div>
             </IOSCard>
           </div>
 
           {/* Additional Resources */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition-shadow cursor-pointer" onClick={() => router.push('/dashboard/storekeeping/vehicles')}>
-              <div className="flex flex-col items-center gap-2 text-center">
-                <div className="p-3 bg-[#F2F2F7] rounded-full"><Car className="h-6 w-6 text-[#3C3C43]" /></div>
-                <h4 className="font-medium">Vehicles</h4>
-                <p className="text-xs text-gray-500">Delivery fleet</p>
-              </div>
-            </IOSCard>
-            <IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition-shadow cursor-pointer" onClick={() => router.push('/dashboard/storekeeping/drivers')}>
-              <div className="flex flex-col items-center gap-2 text-center">
-                <div className="p-3 bg-[#F2F2F7] rounded-full"><User className="h-6 w-6 text-[#3C3C43]" /></div>
-                <h4 className="font-medium">Drivers</h4>
-                <p className="text-xs text-gray-500">Delivery staff</p>
-              </div>
-            </IOSCard>
-            <IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition-shadow cursor-pointer" onClick={() => router.push('/dashboard/storekeeping/suppliers')}>
-              <div className="flex flex-col items-center gap-2 text-center">
-                <div className="p-3 bg-[#F2F2F7] rounded-full"><Users className="h-6 w-6 text-[#3C3C43]" /></div>
-                <h4 className="font-medium">Suppliers</h4>
-                <p className="text-xs text-gray-500">Vendors</p>
-              </div>
-            </IOSCard>
-            <IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition-shadow cursor-pointer" onClick={() => router.push('/dashboard/storekeeping/stock-takes')}>
-              <div className="flex flex-col items-center gap-2 text-center">
-                <div className="p-3 bg-[#F2F2F7] rounded-full"><ClipboardList className="h-6 w-6 text-[#3C3C43]" /></div>
-                <h4 className="font-medium">Stock Takes</h4>
-                <p className="text-xs text-gray-500">Inventory counts</p>
-              </div>
-            </IOSCard>
-            <IOSCard className="p-4 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] transition-shadow cursor-pointer border-2 border-[rgba(60,60,67,0.12)]" onClick={() => router.push('/dashboard/storekeeping/wastage')}>
-              <div className="flex flex-col items-center gap-2 text-center">
-                <div className="p-3 bg-[#F2F2F7] rounded-full"><AlertTriangle className="h-6 w-6 text-[#3C3C43]" /></div>
-                <h4 className="font-medium">Wastage</h4>
-                <p className="text-xs text-gray-500">Track losses</p>
-              </div>
-            </IOSCard>
+          <div className="grid grid-cols-3 xs:grid-cols-5 gap-3">
+            {[
+              { label: 'Vehicles', icon: Car, path: '/dashboard/storekeeping/vehicles' },
+              { label: 'Drivers', icon: User, path: '/dashboard/storekeeping/drivers' },
+              { label: 'Suppliers', icon: Users, path: '/dashboard/storekeeping/suppliers' },
+              { label: 'Counts', icon: ClipboardList, path: '/dashboard/storekeeping/stock-takes' },
+              { label: 'Wastage', icon: AlertTriangle, path: '/dashboard/storekeeping/wastage', danger: true },
+            ].map((res, i) => (
+              <IOSCard
+                key={i}
+                className="p-3 sm:p-4 hover:border-stone-300 transition-all cursor-pointer"
+                onClick={() => router.push(res.path)}
+              >
+                <div className="flex flex-col items-center gap-2 text-center">
+                  <div className={`p-2.5 sm:p-3 bg-stone-50 rounded-full ${res.danger ? 'bg-red-50' : ''}`}>
+                    <res.icon className={`h-5 w-5 sm:h-6 sm:w-6 ${res.danger ? 'text-red-500' : 'text-stone-700'}`} />
+                  </div>
+                  <h4 className="text-[12px] sm:text-sm font-bold text-stone-900">{res.label}</h4>
+                </div>
+              </IOSCard>
+            ))}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

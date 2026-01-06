@@ -250,77 +250,82 @@ export default function KitchenDashboard() {
           <p className="text-sm text-stone-400">New orders will appear here</p>
         </div>
       ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {kitchenOrders.map((order) => {
-            const colors = statusColors[order.status] || statusColors.pending;
             const isUrgent = (order.elapsed_minutes || 0) > 15;
+            const statusStyle = (order.status === 'pending' || order.status === 'confirmed') ? 'border-yellow-200 bg-yellow-50/50' :
+              order.status === 'preparing' ? 'border-blue-200 bg-blue-50/50' :
+                order.status === 'ready' ? 'border-green-200 bg-green-50/50' :
+                  'border-stone-200 bg-white';
 
             return (
               <div
                 key={order.id}
-                className={`bg-white border rounded-lg p-4 ${(order.status === 'pending' || order.status === 'confirmed') ? 'border-yellow-200 bg-yellow-50' :
-                    order.status === 'preparing' ? 'border-blue-200 bg-blue-50' :
-                      order.status === 'ready' ? 'border-green-200 bg-green-50' :
-                        'border-stone-200'
-                  } ${isUrgent ? 'animate-pulse' : ''}`}
+                className={`border rounded-2xl p-4 shadow-sm transition-all ${statusStyle} ${isUrgent ? 'ring-2 ring-red-500 ring-offset-2' : ''}`}
               >
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-start justify-between mb-4">
                   <div>
-                    <p className="font-medium text-stone-900">#{order.order_number}</p>
-                    <p className="text-sm text-stone-500">
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-stone-900">#{order.order_number}</p>
+                      {isUrgent && (
+                        <span className="flex h-2 w-2 rounded-full bg-red-600 animate-ping" />
+                      )}
+                    </div>
+                    <p className="text-xs font-bold text-stone-400 mt-0.5 uppercase tracking-wide">
                       {order.table_number ? `Table ${order.table_number}` : order.order_type}
                     </p>
                   </div>
                   <div className="text-right">
-                    <div className={`flex items-center gap-1 text-sm ${isUrgent ? 'text-red-600' : 'text-stone-600'
-                      }`}>
-                      {isUrgent && <span className="text-red-500">!</span>}
-                      <span className="font-medium">{order.elapsed_minutes}m</span>
+                    <div className={`flex items-center gap-1.5 text-xs font-bold ${isUrgent ? 'text-red-600' : 'text-stone-500'}`}>
+                      <Clock className="h-3.5 w-3.5" />
+                      <span>{order.elapsed_minutes}m</span>
                     </div>
-                    <span className={`px-2 py-1 text-xs rounded ${(order.status === 'pending' || order.status === 'confirmed') ? 'bg-yellow-100 text-yellow-700' :
-                        order.status === 'preparing' ? 'bg-blue-100 text-blue-700' :
-                          order.status === 'ready' ? 'bg-green-100 text-green-700' :
-                            'bg-stone-100 text-stone-700'
-                      }`}>
-                      {order.status}
-                    </span>
+                    <div className="mt-1.5">
+                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${(order.status === 'pending' || order.status === 'confirmed') ? 'bg-yellow-200 text-yellow-800' :
+                        order.status === 'preparing' ? 'bg-blue-200 text-blue-800' :
+                          order.status === 'ready' ? 'bg-green-200 text-green-800' :
+                            'bg-stone-200 text-stone-800'
+                        }`}>
+                        {order.status}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="space-y-1 mb-4">
+                <div className="space-y-2 mb-track-6 border-t border-stone-100 pt-3">
                   {(order.items || []).map((item, i) => (
                     <div
                       key={i}
-                      className={`p-2 rounded-lg text-sm ${item.status === 'ready' ? 'bg-stone-100 line-through opacity-60' : 'bg-stone-50'
-                        }`}
+                      className={`p-2.5 rounded-xl text-[13px] ${item.status === 'ready' ? 'bg-stone-100 line-through opacity-60' : 'bg-white border border-stone-100'}`}
                     >
-                      <div>
-                        <span className="font-medium text-stone-900">{item.quantity}x</span> <span className="text-stone-700">{item.name}</span>
-                        {item.notes && (
-                          <p className="text-xs text-stone-500 mt-1">Note: {item.notes}</p>
-                        )}
+                      <div className="flex items-start gap-2">
+                        <span className="font-bold text-stone-900 shrink-0">{item.quantity}x</span>
+                        <span className="text-stone-700 font-medium leading-tight">{item.name}</span>
                       </div>
+                      {item.notes && (
+                        <p className="text-[11px] text-amber-600 font-bold mt-1 ml-6">Note: {item.notes}</p>
+                      )}
                     </div>
                   ))}
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 mt-4">
                   {(order.status === 'pending' || order.status === 'confirmed') && (
                     <button
-                      className="flex-1 bg-stone-900 text-white px-3 py-2 rounded text-sm font-medium hover:bg-stone-800"
+                      className="flex-1 h-11 bg-stone-900 text-white rounded-xl text-sm font-bold shadow-lg shadow-stone-200 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                       onClick={() => handleStartOrder(order.id)}
                     >
-                      <Play className="h-4 w-4 inline mr-1" />
-                      Start
+                      <Play className="h-4 w-4" fill="currentColor" />
+                      <span>Start Cooking</span>
                     </button>
                   )}
                   {order.status === 'preparing' && (
                     <button
-                      className="flex-1 bg-green-600 text-white px-3 py-2 rounded text-sm font-medium hover:bg-green-700"
+                      className="flex-1 h-11 bg-green-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-green-100 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                       onClick={() => handleCompleteOrder(order.id)}
                     >
-                      <Bell className="h-4 w-4 inline mr-1" />
-                      Ready
+                      <Bell className="h-4 w-4" />
+                      <span>Ready to Serve</span>
                     </button>
                   )}
                 </div>
@@ -341,17 +346,17 @@ export default function KitchenDashboard() {
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Kitchen</h1>
-              <p className="text-stone-500 mt-0.5">Kitchen operations and wastage recording</p>
+              <h1 className="text-[22px] sm:text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Kitchen</h1>
+              <p className="text-stone-500 text-sm mt-0.5">Kitchen operations and wastage recording</p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-3">
               {userBranches.length > 1 && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 flex-1 xs:flex-none">
                   <Building2 className="h-4 w-4 text-stone-400" />
                   <select
                     value={activeBranchId || ''}
                     onChange={(e) => setActiveBranch(Number(e.target.value))}
-                    className="px-3 py-2 text-[13px] bg-stone-50 border border-stone-200 rounded-lg focus:ring-2 focus:ring-amber-400/20 focus:border-amber-400"
+                    className="bg-transparent text-[13px] font-semibold text-stone-700 focus:outline-none w-full"
                   >
                     {userBranches.map((branch) => (
                       <option key={branch.id} value={branch.id}>{branch.name}</option>
@@ -359,7 +364,11 @@ export default function KitchenDashboard() {
                   </select>
                 </div>
               )}
-              <button onClick={() => fetchData(effectiveBranchId)} className="btn-secondary">
+              <button
+                onClick={() => fetchData(effectiveBranchId)}
+                disabled={isLoading}
+                className="btn-secondary h-[40px] px-4 flex items-center justify-center gap-2 flex-1 xs:flex-none"
+              >
                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                 <span>Refresh</span>
               </button>
@@ -367,46 +376,28 @@ export default function KitchenDashboard() {
           </div>
 
           {/* Stats Overview */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <div className="stat-card">
-              <div className="stat-icon">
-                <Clock className="h-5 w-5" />
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            {[
+              { label: 'Pending', value: stats.pendingOrders, icon: Clock, color: 'text-stone-600', bg: 'bg-stone-50' },
+              { label: 'Preparing', value: stats.preparingOrders, icon: ChefHat, color: 'text-blue-600', bg: 'bg-blue-50' },
+              { label: 'Avg Wait', value: `${stats.avgWaitTime}m`, icon: Timer, color: 'text-amber-600', bg: 'bg-amber-50' },
+              { label: 'Wastage', value: stats.totalWastage, icon: Trash2, color: 'text-red-600', bg: 'bg-red-50' },
+              { label: 'Loss Value', value: `KES ${stats.wastageValue.toLocaleString()}`, icon: TrendingDown, color: 'text-red-700', bg: 'bg-red-50', span: true },
+            ].map((stat, i) => (
+              <div key={i} className={`bg-white border border-stone-200 rounded-xl p-3 sm:p-4 shadow-sm flex items-center gap-3 sm:gap-4 ${stat.span ? 'col-span-2 md:col-span-1' : ''}`}>
+                <div className={`h-10 w-10 rounded-xl ${stat.bg} flex items-center justify-center shrink-0`}>
+                  <stat.icon className={`h-5 w-5 ${stat.color}`} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-0.5">{stat.label}</p>
+                  <p className={`text-lg sm:text-xl font-bold text-stone-900 truncate`}>{stat.value}</p>
+                </div>
               </div>
-              <p className="stat-value">{stats.pendingOrders}</p>
-              <p className="stat-label">Pending</p>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon">
-                <ChefHat className="h-5 w-5" />
-              </div>
-              <p className="stat-value">{stats.preparingOrders}</p>
-              <p className="stat-label">Preparing</p>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon">
-                <Timer className="h-5 w-5" />
-              </div>
-              <p className="stat-value">{stats.avgWaitTime} min</p>
-              <p className="stat-label">Avg Wait</p>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon">
-                <Trash2 className="h-5 w-5" />
-              </div>
-              <p className="stat-value">{stats.totalWastage}</p>
-              <p className="stat-label">Wastage Items</p>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon">
-                <TrendingDown className="h-5 w-5" />
-              </div>
-              <p className="stat-value">KES {stats.wastageValue.toLocaleString()}</p>
-              <p className="stat-label">Wastage Value</p>
-            </div>
+            ))}
           </div>
 
           {/* Tab Navigation */}
-          <div className="flex gap-1 p-1 bg-stone-100 rounded-lg w-fit">
+          <div className="flex gap-1 p-1 bg-stone-100/50 border border-stone-200 rounded-xl w-full sm:w-fit overflow-x-auto no-scrollbar">
             {[
               { id: 'kitchen', label: 'Kitchen Display', icon: ChefHat },
               { id: 'wastage', label: 'Wastage Recording', icon: Trash2 },
@@ -414,7 +405,7 @@ export default function KitchenDashboard() {
               <button
                 key={tab.id}
                 onClick={() => handleTabChange(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md text-[13px] font-medium transition-all ${activeTab === tab.id
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-[13px] font-bold transition-all whitespace-nowrap ${activeTab === tab.id
                   ? 'bg-white text-stone-900 shadow-sm'
                   : 'text-stone-500 hover:text-stone-700'
                   }`}

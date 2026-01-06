@@ -86,48 +86,54 @@ export default function BarInventoryPage() {
                                 </button>
                             </Link>
                             <div>
-                                <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Bar Inventory</h1>
-                                <p className="text-stone-500 mt-0.5">Track stock levels and reorder supplies</p>
+                                <h1 className="text-[22px] sm:text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Bar Inventory</h1>
+                                <p className="text-stone-500 text-sm mt-0.5">Track stock levels and reorder</p>
                             </div>
                         </div>
                         <div className="flex gap-2">
-                            <IOSButton variant="outline" onClick={fetchInventory} disabled={isLoading} leftIcon={<RefreshCw className={isLoading ? 'animate-spin' : ''} />}>
-                                Refresh
-                            </IOSButton>
-                            <Link href="/dashboard/storekeeping/requests">
-                                <IOSButton leftIcon={<ShoppingCart />}>
-                                    Request Stock
-                                </IOSButton>
+                            <button
+                                onClick={fetchInventory}
+                                disabled={isLoading}
+                                className="btn-secondary h-[44px] px-4 flex-1 sm:flex-none flex items-center justify-center gap-2"
+                            >
+                                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                                <span className="hidden xs:inline">Refresh</span>
+                            </button>
+                            <Link href="/dashboard/storekeeping/requests" className="flex-1 sm:flex-none">
+                                <button className="btn-primary w-full h-[44px] px-4 flex items-center justify-center gap-2">
+                                    <ShoppingCart className="h-4 w-4" />
+                                    <span>Request Stock</span>
+                                </button>
                             </Link>
                         </div>
                     </div>
 
                     {/* Stats Summary */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <IOSCard className="p-4 flex items-center gap-4">
-                            <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center">
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                        <IOSCard className="p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 shadow-sm">
+                            <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
                                 <Package className="h-5 w-5 text-blue-600" />
                             </div>
                             <div>
-                                <p className="text-xs text-stone-500 font-medium uppercase tracking-wider">Total Items</p>
+                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-0.5">Total Items</p>
                                 <p className="text-xl font-bold text-stone-900">{items.length}</p>
                             </div>
                         </IOSCard>
-                        <IOSCard className="p-4 flex items-center gap-4">
-                            <div className="h-10 w-10 rounded-full bg-amber-50 flex items-center justify-center">
+                        <IOSCard className="p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 shadow-sm">
+                            <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
                                 <AlertTriangle className="h-5 w-5 text-amber-600" />
                             </div>
                             <div>
-                                <p className="text-xs text-stone-500 font-medium uppercase tracking-wider">Low Stock</p>
+                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-0.5">Low Stock</p>
                                 <p className="text-xl font-bold text-amber-600">{lowStockItems.length}</p>
                             </div>
                         </IOSCard>
-                        <IOSCard className="p-4 flex items-center gap-4">
-                            <div className="h-10 w-10 rounded-full bg-purple-50 flex items-center justify-center">
+                        <IOSCard className="p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 shadow-sm col-span-2 lg:col-span-1">
+                            <div className="h-10 w-10 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
                                 <Warehouse className="h-5 w-5 text-purple-600" />
                             </div>
-                            <div>
-                                <p className="text-xs text-stone-500 font-medium uppercase tracking-wider">Storage</p>
+                            <div className="truncate w-full">
+                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-0.5">Storage</p>
                                 <p className="text-xl font-bold text-stone-900">Bar Store</p>
                             </div>
                         </IOSCard>
@@ -145,53 +151,53 @@ export default function BarInventoryPage() {
                     </div>
 
                     {/* Inventory Table */}
-                    <IOSCard className="overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
+                    <IOSCard className="overflow-hidden border-stone-200">
+                        <div className="overflow-x-auto no-scrollbar">
+                            <table className="w-full text-left min-w-[500px] lg:min-w-0">
                                 <thead>
                                     <tr className="bg-stone-50 border-b border-stone-100">
-                                        <th className="px-5 py-3 text-[11px] font-semibold text-stone-400 uppercase tracking-widest">Item Details</th>
-                                        <th className="px-5 py-3 text-[11px] font-semibold text-stone-400 uppercase tracking-widest text-center">Current Qty</th>
-                                        <th className="px-5 py-3 text-[11px] font-semibold text-stone-400 uppercase tracking-widest text-center">Status</th>
-                                        <th className="px-5 py-3 text-[11px] font-semibold text-stone-400 uppercase tracking-widest text-right">Action</th>
+                                        <th className="px-4 ps-6 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Item Details</th>
+                                        <th className="px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-widest text-center">In Stock</th>
+                                        <th className="px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-widest text-center">Status</th>
+                                        <th className="px-4 pe-6 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-widest text-right">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-stone-100">
                                     {isLoading ? (
                                         <tr>
-                                            <td colSpan={4} className="px-5 py-10 text-center">
+                                            <td colSpan={4} className="px-4 py-12 text-center">
                                                 <RefreshCw className="h-6 w-6 animate-spin mx-auto text-stone-300" />
                                             </td>
                                         </tr>
                                     ) : filteredItems.length === 0 ? (
                                         <tr>
-                                            <td colSpan={4} className="px-5 py-10 text-center text-stone-400">
+                                            <td colSpan={4} className="px-4 py-12 text-center text-stone-400">
                                                 {searchTerm ? 'No items match your search' : 'No inventory items found for bar'}
                                             </td>
                                         </tr>
                                     ) : (
                                         filteredItems.map((item) => (
                                             <tr key={item.sku} className="hover:bg-stone-50/50 transition-colors">
-                                                <td className="px-5 py-4">
-                                                    <p className="text-[14px] font-semibold text-stone-900">{item.item_name}</p>
-                                                    <p className="text-[11px] text-stone-400 font-mono mt-0.5">{item.sku}</p>
+                                                <td className="px-4 ps-6 py-4">
+                                                    <p className="text-[13px] sm:text-[14px] font-bold text-stone-900">{item.item_name}</p>
+                                                    <p className="text-[10px] text-stone-400 font-mono mt-0.5">{item.sku}</p>
                                                 </td>
-                                                <td className="px-5 py-4 text-center">
-                                                    <p className="text-[15px] font-bold text-stone-900">{item.quantity} <span className="text-[11px] font-medium text-stone-400 ml-0.5">{item.unit_of_measure}</span></p>
+                                                <td className="px-4 py-4 text-center">
+                                                    <p className="text-[14px] sm:text-[15px] font-bold text-stone-900">{item.quantity} <span className="text-[10px] font-bold text-stone-400 ml-0.5">{item.unit_of_measure}</span></p>
                                                 </td>
-                                                <td className="px-5 py-4 text-center">
+                                                <td className="px-4 py-4 text-center">
                                                     {item.quantity <= 0 ? (
-                                                        <IOSBadge variant="light" color="danger">Out of Stock</IOSBadge>
+                                                        <IOSBadge size="sm" className="bg-red-50 text-red-600 border-red-100">Out</IOSBadge>
                                                     ) : item.quantity <= item.reorder_level ? (
-                                                        <IOSBadge variant="light" color="warning">Low Stock</IOSBadge>
+                                                        <IOSBadge size="sm" className="bg-amber-50 text-amber-600 border-amber-100">Low</IOSBadge>
                                                     ) : (
-                                                        <IOSBadge variant="light" color="success">Healthy</IOSBadge>
+                                                        <IOSBadge size="sm" className="bg-green-50 text-green-600 border-green-100">OK</IOSBadge>
                                                     )}
                                                 </td>
-                                                <td className="px-5 py-4 text-right">
+                                                <td className="px-4 pe-6 py-4 text-right">
                                                     <Link href={`/dashboard/storekeeping/requests`}>
-                                                        <button className="text-[12px] font-semibold text-stone-900 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 rounded-ios transition-colors inline-flex items-center gap-1.5">
-                                                            Request
+                                                        <button className="h-8 px-3 text-[11px] font-bold text-stone-900 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors inline-flex items-center gap-1.5 whitespace-nowrap">
+                                                            Order
                                                             <ArrowRight className="h-3 w-3" />
                                                         </button>
                                                     </Link>

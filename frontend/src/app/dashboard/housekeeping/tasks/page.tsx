@@ -10,7 +10,7 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { housekeepingAPI } from '@/lib/api';
-import { 
+import {
   ClipboardList, Plus, Search, RefreshCw, Filter, Play, Pause, Check,
   Clock, AlertTriangle, User, Bed, Calendar, MoreVertical, X, Edit2, Trash2
 } from 'lucide-react';
@@ -121,7 +121,7 @@ export default function HousekeepingTasksPage() {
   }, [fetchTasks]);
 
   const filteredTasks = tasks.filter((task) => {
-    const matchesSearch = 
+    const matchesSearch =
       task.room_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.assigned_name?.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesSearch;
@@ -227,43 +227,44 @@ export default function HousekeepingTasksPage() {
       <DashboardLayout>
         <div className="space-y-6">
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Housekeeping Tasks</h1>
-              <p className="text-gray-500">Manage cleaning and maintenance tasks</p>
+              <h1 className="text-[22px] sm:text-2xl font-bold text-gray-900">Housekeeping Tasks</h1>
+              <p className="text-gray-500 text-sm">Manage cleaning and maintenance tasks</p>
             </div>
             <div className="flex gap-2">
-              <IOSButton variant="outline" onClick={fetchTasks} leftIcon={<RefreshCw />}>Refresh
+              <IOSButton variant="outline" size="sm" onClick={fetchTasks} leftIcon={<RefreshCw className="h-4 w-4" />}>
+                <span className="hidden xs:inline">Refresh</span>
               </IOSButton>
-              <IOSButton onClick={() => setCreateModalOpen(true)} leftIcon={<Plus />}>
+              <IOSButton size="sm" onClick={() => setCreateModalOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
                 New Task
               </IOSButton>
             </div>
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <IOSCard className="p-4">
-              <p className="text-sm text-gray-500">Total Tasks</p>
-              <p className="text-2xl font-bold">{stats.total}</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            <IOSCard className="p-3 sm:p-4">
+              <p className="text-[11px] sm:text-sm text-gray-500 font-medium">Total Tasks</p>
+              <p className="text-xl sm:text-2xl font-bold">{stats.total}</p>
             </IOSCard>
-            <IOSCard className="p-4">
-              <p className="text-sm text-gray-500">Pending</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
+            <IOSCard className="p-3 sm:p-4">
+              <p className="text-[11px] sm:text-sm text-gray-500 font-medium">Pending</p>
+              <p className="text-xl sm:text-2xl font-bold text-yellow-600">{stats.pending}</p>
             </IOSCard>
-            <IOSCard className="p-4">
-              <p className="text-sm text-gray-500">In Progress</p>
-              <p className="text-2xl font-bold text-[#007AFF]">{stats.inProgress}</p>
+            <IOSCard className="p-3 sm:p-4">
+              <p className="text-[11px] sm:text-sm text-gray-500 font-medium">In Progress</p>
+              <p className="text-xl sm:text-2xl font-bold text-[#007AFF]">{stats.inProgress}</p>
             </IOSCard>
-            <IOSCard className="p-4">
-              <p className="text-sm text-gray-500">Completed</p>
-              <p className="text-2xl font-bold text-[#34C759]">{stats.completed}</p>
+            <IOSCard className="p-3 sm:p-4">
+              <p className="text-[11px] sm:text-sm text-gray-500 font-medium">Completed</p>
+              <p className="text-xl sm:text-2xl font-bold text-[#34C759]">{stats.completed}</p>
             </IOSCard>
           </div>
 
           {/* Filters */}
-          <IOSCard className="p-4">
-            <div className="flex flex-col md:flex-row gap-4">
+          <IOSCard className="p-3 sm:p-4">
+            <div className="flex flex-col lg:flex-row gap-4">
               <div className="flex-1">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
@@ -271,15 +272,15 @@ export default function HousekeepingTasksPage() {
                     placeholder="Search by room or staff..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9"
+                    className="pl-9 h-[40px]"
                   />
                 </div>
               </div>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex flex-wrap items-center gap-2">
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-2 border rounded-ios-lg text-sm"
+                  className="flex-1 min-w-[120px] px-3 h-[40px] border rounded-ios-lg text-sm bg-white"
                 >
                   <option value="all">All Status</option>
                   {Object.entries(statusConfig).map(([key, val]) => (
@@ -289,7 +290,7 @@ export default function HousekeepingTasksPage() {
                 <select
                   value={priorityFilter}
                   onChange={(e) => setPriorityFilter(e.target.value)}
-                  className="px-3 py-2 border rounded-ios-lg text-sm"
+                  className="flex-1 min-w-[120px] px-3 h-[40px] border rounded-ios-lg text-sm bg-white"
                 >
                   <option value="all">All Priority</option>
                   {Object.entries(priorityConfig).map(([key, val]) => (
@@ -299,7 +300,7 @@ export default function HousekeepingTasksPage() {
                 <select
                   value={typeFilter}
                   onChange={(e) => setTypeFilter(e.target.value)}
-                  className="px-3 py-2 border rounded-ios-lg text-sm"
+                  className="flex-1 min-w-[120px] px-3 h-[40px] border rounded-ios-lg text-sm bg-white"
                 >
                   <option value="all">All Types</option>
                   {taskTypes.map((type) => (
@@ -327,70 +328,72 @@ export default function HousekeepingTasksPage() {
                 const priorityInfo = priorityConfig[task.priority] || priorityConfig.normal;
 
                 return (
-                  <IOSCard key={task.id} className="p-4">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-ios-lg bg-blue-100 flex items-center justify-center">
-                          <Bed className="h-6 w-6 text-[#007AFF]" />
+                  <IOSCard key={task.id} className="p-3 sm:p-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-start gap-3 sm:gap-4">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-ios-lg bg-blue-100 flex items-center justify-center shrink-0">
+                          <Bed className="h-5 w-5 sm:h-6 sm:w-6 text-[#007AFF]" />
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-bold">Room {task.room_number}</p>
-                            <span className={`px-2 py-0.5 rounded text-xs ${priorityInfo.color}`}>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-bold text-sm sm:text-base">Room {task.room_number}</p>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${priorityInfo.label === 'Urgent' ? 'bg-red-500' : 'bg-stone-100'} ${priorityInfo.label === 'Urgent' ? 'text-white' : 'text-stone-600'}`}>
                               {priorityInfo.label}
                             </span>
                           </div>
-                          <p className="text-sm text-gray-500 capitalize">
+                          <p className="text-xs sm:text-sm text-gray-500 capitalize truncate">
                             {task.task_type?.replace('_', ' ')}
                           </p>
                           {task.assigned_name && (
-                            <p className="text-sm text-gray-500 flex items-center gap-1">
-                              <User className="h-3 w-3" /> {task.assigned_name}
+                            <p className="text-[11px] sm:text-sm text-gray-500 flex items-center gap-1 mt-0.5">
+                              <User className="h-3 w-3" /> <span className="truncate">{task.assigned_name}</span>
                             </p>
                           )}
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3">
-                        <IOSBadge className={`${statusInfo.bgColor} ${statusInfo.color}`}>
+                      <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 border-t sm:border-t-0 pt-3 sm:pt-0">
+                        <IOSBadge className={`${statusInfo.bgColor} ${statusInfo.color} text-[10px] sm:text-xs h-6`}>
                           {statusInfo.label}
                         </IOSBadge>
 
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
                           {task.status === 'pending' && (
-                            <IOSButton size="sm" onClick={() => handleUpdateStatus(task.id, 'in_progress')} leftIcon={<Play />}>
-                              Start
+                            <IOSButton size="sm" className="h-8 sm:h-9" onClick={() => handleUpdateStatus(task.id, 'in_progress')} leftIcon={<Play className="h-3.5 w-3.5" />}>
+                              <span className="hidden xs:inline">Start</span>
                             </IOSButton>
                           )}
                           {task.status === 'in_progress' && (
-                            <IOSButton size="sm" className="bg-[#34C759]" onClick={() => handleUpdateStatus(task.id, 'completed')} leftIcon={<Check />}>
-                              Complete
+                            <IOSButton size="sm" className="bg-[#34C759] h-8 sm:h-9" onClick={() => handleUpdateStatus(task.id, 'completed')} leftIcon={<Check className="h-3.5 w-3.5" />}>
+                              <span className="hidden xs:inline">Complete</span>
                             </IOSButton>
                           )}
-                          <IOSButton 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => openEditModal(task)}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </IOSButton>
-                          <IOSButton 
-                            size="sm" 
-                            variant="destructive"
-                            onClick={() => confirmDeleteTask(task)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </IOSButton>
-                          <IOSButton 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedTask(task);
-                              setDetailsModalOpen(true);
-                            }}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </IOSButton>
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => openEditModal(task)}
+                              className="p-1.5 sm:p-2 hover:bg-stone-100 rounded-lg transition-colors text-stone-500"
+                              title="Edit"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => confirmDeleteTask(task)}
+                              className="p-1.5 sm:p-2 hover:bg-red-50 rounded-lg transition-colors text-red-500"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedTask(task);
+                                setDetailsModalOpen(true);
+                              }}
+                              className="p-1.5 sm:p-2 hover:bg-stone-100 rounded-lg transition-colors text-stone-500"
+                              title="Details"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -631,14 +634,14 @@ export default function HousekeepingTasksPage() {
                 This action cannot be undone.
               </p>
               <div className="flex gap-2 pt-2">
-                <IOSButton 
-                  variant="outline" 
+                <IOSButton
+                  variant="outline"
                   className="flex-1"
                   onClick={() => { setDeleteConfirmOpen(false); setSelectedTask(null); }}
                 >
                   Cancel
                 </IOSButton>
-                <IOSButton 
+                <IOSButton
                   className="flex-1"
                   onClick={handleDeleteTask}
                   disabled={isDeleting}

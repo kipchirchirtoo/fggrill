@@ -265,29 +265,29 @@ export default function POSKitchenDashboard() {
   const renderOverview = () => (
     <div className="space-y-6">
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { label: 'Orders', value: stats.todayOrders, icon: ShoppingCart, show: true },
           { label: 'Revenue', value: `KES ${stats.todayRevenue.toLocaleString()}`, icon: DollarSign, show: canSeeRevenue },
           { label: 'Pending', value: stats.pendingOrders, icon: Clock, show: true },
           { label: 'Avg Order', value: `KES ${stats.avgOrderValue.toLocaleString()}`, icon: TrendingUp, show: canSeeRevenue },
         ].filter(s => s.show).map((stat, i) => (
-          <div key={i} className="stat-card">
-            <div className="stat-icon">
-              <stat.icon className="h-5 w-5" />
+          <div key={i} className="stat-card p-3 sm:p-4">
+            <div className="stat-icon h-8 w-8 sm:h-9 sm:w-9 mb-2">
+              <stat.icon className="h-4 w-4 sm:h-5 sm:w-5" />
             </div>
-            <p className="stat-value text-[20px]">{stat.value}</p>
-            <p className="stat-label">{stat.label}</p>
+            <p className="stat-value text-[18px] sm:text-[20px] truncate">{stat.value}</p>
+            <p className="stat-label text-[11px] sm:text-[13px]">{stat.label}</p>
           </div>
         ))}
       </div>
 
       {/* Recent Orders */}
-      <IOSCard className="p-6">
+      <IOSCard className="p-4 sm:p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold font-sf-pro-display">Recent Orders</h2>
+          <h2 className="text-base sm:text-lg font-semibold font-sf-pro-display">Recent Orders</h2>
           <IOSButton variant="ghost" size="sm" onClick={() => handleTabChange('pos')}>
-            View POS <ArrowRight className="h-4 w-4 ml-1" />
+            <span className="hidden xs:inline">View POS</span> <ArrowRight className="h-4 w-4 ml-1" />
           </IOSButton>
         </div>
         {isLoading ? (
@@ -300,31 +300,31 @@ export default function POSKitchenDashboard() {
             <p>No orders yet today</p>
           </div>
         ) : (
-          <div className="space-y-3 max-h-80 overflow-y-auto">
+          <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
             {orders.map((order) => {
               const statusColor = orderStatusColors[order.status] || orderStatusColors.pending;
               return (
-                <div key={order.id} className="p-3 border rounded-ios-lg flex items-center justify-between">
-                  <div className="flex-1">
+                <div key={order.id} className="p-3 border border-stone-100 rounded-ios-lg flex items-center justify-between hover:bg-stone-50 transition-colors">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="font-medium">#{order.order_number}</p>
+                      <p className="font-bold text-sm">#{order.order_number}</p>
                       {order.table_number && (
-                        <span className="text-sm text-gray-500">Table {order.table_number}</span>
+                        <span className="text-[11px] font-medium text-stone-500 bg-stone-100 px-1.5 rounded">T{order.table_number}</span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-500">
+                    <p className="text-[12px] text-stone-500 mt-0.5 truncate">
                       {order.items_count} items • KES {order.total?.toLocaleString()}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <IOSButton
-                      size="sm"
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
                       onClick={() => handleGenerateBill(order)}
-                      leftIcon={<FileText />}
+                      className="p-1.5 text-stone-400 hover:text-stone-600 transition-colors"
+                      title="Generate Bill"
                     >
-                      Bill
-                    </IOSButton>
-                    <IOSBadge className={`${statusColor.bg} ${statusColor.text}`}>
+                      <FileText className="h-4 w-4" />
+                    </button>
+                    <IOSBadge className={`${statusColor.bg} ${statusColor.text} text-[10px] h-5`}>
                       {order.status}
                     </IOSBadge>
                   </div>
@@ -531,17 +531,17 @@ export default function POSKitchenDashboard() {
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 flex-shrink-0">
             <div>
-              <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">POS System</h1>
-              <p className="text-stone-500 mt-0.5">Point of sale operations</p>
+              <h1 className="text-[22px] sm:text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">POS System</h1>
+              <p className="text-gray-500 text-sm mt-0.5">Point of sale operations</p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               {userBranches.length > 1 && (
-                <div className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-stone-400" />
+                <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1 flex-1 sm:flex-none">
+                  <Building2 className="h-3.5 w-3.5 text-stone-400" />
                   <select
                     value={activeBranchId || ''}
                     onChange={(e) => setActiveBranch(Number(e.target.value))}
-                    className="px-3 py-2 text-[13px] bg-stone-50 border border-stone-200 rounded-lg focus:ring-2 focus:ring-amber-400/20 focus:border-amber-400"
+                    className="bg-transparent border-none text-[12px] focus:ring-0 p-1"
                   >
                     {userBranches.map((branch) => (
                       <option key={branch.id} value={branch.id}>{branch.name}</option>
@@ -549,24 +549,28 @@ export default function POSKitchenDashboard() {
                   </select>
                 </div>
               )}
-              <button onClick={fetchData} className="btn-secondary">
+              <button
+                onClick={fetchData}
+                className="btn-secondary h-[38px] px-3 flex-1 sm:flex-none"
+                disabled={isLoading}
+              >
                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                <span>Refresh</span>
+                <span className="hidden xs:inline ml-1">Refresh</span>
               </button>
             </div>
           </div>
 
           {/* Tab Navigation */}
-          <div className="flex gap-1 p-1 bg-stone-100 rounded-lg w-fit flex-shrink-0">
+          <div className="flex gap-1 p-1 bg-stone-100 rounded-lg w-full sm:w-fit overflow-x-auto no-scrollbar flex-shrink-0">
             {[
               { id: 'overview', label: 'Overview', icon: UtensilsCrossed },
               { id: 'pos', label: 'POS', icon: ShoppingCart },
-              { id: 'recent', label: 'Recent Orders', icon: Clock },
+              { id: 'recent', label: 'Recent', icon: Clock },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => handleTabChange(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md text-[13px] font-medium transition-all ${activeTab === tab.id
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-md text-[12px] sm:text-[13px] font-medium transition-all whitespace-nowrap flex-1 sm:flex-none justify-center ${activeTab === tab.id
                   ? 'bg-white text-stone-900 shadow-sm'
                   : 'text-stone-500 hover:text-stone-700'
                   }`}

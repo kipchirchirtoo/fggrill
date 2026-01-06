@@ -111,35 +111,57 @@ export default function BarTabsPage() {
     <ProtectedRoute allowedRoles={[UserRole.BARTENDER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div><h1 className="text-2xl font-bold text-gray-900">Bar Tabs</h1><p className="text-gray-500">Manage open tabs</p></div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-[22px] sm:text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Bar Tabs</h1>
+              <p className="text-stone-500 text-sm mt-0.5">Manage open customer tabs</p>
+            </div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchTabs} leftIcon={<RefreshCw />}>Refresh</IOSButton>
-              <IOSButton onClick={() => setNewTabModalOpen(true)} leftIcon={<Plus />}>Open Tab</IOSButton>
+              <button
+                onClick={fetchTabs}
+                disabled={isLoading}
+                className="btn-secondary h-[44px] px-4 flex-1 sm:flex-none flex items-center justify-center gap-2"
+              >
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+              <button
+                onClick={() => setNewTabModalOpen(true)}
+                className="btn-primary h-[44px] px-4 flex-1 sm:flex-none flex items-center justify-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Open Tab</span>
+              </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <IOSCard className="p-4">
-              <CreditCard className="h-8 w-8 text-[#007AFF] mb-2" />
-              <p className="text-sm text-gray-500">Open Tabs</p>
-              <p className="text-2xl font-bold">{openTabs.length}</p>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            <IOSCard className="p-3 sm:p-4 shadow-sm border-stone-200">
+              <CreditCard className="h-6 w-6 sm:h-8 sm:w-8 text-[#007AFF] mb-2" />
+              <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-0.5">Open Tabs</p>
+              <p className="text-xl sm:text-2xl font-bold text-stone-900">{openTabs.length}</p>
             </IOSCard>
-            <IOSCard className="p-4">
-              <DollarSign className="h-8 w-8 text-[#34C759] mb-2" />
-              <p className="text-sm text-gray-500">Total Outstanding</p>
-              <p className="text-2xl font-bold">KES {totalOpen.toLocaleString()}</p>
+            <IOSCard className="p-3 sm:p-4 shadow-sm border-stone-200">
+              <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-[#34C759] mb-2" />
+              <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-0.5">Outstanding</p>
+              <p className="text-xl sm:text-2xl font-bold text-stone-900">KES {totalOpen.toLocaleString()}</p>
             </IOSCard>
-            <IOSCard className="p-4">
-              <Check className="h-8 w-8 text-gray-600 mb-2" />
-              <p className="text-sm text-gray-500">Closed Today</p>
-              <p className="text-2xl font-bold">{tabs.filter(t => t.status === 'closed').length}</p>
+            <IOSCard className="p-3 sm:p-4 shadow-sm border-stone-200 col-span-2 lg:col-span-1">
+              <Check className="h-6 w-6 sm:h-8 sm:w-8 text-stone-600 mb-2" />
+              <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-0.5">Closed Today</p>
+              <p className="text-xl sm:text-2xl font-bold text-stone-900">{tabs.filter(t => t.status === 'closed').length}</p>
             </IOSCard>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             {(['all', 'open', 'closed'] as const).map((status) => (
-              <IOSButton key={status} variant={statusFilter === status ? 'primary' : 'secondary'} size="sm" onClick={() => setStatusFilter(status)}>
+              <IOSButton
+                key={status}
+                variant={statusFilter === status ? 'primary' : 'secondary'}
+                size="sm"
+                onClick={() => setStatusFilter(status)}
+                className="whitespace-nowrap h-[36px] px-5"
+              >
                 {status.charAt(0).toUpperCase() + status.slice(1)}
               </IOSButton>
             ))}
@@ -150,51 +172,64 @@ export default function BarTabsPage() {
           ) : filteredTabs.length === 0 ? (
             <IOSCard className="p-12 text-center"><CreditCard className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No tabs found</p></IOSCard>
           ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredTabs.map((tab) => (
-                <IOSCard key={tab.id} className={`p-4 ${tab.status === 'open' ? 'border-l-4 border-[#007AFF]' : ''}`}>
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <p className="font-bold">#{tab.tab_number}</p>
-                      <p className="text-sm text-gray-500 flex items-center gap-1"><User className="h-3 w-3" /> {tab.customer_name}</p>
-                      {tab.phone && <p className="text-sm text-gray-500">Phone: {tab.phone}</p>}
+                <IOSCard key={tab.id} className={`p-4 shadow-sm hover:border-stone-300 transition-all ${tab.status === 'open' ? 'border-l-4 border-l-[#007AFF]' : ''}`}>
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="min-w-0">
+                      <p className="font-bold text-stone-900">#{tab.tab_number}</p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <User className="h-3.5 w-3.5 text-stone-400" />
+                        <p className="text-sm font-semibold text-stone-700 truncate">{tab.customer_name}</p>
+                      </div>
+                      {tab.phone && (
+                        <p className="text-xs text-stone-500 mt-1 pl-5">{tab.phone}</p>
+                      )}
                     </div>
-                    <IOSBadge color={tab.status === 'open' ? 'info' : 'success'}>{tab.status}</IOSBadge>
+                    <IOSBadge className={tab.status === 'open' ? 'bg-blue-50 text-[#007AFF]' : 'bg-green-50 text-[#34C759]'}>
+                      {tab.status}
+                    </IOSBadge>
                   </div>
-                  <div className="flex items-center justify-between pt-3 border-t">
-                    <div>
-                      <p className="text-xl font-bold">KES {(tab.total_amount || 0).toLocaleString()}</p>
-                      <p className="text-xs text-gray-500">{tab.items?.length || 0} items</p>
+                  <div className="flex flex-col gap-4 pt-4 border-t border-stone-100">
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0">
+                        <p className="text-lg font-bold text-stone-900">KES {(tab.total_amount || 0).toLocaleString()}</p>
+                        <p className="text-[11px] font-bold text-stone-400 uppercase tracking-tight">{tab.items?.length || 0} items ordered</p>
+                      </div>
+                      {tab.status === 'open' && (
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => {
+                              setSelectedTab(tab);
+                              setEditTabData({
+                                customer_name: tab.customer_name,
+                                phone: tab.phone || '',
+                                table_number: ''
+                              });
+                              setEditTabModalOpen(true);
+                            }}
+                            className="p-2 rounded-xl bg-stone-50 text-stone-500 hover:text-stone-700 hover:bg-stone-100 transition-colors"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTab(tab)}
+                            disabled={tab.total_amount > 0}
+                            className="p-2 rounded-xl bg-red-50 text-red-400 hover:text-red-600 hover:bg-red-100 transition-colors disabled:opacity-30"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                     {tab.status === 'open' && (
-                      <div className="flex gap-2">
-                        <IOSButton
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => {
-                            setSelectedTab(tab);
-                            setEditTabData({
-                              customer_name: tab.customer_name,
-                              phone: tab.phone || '',
-                              table_number: ''
-                            });
-                            setEditTabModalOpen(true);
-                          }}
-                        >
-                          <Edit2 className="h-3 w-3" />
-                        </IOSButton>
-                        <IOSButton
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => handleDeleteTab(tab)}
-                          disabled={tab.total_amount > 0}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </IOSButton>
-                        <IOSButton size="sm" onClick={() => { setSelectedTab(tab); setCloseTabModalOpen(true); }}>
-                          <Check className="h-3 w-3 mr-1" /> Close
-                        </IOSButton>
-                      </div>
+                      <button
+                        onClick={() => { setSelectedTab(tab); setCloseTabModalOpen(true); }}
+                        className="w-full h-11 bg-stone-900 text-white rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                      >
+                        <Check className="h-4 w-4" />
+                        <span>Close & Settle</span>
+                      </button>
                     )}
                   </div>
                 </IOSCard>

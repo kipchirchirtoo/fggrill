@@ -121,14 +121,14 @@ export default function OrdersAuditPage() {
                                 <p className="text-stone-500 text-sm">Match orders to payments</p>
                             </div>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
                             {/* Filter Toggle */}
-                            <div className="bg-stone-100 p-1 rounded-lg flex text-xs font-medium">
+                            <div className="bg-stone-100 p-1 rounded-lg flex text-[11px] font-medium overflow-x-auto no-scrollbar">
                                 {['daily', 'weekly', 'monthly'].map((f) => (
                                     <button
                                         key={f}
                                         onClick={() => setFilter(f as any)}
-                                        className={`px-3 py-1.5 rounded-md capitalize transition-all ${filter === f ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-800'
+                                        className={`px-3 py-1.5 rounded-md capitalize transition-all whitespace-nowrap ${filter === f ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-800'
                                             }`}
                                     >
                                         {f}
@@ -136,43 +136,48 @@ export default function OrdersAuditPage() {
                                 ))}
                             </div>
 
-                            <button onClick={fetchOrders} disabled={isLoading} className="btn-secondary">
-                                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                            </button>
-                            <button onClick={confirmAll} className="btn-primary bg-stone-900">
-                                <CheckCircle className="h-4 w-4" />
-                                <span>Confirm All</span>
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button onClick={fetchOrders} disabled={isLoading} className="p-2.5 bg-stone-100 text-stone-600 rounded-lg hover:bg-stone-200 transition-colors disabled:opacity-50">
+                                    <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                                </button>
+                                <button onClick={confirmAll} className="btn-primary bg-stone-900 h-[38px] px-3 text-xs">
+                                    <CheckCircle className="h-3.5 w-3.5" />
+                                    <span className="hidden xs:inline">Confirm All</span>
+                                    <span className="xs:hidden">All</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {/* Main list */}
                         <div className="lg:col-span-2 card-elevated p-6">
-                            <div className="flex gap-1.5 p-1 bg-stone-100 rounded-lg w-fit mb-6">
-                                {tabs.map((tab) => (
-                                    <button
-                                        key={tab.id}
-                                        onClick={() => setActiveTab(tab.id as any)}
-                                        className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-[13px] font-medium transition-all whitespace-nowrap ${activeTab === tab.id
-                                            ? 'bg-white text-stone-900 shadow-sm'
-                                            : 'text-stone-500 hover:text-stone-800'
-                                            }`}
-                                    >
-                                        <tab.icon className="h-4 w-4" />
-                                        {tab.label}
-                                    </button>
-                                ))}
+                            <div className="overflow-x-auto no-scrollbar -mx-2 px-2 sm:mx-0 sm:px-0">
+                                <div className="flex gap-1.5 p-1 bg-stone-100 rounded-lg w-fit mb-6">
+                                    {tabs.map((tab) => (
+                                        <button
+                                            key={tab.id}
+                                            onClick={() => setActiveTab(tab.id as any)}
+                                            className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-[13px] font-medium transition-all whitespace-nowrap ${activeTab === tab.id
+                                                ? 'bg-white text-stone-900 shadow-sm'
+                                                : 'text-stone-500 hover:text-stone-800'
+                                                }`}
+                                        >
+                                            <tab.icon className="h-4 w-4" />
+                                            {tab.label}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
 
-                            <div className="flex justify-between items-center bg-stone-50 border border-stone-100 p-4 rounded-xl mb-6">
+                            <div className="flex flex-col xs:flex-row justify-between items-start xs:items-center bg-stone-50 border border-stone-100 p-4 rounded-xl mb-6 gap-4">
                                 <div>
                                     <span className="text-[11px] font-bold text-stone-500 uppercase tracking-tight block">Total Pipeline Value</span>
-                                    <span className="text-[22px] font-semibold text-stone-900">KES {stats.totalOrders.toLocaleString()}</span>
+                                    <span className="text-[20px] sm:text-[22px] font-semibold text-stone-900">KES {stats.totalOrders.toLocaleString()}</span>
                                 </div>
-                                <div className="text-right">
+                                <div className="text-left xs:text-right">
                                     <span className="text-[11px] font-bold text-stone-500 uppercase tracking-tight block">Confirmation Log</span>
-                                    <span className="text-[18px] font-semibold text-stone-900">
+                                    <span className="text-[16px] sm:text-[18px] font-semibold text-stone-900">
                                         {confirmedOrders.size} <span className="text-stone-400 font-normal">/ {orders.length}</span>
                                     </span>
                                 </div>
@@ -192,31 +197,32 @@ export default function OrdersAuditPage() {
                                     orders.map((order, i) => {
                                         const isConfirmed = confirmedOrders.has(order.id);
                                         return (
-                                            <div key={i} className={`py-3.5 flex items-center justify-between group rounded-lg px-2 transition-colors ${isConfirmed ? 'bg-emerald-50/40' : 'hover:bg-stone-50/80'}`}>
-                                                <div className="flex items-center gap-4">
+                                            <div key={i} className={`py-3.5 flex flex-col xs:flex-row xs:items-center justify-between group rounded-lg px-2 transition-colors gap-3 ${isConfirmed ? 'bg-emerald-50/40' : 'hover:bg-stone-50/80'}`}>
+                                                <div className="flex items-center gap-3 sm:gap-4">
                                                     <button
                                                         onClick={() => toggleConfirm(order.id)}
-                                                        className={`w-4.5 h-4.5 rounded flex items-center justify-center transition-all ${isConfirmed ? 'bg-stone-900 border-stone-900 text-white shadow-sm' : 'border border-stone-300 text-transparent hover:border-stone-900'
+                                                        className={`w-5 h-5 sm:w-4.5 sm:h-4.5 rounded flex items-center justify-center transition-all ${isConfirmed ? 'bg-stone-900 border-stone-900 text-white shadow-sm' : 'border border-stone-300 text-transparent hover:border-stone-900'
                                                             }`}
                                                     >
-                                                        <CheckCircle className="h-3 w-3" />
+                                                        <CheckCircle className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
                                                     </button>
-                                                    1
-                                                    <div className="h-9 w-9 rounded-lg bg-stone-100 flex items-center justify-center text-stone-600 font-bold text-[13px] uppercase">
+                                                    <div className="h-9 w-9 rounded-lg bg-stone-100 flex items-center justify-center text-stone-600 font-bold text-[13px] uppercase flex-shrink-0">
                                                         {(order.order_number || order.id).substr(0, 1)}
                                                     </div>
                                                     <div>
-                                                        <p className="font-semibold text-stone-900 text-[13px]">{order.order_number || `#${order.id.substr(0, 6)}`}</p>
+                                                        <p className="font-semibold text-stone-900 text-[13px] truncate max-w-[150px] sm:max-w-none">{order.order_number || `#${order.id.substr(0, 6)}`}</p>
                                                         <p className="text-[11px] text-stone-400 font-medium tracking-tight uppercase">
                                                             {order.branch} <span className="mx-1">•</span> {order.details}
                                                         </p>
                                                     </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <p className="font-bold text-stone-900 text-[14px]">KES {order.amount.toLocaleString()}</p>
-                                                    {order.amount !== order.paid_amount && (
-                                                        <p className="text-[10px] text-rose-500 font-medium tracking-tight">Paid: {order.paid_amount?.toLocaleString() || 0}</p>
-                                                    )}
+                                                <div className="flex flex-row xs:flex-col items-center xs:items-end justify-between xs:justify-start gap-2 xs:gap-0 pl-8 xs:pl-0">
+                                                    <div className="text-left xs:text-right">
+                                                        <p className="font-bold text-stone-900 text-[14px]">KES {order.amount.toLocaleString()}</p>
+                                                        {order.amount !== order.paid_amount && (
+                                                            <p className="text-[10px] text-rose-500 font-medium tracking-tight">Paid: {order.paid_amount?.toLocaleString() || 0}</p>
+                                                        )}
+                                                    </div>
                                                     <div className="flex items-center justify-end gap-1.5 mt-1">
                                                         <span className="text-[9px] font-bold text-stone-400 uppercase bg-stone-100 px-1.5 py-0.5 rounded tracking-tighter">{order.payment_method}</span>
                                                         <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full tracking-tighter ${order.status === 'Paid' || order.status === 'completed' || order.status === 'checked_out' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'

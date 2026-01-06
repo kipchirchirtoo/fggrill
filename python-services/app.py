@@ -351,6 +351,37 @@ def get_report_types():
         'data': report_types
     }), 200
 
+@app.route('/api/reports/data', methods=['GET'])
+def get_report_data():
+    """Get raw report data as JSON (for analytics views)"""
+    try:
+        report_type = request.args.get('type')
+        if not report_type:
+            return jsonify({'error': 'Report type is required'}), 400
+        
+        # Build filters from query parameters
+        filters = {}
+        for key in request.args:
+            if key != 'type':
+                filters[key] = request.args.get(key)
+        
+        logger.info(f"Fetching raw data for report type: {report_type}, filters: {filters}")
+        
+        # Fetch data using DatabaseFetcher
+        data = db_fetcher.fetch_report_data(report_type, filters)
+        
+        return jsonify({
+            'success': True,
+            'data': data
+        }), 200
+    except Exception as e:
+        logger.error(f"Error fetching report data: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'message': f'Failed to fetch {report_type} data'
+        }), 500
+
 @app.route('/api/reports/schedule', methods=['POST'])
 def schedule_report():
     """Schedule automatic report generation"""

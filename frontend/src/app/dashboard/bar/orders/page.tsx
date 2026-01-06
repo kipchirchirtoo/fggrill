@@ -75,20 +75,36 @@ export default function BarOrdersPage() {
     <ProtectedRoute allowedRoles={[UserRole.BARTENDER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div><h1 className="text-2xl font-bold text-gray-900">Bar Orders</h1><p className="text-gray-500">View and manage orders</p></div>
-            <IOSButton variant="secondary" onClick={fetchOrders} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-[22px] sm:text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Bar Orders</h1>
+              <p className="text-stone-500 text-sm mt-0.5">View and manage orders</p>
+            </div>
+            <button
+              onClick={fetchOrders}
+              disabled={isLoading}
+              className="btn-secondary h-[40px] px-4 flex items-center justify-center gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
           </div>
 
           <IOSCard className="p-4">
-            <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex flex-col lg:flex-row gap-4">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
-                <Input placeholder="Search orders..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
+                <Input placeholder="Search orders..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-[44px]" />
               </div>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
                 {['all', 'pending', 'preparing', 'ready', 'completed'].map((status) => (
-                  <IOSButton key={status} variant={statusFilter === status ? 'primary' : 'secondary'} size="sm" onClick={() => setStatusFilter(status)}>
+                  <IOSButton
+                    key={status}
+                    variant={statusFilter === status ? 'primary' : 'secondary'}
+                    size="sm"
+                    onClick={() => setStatusFilter(status)}
+                    className="whitespace-nowrap h-[36px]"
+                  >
                     {status === 'all' ? 'All' : statusConfig[status]?.label || status}
                   </IOSButton>
                 ))}
@@ -105,22 +121,35 @@ export default function BarOrdersPage() {
               {filteredOrders.map((order) => {
                 const statusInfo = statusConfig[order.status] || statusConfig.pending;
                 return (
-                  <IOSCard key={order.id} className="p-4">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <IOSCard key={order.id} className="p-4 hover:border-stone-200 transition-colors">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-ios-lg bg-purple-100 flex items-center justify-center"><Wine className="h-6 w-6 text-purple-600" /></div>
-                        <div>
-                          <p className="font-bold">#{order.order_number}</p>
-                          <p className="text-sm text-gray-500">{order.seat_number ? `Seat ${order.seat_number}` : order.guest_name || 'Bar'} • {order.items?.length || 0} items</p>
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
+                          <Wine className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-bold text-stone-900">#{order.order_number}</p>
+                            <IOSBadge className={`${statusInfo.bgColor} ${statusInfo.color} text-[10px] h-5 sm:hidden`}>
+                              {statusInfo.label}
+                            </IOSBadge>
+                          </div>
+                          <p className="text-sm text-stone-500 truncate">
+                            {order.seat_number ? `Seat ${order.seat_number}` : order.guest_name || 'Counter'} • {order.items?.length || 0} items
+                          </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <p className="font-bold">KES {order.total?.toLocaleString()}</p>
-                          <p className="text-sm text-gray-500">{new Date(order.created_at).toLocaleTimeString()}</p>
+                      <div className="flex items-center justify-between sm:justify-end gap-6 sm:gap-4 border-t sm:border-0 pt-3 sm:pt-0">
+                        <div className="text-left sm:text-right">
+                          <p className="font-bold text-stone-900">KES {order.total?.toLocaleString()}</p>
+                          <div className="flex items-center gap-1.5 text-xs text-stone-400 mt-0.5">
+                            <Clock className="h-3 w-3" />
+                            <span>{new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
                         </div>
-                        <IOSBadge className={`${statusInfo.bgColor} ${statusInfo.color}`}>{statusInfo.label}</IOSBadge>
-                        {/* Status buttons removed as per request - drinks are already made */}
+                        <IOSBadge className={`${statusInfo.bgColor} ${statusInfo.color} hidden sm:flex`}>
+                          {statusInfo.label}
+                        </IOSBadge>
                       </div>
                     </div>
                   </IOSCard>

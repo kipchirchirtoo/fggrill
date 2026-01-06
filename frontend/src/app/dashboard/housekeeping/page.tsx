@@ -7,7 +7,7 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { housekeepingAPI } from '@/lib/api';
-import { 
+import {
   Sparkles, Bed, CheckCircle, Clock, AlertTriangle, Users,
   RefreshCw, ClipboardList, Eye, Play, Check, Plus, Search,
   Building2, Layers, Timer, TrendingUp
@@ -84,7 +84,7 @@ export default function HousekeepingDashboard() {
     setIsLoading(true);
     const currentBranchId = activeBranchId || user?.branch_id;
     if (!currentBranchId) return;
-    
+
     try {
       const [tasksRes, roomsRes, statsRes] = await Promise.allSettled([
         housekeepingAPI.getTasks({ status: 'pending', branch_id: currentBranchId }),
@@ -148,7 +148,7 @@ export default function HousekeepingDashboard() {
   };
 
   const filteredTasks = tasks.filter(task => {
-    const matchesSearch = searchQuery === '' || 
+    const matchesSearch = searchQuery === '' ||
       task.room_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.task_type?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = taskFilter === 'all' || task.status === taskFilter;
@@ -156,8 +156,8 @@ export default function HousekeepingDashboard() {
   });
 
   const floors = [...new Set(rooms.map(r => r.floor))].sort((a, b) => a - b);
-  const filteredRooms = selectedFloor === 'all' 
-    ? rooms 
+  const filteredRooms = selectedFloor === 'all'
+    ? rooms
     : rooms.filter(r => r.floor === selectedFloor);
 
   return (
@@ -167,15 +167,15 @@ export default function HousekeepingDashboard() {
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Housekeeping</h1>
-              <p className="text-stone-500 mt-0.5">Manage room cleaning and maintenance tasks</p>
+              <h1 className="text-[22px] sm:text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Housekeeping</h1>
+              <p className="text-stone-500 text-sm mt-0.5">Manage room cleaning and maintenance tasks</p>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={fetchData} disabled={isLoading} className="btn-secondary">
+              <button onClick={fetchData} disabled={isLoading} className="btn-secondary h-[40px] px-3">
                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                <span>Refresh</span>
+                <span className="hidden xs:inline">Refresh</span>
               </button>
-              <button onClick={() => setShowNewTaskModal(true)} className="btn-primary">
+              <button onClick={() => setShowNewTaskModal(true)} className="btn-primary h-[40px] px-3">
                 <Plus className="h-4 w-4" />
                 <span>New Task</span>
               </button>
@@ -183,7 +183,7 @@ export default function HousekeepingDashboard() {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 xs:grid-cols-3 lg:grid-cols-6 gap-3">
             {[
               { label: 'Total Rooms', value: stats.totalRooms, icon: Building2 },
               { label: 'Clean', value: stats.cleanRooms, icon: CheckCircle },
@@ -192,36 +192,36 @@ export default function HousekeepingDashboard() {
               { label: 'Pending', value: stats.pendingTasks, icon: Clock },
               { label: 'Done Today', value: stats.completedToday, icon: TrendingUp },
             ].map((stat, i) => (
-              <div key={i} className="stat-card">
-                <div className="stat-icon">
-                  <stat.icon className="h-5 w-5" />
+              <div key={i} className="stat-card p-3 sm:p-4">
+                <div className="stat-icon h-8 w-8 sm:h-9 sm:w-9 mb-2">
+                  <stat.icon className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
-                <p className="stat-value text-[20px]">{stat.value}</p>
-                <p className="stat-label">{stat.label}</p>
+                <p className="stat-value text-[18px] sm:text-[20px]">{stat.value}</p>
+                <p className="stat-label text-[11px] sm:text-[13px]">{stat.label}</p>
               </div>
             ))}
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* Pending Tasks */}
             <div className="card-elevated p-5">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between mb-4 gap-3">
                 <h2 className="text-[15px] font-semibold text-stone-900">Tasks</h2>
-                <div className="flex items-center gap-2">
-                  <div className="relative">
+                <div className="flex items-center gap-2 w-full xs:w-auto">
+                  <div className="relative flex-1 xs:flex-none">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400" />
                     <input
                       type="text"
                       placeholder="Search..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-8 pr-3 py-1.5 text-[12px] w-28 bg-stone-50 border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-300"
+                      className="pl-8 pr-3 py-1.5 text-[12px] w-full xs:w-28 bg-stone-50 border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-300"
                     />
                   </div>
                   <select
                     value={taskFilter}
                     onChange={(e) => setTaskFilter(e.target.value)}
-                    className="px-2 py-1.5 text-[12px] bg-stone-50 border border-stone-200 rounded-lg"
+                    className="px-2 py-1.5 text-[12px] bg-stone-50 border border-stone-200 rounded-lg flex-1 xs:flex-none"
                   >
                     <option value="all">All</option>
                     <option value="pending">Pending</option>
@@ -261,8 +261,8 @@ export default function HousekeepingDashboard() {
                           <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">In Progress</span>
                         )}
                         {task.status === 'pending' && (
-                          <button 
-                            onClick={() => handleStartTask(task.id)} 
+                          <button
+                            onClick={() => handleStartTask(task.id)}
                             className="p-1.5 rounded-md bg-stone-200 hover:bg-stone-300 transition-colors flex items-center gap-1"
                             title="Start Task"
                           >
@@ -270,8 +270,8 @@ export default function HousekeepingDashboard() {
                           </button>
                         )}
                         {task.status === 'in_progress' && (
-                          <button 
-                            onClick={() => handleCompleteTask(task.id)} 
+                          <button
+                            onClick={() => handleCompleteTask(task.id)}
                             className="p-1.5 rounded-md bg-emerald-500 hover:bg-emerald-600 transition-colors"
                             title="Mark Complete"
                           >
@@ -292,21 +292,21 @@ export default function HousekeepingDashboard() {
 
             {/* Room Status Grid */}
             <div className="card-elevated p-5">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between mb-4 gap-3">
                 <h2 className="text-[15px] font-semibold text-stone-900">Room Status</h2>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2 w-full xs:w-auto">
                   <select
                     value={selectedFloor}
                     onChange={(e) => setSelectedFloor(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-                    className="px-2 py-1.5 text-[12px] bg-stone-50 border border-stone-200 rounded-lg"
+                    className="flex-1 xs:flex-none px-2 py-1.5 text-[12px] bg-stone-50 border border-stone-200 rounded-lg min-h-[36px]"
                   >
                     <option value="all">All Floors</option>
                     {floors.map(f => (
                       <option key={f} value={f}>Floor {f}</option>
                     ))}
                   </select>
-                  <Link href="/dashboard/housekeeping/rooms">
-                    <button className="text-[13px] font-medium text-stone-600 hover:text-stone-900">View All</button>
+                  <Link href="/dashboard/housekeeping/rooms" className="shrink-0">
+                    <button className="text-[13px] font-medium text-stone-600 hover:text-stone-900 px-2 py-1.5 hover:bg-stone-50 rounded-lg transition-colors">View All</button>
                   </Link>
                 </div>
               </div>
@@ -322,17 +322,17 @@ export default function HousekeepingDashboard() {
                   <p className="empty-state-title">No rooms found</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-5 gap-2 max-h-80 overflow-y-auto scrollbar-thin">
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-80 overflow-y-auto scrollbar-thin pr-1">
                   {filteredRooms.slice(0, 20).map((room) => {
                     const colors = statusColors[room.status] || statusColors.clean;
                     return (
                       <div
                         key={room.room_id || room.room_number}
-                        className={`p-2 rounded-lg text-center ${colors.bg} ${colors.text} cursor-pointer hover:opacity-80 transition`}
+                        className={`p-2 rounded-lg text-center ${colors.bg} ${colors.text} cursor-pointer hover:opacity-80 transition flex flex-col items-center justify-center min-h-[50px]`}
                         title={`Room ${room.room_number} - ${room.status}`}
                       >
-                        <p className="font-semibold text-[12px]">{room.room_number}</p>
-                        <p className="text-[10px] capitalize">{room.status}</p>
+                        <p className="font-semibold text-[11px] sm:text-[12px]">{room.room_number}</p>
+                        <p className="text-[9px] sm:text-[10px] capitalize truncate w-full">{room.status}</p>
                       </div>
                     );
                   })}
@@ -351,7 +351,7 @@ export default function HousekeepingDashboard() {
           </div>
 
           {/* Quick Links */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-3">
             {[
               { href: '/dashboard/housekeeping/tasks', icon: ClipboardList, label: 'Tasks', desc: 'Manage all tasks' },
               { href: '/dashboard/housekeeping/rooms', icon: Bed, label: 'Rooms', desc: 'Room status' },
@@ -359,13 +359,13 @@ export default function HousekeepingDashboard() {
               { href: '/dashboard/housekeeping/staff', icon: Users, label: 'Staff', desc: 'Team management' },
             ].map((link) => (
               <Link key={link.href} href={link.href}>
-                <div className="card-elevated-hover p-4 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-stone-50 text-stone-500">
-                    <link.icon className="h-5 w-5" />
+                <div className="card-elevated-hover p-3 sm:p-4 flex items-center gap-3">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center bg-stone-50 text-stone-500 shrink-0">
+                    <link.icon className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
                   </div>
-                  <div>
-                    <p className="text-[13px] font-medium text-stone-800">{link.label}</p>
-                    <p className="text-[11px] text-stone-500">{link.desc}</p>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-medium text-stone-800 truncate">{link.label}</p>
+                    <p className="text-[11px] text-stone-500 truncate">{link.desc}</p>
                   </div>
                 </div>
               </Link>
@@ -374,13 +374,13 @@ export default function HousekeepingDashboard() {
         </div>
       </DashboardLayout>
 
-        {/* New Task Modal */}
-        <NewTaskModal
-          isOpen={showNewTaskModal}
-          onClose={() => setShowNewTaskModal(false)}
-          onSubmit={handleCreateTask}
-          rooms={rooms.map(r => ({ room_number: r.room_number, room_id: r.room_id }))}
-        />
+      {/* New Task Modal */}
+      <NewTaskModal
+        isOpen={showNewTaskModal}
+        onClose={() => setShowNewTaskModal(false)}
+        onSubmit={handleCreateTask}
+        rooms={rooms.map(r => ({ room_number: r.room_number, room_id: r.room_id }))}
+      />
     </ProtectedRoute>
   );
 }

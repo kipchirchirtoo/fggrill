@@ -84,16 +84,16 @@ export default function BarDashboard() {
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Bar Dashboard</h1>
-              <p className="text-stone-500 mt-0.5">Manage bar orders and tabs</p>
+              <h1 className="text-[22px] sm:text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Bar Dashboard</h1>
+              <p className="text-stone-500 text-sm mt-0.5">Manage bar orders and tabs</p>
             </div>
-            <div className="flex gap-2">
-              <button onClick={fetchData} disabled={isLoading} className="btn-secondary">
+            <div className="flex items-center gap-2">
+              <button onClick={fetchData} disabled={isLoading} className="btn-secondary h-[40px] px-3">
                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                <span>Refresh</span>
+                <span className="hidden xs:inline">Refresh</span>
               </button>
-              <Link href="/dashboard/bar/pos">
-                <button className="btn-primary">
+              <Link href="/dashboard/bar/pos" className="flex-1 sm:flex-none">
+                <button className="btn-primary w-full h-[40px] px-3">
                   <Plus className="h-4 w-4" />
                   <span>New Order</span>
                 </button>
@@ -102,19 +102,19 @@ export default function BarDashboard() {
           </div>
 
           {/* Stats Grid */}
-          <div className={`grid grid-cols-2 ${canSeeRevenue ? 'md:grid-cols-4' : 'md:grid-cols-2'} gap-3`}>
+          <div className={`grid grid-cols-2 ${canSeeRevenue ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-3`}>
             {statCards.map((stat, i) => (
-              <div key={i} className="stat-card">
-                <div className="stat-icon">
-                  <stat.icon className="h-5 w-5" />
+              <div key={i} className="stat-card p-3 sm:p-4">
+                <div className="stat-icon h-8 w-8 sm:h-9 sm:w-9 mb-2">
+                  <stat.icon className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
-                <p className="stat-value text-[20px]">{stat.value}</p>
-                <p className="stat-label">{stat.label}</p>
+                <p className="stat-value text-[18px] sm:text-[20px] truncate">{stat.value}</p>
+                <p className="stat-label text-[11px] sm:text-[13px]">{stat.label}</p>
               </div>
             ))}
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* Recent Orders */}
             <div className="card-elevated p-5">
               <div className="flex items-center justify-between mb-4">
@@ -147,7 +147,6 @@ export default function BarDashboard() {
               )}
             </div>
 
-            {/* Quick Actions */}
             <div className="card-elevated p-5">
               <h2 className="text-[15px] font-semibold text-stone-900 mb-4">Quick Actions</h2>
               <div className="grid grid-cols-2 gap-3">
@@ -158,12 +157,14 @@ export default function BarDashboard() {
                   { href: '/dashboard/bar/inventory', icon: Wine, label: 'Stock', desc: 'Inventory' },
                 ].map((item) => (
                   <Link key={item.href} href={item.href}>
-                    <div className="action-card group">
-                      <div className="action-card-icon">
-                        <item.icon className="h-5 w-5" />
+                    <div className="action-card-hover p-3 sm:p-4 flex items-center gap-3">
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center bg-stone-50 text-stone-500 shrink-0">
+                        <item.icon className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
                       </div>
-                      <p className="action-card-label">{item.label}</p>
-                      <p className="text-[11px] text-stone-400 mt-0.5">{item.desc}</p>
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-medium text-stone-800 truncate">{item.label}</p>
+                        <p className="text-[11px] text-stone-500 truncate">{item.desc}</p>
+                      </div>
                     </div>
                   </Link>
                 ))}

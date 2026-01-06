@@ -301,27 +301,40 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
     <div className="flex flex-col lg:flex-row gap-4 h-full">
       {/* Menu Items */}
       <div className="flex-1 overflow-hidden">
-        <div className="bg-white border border-gray-200 rounded-lg h-full flex flex-col">
-          <div className="p-4 border-b border-gray-200">
-            <h2 className="text-base font-medium text-gray-900">Menu Items</h2>
-            <div className="relative mt-3">
+        <div className="bg-white border border-gray-200 rounded-lg flex flex-col min-h-0">
+          <div className="p-4 border-b border-gray-200 space-y-3">
+            <div className="flex items-center justify-between lg:hidden mb-2">
+              <h1 className="text-xl font-bold text-stone-900">Menu</h1>
+              <IOSButton size="sm" variant="secondary" onClick={() => {
+                const cartElement = document.getElementById('cart-section');
+                cartElement?.scrollIntoView({ behavior: 'smooth' });
+              }} className="relative">
+                <ShoppingCart className="h-4 w-4" />
+                {cart.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
+                    {cart.reduce((a, b) => a + b.quantity, 0)}
+                  </span>
+                )}
+              </IOSButton>
+            </div>
+            <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search menu items..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-10 pl-9 pr-3 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 focus:bg-white"
+                className="w-full h-11 pl-9 pr-3 text-sm bg-stone-50 border border-stone-200 rounded-lg text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400/20 focus:bg-white"
               />
             </div>
           </div>
 
-          <div className="p-4 border-b border-gray-200">
-            <div className="flex gap-2 overflow-x-auto pb-2">
+          <div className="p-4 border-b border-gray-200 bg-stone-50/50">
+            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
               <button
-                className={`px-3 py-1 text-sm rounded whitespace-nowrap ${selectedCategory === 'all'
-                  ? 'bg-gray-900 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                className={`px-4 py-1.5 text-sm rounded-full whitespace-nowrap transition-all ${selectedCategory === 'all'
+                  ? 'bg-amber-500 text-white shadow-sm'
+                  : 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-50'
                   }`}
                 onClick={() => setSelectedCategory('all')}
               >
@@ -330,9 +343,9 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
               {categories.map((cat) => (
                 <button
                   key={cat.id}
-                  className={`px-3 py-1 text-sm rounded whitespace-nowrap ${selectedCategory === cat.id
-                    ? 'bg-gray-900 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  className={`px-4 py-1.5 text-sm rounded-full whitespace-nowrap transition-all ${selectedCategory === cat.id
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-50'
                     }`}
                   onClick={() => setSelectedCategory(cat.id)}
                 >
@@ -343,22 +356,27 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4 pb-4">
               {filteredItems.map((item) => (
                 <div
                   key={item.id}
                   onClick={() => addToCart(item)}
-                  className="bg-white border border-gray-200 rounded-lg p-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                  className="bg-white border border-stone-200 rounded-xl p-3 cursor-pointer hover:shadow-md transition-all active:scale-95 group"
                 >
-                  <div className="aspect-square bg-gray-100 rounded-lg mb-2 flex items-center justify-center">
+                  <div className="aspect-square bg-stone-50 rounded-lg mb-2.5 flex items-center justify-center overflow-hidden relative">
                     {item.image_url ? (
-                      <img src={item.image_url} alt={item.name} className="w-full h-full object-cover rounded-lg" />
+                      <img src={item.image_url} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                     ) : (
-                      <div className="w-6 h-6 bg-gray-300 rounded"></div>
+                      <Soup className="h-8 w-8 text-stone-300" />
                     )}
+                    <div className="absolute top-1 right-1 lg:opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="bg-amber-500 text-white p-1 rounded-full shadow-sm">
+                        <Plus className="h-3 w-3" />
+                      </div>
+                    </div>
                   </div>
-                  <h3 className="font-medium text-sm mb-1 line-clamp-2 text-gray-900">{item.name}</h3>
-                  <p className="text-gray-900 font-medium text-sm">KES {item.price.toLocaleString()}</p>
+                  <h3 className="font-semibold text-[13px] leading-tight mb-1 line-clamp-2 text-stone-800 h-8 lg:h-7">{item.name}</h3>
+                  <p className="text-amber-600 font-bold text-sm">KES {item.price.toLocaleString()}</p>
                 </div>
               ))}
             </div>
@@ -367,67 +385,75 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
       </div>
 
       {/* Cart & Orders */}
-      <div className="w-full lg:w-80 flex flex-col gap-4">
+      <div id="cart-section" className="w-full lg:w-96 flex flex-col gap-4">
         {/* Current Order */}
         <div className="bg-white border border-gray-200 rounded-lg flex-1 flex flex-col">
           <div className="p-4 border-b border-gray-200">
             <h2 className="text-base font-medium text-gray-900">Current Order</h2>
 
             {/* Order Type */}
-            <div className="flex gap-2 mt-3">
+            <div className="flex gap-2 mt-3 overflow-x-auto no-scrollbar pb-1">
               {(['dine_in', 'takeaway', 'room_service'] as const).map((type) => (
                 <button
                   key={type}
-                  className={`px-3 py-1 text-sm rounded ${orderType === type
-                    ? 'bg-gray-900 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  className={`px-4 py-2 text-xs font-semibold rounded-full whitespace-nowrap transition-all ${orderType === type
+                    ? 'bg-stone-800 text-white shadow-sm'
+                    : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                     }`}
                   onClick={() => setOrderType(type)}
                 >
-                  {type === 'dine_in' ? 'Dine In' : type === 'takeaway' ? 'Takeaway' : 'Room'}
+                  {type === 'dine_in' ? 'Dine In' : type === 'takeaway' ? 'Takeaway' : 'Room Service'}
                 </button>
               ))}
             </div>
 
-            {/* Table/Room Number */}
-            {orderType === 'dine_in' && (
-              <input
-                type="text"
-                placeholder="Table Number"
-                value={tableNumber}
-                onChange={(e) => setTableNumber(e.target.value)}
-                className="w-full mt-3 h-9 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 focus:bg-white"
-              />
-            )}
-            {orderType === 'room_service' && (
-              <input
-                type="text"
-                placeholder="Room Number"
-                value={roomNumber}
-                onChange={(e) => setRoomNumber(e.target.value)}
-                className="w-full mt-3 h-9 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 focus:bg-white"
-              />
-            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3 mt-4">
+              {/* Table/Room Number */}
+              {orderType === 'dine_in' && (
+                <div>
+                  <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1 block">Table Number</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 12"
+                    value={tableNumber}
+                    onChange={(e) => setTableNumber(e.target.value)}
+                    className="w-full h-11 px-3 text-sm bg-stone-50 border border-stone-200 rounded-lg focus:ring-2 focus:ring-amber-400/20 focus:bg-white transition-all"
+                  />
+                </div>
+              )}
+              {orderType === 'room_service' && (
+                <div>
+                  <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1 block">Room Number</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 204"
+                    value={roomNumber}
+                    onChange={(e) => setRoomNumber(e.target.value)}
+                    className="w-full h-11 px-3 text-sm bg-stone-50 border border-stone-200 rounded-lg focus:ring-2 focus:ring-amber-400/20 focus:bg-white transition-all"
+                  />
+                </div>
+              )}
 
-            {/* Waiter Selection */}
-            {orderType === 'dine_in' && (
-              <div className="mt-3">
-                <label className="text-xs font-medium text-gray-600 mb-1 block">Assign Waiter</label>
-                <select
-                  value={selectedWaiterId}
-                  onChange={(e) => setSelectedWaiterId(e.target.value)}
-                  className="w-full h-9 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 focus:bg-white"
-                  required
-                >
-                  <option value="">Select waiter *</option>
-                  {waiters.map((waiter) => (
-                    <option key={waiter.id} value={waiter.id}>
-                      {waiter.first_name} {waiter.last_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+              {/* Waiter Selection */}
+              {orderType === 'dine_in' && (
+                <div>
+                  <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1 block">Assigned Waiter *</label>
+                  <select
+                    value={selectedWaiterId}
+                    onChange={(e) => setSelectedWaiterId(e.target.value)}
+                    className="w-full h-11 px-3 text-sm bg-stone-50 border border-stone-200 rounded-lg focus:ring-2 focus:ring-amber-400/20 focus:bg-white transition-all"
+                    required
+                  >
+                    <option value="">Select waiter</option>
+                    {waiters.map((waiter) => (
+                      <option key={waiter.id} value={waiter.id}>
+                        {waiter.first_name} {waiter.last_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Cart Items */}
@@ -440,30 +466,30 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
             ) : (
               <div className="space-y-2">
                 {cart.map((item) => (
-                  <div key={item.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
-                    <div className="flex-1">
-                      <p className="font-medium text-sm text-gray-900">{item.name}</p>
-                      <p className="text-gray-600 text-sm">KES {(item.price * item.quantity).toLocaleString()}</p>
+                  <div key={item.id} className="flex items-center gap-3 p-2 bg-stone-50 rounded-ios-lg border border-stone-100 hover:border-stone-200 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-[13px] text-stone-800 truncate">{item.name}</p>
+                      <p className="text-amber-600 text-[12px] font-medium">KES {(item.price * item.quantity).toLocaleString()}</p>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg p-0.5">
                       <button
-                        className="w-6 h-6 bg-gray-200 hover:bg-gray-300 rounded text-xs font-medium"
+                        className="w-8 h-8 flex items-center justify-center text-stone-400 hover:text-stone-600"
                         onClick={() => updateQuantity(item.id, -1)}
                       >
-                        -
+                        <Minus className="h-3.5 w-3.5" />
                       </button>
-                      <span className="w-6 text-center text-sm font-medium">{item.quantity}</span>
+                      <span className="w-6 text-center text-[13px] font-bold text-stone-700">{item.quantity}</span>
                       <button
-                        className="w-6 h-6 bg-gray-200 hover:bg-gray-300 rounded text-xs font-medium"
+                        className="w-8 h-8 flex items-center justify-center text-stone-400 hover:text-stone-600"
                         onClick={() => updateQuantity(item.id, 1)}
                       >
-                        +
+                        <Plus className="h-3.5 w-3.5" />
                       </button>
                       <button
-                        className="w-6 h-6 bg-red-100 hover:bg-red-200 text-red-600 rounded text-xs font-medium ml-1"
+                        className="w-8 h-8 flex items-center justify-center text-red-400 hover:text-red-500 ml-0.5"
                         onClick={() => removeFromCart(item.id)}
                       >
-                        ×
+                        <X className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -490,15 +516,15 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
             </div>
 
             {/* Payment Method */}
-            <div>
-              <p className="text-sm font-medium mb-2 text-gray-900">Payment Method</p>
+            <div className="bg-stone-50 p-3 rounded-lg border border-stone-100">
+              <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-2">Payment Method</p>
               <div className="flex gap-2">
                 {(['cash', 'mpesa', 'card'] as const).map((method) => (
                   <button
                     key={method}
-                    className={`px-3 py-1 text-sm rounded ${paymentMethod === method
-                      ? 'bg-gray-900 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${paymentMethod === method
+                      ? 'bg-white text-stone-900 shadow-sm border border-stone-200 ring-2 ring-amber-400/50'
+                      : 'bg-stone-200/50 text-stone-600 border border-transparent hover:bg-stone-200'
                       }`}
                     onClick={() => setPaymentMethod(method)}
                   >
@@ -509,78 +535,84 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
             </div>
 
             {/* Action Buttons */}
-            <div className="space-y-2">
+            <div className="space-y-3">
               <button
                 onClick={handleCreateOrder}
                 disabled={cart.length === 0 || isSubmitting || (orderType === 'dine_in' && !selectedWaiterId)}
-                className="w-full bg-gray-900 text-white px-4 py-2 rounded text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-stone-800 text-white font-bold h-12 rounded-xl shadow-lg shadow-stone-200 active:scale-[0.98] transition-all disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2"
               >
-                {isSubmitting ? 'Creating Order...' : 'Send to Kitchen'}
+                {isSubmitting ? (
+                  <RefreshCw className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>
+                    <ChefHat className="h-5 w-5" />
+                    <span>Send to Kitchen</span>
+                  </>
+                )}
               </button>
 
-              <button
-                onClick={() => {
-                  // Generate bill for current cart items
-                  if (cart.length === 0) {
-                    toast.error('Cart is empty');
-                    return;
-                  }
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => {
+                    // Generate bill for current cart items
+                    if (cart.length === 0) {
+                      toast.error('Cart is empty');
+                      return;
+                    }
+                    if (orderType === 'dine_in' && !selectedWaiterId) {
+                      toast.error('Please select a waiter');
+                      return;
+                    }
+                    const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                    const subtotal = Math.round(total / 1.16);
+                    const tax = total - subtotal;
+                    const selectedWaiter = waiters.find(w => w.id === selectedWaiterId);
+                    const receiptData = {
+                      receipt_type: 'sale' as const,
+                      receipt_number: `ORD-${Date.now().toString().slice(-6)}`,
+                      date: new Date().toLocaleString(),
+                      table_number: orderType === 'dine_in' ? tableNumber : undefined,
+                      room_number: orderType === 'room_service' ? roomNumber : undefined,
+                      customer_name: customerName || (orderType === 'dine_in' ? `Table ${tableNumber}` : 'Walk-in'),
+                      cashier_name: user?.firstName ? `${user.firstName} ${user.lastName || ''}` : 'Staff',
+                      served_by: selectedWaiter ? `${selectedWaiter.first_name} ${selectedWaiter.last_name}` : undefined,
+                      items: cart.map(item => ({
+                        name: item.name,
+                        quantity: item.quantity,
+                        unit_price: item.price,
+                        total: item.price * item.quantity
+                      })),
+                      total_amount: total,
+                      subtotal: subtotal,
+                      tax_amount: tax,
+                      payment_method: paymentMethod || 'Cash',
+                      amount_paid: total,
+                      change_amount: 0
+                    };
+                    handleGenerateBill({
+                      id: 'current-cart',
+                      order_number: receiptData.receipt_number,
+                      total: total,
+                      waiter_name: selectedWaiter ? `${selectedWaiter.first_name} ${selectedWaiter.last_name}` : undefined,
+                      items: cart.map(item => ({ name: item.name, quantity: item.quantity, unit_price: item.price }))
+                    } as TodayOrder);
+                  }}
+                  disabled={cart.length === 0}
+                  className="bg-white border-2 border-stone-200 text-stone-700 font-bold h-11 rounded-xl active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <FileText className="h-4 w-4" />
+                  <span>Bill</span>
+                </button>
 
-                  if (orderType === 'dine_in' && !selectedWaiterId) {
-                    toast.error('Please select a waiter');
-                    return;
-                  }
-
-                  const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-                  const subtotal = Math.round(total / 1.16);
-                  const tax = total - subtotal;
-
-                  const selectedWaiter = waiters.find(w => w.id === selectedWaiterId);
-
-                  const receiptData = {
-                    receipt_type: 'sale' as const,
-                    receipt_number: `ORD-${Date.now().toString().slice(-6)}`,
-                    date: new Date().toLocaleString(),
-                    table_number: orderType === 'dine_in' ? tableNumber : undefined,
-                    room_number: orderType === 'room_service' ? roomNumber : undefined,
-                    customer_name: customerName || (orderType === 'dine_in' ? `Table ${tableNumber}` : 'Walk-in'),
-                    cashier_name: user?.firstName ? `${user.firstName} ${user.lastName || ''}` : 'Staff',
-                    served_by: selectedWaiter ? `${selectedWaiter.first_name} ${selectedWaiter.last_name}` : undefined,
-                    items: cart.map(item => ({
-                      name: item.name,
-                      quantity: item.quantity,
-                      unit_price: item.price,
-                      total: item.price * item.quantity
-                    })),
-                    total_amount: total,
-                    subtotal: subtotal,
-                    tax_amount: tax,
-                    payment_method: paymentMethod || 'Cash',
-                    amount_paid: total,
-                    change_amount: 0
-                  };
-
-                  handleGenerateBill({
-                    id: 'current-cart',
-                    order_number: receiptData.receipt_number,
-                    total: total,
-                    waiter_name: selectedWaiter ? `${selectedWaiter.first_name} ${selectedWaiter.last_name}` : undefined,
-                    items: cart.map(item => ({ name: item.name, quantity: item.quantity, unit_price: item.price }))
-                  } as TodayOrder);
-                }}
-                disabled={cart.length === 0}
-                className="w-full border border-gray-300 text-gray-700 px-4 py-2 rounded text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Generate Bill
-              </button>
-
-              <button
-                onClick={clearCart}
-                disabled={cart.length === 0}
-                className="w-full border border-gray-300 text-gray-700 px-4 py-2 rounded text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Clear Cart
-              </button>
+                <button
+                  onClick={clearCart}
+                  disabled={cart.length === 0}
+                  className="bg-white border-2 border-red-100 text-red-500 font-bold h-11 rounded-xl active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <X className="h-4 w-4" />
+                  <span>Clear</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

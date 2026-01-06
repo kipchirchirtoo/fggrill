@@ -184,25 +184,39 @@ export default function BarPOSPage() {
   return (
     <ProtectedRoute allowedRoles={[UserRole.BARTENDER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
-        <div className="flex gap-6 h-[calc(100vh-120px)]">
-          <div className="flex-1 flex flex-col">
+        <div className="flex flex-col lg:flex-row gap-6 h-auto lg:h-[calc(100vh-120px)]">
+          <div className="flex-1 flex flex-col min-h-0">
             <div className="mb-4 space-y-3">
+              <div className="flex items-center justify-between lg:hidden mb-2">
+                <h1 className="text-xl font-bold text-stone-900">Bar POS</h1>
+                <IOSButton size="sm" variant="secondary" onClick={() => {
+                  const cartElement = document.getElementById('cart-section');
+                  cartElement?.scrollIntoView({ behavior: 'smooth' });
+                }} className="relative">
+                  <ShoppingCart className="h-4 w-4" />
+                  {cart.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
+                      {cart.reduce((a, b) => a + b.quantity, 0)}
+                    </span>
+                  )}
+                </IOSButton>
+              </div>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
-                <Input placeholder="Search drinks..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
+                <Input placeholder="Search drinks..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-[44px]" />
               </div>
-              <div className="flex gap-2 overflow-x-auto pb-2">
-                <IOSButton size="sm" variant={selectedCategory === 'all' ? 'primary' : 'secondary'} onClick={() => setSelectedCategory('all')}>All</IOSButton>
+              <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                <IOSButton size="sm" variant={selectedCategory === 'all' ? 'primary' : 'secondary'} onClick={() => setSelectedCategory('all')} className="whitespace-nowrap h-[36px]">All</IOSButton>
                 {categories.map((cat) => (
-                  <IOSButton key={cat.id} size="sm" variant={selectedCategory === cat.id ? 'primary' : 'secondary'} onClick={() => setSelectedCategory(cat.id)}>{cat.name}</IOSButton>
+                  <IOSButton key={cat.id} size="sm" variant={selectedCategory === cat.id ? 'primary' : 'secondary'} onClick={() => setSelectedCategory(cat.id)} className="whitespace-nowrap h-[36px]">{cat.name}</IOSButton>
                 ))}
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto lg:pr-2">
               {isLoading ? (
-                <div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#007AFF]" /></div>
+                <div className="flex items-center justify-center h-48"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#007AFF]" /></div>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 pb-4">
                   {filteredDrinks.map((drink) => (
                     <IOSCard key={drink.id} className="p-3 cursor-pointer hover:shadow-md transition active:scale-95" onClick={() => addToCart(drink)}>
                       <div className="h-24 bg-gradient-to-br from-amber-100 to-orange-100 rounded-ios-lg mb-2 flex items-center justify-center overflow-hidden relative">
@@ -228,25 +242,31 @@ export default function BarPOSPage() {
             </div>
           </div>
 
-          <div className="w-96 flex flex-col gap-4">
+          <div id="cart-section" className="w-full lg:w-96 flex flex-col gap-4">
             {/* Cart */}
             <IOSCard className="flex-1 flex flex-col min-h-0">
               <div className="p-4 border-b">
-                <h2 className="font-bold text-lg flex items-center gap-2"><ShoppingCart className="h-5 w-5" /> Order</h2>
-                <div className="mt-3 space-y-2">
-                  <select
-                    className="w-full p-2 border rounded-ios-lg text-sm bg-white"
-                    value={selectedTabId}
-                    onChange={(e) => setSelectedTabId(e.target.value)}
-                  >
-                    <option value="">-- Select Open Tab (Optional) --</option>
-                    {openTabs.map((tab) => (
-                      <option key={tab.id} value={tab.id}>
-                        Tab #{tab.tab_number} - {tab.customer_name}
-                      </option>
-                    ))}
-                  </select>
-                  <Input placeholder="Seat Number (optional)" value={tableNumber} onChange={(e) => setTableNumber(e.target.value)} />
+                <h2 className="font-bold text-lg flex items-center gap-2"><ShoppingCart className="h-5 w-5" /> Order Summary</h2>
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <label className="text-[11px] font-medium text-stone-500 uppercase mb-1 block">Tab Selection</label>
+                    <select
+                      className="w-full p-2.5 border rounded-ios-lg text-sm bg-stone-50 h-[44px]"
+                      value={selectedTabId}
+                      onChange={(e) => setSelectedTabId(e.target.value)}
+                    >
+                      <option value="">New Order (No Tab)</option>
+                      {openTabs.map((tab) => (
+                        <option key={tab.id} value={tab.id}>
+                          Tab #{tab.tab_number} - {tab.customer_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-stone-500 uppercase mb-1 block">Seat / Point Information</label>
+                    <Input placeholder="Table or Seat No." value={tableNumber} onChange={(e) => setTableNumber(e.target.value)} className="h-[44px]" />
+                  </div>
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto p-4">
@@ -277,10 +297,10 @@ export default function BarPOSPage() {
                   <div className="flex justify-between text-gray-600"><span>VAT (16% incl.)</span><span>KES {tax.toLocaleString()}</span></div>
                   <div className="flex justify-between font-bold text-lg pt-2 border-t"><span>Total</span><span>KES {total.toLocaleString()}</span></div>
                 </div>
-                <div className="flex gap-2">
-                  <IOSButton variant="secondary" onClick={clearCart} className="flex-1" disabled={cart.length === 0}>Clear</IOSButton>
-                  <IOSButton onClick={handleGenerateBill} className="flex-1" disabled={cart.length === 0 || isSubmitting}>
-                    {isSubmitting ? 'Processing...' : (selectedTabId ? 'Add to Tab' : 'Generate Bill')}
+                <div className="flex flex-col xs:flex-row gap-2">
+                  <IOSButton variant="secondary" onClick={clearCart} className="flex-1 h-[44px]" disabled={cart.length === 0}>Clear Order</IOSButton>
+                  <IOSButton onClick={handleGenerateBill} className="flex-1 h-[44px] font-bold" disabled={cart.length === 0 || isSubmitting}>
+                    {isSubmitting ? 'Processing...' : (selectedTabId ? 'Add to Tab' : 'Place Order')}
                   </IOSButton>
                 </div>
               </div>

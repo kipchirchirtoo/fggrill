@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { housekeepingAPI } from '@/lib/api';
-import { 
+import {
   Bed, RefreshCw, Search, Filter, Sparkles, CheckCircle, Clock,
   AlertTriangle, Wrench, User, Eye, Play, Check, Layers
 } from 'lucide-react';
@@ -132,58 +132,59 @@ export default function HousekeepingRoomsPage() {
       <DashboardLayout>
         <div className="space-y-6">
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Room Status</h1>
-              <p className="text-gray-500">Monitor and update room cleaning status</p>
+              <h1 className="text-[22px] sm:text-2xl font-bold text-gray-900">Room Status</h1>
+              <p className="text-gray-500 text-sm">Monitor and update room cleaning status</p>
             </div>
-            <div className="flex gap-2">
-              <IOSButton 
-                variant={viewMode === 'grid' ? 'primary' : 'outline'} 
-                size="sm"
-                onClick={() => setViewMode('grid')}
-              >
-                Grid
-              </IOSButton>
-              <IOSButton 
-                variant={viewMode === 'list' ? 'primary' : 'outline'} 
-                size="sm"
-                onClick={() => setViewMode('list')}
-              >
-                List
-              </IOSButton>
-              <IOSButton variant="outline" onClick={fetchRooms} leftIcon={<RefreshCw />}>Refresh
+            <div className="flex items-center gap-2">
+              <div className="flex bg-stone-100 p-1 rounded-lg">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${viewMode === 'grid' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}
+                >
+                  Grid
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${viewMode === 'list' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}
+                >
+                  List
+                </button>
+              </div>
+              <IOSButton variant="outline" size="sm" onClick={fetchRooms} leftIcon={<RefreshCw className="h-4 w-4" />}>
+                <span className="hidden xs:inline">Refresh</span>
               </IOSButton>
             </div>
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <IOSCard className="p-4">
-              <p className="text-sm text-gray-500">Total</p>
-              <p className="text-2xl font-bold">{stats.total}</p>
+          <div className="grid grid-cols-2 xs:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
+            <IOSCard className="p-3 sm:p-4">
+              <p className="text-[11px] sm:text-sm text-gray-500 font-medium">Total</p>
+              <p className="text-xl sm:text-2xl font-bold">{stats.total}</p>
             </IOSCard>
-            <IOSCard className="p-4 border-l-4 border-green-500">
-              <p className="text-sm text-gray-500">Clean</p>
-              <p className="text-2xl font-bold text-[#34C759]">{stats.clean}</p>
+            <IOSCard className="p-3 sm:p-4 border-l-4 border-green-500">
+              <p className="text-[11px] sm:text-sm text-gray-500 font-medium">Clean</p>
+              <p className="text-xl sm:text-2xl font-bold text-[#34C759]">{stats.clean}</p>
             </IOSCard>
-            <IOSCard className="p-4 border-l-4 border-red-500">
-              <p className="text-sm text-gray-500">Dirty</p>
-              <p className="text-2xl font-bold text-[#FF3B30]">{stats.dirty}</p>
+            <IOSCard className="p-3 sm:p-4 border-l-4 border-red-500">
+              <p className="text-[11px] sm:text-sm text-gray-500 font-medium">Dirty</p>
+              <p className="text-xl sm:text-2xl font-bold text-[#FF3B30]">{stats.dirty}</p>
             </IOSCard>
-            <IOSCard className="p-4 border-l-4 border-yellow-500">
-              <p className="text-sm text-gray-500">Cleaning</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats.cleaning}</p>
+            <IOSCard className="p-3 sm:p-4 border-l-4 border-yellow-500">
+              <p className="text-[11px] sm:text-sm text-gray-500 font-medium">Cleaning</p>
+              <p className="text-xl sm:text-2xl font-bold text-yellow-600">{stats.cleaning}</p>
             </IOSCard>
-            <IOSCard className="p-4 border-l-4 border-purple-500">
-              <p className="text-sm text-gray-500">Occupied</p>
-              <p className="text-2xl font-bold text-purple-600">{stats.occupied}</p>
+            <IOSCard className="p-3 sm:p-4 border-l-4 border-purple-500">
+              <p className="text-[11px] sm:text-sm text-gray-500 font-medium">Occupied</p>
+              <p className="text-xl sm:text-2xl font-bold text-purple-600">{stats.occupied}</p>
             </IOSCard>
           </div>
 
           {/* Filters */}
-          <IOSCard className="p-4">
-            <div className="flex flex-col md:flex-row gap-4">
+          <IOSCard className="p-3 sm:p-4">
+            <div className="flex flex-col lg:flex-row gap-4">
               <div className="flex-1">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
@@ -191,15 +192,15 @@ export default function HousekeepingRoomsPage() {
                     placeholder="Search room number..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9"
+                    className="pl-9 h-[40px]"
                   />
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-2 border rounded-ios-lg text-sm"
+                  className="flex-1 min-w-[140px] px-3 h-[40px] border rounded-ios-lg text-sm bg-white"
                 >
                   <option value="all">All Status</option>
                   {Object.entries(statusConfig).map(([key, val]) => (
@@ -209,7 +210,7 @@ export default function HousekeepingRoomsPage() {
                 <select
                   value={floorFilter}
                   onChange={(e) => setFloorFilter(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-                  className="px-3 py-2 border rounded-ios-lg text-sm"
+                  className="flex-1 min-w-[140px] px-3 h-[40px] border rounded-ios-lg text-sm bg-white"
                 >
                   <option value="all">All Floors</option>
                   {floors.map((floor) => (
@@ -231,7 +232,7 @@ export default function HousekeepingRoomsPage() {
               <p className="text-gray-500">No rooms found</p>
             </IOSCard>
           ) : viewMode === 'grid' ? (
-            <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-3">
+            <div className="grid grid-cols-3 xs:grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2 sm:gap-3">
               {filteredRooms.map((room) => {
                 const statusInfo = statusConfig[room.status] || statusConfig.clean;
                 const StatusIcon = statusInfo.icon;
@@ -243,12 +244,12 @@ export default function HousekeepingRoomsPage() {
                       setSelectedRoom(room);
                       setDetailsModalOpen(true);
                     }}
-                    className={`p-3 rounded-xl cursor-pointer transition-all hover:scale-105 hover:shadow-none 0_2px_14px_rgba(0,0,0,0.06)] ${statusInfo.bgColor} border-2 border-transparent hover:border-[#E5E5EA]`}
+                    className={`p-2 sm:p-3 rounded-xl cursor-pointer transition-all hover:scale-105 ${statusInfo.bgColor} border-2 border-transparent hover:border-stone-200 active:scale-95`}
                   >
                     <div className="text-center">
-                      <StatusIcon className={`h-5 w-5 mx-auto mb-1 ${statusInfo.color}`} />
-                      <p className={`font-bold ${statusInfo.color}`}>{room.room_number}</p>
-                      <p className="text-xs text-gray-600 capitalize">{room.status}</p>
+                      <StatusIcon className={`h-4 w-4 sm:h-5 sm:w-5 mx-auto mb-1 ${statusInfo.color}`} />
+                      <p className={`font-bold text-xs sm:text-base ${statusInfo.color}`}>{room.room_number}</p>
+                      <p className="text-[9px] sm:text-xs text-gray-600 capitalize truncate">{room.status}</p>
                     </div>
                   </div>
                 );
@@ -261,36 +262,37 @@ export default function HousekeepingRoomsPage() {
                 const StatusIcon = statusInfo.icon;
 
                 return (
-                  <IOSCard key={room.id} className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className={`p-3 rounded-ios-lg ${statusInfo.bgColor}`}>
-                          <StatusIcon className={`h-6 w-6 ${statusInfo.color}`} />
+                  <IOSCard key={room.id} className="p-3 sm:p-4">
+                    <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 sm:gap-4">
+                        <div className={`p-2.5 sm:p-3 rounded-ios-lg ${statusInfo.bgColor} shrink-0`}>
+                          <StatusIcon className={`h-5 w-5 sm:h-6 sm:w-6 ${statusInfo.color}`} />
                         </div>
-                        <div>
-                          <p className="font-bold">Room {room.room_number}</p>
-                          <p className="text-sm text-gray-500">Floor {room.floor} • {room.room_type}</p>
+                        <div className="min-w-0">
+                          <p className="font-bold text-sm sm:text-base">Room {room.room_number}</p>
+                          <p className="text-[11px] sm:text-sm text-gray-500 truncate">Floor {room.floor} • {room.room_type}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <IOSBadge className={`${statusInfo.bgColor} ${statusInfo.color}`}>
+                      <div className="flex items-center justify-between xs:justify-end gap-3 border-t xs:border-t-0 pt-3 xs:pt-0">
+                        <IOSBadge className={`${statusInfo.bgColor} ${statusInfo.color} text-[10px] sm:text-xs h-6`}>
                           {statusInfo.label}
                         </IOSBadge>
-                        {room.assigned_name && (
-                          <span className="text-sm text-gray-500 flex items-center gap-1">
-                            <User className="h-3 w-3" /> {room.assigned_name}
-                          </span>
-                        )}
-                        <IOSButton
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedRoom(room);
-                            setDetailsModalOpen(true);
-                          }}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </IOSButton>
+                        <div className="flex items-center gap-2">
+                          {room.assigned_name && (
+                            <span className="text-[11px] sm:text-sm text-gray-500 flex items-center gap-1">
+                              <User className="h-3 w-3" /> <span className="truncate max-w-[80px] sm:max-w-none">{room.assigned_name}</span>
+                            </span>
+                          )}
+                          <button
+                            onClick={() => {
+                              setSelectedRoom(room);
+                              setDetailsModalOpen(true);
+                            }}
+                            className="p-1.5 sm:p-2 hover:bg-stone-100 rounded-lg transition-colors text-stone-500"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </IOSCard>

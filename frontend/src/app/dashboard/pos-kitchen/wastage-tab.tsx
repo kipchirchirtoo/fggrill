@@ -253,40 +253,43 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
   return (
     <div className="space-y-6">
       {/* Stats Cards - Minimal Design */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <p className="text-xs text-gray-500 mb-1">Total Wastage</p>
-          <p className="text-xl font-semibold text-gray-900">{stats.totalRecords}</p>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-white border border-stone-200 rounded-xl p-3 sm:p-4 shadow-sm">
+          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1">Records</p>
+          <p className="text-xl sm:text-2xl font-bold text-stone-900">{stats.totalRecords}</p>
         </div>
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <p className="text-xs text-gray-500 mb-1">Total Loss</p>
-          <p className="text-xl font-semibold text-gray-900">KES {stats.totalCost.toLocaleString()}</p>
+        <div className="bg-white border border-stone-200 rounded-xl p-3 sm:p-4 shadow-sm">
+          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1">Total Loss</p>
+          <p className="text-xl sm:text-2xl font-bold text-red-600">KES {stats.totalCost.toLocaleString()}</p>
         </div>
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <p className="text-xs text-gray-500 mb-1">Spoilage</p>
-          <p className="text-xl font-semibold text-gray-900">{typeof stats.byReason['spoilage'] === 'object' ? (stats.byReason['spoilage'] as any)?.count || 0 : stats.byReason['spoilage'] || 0}</p>
+        <div className="bg-white border border-stone-200 rounded-xl p-3 sm:p-4 shadow-sm">
+          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1">Spoilage</p>
+          <p className="text-xl sm:text-2xl font-bold text-stone-900">{typeof stats.byReason['spoilage'] === 'object' ? (stats.byReason['spoilage'] as any)?.count || 0 : stats.byReason['spoilage'] || 0}</p>
         </div>
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <p className="text-xs text-gray-500 mb-1">Overcooking</p>
-          <p className="text-xl font-semibold text-gray-900">{typeof stats.byReason['overcooking'] === 'object' ? (stats.byReason['overcooking'] as any)?.count || 0 : stats.byReason['overcooking'] || 0}</p>
+        <div className="bg-white border border-stone-200 rounded-xl p-3 sm:p-4 shadow-sm">
+          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1">Overcooked</p>
+          <p className="text-xl sm:text-2xl font-bold text-stone-900">{typeof stats.byReason['overcooking'] === 'object' ? (stats.byReason['overcooking'] as any)?.count || 0 : stats.byReason['overcooking'] || 0}</p>
         </div>
       </div>
 
       {/* Actions - Minimal Design */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <h2 className="text-base font-medium text-gray-900">Wastage Records</h2>
+      <div className="flex flex-col xs:flex-row xs:items-center xs:justify-between gap-4">
+        <h2 className="text-lg font-bold text-stone-900">Wastage Records</h2>
         <div className="flex gap-2">
           <button
             onClick={fetchData}
-            className="px-3 py-2 border border-gray-300 text-gray-700 rounded text-sm font-medium hover:bg-gray-50"
+            disabled={isLoading}
+            className="flex-1 xs:flex-none h-10 px-4 border border-stone-200 text-stone-600 rounded-lg text-sm font-semibold hover:bg-stone-50 transition-colors flex items-center justify-center gap-2"
           >
-            Refresh
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
           </button>
           <button
             onClick={() => setShowRecordModal(true)}
-            className="px-3 py-2 bg-red-600 text-white rounded text-sm font-medium hover:bg-red-700"
+            className="flex-1 xs:flex-none h-10 px-4 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 shadow-md shadow-red-100 transition-all active:scale-95 flex items-center justify-center gap-2"
           >
-            Record Wastage
+            <Plus className="h-4 w-4" />
+            <span>Record</span>
           </button>
         </div>
       </div>
@@ -310,48 +313,49 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
             const Icon = reasonConfig.icon;
 
             return (
-              <div key={record.id} className="bg-white border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-lg ${reasonConfig.bgColor} flex items-center justify-center`}>
-                      <span className={`text-xs font-medium ${reasonConfig.color}`}>
-                        {reasonConfig.label.charAt(0)}
-                      </span>
+              <div key={record.id} className="bg-white border border-stone-100 rounded-xl p-4 shadow-sm hover:border-stone-200 transition-all">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className={`w-10 h-10 shrink-0 rounded-xl ${reasonConfig.bgColor} flex items-center justify-center`}>
+                      <Icon className={`h-5 w-5 ${reasonConfig.color}`} />
                     </div>
-                    <div>
-                      <p className="font-medium text-gray-900">{record.item_name}</p>
-                      <p className="text-sm text-gray-500">
-                        {record.quantity} {record.unit} • {reasonConfig.label}
+                    <div className="min-w-0">
+                      <p className="font-bold text-stone-900 truncate">{record.item_name}</p>
+                      <p className="text-xs font-medium text-stone-500 mt-0.5">
+                        {record.quantity} {record.unit} • <span className={reasonConfig.color}>{reasonConfig.label}</span>
                       </p>
                       {record.description && (
-                        <p className="text-xs text-gray-400 mt-1">{record.description}</p>
+                        <p className="text-[11px] text-stone-400 mt-1.5 leading-relaxed line-clamp-2 italic">"{record.description}"</p>
                       )}
+                      <div className="flex items-center gap-2 mt-2">
+                        <p className="text-[10px] text-stone-400 font-medium">
+                          {new Date(record.logged_at).toLocaleDateString()} {new Date(record.logged_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                        {record.logged_by_name && (
+                          <>
+                            <span className="w-1 h-1 bg-stone-200 rounded-full"></span>
+                            <p className="text-[10px] text-stone-400 font-medium">by {record.logged_by_name}</p>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <p className="font-medium text-red-600">-KES {(record.cost_impact || 0).toLocaleString()}</p>
-                      <p className="text-xs text-gray-400">
-                        {new Date(record.logged_at).toLocaleDateString()} {new Date(record.logged_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                      {record.logged_by_name && (
-                        <p className="text-xs text-gray-400">by {record.logged_by_name}</p>
-                      )}
-                    </div>
-                    <div className="flex gap-1">
+                  <div className="flex flex-col items-end gap-3 shrink-0">
+                    <p className="font-bold text-red-600 text-sm">-KES {(record.cost_impact || 0).toLocaleString()}</p>
+                    <div className="flex gap-1.5">
                       <button
                         onClick={() => handleEditRecord(record)}
-                        className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700"
+                        className="p-1.5 rounded-lg bg-stone-50 text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors"
                         title="Edit record"
                       >
-                        <Edit2 className="h-4 w-4" />
+                        <Edit2 className="h-3.5 w-3.5" />
                       </button>
                       <button
                         onClick={() => confirmDelete(record)}
-                        className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-600"
+                        className="p-1.5 rounded-lg bg-red-50 text-red-400 hover:text-red-600 hover:bg-red-100 transition-colors"
                         title="Delete record"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </div>
@@ -421,21 +425,21 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
 
             {/* Waste Reason */}
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">Reason for Wastage</label>
-              <div className="grid grid-cols-4 gap-2">
+              <label className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-2 block">Reason for Wastage</label>
+              <div className="grid grid-cols-2 xs:grid-cols-4 gap-2">
                 {(Object.entries(wasteReasonConfig) as [WasteReason, typeof wasteReasonConfig[WasteReason]][]).map(([key, config]) => {
                   const Icon = config.icon;
                   return (
                     <button
                       key={key}
                       onClick={() => setReason(key)}
-                      className={`p-2 rounded-lg border-2 text-center transition-all ${reason === key
-                          ? `border-red-500 ${config.bgColor}`
-                          : 'border-gray-200 hover:border-gray-300'
+                      className={`p-2.5 rounded-xl border-2 text-center transition-all ${reason === key
+                        ? `border-red-500 ${config.bgColor} shadow-sm`
+                        : 'border-stone-100 hover:border-stone-200 bg-stone-50/50'
                         }`}
                     >
                       <Icon className={`h-4 w-4 mx-auto mb-1 ${config.color}`} />
-                      <p className={`text-xs font-medium ${config.color}`}>{config.label}</p>
+                      <p className={`text-[10px] font-bold ${config.color} leading-tight`}>{config.label}</p>
                     </button>
                   );
                 })}
@@ -556,8 +560,8 @@ export function WastageTab({ onDataChange }: WastageTabProps) {
                       key={key}
                       onClick={() => setReason(key)}
                       className={`p-2 rounded-lg border-2 text-center transition-all ${reason === key
-                          ? `border-stone-500 ${config.bgColor}`
-                          : 'border-gray-200 hover:border-gray-300'
+                        ? `border-stone-500 ${config.bgColor}`
+                        : 'border-gray-200 hover:border-gray-300'
                         }`}
                     >
                       <Icon className={`h-4 w-4 mx-auto mb-1 ${config.color}`} />
