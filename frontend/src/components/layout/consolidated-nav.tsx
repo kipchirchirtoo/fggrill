@@ -1092,6 +1092,55 @@ export function ConsolidatedNav() {
     </>
   );
 
+  // Branch Accountant Navigation
+  const branchAccountantNav = (
+    <>
+      <NavItem
+        href="/dashboard/branch-accounting"
+        icon={Building2}
+        label="Overview"
+        active={pathname === '/dashboard/branch-accounting'}
+      />
+
+      <NavGroup label="Financials" icon={DollarSign} defaultOpen>
+        <NavItem
+          href="/dashboard/branch-accounting/invoices"
+          icon={FileText}
+          label="Invoices"
+          active={pathname === '/dashboard/branch-accounting/invoices'}
+        />
+        <NavItem
+          href="/dashboard/branch-accounting/payments"
+          icon={CreditCard}
+          label="Payments"
+          active={pathname === '/dashboard/branch-accounting/payments'}
+        />
+        <NavItem
+          href="/dashboard/branch-accounting/expenses"
+          icon={Receipt}
+          label="Expenses"
+          active={pathname === '/dashboard/branch-accounting/expenses'}
+        />
+      </NavGroup>
+
+      <NavGroup label="Inventory" icon={Package} defaultOpen>
+        <NavItem
+          href="/dashboard/branch-accounting/stock-take"
+          icon={ClipboardList}
+          label="Stock Takes"
+          active={pathname === '/dashboard/branch-accounting/stock-take'}
+        />
+      </NavGroup>
+
+      <NavItem
+        href="/dashboard/branch-accounting/reports"
+        icon={BarChart3}
+        label="Reports"
+        active={pathname === '/dashboard/branch-accounting/reports'}
+      />
+    </>
+  );
+
   // Determine which navigation to render based on user role
   const renderNavigation = () => {
     if (user.role === UserRole.SUPER_ADMIN) {
@@ -1184,6 +1233,9 @@ export function ConsolidatedNav() {
     }
 
     // Branch Accounting Navigation
+    if (user.role === UserRole.BRANCH_ACCOUNTANT) {
+      return branchAccountantNav;
+    }
 
     // Cashier Navigation
     if (user.role === UserRole.CASHIER) {
