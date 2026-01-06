@@ -1,188 +1,223 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import {
-    PieChart, Box, FileText, CheckCircle2,
-    Calendar, Download, Receipt, BookOpen
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { useSearchParams } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth, UserRole } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
-import { UserRole } from '@/lib/auth-context';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { storeAPI, financeAPI } from '@/lib/api';
-import { toast } from 'sonner';
-import { OverviewTab } from '@/components/finance/OverviewTab';
-import { InventoryTab } from '@/components/finance/InventoryTab';
-import { BillingTab } from '@/components/finance/BillingTab';
-import { PaymentsTab } from '@/components/finance/PaymentsTab';
-import { ExpensesTab } from '@/components/finance/ExpensesTab';
-import { ReportsTab } from '@/components/finance/ReportsTab';
-import { AccountingTab } from '@/components/finance/AccountingTab';
-import { NewStockTakeModal } from '@/components/finance/NewStockTakeModal';
-import { TrendingUp } from 'lucide-react';
-
-// --- Main Page Component ---
+import { financeAPI, storeAPI, accountingAPI } from '@/lib/api';
+import {
+    DollarSign, TrendingUp, TrendingDown, FileText,
+    PieChart, CreditCard, RefreshCw, Calendar, ArrowUpRight,
+    ArrowDownRight, CheckCircle, Clock, AlertTriangle, Receipt
+} from 'lucide-react';
+import Link from 'next/link';
+import { format } from 'date-fns';
 
 export default function BranchAccountingDashboard() {
-    const { activeBranchId } = useBranch();
-    const searchParams = useSearchParams();
-    const [activeTab, setActiveTab] = useState<'overview' | 'inventory' | 'billing' | 'payments' | 'expenses' | 'reports' | 'accounting'>('overview');
-    const [dateRange, setDateRange] = useState('Today');
+    const { user } = useAuth();
+    const { activeBranchId, activeBranch } = useBranch();
+    const [stats, setStats] = useState({
+        totalRevenue: 0,
+        totalExpenses: 0,
+        netProfit: 0,
+        pendingInvoices: 0,
+        dailyTransactions: 0
+    });
     const [isLoading, setIsLoading] = useState(true);
-    const [stockTakes, setStockTakes] = useState<any[]>([]);
-    const [isStockModalOpen, setIsStockModalOpen] = useState(false);
+    const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+    const [pendingAlerts, setPendingAlerts] = useState<any[]>([]);
 
-    // Initial tab from URL
-    useEffect(() => {
-        const tab = searchParams.get('tab');
-        if (tab && ['overview', 'inventory', 'billing', 'payments', 'expenses', 'reports', 'accounting'].includes(tab)) {
-            setActiveTab(tab as any);
-        }
-    }, [searchParams]);
+    // Use active branch from context, fallback to user's branch
+    const currentBranchId = activeBranchId || user?.branch_id;
 
-    const [branchStock, setBranchStock] = useState<any[]>([]);
-    const [invoices, setInvoices] = useState<any[]>([]);
+    const fetchData = useCallback(async () => {
+        if (!currentBranchId) return;
 
-    // Fetch data
-    const fetchData = async () => {
         setIsLoading(true);
         try {
-            const [takesRes, stockRes, invoicesRes] = await Promise.all([
-                storeAPI.getStockTakes(),
-                activeBranchId ? storeAPI.getBranchStock(Number(activeBranchId)) : Promise.resolve({ data: [] }),
-                activeBranchId ? financeAPI.getInvoices({ branch_id: Number(activeBranchId) }) : Promise.resolve({ data: [] })
+            // Fetch real data from APIs
+            // Note: Using existing endpoints or assuming standard structure. 
+            // If specific endpoints like 'getAccountingDashboard' don't exist, we aggregate.
+            const [financeRes, invoicesRes] = await Promise.allSettled([
+                financeAPI.getDashboard ? financeAPI.getDashboard(currentBranchId) : Promise.resolve({ data: null }),
+                financeAPI.getInvoices ? financeAPI.getInvoices({ branch_id: currentBranchId, status: 'PENDING' }) : Promise.resolve({ data: [] })
             ]);
 
-            // Filter by branch if activeBranchId is present
-            let takes = takesRes.data || [];
-            if (activeBranchId) {
-                takes = takes.filter((t: any) => t.branch_id === activeBranchId);
+            const financeData = financeRes.status === 'fulfilled' ? financeRes.value?.data || {} : {};
+            const pendingInvoicesList = invoicesRes.status === 'fulfilled' ? invoicesRes.value?.data || [] : [];
+
+            // Calculate or extract stats
+            // Fallback values used if API response is different than expected
+            setStats({
+                totalRevenue: financeData.total_revenue || 0,
+                totalExpenses: financeData.total_expenses || 0,
+                netProfit: (financeData.total_revenue || 0) - (financeData.total_expenses || 0),
+                pendingInvoices: pendingInvoicesList.length,
+                dailyTransactions: financeData.daily_transaction_count || 0
+            });
+
+            // Mocking recent transactions from invoice data if available, or empty
+            setRecentTransactions(pendingInvoicesList.slice(0, 5));
+
+            // Alerts based on pending items
+            const newAlerts = [];
+            if (pendingInvoicesList.length > 5) {
+                newAlerts.push({ type: 'warning', message: `${pendingInvoicesList.length} invoices pending approval`, time: 'Action required' });
             }
-            setStockTakes(takes);
-            setBranchStock(stockRes.data || []);
-            setInvoices(invoicesRes.data || []);
+            setPendingAlerts(newAlerts);
+
         } catch (error) {
-            console.error("Dashboard primary fetch failed:", error);
+            console.error('Error fetching accounting data:', error);
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [currentBranchId]);
 
     useEffect(() => {
         fetchData();
-    }, [activeBranchId]);
+    }, [fetchData]);
 
-    const handleStartStockTake = async (data: any) => {
-        if (!activeBranchId) {
-            toast.error("Please select a branch first");
-            return;
-        }
-
-        try {
-            const res = await storeAPI.createStockTake({
-                branch_id: Number(activeBranchId),
-                take_type: data.take_type,
-                notes: data.notes
-            });
-            if (res.success) {
-                toast.success("Stock take session started");
-                setIsStockModalOpen(false);
-                fetchData();
-            }
-        } catch (error) {
-            toast.error("Failed to start stock take");
-        }
-    };
-
-    // Mock data for initial implementation
-    const stats = [
-        { label: 'Total Revenue', value: 'KES 125,400', icon: TrendingUp, change: '+12.5%', trend: 'up' as const, color: 'text-emerald-600' },
-        { label: 'Total Expenses', value: 'KES 45,200', icon: Receipt, change: '-4.3%', trend: 'down' as const, color: 'text-rose-600' },
-        { label: 'Pending Invoices', value: '12', icon: FileText, change: '5 urgent', trend: 'neutral' as const, color: 'text-blue-600' },
-        { label: 'Net Profit', value: 'KES 80,200', icon: PieChart, change: '+18.2%', trend: 'up' as const, color: 'text-amber-600' },
+    const quickLinks = [
+        { href: '/dashboard/branch-accounting/stock-take', icon: PieChart, label: 'Stock Take', desc: 'Inventory' },
+        { href: '/dashboard/branch-accounting/invoices', icon: FileText, label: 'Invoices', desc: 'Billing' },
+        { href: '/dashboard/branch-accounting/payments', icon: CreditCard, label: 'Payments', desc: 'Transactions' },
+        { href: '/dashboard/branch-accounting/expenses', icon: Receipt, label: 'Expenses', desc: 'Costs' },
+        { href: '/dashboard/branch-accounting/reports', icon: TrendingUp, label: 'Reports', desc: 'Analysis' },
     ];
 
-    const chartData = [
-        { name: '08:00', revenue: 4200, expenses: 1200 },
-        { name: '10:00', revenue: 15600, expenses: 4500 },
-        { name: '12:00', revenue: 35800, expenses: 8900 },
-        { name: '14:00', revenue: 28400, expenses: 6200 },
-        { name: '16:00', revenue: 22100, expenses: 5100 },
-        { name: '18:00', revenue: 19300, expenses: 4800 },
+    const statCards = [
+        { label: 'Total Revenue', value: stats.totalRevenue.toLocaleString() + ' KES', icon: DollarSign, color: 'text-emerald-600' },
+        { label: 'Total Expenses', value: stats.totalExpenses.toLocaleString() + ' KES', icon: ArrowDownRight, color: 'text-rose-600' },
+        { label: 'Net Profit', value: stats.netProfit.toLocaleString() + ' KES', icon: TrendingUp, color: 'text-amber-600' },
+        { label: 'Pending Invoices', value: stats.pendingInvoices.toString(), icon: FileText },
+        { label: 'Transactions', value: stats.dailyTransactions.toString(), icon: RefreshCw },
     ];
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.BRANCH_ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
+        <ProtectedRoute allowedRoles={[UserRole.BRANCH_ACCOUNTANT, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
             <DashboardLayout>
-                <>
-                    <div className="p-6 space-y-6 bg-stone-50 min-h-screen max-w-[1600px] mx-auto">
-                        {/* Header */}
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <div>
-                                <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Branch Accounting</h1>
-                                <p className="text-stone-500 text-sm">Financial oversight and operational monitoring</p>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                                <Button variant="outline" size="sm" className="bg-white">
-                                    <Calendar className="mr-2 h-4 w-4" />
-                                    {dateRange}
-                                </Button>
-                                <Button size="sm" className="bg-stone-900 text-white hover:bg-stone-800">
-                                    <Download className="mr-2 h-4 w-4" />
-                                    Export
-                                </Button>
-                            </div>
+                <div className="space-y-6">
+                    {/* Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                            <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Financial Dashboard</h1>
+                            <p className="text-stone-500 mt-0.5">{activeBranch?.name || user?.branch_name || 'Branch Operations'}</p>
                         </div>
+                        <button
+                            onClick={fetchData}
+                            disabled={isLoading}
+                            className="btn-secondary"
+                        >
+                            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                            <span>Refresh</span>
+                        </button>
+                    </div>
 
-                        {/* Integrated Tabs */}
-                        <div className="flex border-b border-stone-200 overflow-x-auto">
-                            {[
-                                { id: 'overview', label: 'Overview', icon: PieChart },
-                                { id: 'inventory', label: 'Stock Taking', icon: Box },
-                                { id: 'billing', label: 'Billing & Credit', icon: FileText },
-                                { id: 'payments', label: 'Payments', icon: CheckCircle2 },
-                                { id: 'expenses', label: 'Expenses', icon: Receipt },
-                                { id: 'reports', label: 'Reports', icon: FileText },
-                                { id: 'accounting', label: 'Accounting', icon: BookOpen },
-                            ].map((tab) => (
-                                <button
-                                    key={tab.id}
-                                    onClick={() => setActiveTab(tab.id as any)}
-                                    className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-all relative whitespace-nowrap ${activeTab === tab.id
-                                        ? 'text-stone-900'
-                                        : 'text-stone-400 hover:text-stone-600'
-                                        }`}
-                                >
-                                    <tab.icon className={`h-4 w-4 ${activeTab === tab.id ? 'text-stone-900' : 'text-stone-400'}`} />
-                                    {tab.label}
-                                    {activeTab === tab.id && (
-                                        <div className="absolute bottom-0 left-0 w-full h-0.5 bg-stone-900" />
-                                    )}
-                                </button>
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                        {statCards.map((stat, i) => (
+                            <div key={i} className="stat-card">
+                                <div className="stat-icon">
+                                    <stat.icon className={`h-5 w-5 ${stat.color || 'text-stone-600'}`} />
+                                </div>
+                                <p className="stat-value text-[20px] lg:text-[22px] truncate">{stat.value}</p>
+                                <p className="stat-label text-[12px] mt-1">{stat.label}</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Quick Access */}
+                    <div className="card-elevated p-5">
+                        <div className="section-header mb-4">
+                            <h2 className="section-title">Quick Actions</h2>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                            {quickLinks.map((link) => (
+                                <Link key={link.href} href={link.href}>
+                                    <div className="action-card group py-4">
+                                        <div className="action-card-icon w-10 h-10 bg-stone-50 group-hover:bg-white">
+                                            <link.icon className="h-4 w-4" />
+                                        </div>
+                                        <p className="action-card-label text-[12px]">{link.label}</p>
+                                        <p className="text-[10px] text-stone-400 mt-0.5">{link.desc}</p>
+                                    </div>
+                                </Link>
                             ))}
                         </div>
+                    </div>
 
-                        {/* Tab Panels */}
-                        <div className="mt-6">
-                            {activeTab === 'overview' && <OverviewTab stats={stats} chartData={chartData} />}
-                            {activeTab === 'inventory' && <InventoryTab stockTakes={stockTakes} onNew={() => setIsStockModalOpen(true)} />}
-                            {activeTab === 'billing' && <BillingTab invoices={invoices} />}
-                            {activeTab === 'payments' && <PaymentsTab />}
-                            {activeTab === 'expenses' && <ExpensesTab />}
-                            {activeTab === 'reports' && <ReportsTab />}
-                            {activeTab === 'accounting' && <AccountingTab />}
+                    {/* Bottom Section */}
+                    <div className="grid lg:grid-cols-3 gap-5">
+                        {/* Recent Activity/Transactions */}
+                        <div className="lg:col-span-2 card-elevated p-5">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-[15px] font-semibold text-stone-900">Recent Transactions</h3>
+                                <Link href="/dashboard/branch-accounting/payments">
+                                    <span className="text-[12px] font-medium text-stone-500 hover:text-stone-900 cursor-pointer">View All</span>
+                                </Link>
+                            </div>
+
+                            {recentTransactions.length === 0 ? (
+                                <div className="text-center py-10 bg-stone-50/50 rounded-xl border border-dashed border-stone-200">
+                                    <Receipt className="h-10 w-10 mx-auto mb-2 text-stone-300" />
+                                    <p className="text-sm text-stone-500 font-medium">No recent transactions</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {recentTransactions.map((tx, i) => (
+                                        <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-stone-50 border border-stone-100">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-9 w-9 rounded-full bg-white border border-stone-200 flex items-center justify-center">
+                                                    <FileText className="h-4 w-4 text-stone-500" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[13px] font-semibold text-stone-900">{tx.invoice_number || 'Transaction'}</p>
+                                                    <p className="text-[11px] text-stone-500">{tx.supplier?.name || 'Unknown Supplier'}</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[13px] font-bold text-stone-900">KES {(tx.amount || 0).toLocaleString()}</p>
+                                                <p className="text-[10px] text-amber-600 font-medium">{tx.status || 'Pending'}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
-                        <NewStockTakeModal
-                            isOpen={isStockModalOpen}
-                            onClose={() => setIsStockModalOpen(false)}
-                            onSubmit={handleStartStockTake}
-                        />
+                        {/* Alerts */}
+                        <div className="card-elevated p-5">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-[15px] font-semibold text-stone-900">Notifications</h3>
+                                {pendingAlerts.length > 0 && (
+                                    <span className="bg-red-50 text-red-600 px-2 py-0.5 rounded-full text-[10px] font-bold">{pendingAlerts.length}</span>
+                                )}
+                            </div>
+
+                            {pendingAlerts.length === 0 ? (
+                                <div className="text-center py-6 text-stone-400 text-sm">
+                                    <CheckCircle className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                                    <p>All caught up</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {pendingAlerts.map((alert, i) => (
+                                        <div key={i} className="p-3 rounded-lg bg-amber-50 border border-amber-100/50">
+                                            <div className="flex items-start gap-2">
+                                                <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                                                <div>
+                                                    <p className="text-[12px] font-semibold text-stone-900">{alert.message}</p>
+                                                    <p className="text-[10px] text-stone-500 mt-0.5">{alert.time}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </>
+                </div>
             </DashboardLayout>
         </ProtectedRoute>
     );

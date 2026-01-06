@@ -3,19 +3,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     ClipboardList, Clock, CheckCircle, AlertTriangle,
-    RefreshCw, BarChart3, TrendingUp, ShoppingBag, Package,
-    Truck, ArrowUpRight, ChevronRight, Calculator
+    RefreshCw, BarChart3, ShoppingBag, Package,
+    ChevronRight
 } from 'lucide-react';
 import { auditAPI, storeAPI, restaurantAPI } from '@/lib/api';
-import { BranchAwareDashboardLayout } from '@/components/layout/branch-aware-dashboard-layout';
-import { useBranch } from '@/lib/branch-context';
+import { DashboardLayout } from '@/components/layout/dashboard-layout'; // Changed from BranchAware...
+import { BranchSelector, useBranch } from '@/lib/branch-context'; // Import BranchSelector direct
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 export default function AuditorDashboard() {
-    const { activeBranchId } = useBranch();
+    const { activeBranchId, activeBranch } = useBranch();
     const [isLoading, setIsLoading] = useState(true);
     const [stats, setStats] = useState({
         totalAudits: 0,
@@ -28,7 +28,6 @@ export default function AuditorDashboard() {
 
     const [recentLogs, setRecentLogs] = useState<any[]>([]);
     const router = useRouter();
-    const { activeBranch } = useBranch();
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -93,22 +92,25 @@ export default function AuditorDashboard() {
 
     return (
         <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
-            <BranchAwareDashboardLayout
-                title="Internal Audit Oversight"
-                subtitle={activeBranchId === 0 ? "Viewing all branches" : `Monitoring ${activeBranch?.name || 'Loading...'}`}
-                requireBranchContext={false}
-            >
+            <DashboardLayout>
                 <div className="space-y-6">
-                    {/* Refresh Header */}
-                    <div className="flex justify-end">
-                        <button
-                            onClick={fetchData}
-                            disabled={isLoading}
-                            className="btn-secondary"
-                        >
-                            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                            <span>Refresh Audit Data</span>
-                        </button>
+                    {/* Header */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Internal Audit Oversight</h1>
+                            <p className="text-stone-500 mt-0.5">{activeBranchId === 0 ? "Viewing all branches" : `Monitoring ${activeBranch?.name || 'Loading...'}`}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <BranchSelector />
+                            <button
+                                onClick={fetchData}
+                                disabled={isLoading}
+                                className="btn-secondary"
+                            >
+                                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                                <span>Refresh Data</span>
+                            </button>
+                        </div>
                     </div>
 
                     {/* Stats Grid */}
@@ -195,7 +197,7 @@ export default function AuditorDashboard() {
                         </div>
                     </div>
                 </div>
-            </BranchAwareDashboardLayout>
+            </DashboardLayout>
         </ProtectedRoute>
     );
 }
