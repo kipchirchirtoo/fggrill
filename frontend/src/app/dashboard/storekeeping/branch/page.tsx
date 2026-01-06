@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
-import { ProtectedRoute } from '@/components/auth/protected-route';
+import { ProtectedRoute as RouteGuard } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Button } from "@/components/ui/minimal/button";
 import { Input } from '@/components/ui/input';
@@ -395,7 +395,7 @@ export default function BranchStorekeeperPage() {
   }
 
   return (
-    <ProtectedRoute
+    <RouteGuard
       allowedRoles={[
         UserRole.SUPER_ADMIN,
         UserRole.GENERAL_MANAGER,
@@ -1433,6 +1433,6 @@ export default function BranchStorekeeperPage() {
         </button>
       </div>
     </DashboardLayout>
-  </ProtectedRoute>
+  </RouteGuard>
       );
 }
