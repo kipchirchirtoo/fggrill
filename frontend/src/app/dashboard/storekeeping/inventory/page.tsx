@@ -961,8 +961,8 @@ export default function InventoryPage() {
                 <button
                   onClick={toggleEditLock}
                   className={`shrink-0 h-10 px-4 rounded-xl text-xs font-bold transition-all ${editLock
-                      ? 'bg-amber-600 text-white shadow-lg shadow-amber-100'
-                      : 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-50'
+                    ? 'bg-amber-600 text-white shadow-lg shadow-amber-100'
+                    : 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-50'
                     }`}
                 >
                   {editLock ? 'Disable' : 'Enable'}

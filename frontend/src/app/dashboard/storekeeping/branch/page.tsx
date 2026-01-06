@@ -364,9 +364,9 @@ export default function BranchStorekeeperPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'PENDING': return 'bg-[#F2F2F7]';
-      case 'APPROVED': return 'bg-[#F2F2F7]0';
-      case 'REJECTED': return 'bg-[#F2F2F7]0';
-      case 'DISPATCHED': return 'bg-[#F2F2F7]0';
+      case 'APPROVED': return 'bg-emerald-50';
+      case 'REJECTED': return 'bg-red-50';
+      case 'DISPATCHED': return 'bg-blue-50';
       case 'IN_TRANSIT': return 'bg-[#F2F2F7]';
       case 'DELIVERED': return 'bg-[#3C3C43]';
       default: return 'bg-[#8E8E93]';
@@ -493,8 +493,8 @@ export default function BranchStorekeeperPage() {
                   key={tab.id}
                   onClick={() => handleTabChange(tab.id)}
                   className={`flex items-center gap-2 px-6 py-4 border-b-2 transition-all whitespace-nowrap ${activeTab === tab.id
-                      ? 'border-stone-900 text-stone-900'
-                      : 'border-transparent text-stone-400 hover:text-stone-600'
+                    ? 'border-stone-900 text-stone-900'
+                    : 'border-transparent text-stone-400 hover:text-stone-600'
                     }`}
                 >
                   <tab.icon className={`h-4 w-4 ${activeTab === tab.id ? 'text-stone-900' : 'text-stone-400'}`} />
@@ -511,7 +511,7 @@ export default function BranchStorekeeperPage() {
           </div>
 
           {/* Tab Content */}
-          <div className="bg-[#FFFFFF] rounded-xl shadow-none 0_1px_3px_rgba(0,0,0,0.04)] border">
+          <div className="bg-[#FFFFFF] rounded-xl shadow-none border">
 
             {/* Current Stock Tab */}
             {activeTab === 'stock' && (
