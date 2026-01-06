@@ -417,50 +417,7 @@ export const storeAPI = {
   },
 };
 
-// =====================================================
-// ACCOUNTING API
-// =====================================================
 
-export const accountingAPI = {
-  getDashboard: () => fetchAPI<any>('/accounting/dashboard'),
-
-  // Chart of Accounts
-  getAccounts: (params?: { type?: string }) => {
-    const query = new URLSearchParams();
-    if (params?.type) query.append('account_type', params.type);
-    return fetchAPI<any>(`/accounting/accounts?${query}`);
-  },
-
-  // Invoices (AR)
-  getInvoices: (params?: { customer_id?: string; status?: string; overdue?: boolean }) => {
-    const query = new URLSearchParams();
-    if (params?.customer_id) query.append('customer_id', params.customer_id);
-    if (params?.status) query.append('status', params.status);
-    if (params?.overdue) query.append('overdue', 'true');
-    return fetchAPI<any>(`/accounting/invoices?${query}`);
-  },
-  createInvoice: (data: any) => fetchAPI<any>('/accounting/invoices', { method: 'POST', body: JSON.stringify(data) }),
-
-  // Bills (AP - Expenses)
-  getBills: (params?: { vendor_id?: string; status?: string; overdue?: boolean }) => {
-    const query = new URLSearchParams();
-    if (params?.vendor_id) query.append('vendor_id', params.vendor_id);
-    if (params?.status) query.append('status', params.status);
-    if (params?.overdue) query.append('overdue', 'true');
-    return fetchAPI<any>(`/accounting/bills?${query}`);
-  },
-  createBill: (data: any) => fetchAPI<any>('/accounting/bills', { method: 'POST', body: JSON.stringify(data) }),
-
-  // Banking (Payments)
-  getTransactions: (params?: { bank_account_id?: string; start_date?: string; end_date?: string }) => {
-    const query = new URLSearchParams();
-    if (params?.bank_account_id) query.append('bank_account_id', params.bank_account_id);
-    if (params?.start_date) query.append('start_date', params.start_date);
-    if (params?.end_date) query.append('end_date', params.end_date);
-    return fetchAPI<any>(`/accounting/bank-transactions?${query}`);
-  },
-  createTransaction: (data: any) => fetchAPI<any>('/accounting/bank-transactions', { method: 'POST', body: JSON.stringify(data) }),
-};
 
 // =====================================================
 // SYSTEM API
@@ -2340,6 +2297,12 @@ export const auditAPI = {
   },
 
   // Approvals
+  getPendingApprovals: (branchId?: number) => {
+    const query = branchId ? `?branch_id=${branchId}` : '';
+    return fetchPythonAPI<any>(`/audit/approvals/pending${query}`);
+  },
+  processApproval: (id: string, data: { action: 'APPROVED' | 'REJECTED'; notes?: string }) =>
+    fetchPythonAPI<any>(`/audit/approvals/${id}/process`, { method: 'POST', body: JSON.stringify(data) }),
   submitApproval: (data: { entity_type: string; entity_id: string; status: string; comments?: string }) =>
     fetchAPI<any>('/auditor/approvals', { method: 'POST', body: JSON.stringify(data) }),
   getApprovalHistory: (params?: { entity_type?: string; entity_id?: string }) => {
@@ -2362,6 +2325,16 @@ export const auditAPI = {
     reportsService.getReportData('reconciliation_audit', params),
   getSoldItemsAnalytics: (params: { branch_id?: number; from_date?: string; to_date?: string }) =>
     reportsService.getReportData('sold_items_analytics', params),
+
+  getAuditTrail: async (filters?: any) => {
+    const params = new URLSearchParams();
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.user) params.append('user', filters.user);
+    if (filters?.action) params.append('action', filters.action);
+
+    return fetchPythonAPI<any>(`/audit/trail?${params.toString()}`);
+  },
 };
 
 
@@ -2654,6 +2627,50 @@ export const reportsService = {
 
 // Accounting API
 export const accountingAPI = {
+  // ===== Node.js Backend Endpoints =====
+
+  // Dashboard
+  getDashboard: () => fetchAPI<any>('/accounting/dashboard'),
+
+  // Chart of Accounts
+  getAccounts: (params?: { type?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.type) query.append('account_type', params.type);
+    return fetchAPI<any>(`/accounting/accounts?${query}`);
+  },
+
+  // Invoices (AR)
+  getInvoices: (params?: { customer_id?: string; status?: string; overdue?: boolean }) => {
+    const query = new URLSearchParams();
+    if (params?.customer_id) query.append('customer_id', params.customer_id);
+    if (params?.status) query.append('status', params.status);
+    if (params?.overdue) query.append('overdue', 'true');
+    return fetchAPI<any>(`/accounting/invoices?${query}`);
+  },
+  createInvoice: (data: any) => fetchAPI<any>('/accounting/invoices', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Bills (AP - Expenses)
+  getBills: (params?: { vendor_id?: string; status?: string; overdue?: boolean }) => {
+    const query = new URLSearchParams();
+    if (params?.vendor_id) query.append('vendor_id', params.vendor_id);
+    if (params?.status) query.append('status', params.status);
+    if (params?.overdue) query.append('overdue', 'true');
+    return fetchAPI<any>(`/accounting/bills?${query}`);
+  },
+  createBill: (data: any) => fetchAPI<any>('/accounting/bills', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Banking (Payments)
+  getTransactions: (params?: { bank_account_id?: string; start_date?: string; end_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.bank_account_id) query.append('bank_account_id', params.bank_account_id);
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/accounting/bank-transactions?${query}`);
+  },
+  createTransaction: (data: any) => fetchAPI<any>('/accounting/bank-transactions', { method: 'POST', body: JSON.stringify(data) }),
+
+  // ===== Python Service Endpoints =====
+
   // Journal Entries
   getJournalEntries: async (filters?: any) => {
     const params = new URLSearchParams();
@@ -2684,6 +2701,12 @@ export const accountingAPI = {
     });
     return response.json();
   },
+
+  createComprehensiveJournal: async (data: any) =>
+    fetchPythonAPI<any>('/accounting/journal-entries/comprehensive', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
 
   updateJournalEntry: async (id: string, entry: any) => {
     const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/journal-entries/${id}`, {
@@ -2745,8 +2768,16 @@ export const accountingAPI = {
     if (filters?.end_date) params.append('end_date', filters.end_date);
     if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
 
-    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/reports/trial-balance?${params}`);
-    return response.json();
+    return fetchPythonAPI<any>(`/accounting/reports/trial-balance?${params.toString()}`);
+  },
+
+  getProfitAndLoss: async (filters?: any) => {
+    const params = new URLSearchParams();
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
+
+    return fetchPythonAPI<any>(`/accounting/reports/p-and-l?${params.toString()}`);
   },
 
   getFinancialStatements: async (type: string, filters?: any) => {
@@ -2756,8 +2787,7 @@ export const accountingAPI = {
     if (filters?.end_date) params.append('end_date', filters.end_date);
     if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
 
-    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/reports/financial-statements?${params}`);
-    return response.json();
+    return fetchPythonAPI<any>(`/accounting/reports/financial-statements?${params.toString()}`);
   },
 
   getAuditTrail: async (filters?: any) => {
@@ -2767,8 +2797,7 @@ export const accountingAPI = {
     if (filters?.user) params.append('user', filters.user);
     if (filters?.action) params.append('action', filters.action);
 
-    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/audit-trail?${params}`);
-    return response.json();
+    return fetchPythonAPI<any>(`/audit/trail?${params.toString()}`);
   },
 
   getWorkpapers: async (filters?: any) => {
@@ -2776,8 +2805,7 @@ export const accountingAPI = {
     if (filters?.status) params.append('status', filters.status);
     if (filters?.period) params.append('period', filters.period);
 
-    const response = await fetch(`${PYTHON_SERVICE_URL}/api/audit/workpapers?${params}`);
-    return response.json();
+    return fetchPythonAPI<any>(`/audit/workpapers?${params.toString()}`);
   }
 };
 

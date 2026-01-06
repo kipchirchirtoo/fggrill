@@ -84,10 +84,10 @@ export default function AuditorDashboard() {
     ];
 
     const quickLinks = [
-        { href: '/dashboard/auditor/sales', icon: ShoppingBag, label: 'Sales Audit', desc: 'Verify daily revenue' },
+        { href: '/dashboard/auditor/approvals', icon: CheckCircle, label: 'Financial Approvals', desc: 'Expense & Stock sign-off' },
+        { href: '/dashboard/auditor/audit-trail', icon: ClipboardList, label: 'Audit Trail', desc: 'Immutable activity logs' },
         { href: '/dashboard/auditor/stock', icon: Package, label: 'Stock Audit', desc: 'Inventory & variance' },
-        { href: '/dashboard/auditor/sold-items', icon: BarChart3, label: 'Global Analytics', desc: 'Aggregated performance' },
-        { href: '/dashboard/auditor/reports', icon: ClipboardList, label: 'Reports', desc: 'Analytics generation' },
+        { href: '/dashboard/auditor/reports', icon: BarChart3, label: 'Reports & Analytics', desc: 'Statement generation' },
     ];
 
     return (

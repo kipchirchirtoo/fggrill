@@ -1,0 +1,112 @@
+-- Stock Taking and Valuation Tables
+-- Part 1: Stock Counts and Variance Tracking
+
+-- Stock count sessions
+CREATE TABLE IF NOT EXISTS stock_counts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  branch_id INTEGER NOT NULL REFERENCES branches(id),
+  count_date DATE NOT NULL,
+  count_type VARCHAR(20) NOT NULL CHECK (count_type IN ('daily', 'weekly', 'monthly', 'ad-hoc')),
+  status VARCHAR(20) DEFAULT 'draft' CHECK (status IN ('draft', 'submitted', 'approved', 'rejected')),
+  counted_by UUID REFERENCES staff(id),
+  approved_by UUID REFERENCES staff(id),
+  approved_at TIMESTAMP WITH TIME ZONE,
+  rejection_reason TEXT,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Individual items in a stock count
+CREATE TABLE IF NOT EXISTS stock_count_items (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  stock_count_id UUID NOT NULL REFERENCES stock_counts(id) ON DELETE CASCADE,
+  item_id UUID NOT NULL REFERENCES inventory_items(id),
+  system_quantity DECIMAL(10,2) NOT NULL,
+  physical_quantity DECIMAL(10,2) NOT NULL,
+  variance DECIMAL(10,2) GENERATED ALWAYS AS (physical_quantity - system_quantity) STORED,
+  variance_percentage DECIMAL(5,2),
+  unit_cost DECIMAL(10,2) NOT NULL,
+  variance_value DECIMAL(12,2) GENERATED ALWAYS AS ((physical_quantity - system_quantity) * unit_cost) STORED,
+  reason TEXT,
+  photo_url TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Stock valuation methods per item
+CREATE TABLE IF NOT EXISTS stock_valuation_methods (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  branch_id INTEGER NOT NULL REFERENCES branches(id),
+  item_id UUID NOT NULL REFERENCES inventory_items(id),
+  method VARCHAR(20) NOT NULL CHECK (method IN ('FIFO', 'WEIGHTED_AVERAGE', 'LIFO')),
+  effective_from DATE NOT NULL,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(branch_id, item_id, effective_from)
+);
+
+-- Stock valuation layers for FIFO/LIFO tracking
+CREATE TABLE IF NOT EXISTS stock_valuation_layers (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  branch_id INTEGER NOT NULL REFERENCES branches(id),
+  item_id UUID NOT NULL REFERENCES inventory_items(id),
+  transaction_date DATE NOT NULL,
+  transaction_type VARCHAR(20) NOT NULL CHECK (transaction_type IN ('purchase', 'sale', 'adjustment', 'transfer_in', 'transfer_out')),
+  quantity DECIMAL(10,2) NOT NULL,
+  unit_cost DECIMAL(10,2) NOT NULL,
+  remaining_quantity DECIMAL(10,2) NOT NULL,
+  reference_id UUID,
+  reference_type VARCHAR(50), -- 'purchase_order', 'stock_count', 'transfer', etc.
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes for performance
+CREATE INDEX IF NOT EXISTS idx_stock_counts_branch ON stock_counts(branch_id);
+CREATE INDEX IF NOT EXISTS idx_stock_counts_date ON stock_counts(count_date);
+CREATE INDEX IF NOT EXISTS idx_stock_counts_status ON stock_counts(status);
+CREATE INDEX IF NOT EXISTS idx_stock_count_items_count ON stock_count_items(stock_count_id);
+CREATE INDEX IF NOT EXISTS idx_stock_count_items_item ON stock_count_items(item_id);
+CREATE INDEX IF NOT EXISTS idx_valuation_layers_item ON stock_valuation_layers(item_id, transaction_date);
+CREATE INDEX IF NOT EXISTS idx_valuation_layers_branch ON stock_valuation_layers(branch_id);
+CREATE INDEX IF NOT EXISTS idx_valuation_methods_branch_item ON stock_valuation_methods(branch_id, item_id);
+
+-- Function to calculate variance percentage
+CREATE OR REPLACE FUNCTION calculate_variance_percentage()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.system_quantity > 0 THEN
+    NEW.variance_percentage := ((NEW.physical_quantity - NEW.system_quantity) / NEW.system_quantity) * 100;
+  ELSE
+    NEW.variance_percentage := 0;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to auto-calculate variance percentage
+CREATE TRIGGER trg_calculate_variance_percentage
+BEFORE INSERT OR UPDATE ON stock_count_items
+FOR EACH ROW EXECUTE FUNCTION calculate_variance_percentage();
+
+-- Function to update stock count timestamp
+CREATE OR REPLACE FUNCTION update_stock_count_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at := NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to update timestamp
+CREATE TRIGGER trg_update_stock_count_timestamp
+BEFORE UPDATE ON stock_counts
+FOR EACH ROW EXECUTE FUNCTION update_stock_count_timestamp();
+
+-- Comments for documentation
+COMMENT ON TABLE stock_counts IS 'Stock count sessions for daily, weekly, monthly, or ad-hoc inventory counts';
+COMMENT ON TABLE stock_count_items IS 'Individual items counted in a stock count session with variance tracking';
+COMMENT ON TABLE stock_valuation_methods IS 'Valuation method configuration per item (FIFO, Weighted Average, LIFO)';
+COMMENT ON TABLE stock_valuation_layers IS 'Stock layers for FIFO/LIFO cost tracking';
+COMMENT ON COLUMN stock_count_items.variance IS 'Calculated as physical_quantity - system_quantity';
+COMMENT ON COLUMN stock_count_items.variance_percentage IS 'Percentage variance from system quantity';
+COMMENT ON COLUMN stock_count_items.variance_value IS 'Monetary value of variance (variance * unit_cost)';

@@ -1,0 +1,93 @@
+-- Banking & Payment Recording
+-- Part 3: Bank Accounts, Deposits and Receipts
+
+-- Physical bank accounts per branch
+CREATE TABLE IF NOT EXISTS bank_accounts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  branch_id INTEGER NOT NULL REFERENCES branches(id),
+  account_name VARCHAR(100) NOT NULL,
+  account_number VARCHAR(50) NOT NULL,
+  bank_name VARCHAR(100) NOT NULL,
+  account_type VARCHAR(20) CHECK (account_type IN ('checking', 'savings', 'mpesa', 'cash_box')),
+  currency VARCHAR(3) DEFAULT 'KES',
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Bank deposits tracking
+CREATE TABLE IF NOT EXISTS bank_deposits (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  branch_id INTEGER NOT NULL REFERENCES branches(id),
+  bank_account_id UUID NOT NULL REFERENCES bank_accounts(id),
+  deposit_date DATE NOT NULL,
+  deposit_number VARCHAR(50) UNIQUE NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  deposit_slip_url TEXT,
+  reconciled BOOLEAN DEFAULT false,
+  reconciled_date DATE,
+  reconciled_by UUID REFERENCES staff(id),
+  notes TEXT,
+  recorded_by UUID REFERENCES staff(id),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Payment receipts from various channels (M-Pesa, PDQ, Cash)
+CREATE TABLE IF NOT EXISTS payment_receipts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  branch_id INTEGER NOT NULL REFERENCES branches(id),
+  receipt_number VARCHAR(50) UNIQUE NOT NULL,
+  receipt_date DATE NOT NULL,
+  payment_method VARCHAR(20) CHECK (payment_method IN ('cash', 'mpesa', 'pdq', 'bank_transfer')),
+  amount DECIMAL(12,2) NOT NULL,
+  reference VARCHAR(100), -- M-Pesa code, PDQ reference, etc.
+  payer_name VARCHAR(100),
+  linked_source_id UUID, -- Link to booking_id, room_order_id, etc.
+  source_type VARCHAR(50), -- 'booking', 'restaurant_order', 'bar_order', 'manual'
+  reconciled BOOLEAN DEFAULT false,
+  recorded_by UUID REFERENCES staff(id),
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Reconciliation table for matching sales to payments
+CREATE TABLE IF NOT EXISTS sales_payment_reconciliation (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  branch_id INTEGER NOT NULL REFERENCES branches(id),
+  reconciliation_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  receipt_id UUID REFERENCES payment_receipts(id),
+  source_id UUID, -- booking_id, etc.
+  amount DECIMAL(12,2) NOT NULL,
+  status VARCHAR(20) DEFAULT 'matched' CHECK (status IN ('matched', 'unmatched', 'discrepancy')),
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_bank_accounts_branch ON bank_accounts(branch_id);
+CREATE INDEX IF NOT EXISTS idx_bank_deposits_branch ON bank_deposits(branch_id);
+CREATE INDEX IF NOT EXISTS idx_bank_deposits_account ON bank_deposits(bank_account_id);
+CREATE INDEX IF NOT EXISTS idx_payment_receipts_branch ON payment_receipts(branch_id);
+CREATE INDEX IF NOT EXISTS idx_payment_receipts_method ON payment_receipts(payment_method);
+CREATE INDEX IF NOT EXISTS idx_payment_receipts_ref ON payment_receipts(reference);
+CREATE INDEX IF NOT EXISTS idx_payment_receipts_source ON payment_receipts(linked_source_id);
+
+-- Trigger to auto-update reconciled status on receipt if matched in reconciliation table
+CREATE OR REPLACE FUNCTION update_receipt_reconciled_status()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.status = 'matched' THEN
+    UPDATE payment_receipts SET reconciled = true WHERE id = NEW.receipt_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_update_receipt_reconciled
+AFTER INSERT OR UPDATE ON sales_payment_reconciliation
+FOR EACH ROW EXECUTE FUNCTION update_receipt_reconciled_status();
+
+-- Comments
+COMMENT ON TABLE bank_accounts IS 'Branch-specific bank and M-Pesa accounts';
+COMMENT ON TABLE bank_deposits IS 'Records of cash/cheque deposits to bank accounts';
+COMMENT ON TABLE payment_receipts IS 'Records of incoming payments from all channels (M-Pesa, PDQ, etc.)';
+COMMENT ON TABLE sales_payment_reconciliation IS 'Links receipts to sales sources to ensure all revenue is accounted for';

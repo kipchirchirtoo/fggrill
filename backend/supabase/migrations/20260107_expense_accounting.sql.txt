@@ -1,0 +1,139 @@
+-- Expenses and Accounting Controls
+-- Part 4: Expense Categories, Approvals, and Period Locking
+
+-- Expense Categories (Utilities, Maintenance, etc.)
+CREATE TABLE IF NOT EXISTS expense_categories (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  category_code VARCHAR(20) UNIQUE NOT NULL,
+  category_name VARCHAR(100) NOT NULL,
+  parent_category_id UUID REFERENCES expense_categories(id),
+  account_id UUID, -- Link to Chart of Accounts if needed
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Seed basic expense categories
+INSERT INTO expense_categories (category_code, category_name) VALUES
+('UTIL', 'Utilities (Electricity, Water, Garbage)'),
+('MAINT', 'Maintenance & Repairs'),
+('FOOD', 'Food Cost / Kitchen Supplies'),
+('BEV', 'Beverage Cost / Bar Supplies'),
+('SALARY', 'Salaries & Wages'),
+('MARKET', 'Marketing & Advertising'),
+('ADMIN', 'General Administrative'),
+('COMM', 'Communication & Internet'),
+('TRANS', 'Transport & Travel'),
+('RENT', 'Rent & Lease'),
+('TAX', 'Taxes & Licenses')
+ON CONFLICT (category_code) DO NOTHING;
+
+-- Add category_id and approval columns to existing expenses table if it exists
+-- Assuming table 'expenses' already exists from previous migrations (based on check_expenses_cols.py)
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename  = 'expenses') THEN
+        ALTER TABLE expenses ADD COLUMN IF NOT EXISTS category_id UUID REFERENCES expense_categories(id);
+        ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_url TEXT;
+        ALTER TABLE expenses ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) DEFAULT 'pending' 
+            CHECK (approval_status IN ('pending', 'approved', 'rejected'));
+        ALTER TABLE expenses ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES staff(id);
+        ALTER TABLE expenses ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE;
+        ALTER TABLE expenses ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+    END IF;
+END $$;
+
+-- Accounting Periods and Locking
+CREATE TABLE IF NOT EXISTS accounting_periods (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  branch_id INTEGER NOT NULL REFERENCES branches(id),
+  period_name VARCHAR(50) NOT NULL, -- e.g., "Jan-2024"
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  status VARCHAR(20) DEFAULT 'open' CHECK (status IN ('open', 'closed', 'locked')),
+  closed_at TIMESTAMP WITH TIME ZONE,
+  closed_by UUID REFERENCES staff(id),
+  locked_at TIMESTAMP WITH TIME ZONE,
+  locked_by UUID REFERENCES staff(id),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(branch_id, period_name)
+);
+
+-- Function to check if a date is within a locked period
+CREATE OR REPLACE FUNCTION check_period_lock()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_locked BOOLEAN;
+  v_date DATE;
+  v_branch_id INTEGER;
+BEGIN
+  -- Determine date and branch based on table
+  IF TG_TABLE_NAME = 'expenses' THEN
+    v_date := NEW.expense_date;
+    v_branch_id := NEW.branch_id;
+  ELSIF TG_TABLE_NAME = 'accounting_journal_entries' THEN
+    v_date := NEW.entry_date;
+    v_branch_id := NEW.branch_id;
+  ELSIF TG_TABLE_NAME = 'payment_receipts' THEN
+    v_date := NEW.receipt_date;
+    v_branch_id := NEW.branch_id;
+  ELSE
+    RETURN NEW;
+  END IF;
+
+  SELECT EXISTS(
+    SELECT 1 FROM accounting_periods
+    WHERE branch_id = v_branch_id
+    AND v_date BETWEEN start_date AND end_date
+    AND status IN ('closed', 'locked')
+  ) INTO v_locked;
+
+  IF v_locked THEN
+    RAISE EXCEPTION 'Action prohibited: The accounting period for this date is closed or locked.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Apply period lock triggers to key financial tables
+DO $$
+BEGIN
+    -- For Expenses
+    IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'expenses') THEN
+        CREATE TRIGGER trg_check_lock_expenses
+        BEFORE INSERT OR UPDATE OR DELETE ON expenses
+        FOR EACH ROW EXECUTE FUNCTION check_period_lock();
+    END IF;
+
+    -- For Journal Entries
+    IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'accounting_journal_entries') THEN
+        CREATE TRIGGER trg_check_lock_journal
+        BEFORE INSERT OR UPDATE OR DELETE ON accounting_journal_entries
+        FOR EACH ROW EXECUTE FUNCTION check_period_lock();
+    END IF;
+END $$;
+
+-- VAT / Tax summaries
+CREATE TABLE IF NOT EXISTS tax_summaries (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  branch_id INTEGER NOT NULL REFERENCES branches(id),
+  tax_period_name VARCHAR(50) NOT NULL,
+  period_start DATE NOT NULL,
+  period_end DATE NOT NULL,
+  tax_type VARCHAR(20) CHECK (tax_type IN ('VAT', 'WHT', 'PAYE', 'CATERING_LEVY')),
+  taxable_amount DECIMAL(15,2) DEFAULT 0,
+  tax_amount DECIMAL(15,2) DEFAULT 0,
+  is_filed BOOLEAN DEFAULT false,
+  filed_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category_id);
+CREATE INDEX IF NOT EXISTS idx_accounting_periods_date ON accounting_periods(start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_tax_summaries_branch_period ON tax_summaries(branch_id, tax_period_name);
+
+-- Comments
+COMMENT ON TABLE expense_categories IS 'Categorization for operational expenses';
+COMMENT ON TABLE accounting_periods IS 'Controls over financial periods (closing and locking tasks)';
+COMMENT ON TABLE tax_summaries IS 'Consolidated tax figures for branch compliance';

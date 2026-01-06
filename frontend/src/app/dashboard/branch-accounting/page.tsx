@@ -5,11 +5,12 @@ import { useAuth, UserRole } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { financeAPI, storeAPI, accountingAPI } from '@/lib/api';
+import { financeAPI, storeAPI, accountingAPI, auditAPI } from '@/lib/api';
 import {
     DollarSign, TrendingUp, TrendingDown, FileText,
     PieChart, CreditCard, RefreshCw, Calendar, ArrowUpRight,
-    ArrowDownRight, CheckCircle, Clock, AlertTriangle, Receipt
+    ArrowDownRight, CheckCircle, Clock, AlertTriangle, Receipt,
+    Landmark, History, Book, Shield, FileSpreadsheet, ArrowRightLeft
 } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';
@@ -36,34 +37,33 @@ export default function BranchAccountingDashboard() {
 
         setIsLoading(true);
         try {
-            // Fetch real data from APIs
-            // Note: Using existing endpoints or assuming standard structure. 
-            // If specific endpoints like 'getAccountingDashboard' don't exist, we aggregate.
-            const [financeRes, invoicesRes] = await Promise.allSettled([
-                financeAPI.getDashboard ? financeAPI.getDashboard(currentBranchId) : Promise.resolve({ data: null }),
-                financeAPI.getInvoices ? financeAPI.getInvoices({ branch_id: currentBranchId, status: 'PENDING' }) : Promise.resolve({ data: [] })
+            // Fetch real data from accounting and audit APIs
+            const [plRes, auditRes, invoicesRes] = await Promise.allSettled([
+                accountingAPI.getProfitAndLoss({ branch_id: currentBranchId }),
+                auditAPI.getPendingApprovals(currentBranchId),
+                financeAPI.getInvoices({ branch_id: currentBranchId, status: 'PENDING' })
             ]);
 
-            const financeData = financeRes.status === 'fulfilled' ? financeRes.value?.data || {} : {};
+            const plData = plRes.status === 'fulfilled' ? plRes.value?.data || {} : {};
+            const auditData = auditRes.status === 'fulfilled' ? auditRes.value?.data || [] : [];
             const pendingInvoicesList = invoicesRes.status === 'fulfilled' ? invoicesRes.value?.data || [] : [];
 
-            // Calculate or extract stats
-            // Fallback values used if API response is different than expected
             setStats({
-                totalRevenue: financeData.total_revenue || 0,
-                totalExpenses: financeData.total_expenses || 0,
-                netProfit: (financeData.total_revenue || 0) - (financeData.total_expenses || 0),
-                pendingInvoices: pendingInvoicesList.length,
-                dailyTransactions: financeData.daily_transaction_count || 0
+                totalRevenue: plData.revenue_total || 0,
+                totalExpenses: plData.expense_total || 0,
+                netProfit: plData.net_profit || 0,
+                pendingInvoices: auditData.length,
+                dailyTransactions: plData.transaction_count || 0
             });
 
-            // Mocking recent transactions from invoice data if available, or empty
             setRecentTransactions(pendingInvoicesList.slice(0, 5));
 
-            // Alerts based on pending items
             const newAlerts = [];
+            if (auditData.length > 0) {
+                newAlerts.push({ type: 'warning', message: `${auditData.length} records requiring audit approval`, time: 'Action required' });
+            }
             if (pendingInvoicesList.length > 5) {
-                newAlerts.push({ type: 'warning', message: `${pendingInvoicesList.length} invoices pending approval`, time: 'Action required' });
+                newAlerts.push({ type: 'info', message: `${pendingInvoicesList.length} invoices pending payment`, time: 'Ongoing' });
             }
             setPendingAlerts(newAlerts);
 
@@ -90,8 +90,46 @@ export default function BranchAccountingDashboard() {
         { label: 'Total Revenue', value: stats.totalRevenue.toLocaleString() + ' KES', icon: DollarSign, color: 'text-emerald-600' },
         { label: 'Total Expenses', value: stats.totalExpenses.toLocaleString() + ' KES', icon: ArrowDownRight, color: 'text-rose-600' },
         { label: 'Net Profit', value: stats.netProfit.toLocaleString() + ' KES', icon: TrendingUp, color: 'text-amber-600' },
-        { label: 'Pending Invoices', value: stats.pendingInvoices.toString(), icon: FileText },
-        { label: 'Transactions', value: stats.dailyTransactions.toString(), icon: RefreshCw },
+        { label: 'Pending Approvals', value: stats.pendingInvoices.toString(), icon: CheckCircle, color: 'text-blue-600' },
+        { label: 'Daily Transactions', value: stats.dailyTransactions.toString(), icon: History, color: 'text-stone-500' },
+    ];
+    const accountingModules = [
+        {
+            title: 'Stock Management',
+            icon: PieChart,
+            links: [
+                { label: 'Stock Take', href: '/dashboard/branch-accounting/stock-take' },
+                { label: 'Variance Analysis', href: '/dashboard/branch-accounting/reports' }
+            ],
+            stats: '3 items low stock'
+        },
+        {
+            title: 'Credit & Bills',
+            icon: CreditCard,
+            links: [
+                { label: 'Employee Credit', href: '/dashboard/branch-accounting/credit-bills/employee' },
+                { label: 'Customer Aging', href: '/dashboard/branch-accounting/credit-bills/customer' }
+            ],
+            stats: 'KES 45k overdue'
+        },
+        {
+            title: 'Banking',
+            icon: Landmark,
+            links: [
+                { label: 'Bank Deposits', href: '/dashboard/branch-accounting/banking/deposits' },
+                { label: 'Bank Reconciliation', href: '/dashboard/branch-accounting/banking/reconciliation' }
+            ],
+            stats: 'Reconciled 2h ago'
+        },
+        {
+            title: 'Audit & Reports',
+            icon: History,
+            links: [
+                { label: 'Financial Reports', href: '/dashboard/branch-accounting/reports' },
+                { label: 'Audit Trail', href: '/dashboard/branch-accounting/audit-trail' }
+            ],
+            stats: 'Period: Jan 2024'
+        }
     ];
 
     return (
@@ -127,23 +165,75 @@ export default function BranchAccountingDashboard() {
                         ))}
                     </div>
 
-                    {/* Quick Access */}
-                    <div className="card-elevated p-5">
-                        <div className="section-header mb-4">
-                            <h2 className="section-title">Quick Actions</h2>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-                            {quickLinks.map((link) => (
-                                <Link key={link.href} href={link.href}>
-                                    <div className="action-card group py-4">
-                                        <div className="action-card-icon w-10 h-10 bg-stone-50 group-hover:bg-white">
-                                            <link.icon className="h-4 w-4" />
-                                        </div>
-                                        <p className="action-card-label text-[12px]">{link.label}</p>
-                                        <p className="text-[10px] text-stone-400 mt-0.5">{link.desc}</p>
+                    {/* Modules Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                        {accountingModules.map((module) => (
+                            <div key={module.title} className="card-elevated p-5 hover:shadow-md transition-shadow">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="h-10 w-10 rounded-xl bg-stone-50 flex items-center justify-center">
+                                        <module.icon className="h-5 w-5 text-stone-600" />
                                     </div>
-                                </Link>
-                            ))}
+                                    <div>
+                                        <h3 className="text-[14px] font-semibold text-stone-900">{module.title}</h3>
+                                        <p className="text-[11px] text-stone-500 font-medium">{module.stats}</p>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    {module.links.map((link) => (
+                                        <Link key={link.href} href={link.href}>
+                                            <div className="flex items-center justify-between p-2.5 rounded-lg hover:bg-stone-50 group transition-colors">
+                                                <span className="text-[12px] text-stone-600 group-hover:text-stone-900 font-medium">{link.label}</span>
+                                                <ArrowUpRight className="h-3 w-3 text-stone-300 group-hover:text-stone-600 transition-all opacity-0 group-hover:opacity-100" />
+                                            </div>
+                                        </Link>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Quick Access */}
+                    <div className="card-elevated p-5 bg-gradient-to-br from-stone-900 to-stone-800 text-white">
+                        <div className="section-header mb-4 border-white/10">
+                            <h2 className="section-title text-white">Daily Operations</h2>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                            <Link href="/dashboard/branch-accounting/stock-take">
+                                <div className="p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-center transition-all group">
+                                    <h4 className="text-[12px] font-semibold mb-1 text-white">New Stock Take</h4>
+                                    <p className="text-[10px] text-stone-400">Inventory check</p>
+                                </div>
+                            </Link>
+                            <Link href="/dashboard/branch-accounting/invoices/new">
+                                <div className="p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-center transition-all group">
+                                    <h4 className="text-[12px] font-semibold mb-1 text-white">New Invoice</h4>
+                                    <p className="text-[10px] text-stone-400">Step-by-step</p>
+                                </div>
+                            </Link>
+                            <Link href="/dashboard/branch-accounting/quotations/new">
+                                <div className="p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-center transition-all group">
+                                    <h4 className="text-[12px] font-semibold mb-1 text-white">New Quotation</h4>
+                                    <p className="text-[10px] text-stone-400">Draft estimate</p>
+                                </div>
+                            </Link>
+                            <Link href="/dashboard/branch-accounting/accounting-tools/journal-entries/new">
+                                <div className="p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-center transition-all group">
+                                    <h4 className="text-[12px] font-semibold mb-1 text-white">New Journal</h4>
+                                    <p className="text-[10px] text-stone-400">Double entry</p>
+                                </div>
+                            </Link>
+                            <Link href="/dashboard/auditor/approvals">
+                                <div className="p-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-center transition-all group">
+                                    <h4 className="text-[12px] font-semibold mb-1 text-amber-200">Approvals</h4>
+                                    <p className="text-[10px] text-amber-400/70">Auditor sign-off</p>
+                                </div>
+                            </Link>
+                            <Link href="/dashboard/branch-accounting/accounting-tools/period-management">
+                                <div className="p-3 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-center transition-all group">
+                                    <h4 className="text-[12px] font-semibold mb-1 text-blue-200">Close Period</h4>
+                                    <p className="text-[10px] text-blue-400/70">Month-end lock</p>
+                                </div>
+                            </Link>
                         </div>
                     </div>
 
