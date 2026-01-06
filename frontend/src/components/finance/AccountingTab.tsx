@@ -69,7 +69,7 @@ export const AccountingTab = () => {
                 </Button>
                 <Button
                     variant={view === 'journals' ? 'default' : 'outline'}
-                    onClick={() => setView('journals'}
+                    onClick={() => setView('journals')}
                     className={view === 'journals' ? 'bg-stone-900 text-white' : ''}
                 >
                     Journal Entries

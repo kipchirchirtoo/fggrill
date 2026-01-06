@@ -58,6 +58,7 @@ export enum UserRole {
 
   // Finance & Administration
   ACCOUNTANT = 'accountant',
+  BRANCH_ACCOUNTANT = 'branch_accountant',
   AUDITOR = 'auditor',
   FINANCE_MANAGER = 'finance_manager',
   HR_MANAGER = 'hr_manager',

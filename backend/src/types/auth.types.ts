@@ -7,6 +7,7 @@ export enum UserRole {
   RESTAURANT = 'restaurant',
   MAINTENANCE = 'maintenance',
   ACCOUNTANT = 'accountant',
+  BRANCH_ACCOUNTANT = 'branch_accountant',
   AUDITOR = 'auditor',
   CENTRAL_STOREKEEPER = 'central_storekeeper',
   BRANCH_STOREKEEPER = 'branch_storekeeper',

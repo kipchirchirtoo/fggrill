@@ -432,7 +432,15 @@ export default function InventoryPage() {
   const totalValue = items.reduce((sum, i) => sum + ((i.quantity || 0) * (i.cost_price || 0)), 0);
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER]}>
+    <ProtectedRoute
+      allowedRoles={[
+        UserRole.SUPER_ADMIN,
+        UserRole.GENERAL_MANAGER,
+        UserRole.BRANCH_MANAGER,
+        UserRole.CENTRAL_STOREKEEPER,
+        UserRole.BRANCH_STOREKEEPER
+      ]}
+    >
       <DashboardLayout>
         <div className="space-y-6">
           {/* Header */}

@@ -395,7 +395,16 @@ export default function BranchStorekeeperPage() {
   }
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.RESTAURANT, UserRole.HOUSEKEEPING]}>
+    <ProtectedRoute
+      allowedRoles={[
+        UserRole.SUPER_ADMIN,
+        UserRole.GENERAL_MANAGER,
+        UserRole.CENTRAL_STOREKEEPER,
+        UserRole.BRANCH_STOREKEEPER,
+        UserRole.RESTAURANT,
+        UserRole.HOUSEKEEPING
+      ]}
+    >
       <DashboardLayout>
         <div className="space-y-6">
           {/* Header */}

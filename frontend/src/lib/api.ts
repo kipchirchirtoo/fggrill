@@ -2622,6 +2622,15 @@ export const accountingAPI = {
     return response.json();
   },
 
+  getChartOfAccounts: async (filters?: any) => {
+    const params = new URLSearchParams();
+    if (filters?.type) params.append('type', filters.type);
+    if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
+
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/chart-of-accounts?${params}`);
+    return response.json();
+  },
+
   createJournalEntry: async (entry: any) => {
     const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/journal-entries`, {
       method: 'POST',

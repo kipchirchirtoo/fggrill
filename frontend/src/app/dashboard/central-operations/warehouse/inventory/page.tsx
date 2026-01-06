@@ -65,6 +65,11 @@ interface InventoryItem {
   reorder_level: number;
   value: number;
   branch_allocations: Record<string, number>;
+  barcode?: string;
+  description?: string;
+  par_stock?: number;
+  cost_price?: number;
+  selling_price?: number;
 }
 
 interface Branch {
@@ -103,7 +108,6 @@ function CentralWarehouseInventoryContent() {
   const [formReorderLevel, setFormReorderLevel] = useState(10);
   const [formValue, setFormValue] = useState(0);
   const [formCostPrice, setFormCostPrice] = useState(0);
-  const [skuPreview, setSkuPreview] = useState('FGH-BAR-ITEM-XXXX');
   const [skuPreview, setSkuPreview] = useState('FGH-BAR-ITEM-XXXX');
   const [useAutoSku, setUseAutoSku] = useState(true);
   const [formDescription, setFormDescription] = useState('');
