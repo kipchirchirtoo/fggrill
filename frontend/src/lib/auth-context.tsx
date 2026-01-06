@@ -242,7 +242,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       [UserRole.POS_KITCHEN]: '/dashboard/pos-kitchen',
       [UserRole.KITCHEN]: '/dashboard/kitchen',
       [UserRole.BARTENDER]: '/dashboard/bar',
-      [UserRole.ACCOUNTANT]: '/dashboard/finance',
+      [UserRole.ACCOUNTANT]: '/dashboard/branch-accounting',
       [UserRole.BRANCH_ACCOUNTANT]: '/dashboard/branch-accounting',
       [UserRole.AUDITOR]: '/dashboard/auditor',
       [UserRole.CASHIER]: '/dashboard/cashier',
