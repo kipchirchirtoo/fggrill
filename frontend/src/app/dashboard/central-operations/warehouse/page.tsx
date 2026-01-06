@@ -113,7 +113,7 @@ function WarehouseDashboardContent() {
                 <IOSCard className="lg:col-span-2 overflow-hidden">
                     <div className="p-4 border-b flex justify-between items-center">
                         <h2 className="font-semibold text-gray-800">Recent Activity</h2>
-                        <Link href="/dashboard/central-operations/warehouse/requests">
+                        <Link href="/dashboard/central-operations/warehouse/transfers?status=pending">
                             <span className="text-sm text-blue-600 hover:underline flex items-center">
                                 View All <ChevronRight className="h-4 w-4" />
                             </span>
@@ -174,7 +174,7 @@ function WarehouseDashboardContent() {
                     title="Review Requests"
                     description="Approve or reject branch stock requests"
                     icon={<ClipboardList className="h-5 w-5" />}
-                    href="/dashboard/central-operations/warehouse/requests"
+                    href="/dashboard/central-operations/warehouse/transfers?status=pending"
                     color="blue"
                 />
                 <QuickActionCard

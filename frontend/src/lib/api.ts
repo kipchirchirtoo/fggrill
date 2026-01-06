@@ -2071,6 +2071,8 @@ export const financeAPI = {
   createTransaction: (data: any) => fetchAPI<any>('/finance/transactions', { method: 'POST', body: JSON.stringify(data) }),
   verifyPayment: (paymentId: string, status: 'completed' | 'failed', notes?: string) =>
     fetchAPI<any>(`/cashier/verify-payment/${paymentId}`, { method: 'POST', body: JSON.stringify({ status, notes }) }),
+  recordDeposit: (data: { amount: number; bank_account_id: string; reference: string; notes?: string; date?: string; branch_id?: number }) =>
+    fetchPythonAPI<any>('/finance/deposits', { method: 'POST', body: JSON.stringify(data) }),
 
   // Expense Management
   getExpenses: (params?: any) => {
@@ -2258,6 +2260,7 @@ export const reportsAPI = {
     });
   }
 };
+
 
 // =====================================================
 // AUDIT API

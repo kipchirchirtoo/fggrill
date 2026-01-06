@@ -265,6 +265,37 @@ class FinanceService:
             logger.error(f"Error creating invoice: {e}")
             raise
     
+    def record_deposit(self, data: Dict[str, Any], user_id: str) -> Dict:
+        """Record a bank deposit"""
+        try:
+            # Create finance transaction
+            deposit = {
+                'transaction_type': 'deposit',
+                'amount': data['amount'],
+                'description': f"Bank Deposit - {data.get('reference', 'N/A')}",
+                'payment_method': 'bank_transfer',
+                'payment_reference': data.get('reference'),
+                'payment_status': 'completed',
+                'notes': data.get('notes', ''),
+                'created_by': user_id
+            }
+            
+            if data.get('date'):
+                deposit['created_at'] = data['date']
+            if data.get('branch_id'):
+                deposit['branch_id'] = data['branch_id']
+            
+            result = self.supabase.table('finance_transactions').insert(deposit).execute()
+            
+            # Optionally create a journal entry for double-entry bookkeeping
+            # This would debit Cash and credit the appropriate account
+            # For now, we'll just return the transaction
+            
+            return result.data[0] if result.data else {}
+        except Exception as e:
+            logger.error(f"Error recording deposit: {e}")
+            raise
+    
     # ==================== CASH FLOW ====================
     
     def get_cash_flow(self, params: Dict[str, Any]) -> Dict:

@@ -281,10 +281,79 @@ class BrandedPDFGenerator:
             'inventory_discrepancy': self._generate_inventory_discrepancy_report,
             'procurement_analysis': self._generate_procurement_analysis_report,
             'exception_logs': self._generate_exception_logs_report,
+            'reconciliation_audit': self._generate_reconciliation_audit_report,
         }
         
         generator = generators.get(report_type, self._generate_generic_report)
         return generator(data, filters)
+
+    def _generate_reconciliation_audit_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Reconciliation Audit Report"""
+        elements = []
+        
+        date_range = f"As of {datetime.now().strftime('%d/%m/%Y')}"
+        elements.extend(self._create_header("RECONCILIATION AUDIT REPORT", date_range))
+        
+        # Summary
+        summary = data.get('summary', {})
+        summary_data = [
+            ['AUDIT SUMMARY', '', '', ''],
+            ['Total Discrepancy:', self._format_currency(summary.get('total_discrepancy') or 0),
+             'Reconciled Accounts:', str(summary.get('reconciled_count') or 0)],
+            ['Pending Accounts:', str(summary.get('pending_count') or 0),
+             'Discrepancy Accounts:', str(summary.get('discrepancy_count') or 0)],
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
+        summary_table.setStyle(TableStyle([
+            ('SPAN', (0, 0), (-1, 0)),
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 1), (2, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Reconciliations Table
+        elements.append(Paragraph("<b>ACCOUNT RECONCILIATIONS</b>", self.styles['SectionHeader']))
+        
+        headers = ['Account Name', 'Type', 'Book Balance', 'Bank Balance', 'Difference', 'Status']
+        rec_data = [headers]
+        
+        for rec in data.get('reconciliations', []):
+            status = (rec.get('status') or 'Unknown').upper()
+            rec_data.append([
+                str(rec.get('account_name') or '')[:25],
+                str(rec.get('account_type') or '')[:15],
+                self._format_currency(rec.get('book_balance') or 0),
+                self._format_currency(rec.get('bank_balance') or 0),
+                self._format_currency(rec.get('difference') or 0),
+                status
+            ])
+        
+        if len(rec_data) == 1:
+            rec_data.append(['No reconciliation data', '-', '-', '-', '-', '-'])
+        
+        rec_table = Table(rec_data, colWidths=[2*inch, 1*inch, 1.2*inch, 1.2*inch, 1.2*inch, 1*inch])
+        rec_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GREEN),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('ALIGN', (2, 0), (4, -1), 'RIGHT'),
+            ('ALIGN', (-1, 0), (-1, -1), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(rec_table)
+        
+        return self._create_pdf(elements)
 
     def _create_pdf(self, elements: List, filename: str = None, landscape_mode: bool = False) -> str:
         """Create PDF from elements"""

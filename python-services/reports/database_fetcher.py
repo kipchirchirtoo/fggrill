@@ -73,6 +73,56 @@ class DatabaseFetcher:
             logger.error(f"Error fetching {report_type} data: {e}")
             return {'error': str(e)}
 
+    def _fetch_reconciliation_audit(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch reconciliation audit data"""
+        # For now, return mock data as the reconciliations table is not yet fully integrated
+        # In the future, this should query the database
+        
+        data = {
+            'reconciliations': [
+                {
+                    'id': '1',
+                    'account_name': 'Cash - Main Bank Account',
+                    'account_type': 'Asset',
+                    'book_balance': 1250000.00,
+                    'bank_balance': 1248500.00,
+                    'difference': 1500.00,
+                    'last_reconciled': '2024-12-01',
+                    'status': 'discrepancy',
+                    'reconciled_by': 'accountant@famousgate.com'
+                },
+                {
+                    'id': '2',
+                    'account_name': 'Petty Cash',
+                    'account_type': 'Asset',
+                    'book_balance': 50000.00,
+                    'bank_balance': 50000.00,
+                    'difference': 0.00,
+                    'last_reconciled': '2024-12-09',
+                    'status': 'reconciled',
+                    'reconciled_by': 'accountant@famousgate.com'
+                },
+                {
+                    'id': '3',
+                    'account_name': 'Accounts Receivable',
+                    'account_type': 'Asset',
+                    'book_balance': 850000.00,
+                    'bank_balance': 0.00,
+                    'difference': 850000.00,
+                    'last_reconciled': '2024-11-30',
+                    'status': 'pending',
+                    'reconciled_by': None
+                }
+            ],
+            'summary': {
+                'total_discrepancy': 1500.00,
+                'reconciled_count': 1,
+                'pending_count': 1,
+                'discrepancy_count': 1
+            }
+        }
+        return data
+
     def _parse_dates(self, filters: Dict) -> tuple:
         """Parse date filters"""
         # Default to today if no dates provided

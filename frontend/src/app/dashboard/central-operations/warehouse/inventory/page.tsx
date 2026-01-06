@@ -104,7 +104,11 @@ function CentralWarehouseInventoryContent() {
   const [formValue, setFormValue] = useState(0);
   const [formCostPrice, setFormCostPrice] = useState(0);
   const [skuPreview, setSkuPreview] = useState('FGH-BAR-ITEM-XXXX');
+  const [skuPreview, setSkuPreview] = useState('FGH-BAR-ITEM-XXXX');
   const [useAutoSku, setUseAutoSku] = useState(true);
+  const [formDescription, setFormDescription] = useState('');
+  const [formParStock, setFormParStock] = useState(0);
+  const [formSellingPrice, setFormSellingPrice] = useState(0);
 
   // States for dispatch
   const [dispatchBranch, setDispatchBranch] = useState('');
@@ -1231,7 +1235,7 @@ function CentralWarehouseInventoryContent() {
                         required
                       >
                         <option value="">Select Branch</option>
-                        {branches.map((branch) => (
+                        {branchList.map((branch) => (
                           <option key={branch.id} value={branch.id}>
                             {branch.name}
                           </option>

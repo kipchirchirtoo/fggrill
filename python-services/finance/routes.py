@@ -93,6 +93,19 @@ def create_invoice():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@finance_bp.route('/deposits', methods=['POST'])
+def record_deposit():
+    """Record a bank deposit"""
+    try:
+        data = request.get_json()
+        user_id = request.headers.get('X-User-Id', 'system')
+        result = finance_service.record_deposit(data, user_id)
+        return jsonify({'success': True, 'data': result}), 201
+    except Exception as e:
+        logger.error(f"Record deposit error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @finance_bp.route('/cashflow', methods=['GET'])
 def get_cash_flow():
     """Get cash flow report"""
