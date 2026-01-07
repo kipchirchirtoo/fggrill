@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth, UserRole } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -15,7 +15,7 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 
 export default function BankDepositsPage() {
-    const { user, UserRole } = useAuth();
+    const { user } = useAuth();
     const { activeBranchId } = useBranch();
     const [deposits, setDeposits] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
