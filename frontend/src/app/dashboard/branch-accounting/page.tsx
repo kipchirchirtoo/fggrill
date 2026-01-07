@@ -99,27 +99,27 @@ export default function BranchAccountingDashboard() {
             icon: PieChart,
             links: [
                 { label: 'Stock Take', href: '/dashboard/branch-accounting/stock-take' },
-                { label: 'Variance Analysis', href: '/dashboard/branch-accounting/reports' }
+                { label: 'Stock Valuation', href: '/dashboard/branch-accounting/reports?tab=valuation' }
             ],
-            stats: '3 items low stock'
+            stats: 'Inventory oversight'
         },
         {
             title: 'Credit & Bills',
             icon: CreditCard,
             links: [
-                { label: 'Employee Credit', href: '/dashboard/branch-accounting/credit-bills/employee' },
-                { label: 'Customer Aging', href: '/dashboard/branch-accounting/credit-bills/customer' }
+                { label: 'Customer Credit', href: '/dashboard/branch-accounting/credit-bills/customer' },
+                { label: 'Invoices', href: '/dashboard/branch-accounting/invoices' }
             ],
-            stats: 'KES 45k overdue'
+            stats: 'Receivables'
         },
         {
             title: 'Banking',
             icon: Landmark,
             links: [
                 { label: 'Bank Deposits', href: '/dashboard/branch-accounting/banking/deposits' },
-                { label: 'Bank Reconciliation', href: '/dashboard/branch-accounting/banking/reconciliation' }
+                { label: 'Reconciliation', href: '/dashboard/branch-accounting/banking/reconciliation' }
             ],
-            stats: 'Reconciled 2h ago'
+            stats: 'Cash flow'
         },
         {
             title: 'Audit & Reports',
@@ -128,7 +128,7 @@ export default function BranchAccountingDashboard() {
                 { label: 'Financial Reports', href: '/dashboard/branch-accounting/reports' },
                 { label: 'Audit Trail', href: '/dashboard/branch-accounting/audit-trail' }
             ],
-            stats: 'Period: Jan 2024'
+            stats: 'Compliance'
         }
     ];
 
@@ -219,19 +219,13 @@ export default function BranchAccountingDashboard() {
                             <Link href="/dashboard/branch-accounting/accounting-tools/journal-entries/new">
                                 <div className="p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-center transition-all group">
                                     <h4 className="text-[12px] font-semibold mb-1 text-white">New Journal</h4>
-                                    <p className="text-[10px] text-stone-400">Double entry</p>
-                                </div>
-                            </Link>
-                            <Link href="/dashboard/auditor/approvals">
-                                <div className="p-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-center transition-all group">
-                                    <h4 className="text-[12px] font-semibold mb-1 text-amber-200">Approvals</h4>
-                                    <p className="text-[10px] text-amber-400/70">Auditor sign-off</p>
+                                    <p className="text-[10px] text-stone-400">Record entry</p>
                                 </div>
                             </Link>
                             <Link href="/dashboard/branch-accounting/accounting-tools/period-management">
                                 <div className="p-3 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-center transition-all group">
                                     <h4 className="text-[12px] font-semibold mb-1 text-blue-200">Close Period</h4>
-                                    <p className="text-[10px] text-blue-400/70">Month-end lock</p>
+                                    <p className="text-[10px] text-blue-400/70">Month-end</p>
                                 </div>
                             </Link>
                         </div>

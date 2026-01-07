@@ -649,22 +649,22 @@ export function ConsolidatedNav() {
 
       <NavGroup label="Operations" icon={Package} defaultOpen>
         <NavItem
-          href="/dashboard/branch-accounting?tab=inventory"
+          href="/dashboard/branch-accounting/stock-take"
           icon={CheckCircle}
           label="Stock Taking"
-          active={pathname === '/dashboard/branch-accounting' && pathname.includes('tab=inventory')}
+          active={pathname === '/dashboard/branch-accounting/stock-take'}
         />
         <NavItem
-          href="/dashboard/branch-accounting?tab=billing"
+          href="/dashboard/branch-accounting/invoices"
           icon={FileText}
-          label="Billing & Credit"
-          active={pathname === '/dashboard/branch-accounting' && pathname.includes('tab=billing')}
+          label="Invoices & Bills"
+          active={pathname.includes('/dashboard/branch-accounting/invoices') || pathname.includes('/dashboard/branch-accounting/credit-bills')}
         />
         <NavItem
-          href="/dashboard/branch-accounting?tab=payments"
+          href="/dashboard/branch-accounting/payments"
           icon={CreditCard}
-          label="Payment Verification"
-          active={pathname === '/dashboard/branch-accounting' && pathname.includes('tab=payments')}
+          label="Payments"
+          active={pathname === '/dashboard/branch-accounting/payments'}
         />
       </NavGroup>
 
