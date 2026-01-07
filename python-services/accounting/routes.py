@@ -494,7 +494,8 @@ def get_pending_approvals():
         branch_id = request.args.get('branch_id')
         if supabase:
             query = supabase.table('approval_requests').select('*, requested_by_user:staff_profiles!requested_by(*)').eq('status', 'pending')
-            if branch_id: query = query.eq('branch_id', branch_id)
+            if branch_id: 
+                query = query.eq('branch_id', int(branch_id))
             res = query.order('created_at', desc=False).execute()
             return jsonify({'success': True, 'data': res.data})
         return jsonify({'success': False}), 503

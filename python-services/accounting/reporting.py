@@ -21,19 +21,23 @@ class ReportingService:
             # 1. Get Revenues
             revenue_query = self.supabase.table('accounting_journal_items') \
                 .select('*, account:accounting_chart_of_accounts!inner(*)') \
-                .eq('account.category_id', revenue_id) \
-                .execute()
+                .eq('account.category_id', revenue_id)
+            if branch_id:
+                revenue_query = revenue_query.eq('account.branch_id', branch_id)
+            revenue_res = revenue_query.execute()
                 
             # 2. Get Expenses
             expense_query = self.supabase.table('accounting_journal_items') \
                 .select('*, account:accounting_chart_of_accounts!inner(*)') \
-                .eq('account.category_id', expense_id) \
-                .execute()
+                .eq('account.category_id', expense_id)
+            if branch_id:
+                expense_query = expense_query.eq('account.branch_id', branch_id)
+            expense_res = expense_query.execute()
 
             # Aggregate Revenue
             revenue_items = {}
             total_revenue = Decimal('0')
-            for item in revenue_query.data:
+            for item in revenue_res.data:
                 name = item['account']['account_name']
                 amount = Decimal(str(item.get('credit') or 0)) - Decimal(str(item.get('debit') or 0))
                 revenue_items[name] = revenue_items.get(name, Decimal('0')) + amount
@@ -42,9 +46,9 @@ class ReportingService:
             # Aggregate Expenses
             expense_items = {}
             total_expenses = Decimal('0')
-            for item in expense_query.data:
+            for item in expense_res.data:
                 name = item['account']['account_name']
-                amount = Decimal(str(item['debit'])) - Decimal(str(item['credit']))
+                amount = Decimal(str(item.get('debit') or 0)) - Decimal(str(item.get('credit') or 0))
                 expense_items[name] = expense_items.get(name, Decimal('0')) + amount
                 total_expenses += amount
 

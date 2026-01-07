@@ -135,7 +135,8 @@ export const getInvoices = async (
 
     // Add filters
     if (req.query.status && req.query.status !== 'all') {
-      query = query.eq('status', req.query.status);
+      const status = (req.query.status as string).toLowerCase();
+      query = query.eq('status', status);
     }
     if (req.query.guest) {
       query = query.eq('guest_id', req.query.guest);
