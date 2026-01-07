@@ -85,8 +85,8 @@ export default function InvoicesPage() {
     // Mock customers for now since we don't have a full customer DB integrated yet
     // In real app, fetch from guestAPI or a customer API
     const mockCustomers = [
-        { id: '1', name: 'Walk-in Customer' },
-        { id: '2', name: 'Corporate Client A' }
+        { id: '00000000-0000-0000-0000-000000000001', name: 'Walk-in Customer' },
+        { id: '00000000-0000-0000-0000-000000000002', name: 'Corporate Client A' }
     ];
 
     return (

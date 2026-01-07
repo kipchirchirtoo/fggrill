@@ -81,8 +81,8 @@ export default function InvoiceWizard() {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <button
-                                onClick={() => setCustomer({ id: 'G1', name: 'John Doe Ltd' })}
-                                className={`p-4 rounded-xl border-2 text-left transition-all ${customer?.id === 'G1' ? 'border-stone-900 bg-stone-50' : 'border-stone-100 hover:border-stone-200'
+                                onClick={() => setCustomer({ id: '00000000-0000-0000-0000-000000000001', name: 'John Doe Ltd' })}
+                                className={`p-4 rounded-xl border-2 text-left transition-all ${customer?.id === '00000000-0000-0000-0000-000000000001' ? 'border-stone-900 bg-stone-50' : 'border-stone-100 hover:border-stone-200'
                                     }`}
                             >
                                 <User className="h-5 w-5 text-stone-400 mb-2" />

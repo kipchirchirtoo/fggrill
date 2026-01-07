@@ -169,7 +169,7 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
         tax_amount,
         total_amount,
         balance: total_amount,
-        status: 'pending',
+        status: 'unpaid',
         reference,
         notes,
         created_by: req.user?.id
@@ -198,10 +198,13 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
       `)
       .order('invoice_date', { ascending: false });
 
-    if (customer_id) query = query.eq('customer_id', customer_id);
-    if (status) query = query.eq('status', status);
+    if (status) {
+      let statusVal = status as string;
+      if (statusVal === 'pending') statusVal = 'unpaid';
+      query = query.eq('status', statusVal);
+    }
     if (overdue === 'true') {
-      query = query.lt('due_date', new Date().toISOString().split('T')[0]).eq('status', 'pending');
+      query = query.lt('due_date', new Date().toISOString().split('T')[0]).eq('status', 'unpaid');
     }
 
     const { data, error } = await query;
@@ -233,7 +236,7 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
         tax_amount,
         total_amount,
         balance: total_amount,
-        status: 'pending',
+        status: 'unpaid',
         reference,
         notes,
         created_by: req.user?.id
@@ -262,10 +265,13 @@ export const getBills = async (req: Request, res: Response, next: NextFunction):
       `)
       .order('bill_date', { ascending: false });
 
-    if (vendor_id) query = query.eq('vendor_id', vendor_id);
-    if (status) query = query.eq('status', status);
+    if (status) {
+      let statusVal = status as string;
+      if (statusVal === 'pending') statusVal = 'unpaid';
+      query = query.eq('status', statusVal);
+    }
     if (overdue === 'true') {
-      query = query.lt('due_date', new Date().toISOString().split('T')[0]).eq('status', 'pending');
+      query = query.lt('due_date', new Date().toISOString().split('T')[0]).eq('status', 'unpaid');
     }
 
     const { data, error } = await query;
@@ -288,7 +294,8 @@ export const createBankTransaction = async (req: Request, res: Response, next: N
       .insert([{
         bank_account_id,
         transaction_date,
-        amount,
+        debit_amount: transaction_type === 'debit' ? amount : 0,
+        credit_amount: transaction_type === 'credit' ? amount : 0,
         transaction_type, // 'credit' or 'debit'
         reference,
         description,
@@ -402,16 +409,16 @@ export const getAccountingDashboard = async (req: Request, res: Response, next: 
     const dashboard = {
       receivables: {
         total: invoices?.reduce((sum, inv) => sum + (inv.balance || 0), 0) || 0,
-        overdue: invoices?.filter(inv => inv.status === 'pending' && inv.due_date < today)
+        overdue: invoices?.filter(inv => inv.status === 'unpaid' && inv.due_date < today)
           .reduce((sum, inv) => sum + (inv.balance || 0), 0) || 0,
-        current: invoices?.filter(inv => inv.status === 'pending' && inv.due_date >= today)
+        current: invoices?.filter(inv => inv.status === 'unpaid' && inv.due_date >= today)
           .reduce((sum, inv) => sum + (inv.balance || 0), 0) || 0
       },
       payables: {
         total: bills?.reduce((sum, bill) => sum + (bill.balance || 0), 0) || 0,
-        overdue: bills?.filter(bill => bill.status === 'pending' && bill.due_date < today)
+        overdue: bills?.filter(bill => bill.status === 'unpaid' && bill.due_date < today)
           .reduce((sum, bill) => sum + (bill.balance || 0), 0) || 0,
-        current: bills?.filter(bill => bill.status === 'pending' && bill.due_date >= today)
+        current: bills?.filter(bill => bill.status === 'unpaid' && bill.due_date >= today)
           .reduce((sum, bill) => sum + (bill.balance || 0), 0) || 0
       },
       cash: {

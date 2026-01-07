@@ -84,9 +84,9 @@ export default function ExpensesPage() {
 
     // Mock vendors
     const mockVendors = [
-        { id: '1', name: 'General Supplies Ltd' },
-        { id: '2', name: 'Local Market Vendor' },
-        { id: '3', name: 'Utility Company' }
+        { id: '00000000-0000-0000-0000-000000000001', name: 'General Supplies Ltd' },
+        { id: '00000000-0000-0000-0000-000000000002', name: 'Local Market Vendor' },
+        { id: '00000000-0000-0000-0000-000000000003', name: 'Utility Company' }
     ];
 
     return (
