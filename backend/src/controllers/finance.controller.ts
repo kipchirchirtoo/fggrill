@@ -136,7 +136,7 @@ export const getInvoices = async (
     // Add filters
     if (req.query.status && req.query.status !== 'all') {
       let status = (req.query.status as string).toLowerCase();
-      if (status === 'pending') status = 'unpaid';
+      if (status === 'pending') status = 'sent';
       query = query.eq('status', status);
     }
     if (req.query.guest) {
