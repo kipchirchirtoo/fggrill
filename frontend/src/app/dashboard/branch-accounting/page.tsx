@@ -41,7 +41,7 @@ export default function BranchAccountingDashboard() {
             const [plRes, auditRes, invoicesRes] = await Promise.allSettled([
                 accountingAPI.getProfitAndLoss({ branch_id: currentBranchId }),
                 auditAPI.getPendingApprovals(currentBranchId),
-                financeAPI.getInvoices({ branch_id: currentBranchId, status: 'PENDING' })
+                financeAPI.getInvoices({ branch_id: currentBranchId, status: 'pending' })
             ]);
 
             const plData = plRes.status === 'fulfilled' ? plRes.value?.data || {} : {};

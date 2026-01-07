@@ -2094,7 +2094,7 @@ export const financeAPI = {
     if (params?.branch_id) query.append('branch_id', String(params.branch_id));
     if (params?.startDate) query.append('startDate', params.startDate);
     if (params?.endDate) query.append('endDate', params.endDate);
-    if (params?.status) query.append('status', params.status);
+    if (params?.status) query.append('status', params.status.toLowerCase());
     return fetchAPI<any>(`/finance/invoices?${query}`);
   },
   createInvoice: (data: any) => fetchAPI<any>('/finance/invoices', { method: 'POST', body: JSON.stringify(data) }),

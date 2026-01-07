@@ -35,7 +35,7 @@ class ReportingService:
             total_revenue = Decimal('0')
             for item in revenue_query.data:
                 name = item['account']['account_name']
-                amount = Decimal(str(item['credit'])) - Decimal(str(item['debit']))
+                amount = Decimal(str(item.get('credit') or 0)) - Decimal(str(item.get('debit') or 0))
                 revenue_items[name] = revenue_items.get(name, Decimal('0')) + amount
                 total_revenue += amount
 
