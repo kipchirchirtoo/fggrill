@@ -31,55 +31,55 @@ router.use(protect);
 
 // Guest and staff routes
 router.get('/invoices/:id',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.RECEPTIONIST]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.RECEPTIONIST]),
   getInvoices
 );
 
 // Staff routes
 router.get('/invoices',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.RECEPTIONIST]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.RECEPTIONIST]),
   getInvoices
 );
 
 router.post('/payments',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.RECEPTIONIST]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.RECEPTIONIST]),
   processPayment
 );
 
 // Finance staff routes
 router.get('/transactions',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getTransactions
 );
 
 router.post('/transactions',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   createTransaction
 );
 
 router.post('/invoices',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   createInvoice
 );
 
 router.get('/overview',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getFinancialOverview
 );
 
 // Dashboard alias for overview
 router.get('/dashboard',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.BRANCH_MANAGER]),
   getFinancialOverview
 );
 
 router.route('/budgets')
-  .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]), getBudgets)
+  .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), getBudgets)
   .post(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), createBudget);
 
 router.route('/expenses')
-  .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]), getExpenses)
-  .post(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER]), createExpense);
+  .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), getExpenses)
+  .post(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER]), createExpense);
 
 router.put('/expenses/:id/approve',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
@@ -90,49 +90,49 @@ router.put('/expenses/:id/approve',
 
 // Cash Flow Report
 router.get('/cashflow',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getCashFlowReport
 );
 
 // Profit & Loss Statement
 router.get('/profit-loss',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getProfitLossStatement
 );
 
 // Revenue by Branch
 router.get('/revenue-by-branch',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getRevenueByBranch
 );
 
 // Budget vs Actual Analysis
 router.get('/budget-analysis',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getBudgetAnalysis
 );
 
 // Tax Summary
 router.get('/tax-summary',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getTaxSummary
 );
 
 // Financial Forecast
 router.get('/forecast',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getFinancialForecast
 );
 
 // Accounts Receivable/Payable
 router.get('/ar-ap',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getAccountsReceivablePayable
 );
 
 // Financial KPIs
 router.get('/kpis',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getFinancialKPIs
 );
 
@@ -140,7 +140,7 @@ router.get('/kpis',
 
 // Balance Sheet
 router.get('/balance-sheet',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   async (req, res) => {
     try {
       // Proxy to Python service or implement locally
@@ -157,7 +157,7 @@ router.get('/balance-sheet',
 
 // Trial Balance
 router.get('/trial-balance',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   async (req, res) => {
     try {
       const axios = require('axios');
@@ -173,7 +173,7 @@ router.get('/trial-balance',
 
 // Journal Entries
 router.get('/journal-entries',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   async (req, res) => {
     try {
       const axios = require('axios');
@@ -188,7 +188,7 @@ router.get('/journal-entries',
 );
 
 router.post('/journal-entries',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   async (req, res) => {
     try {
       const axios = require('axios');
@@ -204,7 +204,7 @@ router.post('/journal-entries',
 
 // Financial Ratios
 router.get('/financial-ratios',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   async (req, res) => {
     try {
       const axios = require('axios');
@@ -220,7 +220,7 @@ router.get('/financial-ratios',
 
 // Aging Report
 router.get('/aging-report',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   async (req, res) => {
     try {
       const axios = require('axios');
@@ -236,7 +236,7 @@ router.get('/aging-report',
 
 // Expense Breakdown
 router.get('/expense-breakdown',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   async (req, res) => {
     try {
       const axios = require('axios');
@@ -252,7 +252,7 @@ router.get('/expense-breakdown',
 
 // Revenue Analysis
 router.get('/revenue-analysis',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   async (req, res) => {
     try {
       const axios = require('axios');
@@ -268,7 +268,7 @@ router.get('/revenue-analysis',
 
 // Comparative Analysis
 router.get('/comparative-analysis',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   async (req, res) => {
     try {
       const axios = require('axios');
@@ -284,7 +284,7 @@ router.get('/comparative-analysis',
 
 // Generate Financial Report
 router.post('/reports/generate',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   async (req, res) => {
     try {
       const axios = require('axios');
@@ -300,7 +300,7 @@ router.post('/reports/generate',
 
 // Get Branches for Finance
 router.get('/branches',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.BRANCH_MANAGER]),
   async (req, res) => {
     try {
       const { data, error } = await supabase.from('branches').select('id, name, code');

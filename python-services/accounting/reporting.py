@@ -9,18 +9,26 @@ class ReportingService:
     def get_profit_and_loss(self, branch_id: int, start_date: str, end_date: str) -> Dict[str, Any]:
         """Calculates P&L for a specific period"""
         try:
+            # 0. Get Category IDs
+            categories_res = self.supabase.table('accounting_account_categories').select('id, name').execute()
+            category_map = {cat['name']: cat['id'] for cat in categories_res.data}
+            revenue_id = category_map.get('REVENUE')
+            expense_id = category_map.get('EXPENSES')
+
+            if not revenue_id or not expense_id:
+                raise Exception("Accounting categories 'REVENUE' or 'EXPENSES' not found")
+
             # 1. Get Revenues
-            # In a real system, we'd query accounting_journal_items joined with CoA category 'REVENUE'
             revenue_query = self.supabase.table('accounting_journal_items') \
                 .select('*, account:accounting_chart_of_accounts!inner(*)') \
-                .eq('account.category_id', 4) \
-                .execute() # category 4 is REVENUE
+                .eq('account.category_id', revenue_id) \
+                .execute()
                 
             # 2. Get Expenses
             expense_query = self.supabase.table('accounting_journal_items') \
                 .select('*, account:accounting_chart_of_accounts!inner(*)') \
-                .eq('account.category_id', 5) \
-                .execute() # category 5 is EXPENSES
+                .eq('account.category_id', expense_id) \
+                .execute()
 
             # Aggregate Revenue
             revenue_items = {}
