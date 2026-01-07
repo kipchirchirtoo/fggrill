@@ -7,7 +7,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { storeAPI } from '@/lib/api';
 import {
   Package, Truck, ClipboardList, RefreshCw, AlertTriangle,
-  TrendingDown, FileText, ShoppingCart, Utensils
+  TrendingDown, FileText, ShoppingCart, Utensils, ArrowDownToLine
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -34,8 +34,11 @@ export default function BranchStoreDashboard() {
 
   const quickLinks = [
     { href: '/dashboard/branch-store/stock', icon: Package, label: 'Stock', desc: 'Current inventory' },
-    { href: '/dashboard/branch-store/stock-out', icon: TrendingDown, label: 'Stock Out', desc: 'Issue items' },
+    { href: '/dashboard/branch-store/receive', icon: ArrowDownToLine, label: 'Receive', desc: 'Confirm delivery' },
+    { href: '/dashboard/branch-store/requests', icon: ShoppingCart, label: 'Requests', desc: 'Order from store' },
+    { href: '/dashboard/branch-store/stock-takes', icon: ClipboardList, label: 'Stock Take', desc: 'Inventory audit' },
     { href: '/dashboard/branch-store/kitchen-usage', icon: Utensils, label: 'Kitchen', desc: 'Kitchen usage' },
+    { href: '/dashboard/branch-store/stock-out', icon: TrendingDown, label: 'Stock Out', desc: 'Issue items' },
     { href: '/dashboard/branch-store/reports', icon: FileText, label: 'Reports', desc: 'Analytics' },
   ];
 

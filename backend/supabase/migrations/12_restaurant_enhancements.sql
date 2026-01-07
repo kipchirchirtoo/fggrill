@@ -288,24 +288,24 @@ CREATE TABLE restaurant_item_station_routing (
 -- -- ============ POS FEATURES ============
 -- 
 -- -- Discounts and promotions
--- CREATE TABLE restaurant_discounts (
---   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
---   code TEXT UNIQUE,
---   name TEXT NOT NULL,
---   description TEXT,
---   discount_type TEXT NOT NULL, -- 'percentage', 'fixed_amount'
---   discount_value DECIMAL(10, 2) NOT NULL,
---   min_order_amount DECIMAL(10, 2) DEFAULT 0,
---   max_discount_amount DECIMAL(10, 2),
---   valid_from TIMESTAMP WITH TIME ZONE,
-  valid_until TIMESTAMP WITH TIME ZONE,
-  is_active BOOLEAN DEFAULT true NOT NULL,
-  usage_limit INTEGER,
-  times_used INTEGER DEFAULT 0,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
-  updated_at TIMESTAMP WITH TIME ZONE,
-  
-  CONSTRAINT valid_discount CHECK (discount_value > 0)
+CREATE TABLE IF NOT EXISTS restaurant_discounts (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    code TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    discount_type TEXT NOT NULL, -- 'percentage', 'fixed_amount'
+    discount_value DECIMAL(10, 2) NOT NULL,
+    min_order_amount DECIMAL(10, 2) DEFAULT 0,
+    max_discount_amount DECIMAL(10, 2),
+    valid_from TIMESTAMP WITH TIME ZONE,
+    valid_until TIMESTAMP WITH TIME ZONE,
+    is_active BOOLEAN DEFAULT true NOT NULL,
+    usage_limit INTEGER,
+    times_used INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE,
+    
+    CONSTRAINT valid_discount CHECK (discount_value > 0)
 );
 
 -- Split bill records
@@ -420,34 +420,34 @@ CREATE TABLE restaurant_purchase_order_items (
 );
 
 -- Enhanced inventory items with more tracking
--- ALTER TABLE restaurant_inventory_items 
---   ADD COLUMN IF NOT EXISTS sku TEXT UNIQUE,
---   ADD COLUMN IF NOT EXISTS category TEXT,
---   ADD COLUMN IF NOT EXISTS supplier_id UUID REFERENCES restaurant_suppliers(id),
---   ADD COLUMN IF NOT EXISTS reorder_level INTEGER DEFAULT 0,
---   ADD COLUMN IF NOT EXISTS reorder_quantity INTEGER DEFAULT 0,
---   ADD COLUMN IF NOT EXISTS unit_cost DECIMAL(10, 2) DEFAULT 0,
---   ADD COLUMN IF NOT EXISTS storage_location TEXT,
---   ADD COLUMN IF NOT EXISTS barcode TEXT,
---   ADD COLUMN IF NOT EXISTS batch_tracking BOOLEAN DEFAULT false,
---   ADD COLUMN IF NOT EXISTS expiry_tracking BOOLEAN DEFAULT false;
+ALTER TABLE restaurant_inventory_items 
+   ADD COLUMN IF NOT EXISTS sku TEXT UNIQUE,
+   ADD COLUMN IF NOT EXISTS category TEXT,
+   ADD COLUMN IF NOT EXISTS supplier_id UUID REFERENCES restaurant_suppliers(id),
+   ADD COLUMN IF NOT EXISTS reorder_level INTEGER DEFAULT 0,
+   ADD COLUMN IF NOT EXISTS reorder_quantity INTEGER DEFAULT 0,
+   ADD COLUMN IF NOT EXISTS unit_cost DECIMAL(10, 2) DEFAULT 0,
+   ADD COLUMN IF NOT EXISTS storage_location TEXT,
+   ADD COLUMN IF NOT EXISTS barcode TEXT,
+   ADD COLUMN IF NOT EXISTS batch_tracking BOOLEAN DEFAULT false,
+   ADD COLUMN IF NOT EXISTS expiry_tracking BOOLEAN DEFAULT false;
 -- 
 -- -- Inventory batches (for FIFO/LIFO)
--- CREATE TABLE restaurant_inventory_batches (
---   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
---   inventory_item_id UUID REFERENCES restaurant_inventory_items(id) ON DELETE CASCADE,
---   batch_number TEXT NOT NULL,
---   quantity INTEGER NOT NULL,
-  remaining_quantity INTEGER NOT NULL,
-  unit_cost DECIMAL(10, 2) NOT NULL,
-  received_date DATE NOT NULL,
-  expiry_date DATE,
-  supplier_id UUID REFERENCES restaurant_suppliers(id),
-  notes TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
-  
-  CONSTRAINT valid_quantity CHECK (quantity > 0 AND remaining_quantity >= 0 AND remaining_quantity <= quantity),
-  CONSTRAINT valid_cost CHECK (unit_cost >= 0)
+CREATE TABLE IF NOT EXISTS restaurant_inventory_batches (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    inventory_item_id UUID REFERENCES restaurant_inventory_items(id) ON DELETE CASCADE,
+    batch_number TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    remaining_quantity INTEGER NOT NULL,
+    unit_cost DECIMAL(10, 2) NOT NULL,
+    received_date DATE NOT NULL,
+    expiry_date DATE,
+    supplier_id UUID REFERENCES restaurant_suppliers(id),
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+    
+    CONSTRAINT valid_quantity CHECK (quantity > 0 AND remaining_quantity >= 0 AND remaining_quantity <= quantity),
+    CONSTRAINT valid_cost CHECK (unit_cost >= 0)
 );
 
 -- Recipe management
@@ -586,38 +586,38 @@ CREATE TABLE restaurant_delivery_drivers (
 );
 
 -- Enhanced orders for delivery
--- ALTER TABLE restaurant_orders 
---   ADD COLUMN IF NOT EXISTS delivery_address TEXT,
---   ADD COLUMN IF NOT EXISTS delivery_zone_id UUID REFERENCES restaurant_delivery_zones(id),
---   ADD COLUMN IF NOT EXISTS delivery_fee DECIMAL(10, 2) DEFAULT 0,
---   ADD COLUMN IF NOT EXISTS delivery_driver_id UUID REFERENCES restaurant_delivery_drivers(id),
---   ADD COLUMN IF NOT EXISTS delivery_status delivery_status,
---   ADD COLUMN IF NOT EXISTS pickup_time TIMESTAMP WITH TIME ZONE,
---   ADD COLUMN IF NOT EXISTS estimated_delivery_time TIMESTAMP WITH TIME ZONE,
---   ADD COLUMN IF NOT EXISTS actual_delivery_time TIMESTAMP WITH TIME ZONE,
---   ADD COLUMN IF NOT EXISTS delivery_notes TEXT,
---   ADD COLUMN IF NOT EXISTS tip_amount DECIMAL(10, 2) DEFAULT 0,
---   ADD COLUMN IF NOT EXISTS discount_id UUID REFERENCES restaurant_discounts(id),
---   ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(10, 2) DEFAULT 0,
---   ADD COLUMN IF NOT EXISTS tax_amount DECIMAL(10, 2) DEFAULT 0,
---   ADD COLUMN IF NOT EXISTS service_charge DECIMAL(10, 2) DEFAULT 0,
---   ADD COLUMN IF NOT EXISTS grand_total DECIMAL(10, 2) GENERATED ALWAYS AS (
---     total_amount + COALESCE(delivery_fee, 0) + COALESCE(tax_amount, 0) + COALESCE(service_charge, 0) + COALESCE(tip_amount, 0) - COALESCE(discount_amount, 0)
---   ) STORED;
+ALTER TABLE restaurant_orders 
+   ADD COLUMN IF NOT EXISTS delivery_address TEXT,
+   ADD COLUMN IF NOT EXISTS delivery_zone_id UUID REFERENCES restaurant_delivery_zones(id),
+   ADD COLUMN IF NOT EXISTS delivery_fee DECIMAL(10, 2) DEFAULT 0,
+   ADD COLUMN IF NOT EXISTS delivery_driver_id UUID REFERENCES restaurant_delivery_drivers(id),
+   ADD COLUMN IF NOT EXISTS delivery_status delivery_status,
+   ADD COLUMN IF NOT EXISTS pickup_time TIMESTAMP WITH TIME ZONE,
+   ADD COLUMN IF NOT EXISTS estimated_delivery_time TIMESTAMP WITH TIME ZONE,
+   ADD COLUMN IF NOT EXISTS actual_delivery_time TIMESTAMP WITH TIME ZONE,
+   ADD COLUMN IF NOT EXISTS delivery_notes TEXT,
+   ADD COLUMN IF NOT EXISTS tip_amount DECIMAL(10, 2) DEFAULT 0,
+   ADD COLUMN IF NOT EXISTS discount_id UUID REFERENCES restaurant_discounts(id),
+   ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(10, 2) DEFAULT 0,
+   ADD COLUMN IF NOT EXISTS tax_amount DECIMAL(10, 2) DEFAULT 0,
+   ADD COLUMN IF NOT EXISTS service_charge DECIMAL(10, 2) DEFAULT 0,
+   ADD COLUMN IF NOT EXISTS grand_total DECIMAL(10, 2) GENERATED ALWAYS AS (
+     total_amount + COALESCE(delivery_fee, 0) + COALESCE(tax_amount, 0) + COALESCE(service_charge, 0) + COALESCE(tip_amount, 0) - COALESCE(discount_amount, 0)
+   ) STORED;
 -- 
 -- -- ============ STAFF MANAGEMENT ============
 -- 
 -- -- Server sections assignment
--- CREATE TABLE restaurant_server_sections (
---   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
---   server_id UUID REFERENCES staff_profiles(id) NOT NULL,
---   section_id UUID REFERENCES restaurant_sections(id) NOT NULL,
---   shift_date DATE NOT NULL,
---   shift_start TIME NOT NULL,
---   shift_end TIME NOT NULL,
---   is_active BOOLEAN DEFAULT true NOT NULL,
---   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
--- );
+CREATE TABLE IF NOT EXISTS restaurant_server_sections (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  server_id UUID REFERENCES staff_profiles(id) NOT NULL,
+  section_id UUID REFERENCES restaurant_sections(id) NOT NULL,
+  shift_date DATE NOT NULL,
+  shift_start TIME NOT NULL,
+  shift_end TIME NOT NULL,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
 -- Server performance tracking
 CREATE TABLE restaurant_server_performance (

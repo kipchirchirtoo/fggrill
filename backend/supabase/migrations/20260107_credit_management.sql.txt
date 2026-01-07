@@ -4,7 +4,7 @@
 -- Employee credit bills tracking
 CREATE TABLE IF NOT EXISTS employee_credit_bills (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  employee_id UUID NOT NULL REFERENCES staff(id),
+  employee_id UUID NOT NULL REFERENCES staff_profiles(id),
   branch_id INTEGER NOT NULL REFERENCES branches(id),
   bill_number VARCHAR(50) UNIQUE NOT NULL,
   bill_date DATE NOT NULL,
@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS employee_credit_bills (
   status VARCHAR(20) DEFAULT 'unpaid' CHECK (status IN ('unpaid', 'partial', 'paid', 'written_off')),
   description TEXT,
   due_date DATE,
-  recorded_by UUID REFERENCES staff(id),
+  recorded_by UUID REFERENCES staff_profiles(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS employee_credit_payments (
   amount DECIMAL(12,2) NOT NULL,
   payment_method VARCHAR(20) CHECK (payment_method IN ('cash', 'bank', 'mpesa', 'deduction')),
   reference VARCHAR(100),
-  recorded_by UUID REFERENCES staff(id),
+  recorded_by UUID REFERENCES staff_profiles(id),
   notes TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS customer_invoices (
   status VARCHAR(20) DEFAULT 'unpaid' CHECK (status IN ('unpaid', 'partial', 'paid', 'overdue', 'written_off')),
   aging_bucket VARCHAR(20), -- 'current', '1-30', '31-60', '61-90', '90+'
   description TEXT,
-  created_by UUID REFERENCES staff(id),
+  created_by UUID REFERENCES staff_profiles(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS customer_invoice_payments (
   amount DECIMAL(12,2) NOT NULL,
   payment_method VARCHAR(20) CHECK (payment_method IN ('cash', 'mpesa', 'pdq', 'bank_transfer')),
   reference VARCHAR(100),
-  recorded_by UUID REFERENCES staff(id),
+  recorded_by UUID REFERENCES staff_profiles(id),
   notes TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

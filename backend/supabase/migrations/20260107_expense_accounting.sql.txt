@@ -36,7 +36,7 @@ BEGIN
         ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_url TEXT;
         ALTER TABLE expenses ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) DEFAULT 'pending' 
             CHECK (approval_status IN ('pending', 'approved', 'rejected'));
-        ALTER TABLE expenses ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES staff(id);
+        ALTER TABLE expenses ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES staff_profiles(id);
         ALTER TABLE expenses ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE;
         ALTER TABLE expenses ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
     END IF;
@@ -51,9 +51,9 @@ CREATE TABLE IF NOT EXISTS accounting_periods (
   end_date DATE NOT NULL,
   status VARCHAR(20) DEFAULT 'open' CHECK (status IN ('open', 'closed', 'locked')),
   closed_at TIMESTAMP WITH TIME ZONE,
-  closed_by UUID REFERENCES staff(id),
+  closed_by UUID REFERENCES staff_profiles(id),
   locked_at TIMESTAMP WITH TIME ZONE,
-  locked_by UUID REFERENCES staff(id),
+  locked_by UUID REFERENCES staff_profiles(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(branch_id, period_name)
 );

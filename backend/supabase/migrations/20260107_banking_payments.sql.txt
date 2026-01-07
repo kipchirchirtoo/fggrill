@@ -25,9 +25,9 @@ CREATE TABLE IF NOT EXISTS bank_deposits (
   deposit_slip_url TEXT,
   reconciled BOOLEAN DEFAULT false,
   reconciled_date DATE,
-  reconciled_by UUID REFERENCES staff(id),
+  reconciled_by UUID REFERENCES staff_profiles(id),
   notes TEXT,
-  recorded_by UUID REFERENCES staff(id),
+  recorded_by UUID REFERENCES staff_profiles(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS payment_receipts (
   linked_source_id UUID, -- Link to booking_id, room_order_id, etc.
   source_type VARCHAR(50), -- 'booking', 'restaurant_order', 'bar_order', 'manual'
   reconciled BOOLEAN DEFAULT false,
-  recorded_by UUID REFERENCES staff(id),
+  recorded_by UUID REFERENCES staff_profiles(id),
   notes TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

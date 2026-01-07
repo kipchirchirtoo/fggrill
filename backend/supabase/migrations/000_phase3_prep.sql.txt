@@ -1,0 +1,101 @@
+-- Preliminary enums and roles
+ALTER TYPE user_role ADD VALUE 'auditor';
+ALTER TYPE user_role ADD VALUE 'branch_accountant';
+ALTER TYPE user_role ADD VALUE 'cashier';
+ALTER TYPE user_role ADD VALUE 'storekeeper';
+ALTER TYPE user_role ADD VALUE 'housekeeping';
+ALTER TYPE user_role ADD VALUE 'maintenance';
+ALTER TYPE user_role ADD VALUE 'restaurant';
+ALTER TYPE user_role ADD VALUE 'receptionist';
+
+-- Finance enums
+ALTER TYPE payment_status ADD VALUE 'completed';
+ALTER TYPE payment_status ADD VALUE 'failed';
+ALTER TYPE payment_status ADD VALUE 'refunded';
+
+ALTER TYPE payment_method ADD VALUE 'mpesa';
+ALTER TYPE payment_method ADD VALUE 'bank_transfer';
+ALTER TYPE payment_method ADD VALUE 'pdq';
+ALTER TYPE payment_method ADD VALUE 'card';
+ALTER TYPE payment_method ADD VALUE 'cheque';
+
+-- Base Tables & Columns
+CREATE TABLE IF NOT EXISTS accounting_journal_entries (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    branch_id INTEGER REFERENCES branches(id),
+    entry_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    reference_number VARCHAR(50) UNIQUE NOT NULL,
+    description TEXT,
+    status VARCHAR(20) DEFAULT 'draft',
+    created_by UUID,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- COMPREHENSIVE HOUSEKEEPING PREP
+DO $$ 
+BEGIN
+    -- hk_staff_profiles
+    IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'hk_staff_profiles') THEN
+        ALTER TABLE hk_staff_profiles ADD COLUMN IF NOT EXISTS assigned_floors INTEGER[];
+        ALTER TABLE hk_staff_profiles ADD COLUMN IF NOT EXISTS max_rooms_per_shift INTEGER DEFAULT 15;
+        ALTER TABLE hk_staff_profiles ADD COLUMN IF NOT EXISTS max_credits_per_shift DECIMAL(4,1) DEFAULT 20.0;
+        ALTER TABLE hk_staff_profiles ADD COLUMN IF NOT EXISTS is_available BOOLEAN DEFAULT true;
+        ALTER TABLE hk_staff_profiles ADD COLUMN IF NOT EXISTS current_task_id UUID;
+        ALTER TABLE hk_staff_profiles ADD COLUMN IF NOT EXISTS current_room_number VARCHAR(20);
+        ALTER TABLE hk_staff_profiles ADD COLUMN IF NOT EXISTS quality_score DECIMAL(3,2) DEFAULT 5.00;
+    END IF;
+
+    -- hk_inspections
+    IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'hk_inspections') THEN
+        ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS inspected_by UUID REFERENCES staff_profiles(id);
+        ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS result VARCHAR(20) CHECK (result IN ('pass', 'fail', 'pending'));
+        ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS inspection_number VARCHAR(50);
+    END IF;
+
+    -- hk_lost_found
+    IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'hk_lost_found') THEN
+        ALTER TABLE hk_lost_found ADD COLUMN IF NOT EXISTS room_id UUID REFERENCES rooms(id);
+        ALTER TABLE hk_lost_found ADD COLUMN IF NOT EXISTS item_number VARCHAR(50);
+    END IF;
+
+    -- hk_tasks
+    IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'hk_tasks') THEN
+        ALTER TABLE hk_tasks ADD COLUMN IF NOT EXISTS task_number VARCHAR(50);
+    END IF;
+
+    -- hk_maintenance_requests
+    IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'hk_maintenance_requests') THEN
+        ALTER TABLE hk_maintenance_requests ADD COLUMN IF NOT EXISTS request_number VARCHAR(50);
+    END IF;
+
+    -- hk_guest_requests
+    IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'hk_guest_requests') THEN
+        ALTER TABLE hk_guest_requests ADD COLUMN IF NOT EXISTS request_number VARCHAR(50);
+    END IF;
+
+    -- hk_checklist_templates
+    IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'hk_checklist_templates') THEN
+        ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS sections JSONB NOT NULL DEFAULT '[]';
+        ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS total_estimated_time INTEGER;
+        ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+        ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id);
+        ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id);
+        ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+        ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+        ALTER TABLE hk_checklist_templates DROP COLUMN IF EXISTS items;
+        ALTER TABLE hk_checklist_templates DROP COLUMN IF EXISTS estimated_minutes;
+    END IF;
+END $$;
+
+-- Drop functions that changed signatures
+DROP FUNCTION IF EXISTS process_stock_issue() CASCADE;
+DROP FUNCTION IF EXISTS process_stock_return() CASCADE;
+DROP FUNCTION IF EXISTS process_stock_transfer() CASCADE;
+DROP FUNCTION IF EXISTS process_stock_adjustment() CASCADE;
+DROP FUNCTION IF EXISTS update_po_status() CASCADE;
+DROP FUNCTION IF EXISTS update_supplier_performance_on_po() CASCADE;
+DROP FUNCTION IF EXISTS calculate_grn_totals() CASCADE;
+DROP FUNCTION IF EXISTS check_low_stock_alert() CASCADE;
+DROP FUNCTION IF EXISTS check_expiring_items() CASCADE;
+DROP FUNCTION IF EXISTS get_items_to_reorder() CASCADE;

@@ -1,3 +1,24 @@
+
+-- COMPREHENSIVE FIXES FOR HOUSEKEEPING
+ALTER TABLE hk_staff_profiles ADD COLUMN IF NOT EXISTS assigned_floors INTEGER[];
+ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS inspected_by UUID REFERENCES staff_profiles(id);
+ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS result VARCHAR(20) CHECK (result IN ('pass', 'fail', 'pending'));
+ALTER TABLE hk_lost_found ADD COLUMN IF NOT EXISTS room_id UUID REFERENCES rooms(id);
+ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS inspection_number VARCHAR(50);
+ALTER TABLE hk_tasks ADD COLUMN IF NOT EXISTS task_number VARCHAR(50);
+ALTER TABLE hk_lost_found ADD COLUMN IF NOT EXISTS item_number VARCHAR(50);
+ALTER TABLE hk_maintenance_requests ADD COLUMN IF NOT EXISTS request_number VARCHAR(50);
+ALTER TABLE hk_guest_requests ADD COLUMN IF NOT EXISTS request_number VARCHAR(50);
+ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS sections JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS total_estimated_time INTEGER;
+ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id);
+ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id);
+ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+ALTER TABLE hk_checklist_templates DROP COLUMN IF EXISTS items;
+ALTER TABLE hk_checklist_templates DROP COLUMN IF EXISTS estimated_minutes;
+
 -- =====================================================
 -- ENHANCED HOUSEKEEPING MODULE - COMPLETE MIGRATION
 -- Version: 2.0
@@ -199,6 +220,10 @@ CREATE TABLE IF NOT EXISTS hk_staff_profiles (
 -- Create index for faster lookups
 CREATE INDEX IF NOT EXISTS idx_hk_staff_user ON hk_staff_profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_hk_staff_available ON hk_staff_profiles(is_available);
+
+-- Ensure column exists before indexing
+ALTER TABLE hk_staff_profiles ADD COLUMN IF NOT EXISTS assigned_floors INTEGER[];
+
 CREATE INDEX IF NOT EXISTS idx_hk_staff_floors ON hk_staff_profiles USING GIN(assigned_floors);
 
 -- =====================================================
@@ -347,7 +372,7 @@ CREATE TABLE IF NOT EXISTS hk_checklist_templates (
   
   total_estimated_time INTEGER, -- Total estimated time in minutes
   is_active BOOLEAN DEFAULT true,
-  branch_id UUID REFERENCES branches(id), -- NULL means all branches
+  branch_id INTEGER REFERENCES branches(id), -- NULL means all branches
   
   created_by UUID REFERENCES users(id) NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -439,6 +464,8 @@ CREATE TABLE IF NOT EXISTS hk_inspections (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS result VARCHAR(20) CHECK (result IN ('pass', 'fail', 'pending'));
+ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS inspected_by UUID REFERENCES staff_profiles(id);
 CREATE INDEX IF NOT EXISTS idx_hk_inspections_room ON hk_inspections(room_id);
 CREATE INDEX IF NOT EXISTS idx_hk_inspections_task ON hk_inspections(task_id);
 CREATE INDEX IF NOT EXISTS idx_hk_inspections_inspector ON hk_inspections(inspected_by);
@@ -481,7 +508,7 @@ CREATE TABLE IF NOT EXISTS hk_linen_inventory (
   -- Location
   location_type VARCHAR(50) NOT NULL, -- central_store, floor_pantry, room, laundry
   location_id VARCHAR(100), -- floor number, room number, etc.
-  branch_id UUID REFERENCES branches(id) NOT NULL,
+  branch_id INTEGER REFERENCES branches(id) NOT NULL,
   
   -- Status
   status hk_linen_status DEFAULT 'clean_available',
@@ -593,13 +620,14 @@ CREATE TABLE IF NOT EXISTS hk_lost_found (
   retention_days INTEGER DEFAULT 90,
   retention_end_date DATE,
   
-  branch_id UUID REFERENCES branches(id) NOT NULL,
+  branch_id INTEGER REFERENCES branches(id) NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_hk_lost_found_status ON hk_lost_found(status);
 CREATE INDEX IF NOT EXISTS idx_hk_lost_found_date ON hk_lost_found(found_at DESC);
+ALTER TABLE hk_lost_found ADD COLUMN IF NOT EXISTS room_id UUID REFERENCES rooms(id);
 CREATE INDEX IF NOT EXISTS idx_hk_lost_found_room ON hk_lost_found(room_id);
 
 -- =====================================================
@@ -654,7 +682,7 @@ CREATE TABLE IF NOT EXISTS hk_maintenance_requests (
   sla_due_at TIMESTAMP WITH TIME ZONE,
   sla_breached BOOLEAN DEFAULT false,
   
-  branch_id UUID REFERENCES branches(id) NOT NULL,
+  branch_id INTEGER REFERENCES branches(id) NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -717,7 +745,7 @@ CREATE TABLE IF NOT EXISTS hk_guest_requests (
   guest_satisfied BOOLEAN,
   guest_feedback TEXT,
   
-  branch_id UUID REFERENCES branches(id) NOT NULL,
+  branch_id INTEGER REFERENCES branches(id) NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -748,7 +776,7 @@ CREATE TABLE IF NOT EXISTS hk_shift_definitions (
   sunday BOOLEAN DEFAULT true,
   
   is_active BOOLEAN DEFAULT true,
-  branch_id UUID REFERENCES branches(id),
+  branch_id INTEGER REFERENCES branches(id),
   
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -849,7 +877,7 @@ CREATE TABLE IF NOT EXISTS hk_shift_swaps (
 CREATE TABLE IF NOT EXISTS hk_daily_metrics (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   metric_date DATE NOT NULL,
-  branch_id UUID REFERENCES branches(id) NOT NULL,
+  branch_id INTEGER REFERENCES branches(id) NOT NULL,
   
   -- Task metrics
   total_tasks_created INTEGER DEFAULT 0,
@@ -930,7 +958,7 @@ CREATE TABLE IF NOT EXISTS hk_staff_daily_metrics (
 CREATE TABLE IF NOT EXISTS hk_floor_pantry_inventory (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   floor_number INTEGER NOT NULL,
-  branch_id UUID REFERENCES branches(id) NOT NULL,
+  branch_id INTEGER REFERENCES branches(id) NOT NULL,
   
   supply_id UUID NOT NULL, -- References housekeeping_supplies
   current_quantity INTEGER DEFAULT 0,
@@ -962,7 +990,7 @@ CREATE TABLE IF NOT EXISTS hk_cart_inventory (
   last_loaded_at TIMESTAMP WITH TIME ZONE,
   last_loaded_by UUID REFERENCES users(id),
   
-  branch_id UUID REFERENCES branches(id) NOT NULL,
+  branch_id INTEGER REFERENCES branches(id) NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -970,6 +998,46 @@ CREATE TABLE IF NOT EXISTS hk_cart_inventory (
 -- =====================================================
 -- SECTION 14: TRIGGERS AND FUNCTIONS
 -- =====================================================
+
+
+-- FIXES FOR MISSING COLUMNS
+ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS inspection_number VARCHAR(50);
+ALTER TABLE hk_tasks ADD COLUMN IF NOT EXISTS task_number VARCHAR(50);
+ALTER TABLE hk_lost_found ADD COLUMN IF NOT EXISTS item_number VARCHAR(50);
+ALTER TABLE hk_maintenance_requests ADD COLUMN IF NOT EXISTS request_number VARCHAR(50);
+
+
+-- FIXES FOR MISSING COLUMNS
+ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS inspection_number VARCHAR(50);
+ALTER TABLE hk_tasks ADD COLUMN IF NOT EXISTS task_number VARCHAR(50);
+ALTER TABLE hk_lost_found ADD COLUMN IF NOT EXISTS item_number VARCHAR(50);
+ALTER TABLE hk_maintenance_requests ADD COLUMN IF NOT EXISTS request_number VARCHAR(50);
+ALTER TABLE hk_guest_requests ADD COLUMN IF NOT EXISTS request_number VARCHAR(50);
+
+
+-- FIXES FOR MISSING COLUMNS
+ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS inspection_number VARCHAR(50);
+ALTER TABLE hk_tasks ADD COLUMN IF NOT EXISTS task_number VARCHAR(50);
+ALTER TABLE hk_lost_found ADD COLUMN IF NOT EXISTS item_number VARCHAR(50);
+ALTER TABLE hk_maintenance_requests ADD COLUMN IF NOT EXISTS request_number VARCHAR(50);
+ALTER TABLE hk_guest_requests ADD COLUMN IF NOT EXISTS request_number VARCHAR(50);
+ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS sections JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS total_estimated_time INTEGER;
+
+
+-- FIXES FOR MISSING COLUMNS
+ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS inspection_number VARCHAR(50);
+ALTER TABLE hk_tasks ADD COLUMN IF NOT EXISTS task_number VARCHAR(50);
+ALTER TABLE hk_lost_found ADD COLUMN IF NOT EXISTS item_number VARCHAR(50);
+ALTER TABLE hk_maintenance_requests ADD COLUMN IF NOT EXISTS request_number VARCHAR(50);
+ALTER TABLE hk_guest_requests ADD COLUMN IF NOT EXISTS request_number VARCHAR(50);
+ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS sections JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS total_estimated_time INTEGER;
+ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id);
+ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id);
+ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
 
 -- Function to generate task numbers
 CREATE OR REPLACE FUNCTION generate_hk_task_number()

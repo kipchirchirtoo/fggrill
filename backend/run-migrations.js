@@ -8,52 +8,119 @@ const client = new Client({
     connectionTimeoutMillis: 10000,
 });
 
-async function runSQL(sql, fileName) {
-    console.log(`Executing ${fileName}...`);
+/**
+ * Robustly split SQL by semicolons, ignoring those inside $$ blocks and single quotes.
+ */
+function splitSql(sql) {
+    const statements = [];
+    let current = '';
+    let inQuote = false;
+    let inDollarBlock = false;
+
+    for (let i = 0; i < sql.length; i++) {
+        const char = sql[i];
+        const nextChar = sql[i + 1];
+
+        if (char === "'" && !inDollarBlock) {
+            inQuote = !inQuote;
+        } else if (char === '$' && nextChar === '$' && !inQuote) {
+            inDollarBlock = !inDollarBlock;
+            current += char;
+            i++; // skip next $
+            current += '$';
+            continue;
+        }
+
+        if (char === ';' && !inQuote && !inDollarBlock) {
+            statements.push(current.trim());
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+
+    if (current.trim()) {
+        statements.push(current.trim());
+    }
+
+    return statements;
+}
+
+async function runSQLStatement(statement, fileName) {
+    const trimmed = statement.trim();
+    if (!trimmed) return;
+
     try {
-        // We use client.query(sql) which handles multiple statements if separated by ;
-        await client.query(sql);
-        console.log(`✅ Passed: ${fileName}`);
+        await client.query(trimmed + ';');
     } catch (err) {
-        console.error(`❌ Failed: ${fileName}`);
-        console.error(err.message);
+        // Skip common existing object errors
+        const skipCodes = ['42P07', '42710', '23505', '42712', '42P11', '42P15', '42701', '42723'];
+        if (skipCodes.includes(err.code) || err.message.includes('already exists')) {
+            return;
+        }
+        console.error(`❌ Statement failed in ${fileName}:`);
+        console.error(trimmed.substring(0, 200) + (trimmed.length > 200 ? '...' : ''));
+        console.error(`Error code: ${err.code}`);
+        console.error(`Error message: ${err.message}`);
         throw err;
     }
 }
 
+async function runFile(filePath, fileName) {
+    console.log(`Executing ${fileName}...`);
+    const sql = fs.readFileSync(filePath, 'utf8');
+
+    const statements = splitSql(sql);
+    let count = 0;
+    for (const statement of statements) {
+        try {
+            await runSQLStatement(statement, fileName);
+            count++;
+        } catch (err) {
+            console.error(`Stopping migration process at ${fileName} due to error.`);
+            throw err;
+        }
+    }
+    console.log(`✅ Passed: ${fileName} (${count} statements)`);
+}
+
 async function start() {
     const migrationsDir = path.join(__dirname, 'supabase/migrations');
-    const files = [
-        '20260106_add_branch_accountant_role.sql.txt',
-        '20260107_coa_journals.sql.txt',
-        '20260107_stock_management.sql.txt',
-        '20260107_expense_accounting.sql.txt',
-        '20260107_banking_payments.sql.txt',
-        '20260107_credit_management.sql.txt',
-        '20260107_invoicing_auditor.sql.txt'
-    ];
+
+    let files = fs.readdirSync(migrationsDir)
+        .filter(f => f.endsWith('.sql') || f.endsWith('.sql.txt'))
+        .sort((a, b) => {
+            const aNum = parseInt(a);
+            const bNum = parseInt(b);
+            if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
+            if (!isNaN(aNum)) return -1;
+            if (!isNaN(bNum)) return 1;
+            return a.localeCompare(b);
+        });
 
     console.log('Connecting to database...');
     await client.connect();
     console.log('Connected.');
 
+    // Prep fixes
+    const prepPath = path.join(migrationsDir, '000_phase3_prep.sql.txt');
+    if (fs.existsSync(prepPath)) {
+        await runFile(prepPath, '000_phase3_prep.sql.txt');
+    }
+
     for (const file of files) {
+        if (file === '000_phase3_prep.sql.txt') continue;
         const filePath = path.join(migrationsDir, file);
-        if (fs.existsSync(filePath)) {
-            const sql = fs.readFileSync(filePath, 'utf8');
-            await runSQL(sql, file);
-        } else {
-            console.warn(`⚠️ File not found: ${file}`);
-        }
+        await runFile(filePath, file);
     }
 
     await client.end();
-    console.log('All attempted migrations completed.');
+    console.log('All migrations processed successfully.');
     process.exit(0);
 }
 
 start().catch(err => {
-    console.error('Migration process aborted:', err);
+    console.error('Migration process aborted:', err.message);
     if (client) client.end().catch(() => { });
     process.exit(1);
 });
