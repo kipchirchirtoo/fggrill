@@ -809,13 +809,6 @@ export function ConsolidatedNav() {
         label="Stock Out"
         active={pathname === '/dashboard/branch-store/stock-out'}
       />
-
-      <NavItem
-        href="/dashboard/branch-store/reports"
-        icon={BarChart3}
-        label="Reports"
-        active={pathname === '/dashboard/branch-store/reports'}
-      />
     </>
   );
 

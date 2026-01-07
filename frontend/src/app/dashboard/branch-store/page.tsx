@@ -39,7 +39,6 @@ export default function BranchStoreDashboard() {
     { href: '/dashboard/branch-store/stock-takes', icon: ClipboardList, label: 'Stock Take', desc: 'Inventory audit' },
     { href: '/dashboard/branch-store/kitchen-usage', icon: Utensils, label: 'Kitchen', desc: 'Kitchen usage' },
     { href: '/dashboard/branch-store/stock-out', icon: TrendingDown, label: 'Stock Out', desc: 'Issue items' },
-    { href: '/dashboard/branch-store/reports', icon: FileText, label: 'Reports', desc: 'Analytics' },
   ];
 
   const statCards = [
