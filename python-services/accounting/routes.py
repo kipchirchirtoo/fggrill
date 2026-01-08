@@ -492,14 +492,28 @@ def get_pending_approvals():
     """Get all pending approval requests for the auditor"""
     try:
         branch_id = request.args.get('branch_id')
-        if supabase:
-            query = supabase.table('approval_requests').select('*, requested_by_user:staff_profiles!requested_by(*)').eq('status', 'pending')
+        if not supabase:
+            return jsonify({'success': False, 'message': 'Database not available'}), 503
+            
+        # Try primary selective join
+        try:
+            query = supabase.table('approval_requests')\
+                .select('*, requested_by_user:staff_profiles!requested_by(*)')\
+                .eq('status', 'pending')
             if branch_id: 
                 query = query.eq('branch_id', int(branch_id))
             res = query.order('created_at', desc=False).execute()
-            return jsonify({'success': True, 'data': res.data})
-        return jsonify({'success': False}), 503
+        except Exception as join_e:
+            logger.warning(f"Join with 'requested_by' failed, trying fallback: {join_e}")
+            # Fallback to simple select if join fails
+            query = supabase.table('approval_requests').select('*').eq('status', 'pending')
+            if branch_id: 
+                query = query.eq('branch_id', int(branch_id))
+            res = query.order('created_at', desc=False).execute()
+            
+        return jsonify({'success': True, 'data': res.data})
     except Exception as e:
+        logger.error(f"Error in get_pending_approvals: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @audit_bp.route('/approvals/<request_id>/process', methods=['POST'])

@@ -11,12 +11,17 @@ class ReportingService:
         try:
             # 0. Get Category IDs
             categories_res = self.supabase.table('accounting_account_categories').select('id, name').execute()
-            category_map = {cat['name']: cat['id'] for cat in categories_res.data}
+            category_map = {cat['name'].upper(): cat['id'] for cat in categories_res.data}
             revenue_id = category_map.get('REVENUE')
             expense_id = category_map.get('EXPENSES')
 
             if not revenue_id or not expense_id:
-                raise Exception("Accounting categories 'REVENUE' or 'EXPENSES' not found")
+                # Try fallback names if upper casing didn't match REVENUE/EXPENSES exactly
+                revenue_id = revenue_id or category_map.get('REVENUE') or category_map.get('INCOME')
+                expense_id = expense_id or category_map.get('EXPENSES') or category_map.get('EXPENSE')
+                
+                if not revenue_id or not expense_id:
+                    raise Exception(f"Accounting categories 'REVENUE' and 'EXPENSES' not found. Available: {list(category_map.keys())}")
 
             # 1. Get Revenues
             revenue_query = self.supabase.table('accounting_journal_items') \

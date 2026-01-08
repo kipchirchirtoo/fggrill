@@ -198,8 +198,10 @@ class NotificationService {
         logger.error(`Supabase error fetching notifications for user ${userId}:`, {
           message: error.message,
           code: error.code,
-          details: error.details
+          details: error.details,
+          hint: error.hint
         });
+        // Return empty array instead of throwing or returning null to avoid breaking frontend
         return [];
       }
 
