@@ -1,0 +1,81 @@
+-- Create accounting_account_categories table
+-- This table categorizes chart of accounts into Revenue, Expenses, Assets, Liabilities, Equity
+
+CREATE TABLE IF NOT EXISTS accounting_account_categories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    type TEXT CHECK (type IN ('asset', 'liability', 'equity', 'revenue', 'expense')),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Insert default categories
+INSERT INTO accounting_account_categories (name, description, type) VALUES
+    ('REVENUE', 'Revenue and income accounts', 'revenue'),
+    ('EXPENSES', 'Operating expenses', 'expense'),
+    ('INCOME', 'Alternative name for revenue', 'revenue'),
+    ('EXPENSE', 'Alternative name for expenses', 'expense'),
+    ('ASSETS', 'Asset accounts', 'asset'),
+    ('LIABILITIES', 'Liability accounts', 'liability'),
+    ('EQUITY', 'Equity accounts', 'equity')
+ON CONFLICT (name) DO NOTHING;
+
+-- Create approval_requests table
+-- This table stores approval requests for various operations
+
+CREATE TABLE IF NOT EXISTS approval_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    request_type TEXT NOT NULL CHECK (request_type IN ('expense', 'purchase_order', 'leave', 'budget', 'journal_entry', 'other')),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled')),
+    branch_id INTEGER,
+    requested_by UUID REFERENCES users(id),
+    approved_by UUID REFERENCES users(id),
+    amount DECIMAL(12,2),
+    description TEXT,
+    notes TEXT,
+    metadata JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    approved_at TIMESTAMPTZ,
+    rejected_at TIMESTAMPTZ
+);
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_approval_requests_status ON approval_requests(status);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_branch ON approval_requests(branch_id);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_requested_by ON approval_requests(requested_by);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_created_at ON approval_requests(created_at DESC);
+
+-- Create updated_at trigger for approval_requests
+CREATE OR REPLACE FUNCTION update_approval_requests_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_approval_requests_updated_at
+    BEFORE UPDATE ON approval_requests
+    FOR EACH ROW
+    EXECUTE FUNCTION update_approval_requests_updated_at();
+
+-- Add category_id to accounting_chart_of_accounts if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'accounting_chart_of_accounts' 
+        AND column_name = 'category_id'
+    ) THEN
+        ALTER TABLE accounting_chart_of_accounts 
+        ADD COLUMN category_id UUID REFERENCES accounting_account_categories(id);
+        
+        CREATE INDEX idx_chart_of_accounts_category ON accounting_chart_of_accounts(category_id);
+    END IF;
+END $$;
+
+COMMENT ON TABLE accounting_account_categories IS 'Categories for chart of accounts (Revenue, Expenses, Assets, Liabilities, Equity)';
+COMMENT ON TABLE approval_requests IS 'Stores approval requests for various operations across the system';
