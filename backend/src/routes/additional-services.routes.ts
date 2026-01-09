@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { protect, authorize } from '../middleware/auth';
+import { UserRole } from '../models/User';
 import {
   getServices,
   getServiceById,
@@ -25,77 +26,77 @@ router.use(protect);
 // Additional Services Management
 router.route('/services')
   .get(
-    authorize(['super_admin', 'branch_manager', 'receptionist', 'cashier']),
+    authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST, UserRole.CASHIER]),
     getServices
   )
   .post(
-    authorize(['super_admin', 'branch_manager']),
+    authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER]),
     createService
   );
 
 router.route('/services/:id')
   .get(
-    authorize(['super_admin', 'branch_manager', 'receptionist', 'cashier']),
+    authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST, UserRole.CASHIER]),
     getServiceById
   )
   .patch(
-    authorize(['super_admin', 'branch_manager']),
+    authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER]),
     updateService
   )
   .delete(
-    authorize(['super_admin']),
+    authorize([UserRole.SUPER_ADMIN]),
     deleteService
   );
 
 // Service Bookings
 router.route('/bookings')
   .get(
-    authorize(['super_admin', 'branch_manager', 'receptionist', 'cashier']),
+    authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST, UserRole.CASHIER]),
     getServiceBookings
   )
   .post(
-    authorize(['super_admin', 'branch_manager', 'receptionist', 'cashier']),
+    authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST, UserRole.CASHIER]),
     createServiceBooking
   );
 
 router.route('/bookings/:id')
   .get(
-    authorize(['super_admin', 'branch_manager', 'receptionist', 'cashier']),
+    authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST, UserRole.CASHIER]),
     getServiceBookingById
   )
   .patch(
-    authorize(['super_admin', 'branch_manager', 'receptionist', 'cashier']),
+    authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST, UserRole.CASHIER]),
     updateServiceBooking
   );
 
 router.route('/bookings/:id/confirm')
   .patch(
-    authorize(['super_admin', 'branch_manager', 'receptionist']),
+    authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST]),
     confirmServiceBooking
   );
 
 router.route('/bookings/:id/complete')
   .patch(
-    authorize(['super_admin', 'branch_manager', 'receptionist', 'cashier']),
+    authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST, UserRole.CASHIER]),
     completeServiceBooking
   );
 
 router.route('/bookings/:id/cancel')
   .patch(
-    authorize(['super_admin', 'branch_manager', 'receptionist']),
+    authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST]),
     cancelServiceBooking
   );
 
 router.route('/bookings/:id/payment')
   .post(
-    authorize(['super_admin', 'branch_manager', 'receptionist', 'cashier']),
+    authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST, UserRole.CASHIER]),
     recordServicePayment
   );
 
 // Service Stats
 router.route('/stats')
   .get(
-    authorize(['super_admin', 'branch_manager', 'receptionist', 'cashier']),
+    authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST, UserRole.CASHIER]),
     getServiceStats
   );
 

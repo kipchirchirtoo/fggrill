@@ -16,6 +16,7 @@ import {
     getCashierStats
 } from '../controllers/cashier.controller';
 import { protect as authenticate, authorize } from '../middleware/auth';
+import { UserRole } from '../models/User';
 
 const router = Router();
 
@@ -65,7 +66,7 @@ router.route('/credit-bills')
 
 router.route('/credit-bills/:id/approve')
     .patch(
-        authorize(['super_admin', 'branch_manager', 'accountant', 'branch_accountant']),
+        authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
         approveCreditBill
     );
 
