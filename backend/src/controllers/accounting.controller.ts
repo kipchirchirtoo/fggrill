@@ -413,7 +413,6 @@ export const createBankTransaction = async (req: Request, res: Response, next: N
         transaction_date,
         debit_amount: transaction_type === 'debit' ? amount : 0,
         credit_amount: transaction_type === 'credit' ? amount : 0,
-        transaction_type, // 'credit' or 'debit'
         reference,
         description,
         reconciled: false
