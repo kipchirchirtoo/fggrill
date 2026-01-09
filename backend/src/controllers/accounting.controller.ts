@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 
+const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
 // ============ CHART OF ACCOUNTS ============
 
 export const getChartOfAccounts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -158,11 +160,57 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
     const total_amount = subtotal + (tax_amount || 0);
     const invoice_number = `INV-${Date.now()}`;
 
+    // Customer mapping logic to handle string IDs
+    let resolvedCustomerId = customer_id;
+    if (customer_id && !isUUID(customer_id)) {
+      // Check if already mapped in accounting_customers
+      const { data: mappedCustomer } = await supabase
+        .from('accounting_customers')
+        .select('id')
+        .eq('customer_code', customer_id)
+        .maybeSingle();
+
+      if (mappedCustomer) {
+        resolvedCustomerId = mappedCustomer.id;
+      } else {
+        // Not mapped, look up in customers/users table
+        const { data: customer } = await supabase
+          .from('customers') // Assuming a 'customers' table exists, otherwise might be 'users'
+          .select('*')
+          .eq('id', customer_id)
+          .maybeSingle();
+
+        if (customer) {
+          // Auto-create mapping entry in accounting_customers
+          const { data: newCustomer, error: cError } = await supabase
+            .from('accounting_customers')
+            .insert([{
+              customer_code: customer.id,
+              customer_name: customer.name || `${customer.first_name} ${customer.last_name}`,
+              contact_person: customer.contact_person,
+              email: customer.email,
+              phone: customer.phone,
+              address: customer.address,
+              is_active: true
+            }])
+            .select()
+            .single();
+
+          if (cError) {
+            logger.error('Error auto-creating accounting_customer:', cError);
+          } else if (newCustomer) {
+            resolvedCustomerId = newCustomer.id;
+            logger.info(`Mapped customer ${customer_id} to accounting_customer ${resolvedCustomerId}`);
+          }
+        }
+      }
+    }
+
     const { data, error } = await supabase
       .from('accounting_ar_invoices')
       .insert([{
         invoice_number,
-        customer_id,
+        customer_id: resolvedCustomerId,
         invoice_date,
         due_date,
         subtotal,
@@ -190,6 +238,16 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
   try {
     const { customer_id, status, overdue } = req.query;
 
+    let resolvedCustomerId = customer_id as string;
+    if (resolvedCustomerId && !isUUID(resolvedCustomerId)) {
+      const { data: mapped } = await supabase
+        .from('accounting_customers')
+        .select('id')
+        .eq('customer_code', resolvedCustomerId)
+        .maybeSingle();
+      if (mapped) resolvedCustomerId = mapped.id;
+    }
+
     let query = supabase
       .from('accounting_ar_invoices')
       .select(`
@@ -198,6 +256,7 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
       `)
       .order('invoice_date', { ascending: false });
 
+    if (resolvedCustomerId) query = query.eq('customer_id', resolvedCustomerId);
     if (status) {
       let statusVal = status as string;
       if (statusVal === 'pending') statusVal = 'unpaid';
@@ -225,11 +284,58 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
     const total_amount = subtotal + (tax_amount || 0);
     const bill_number = `BILL-${Date.now()}`;
 
+    // Vendor mapping logic to handle string IDs from 'suppliers' table
+    let resolvedVendorId = vendor_id as string;
+
+    if (vendor_id && !isUUID(vendor_id)) {
+      // Check if already mapped in accounting_vendors
+      const { data: mappedVendor } = await supabase
+        .from('accounting_vendors')
+        .select('id')
+        .eq('vendor_code', vendor_id)
+        .maybeSingle();
+
+      if (mappedVendor) {
+        resolvedVendorId = mappedVendor.id;
+      } else {
+        // Not mapped, look up in suppliers table
+        const { data: supplier } = await supabase
+          .from('suppliers')
+          .select('*')
+          .eq('id', vendor_id)
+          .maybeSingle();
+
+        if (supplier) {
+          // Auto-create mapping entry in accounting_vendors
+          const { data: newVendor, error: vError } = await supabase
+            .from('accounting_vendors')
+            .insert([{
+              vendor_code: supplier.id,
+              vendor_name: supplier.name,
+              contact_person: supplier.contact_person,
+              email: supplier.email,
+              phone: supplier.phone,
+              address: supplier.address,
+              is_active: true
+            }])
+            .select()
+            .single();
+
+          if (vError) {
+            logger.error('Error auto-creating accounting_vendor:', vError);
+          } else if (newVendor) {
+            resolvedVendorId = newVendor.id;
+            logger.info(`Mapped supplier ${vendor_id} to accounting_vendor ${resolvedVendorId}`);
+          }
+        }
+      }
+    }
+
     const { data, error } = await supabase
       .from('accounting_ap_bills')
       .insert([{
         bill_number,
-        vendor_id,
+        vendor_id: resolvedVendorId,
         bill_date,
         due_date,
         subtotal,
@@ -257,6 +363,16 @@ export const getBills = async (req: Request, res: Response, next: NextFunction):
   try {
     const { vendor_id, status, overdue } = req.query;
 
+    let resolvedVendorId = vendor_id as string;
+    if (resolvedVendorId && !isUUID(resolvedVendorId)) {
+      const { data: mapped } = await supabase
+        .from('accounting_vendors')
+        .select('id')
+        .eq('vendor_code', resolvedVendorId)
+        .maybeSingle();
+      if (mapped) resolvedVendorId = mapped.id;
+    }
+
     let query = supabase
       .from('accounting_ap_bills')
       .select(`
@@ -265,6 +381,7 @@ export const getBills = async (req: Request, res: Response, next: NextFunction):
       `)
       .order('bill_date', { ascending: false });
 
+    if (resolvedVendorId) query = query.eq('vendor_id', resolvedVendorId);
     if (status) {
       let statusVal = status as string;
       if (statusVal === 'pending') statusVal = 'unpaid';
@@ -299,8 +416,7 @@ export const createBankTransaction = async (req: Request, res: Response, next: N
         transaction_type, // 'credit' or 'debit'
         reference,
         description,
-        reconciled: false,
-        created_by: req.user?.id
+        reconciled: false
       }])
       .select()
       .single();
