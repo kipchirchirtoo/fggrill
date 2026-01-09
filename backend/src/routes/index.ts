@@ -46,6 +46,8 @@ import staffRoutes from './staff.routes';
 import storekeepingEnhancedRoutes from './storekeeping';
 import cashierRoutes from './cashier.routes';
 import wastageRoutes from './wastage.routes';
+import kitchenLedgerRoutes from './kitchen-ledger.routes';
+import additionalServicesRoutes from './additional-services.routes';
 
 console.log('Index routes: importing staffRoutes', staffRoutes);
 
@@ -109,6 +111,8 @@ router.use('/barcode', barcodeRoutes);
 router.use('/storekeeping', storekeepingEnhancedRoutes);
 router.use('/cashier', cashierRoutes);
 router.use('/wastage', wastageRoutes);
+router.use('/kitchen', kitchenLedgerRoutes);
+router.use('/additional-services', additionalServicesRoutes);
 
 // Email booking endpoints (public - no auth required)
 router.post('/email/send-booking/:bookingId', sendBookingEmail);

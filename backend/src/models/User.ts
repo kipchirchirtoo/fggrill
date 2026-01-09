@@ -63,6 +63,7 @@ export enum UserRole {
   FINANCE_MANAGER = 'finance_manager',
   HR_MANAGER = 'hr_manager',
   PAYROLL_CLERK = 'payroll_clerk',
+  CASHIER = 'cashier',
 
   // Store & Inventory
   CENTRAL_STOREKEEPER = 'central_storekeeper',

@@ -608,3 +608,623 @@ export const verifyPayment = async (
         next(error);
     }
 };
+
+// ============================================
+// UNPAID BILLS MANAGEMENT
+// ============================================
+
+/**
+ * Get all unpaid bills
+ */
+export const getUnpaidBills = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { branch_id, status, customer_type, bill_type } = req.query;
+
+        let query = supabase
+            .from('unpaid_bills')
+            .select('*')
+            .order('bill_date', { ascending: false });
+
+        if (branch_id) {
+            query = query.eq('branch_id', branch_id);
+        }
+
+        if (status) {
+            query = query.eq('status', status);
+        } else {
+            // By default, exclude paid bills
+            query = query.neq('status', 'paid');
+        }
+
+        if (customer_type) {
+            query = query.eq('customer_type', customer_type as string);
+        }
+
+        if (bill_type) {
+            query = query.eq('bill_type', bill_type as string);
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+
+        res.json({
+            success: true,
+            message: 'Unpaid bills retrieved successfully',
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Create unpaid bill
+ */
+export const createUnpaidBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const {
+            branch_id,
+            bill_type,
+            reference_type,
+            reference_id,
+            customer_type,
+            customer_id,
+            customer_name,
+            room_number,
+            waiter_id,
+            total_amount,
+            payment_terms,
+            due_date,
+            remarks
+        } = req.body;
+
+        // Generate bill number
+        const { data: billNumberData } = await supabase
+            .rpc('generate_bill_number');
+
+        const bill_number = billNumberData || `BILL${Date.now()}`;
+
+        const { data, error } = await supabase
+            .from('unpaid_bills')
+            .insert({
+                bill_number,
+                branch_id,
+                bill_type,
+                reference_type,
+                reference_id,
+                customer_type,
+                customer_id,
+                customer_name,
+                room_number,
+                waiter_id,
+                total_amount,
+                balance_amount: total_amount,
+                payment_terms,
+                due_date,
+                remarks,
+                status: 'unpaid',
+                created_by: req.user?.id
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.status(201).json({
+            success: true,
+            message: 'Unpaid bill created successfully',
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Record payment for unpaid bill
+ */
+export const recordBillPayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { payment_amount, payment_method, payment_reference } = req.body;
+
+        // Fetch current bill
+        const { data: bill, error: fetchError } = await supabase
+            .from('unpaid_bills')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (fetchError) throw fetchError;
+        if (!bill) {
+            throw new AppError('Bill not found', 404);
+        }
+
+        // Calculate new paid amount
+        const new_paid_amount = (bill.paid_amount || 0) + payment_amount;
+        const new_balance = bill.total_amount - new_paid_amount;
+
+        // Update bill
+        const { data: updatedBill, error: updateError } = await supabase
+            .from('unpaid_bills')
+            .update({
+                paid_amount: new_paid_amount,
+                balance_amount: new_balance
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateError) throw updateError;
+
+        // Record cashier transaction
+        const { data: transactionData } = await supabase
+            .rpc('generate_cashier_transaction_number');
+
+        const transaction_number = transactionData || `CT${Date.now()}`;
+
+        await supabase
+            .from('cashier_transactions')
+            .insert({
+                transaction_number,
+                branch_id: bill.branch_id,
+                cashier_id: req.user?.id,
+                transaction_type: 'payment',
+                revenue_type: bill.bill_type,
+                reference_type: 'unpaid_bill',
+                reference_id: bill.id,
+                payment_method,
+                amount: payment_amount,
+                payment_reference,
+                customer_name: bill.customer_name
+            });
+
+        res.json({
+            success: true,
+            message: 'Payment recorded successfully',
+            data: updatedBill
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// ============================================
+// CREDIT BILLS MANAGEMENT
+// ============================================
+
+/**
+ * Get all credit bills
+ */
+export const getCreditBills = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { branch_id, staff_id, status, approval_status } = req.query;
+
+        let query = supabase
+            .from('credit_bills')
+            .select('*')
+            .order('credit_date', { ascending: false });
+
+        if (branch_id) {
+            query = query.eq('branch_id', branch_id as string);
+        }
+
+        if (staff_id) {
+            query = query.eq('staff_id', staff_id as string);
+        }
+
+        if (status) {
+            query = query.eq('status', status as string);
+        }
+
+        if (approval_status) {
+            query = query.eq('approval_status', approval_status as string);
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+
+        res.json({
+            success: true,
+            message: 'Credit bills retrieved successfully',
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Create credit bill
+ */
+export const createCreditBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const {
+            branch_id,
+            staff_id,
+            staff_name,
+            employee_id,
+            department,
+            bill_type,
+            reference_type,
+            reference_id,
+            total_amount,
+            due_date,
+            payment_method,
+            deduction_months,
+            remarks
+        } = req.body;
+
+        // Calculate monthly deduction
+        const monthly_deduction = total_amount / (deduction_months || 1);
+
+        // Generate credit number
+        const { data: creditNumberData } = await supabase
+            .rpc('generate_credit_number');
+
+        const credit_number = creditNumberData || `CR${Date.now()}`;
+
+        const { data, error } = await supabase
+            .from('credit_bills')
+            .insert({
+                credit_number,
+                branch_id,
+                staff_id,
+                staff_name,
+                employee_id,
+                department,
+                bill_type,
+                reference_type,
+                reference_id,
+                total_amount,
+                balance_amount: total_amount,
+                due_date,
+                payment_method,
+                deduction_months: deduction_months || 1,
+                monthly_deduction,
+                remarks,
+                status: 'active',
+                approval_status: 'pending',
+                created_by: req.user?.id
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.status(201).json({
+            success: true,
+            message: 'Credit bill created successfully',
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Approve/reject credit bill
+ */
+export const approveCreditBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { approval_status } = req.body;
+
+        const { data, error } = await supabase
+            .from('credit_bills')
+            .update({
+                approval_status,
+                approved_by: req.user?.id,
+                approved_at: new Date().toISOString()
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.json({
+            success: true,
+            message: `Credit bill ${approval_status} successfully`,
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Record credit bill payment
+ */
+export const recordCreditPayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { payment_amount, payment_method, payment_reference } = req.body;
+
+        // Fetch current credit bill
+        const { data: credit, error: fetchError } = await supabase
+            .from('credit_bills')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (fetchError) throw fetchError;
+        if (!credit) {
+            throw new AppError('Credit bill not found', 404);
+        }
+
+        // Calculate new paid amount
+        const new_paid_amount = (credit.paid_amount || 0) + payment_amount;
+        const new_balance = credit.total_amount - new_paid_amount;
+
+        // Update credit bill
+        const { data: updatedCredit, error: updateError } = await supabase
+            .from('credit_bills')
+            .update({
+                paid_amount: new_paid_amount,
+                balance_amount: new_balance
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateError) throw updateError;
+
+        // Record cashier transaction
+        const { data: transactionData } = await supabase
+            .rpc('generate_cashier_transaction_number');
+
+        const transaction_number = transactionData || `CT${Date.now()}`;
+
+        await supabase
+            .from('cashier_transactions')
+            .insert({
+                transaction_number,
+                branch_id: credit.branch_id,
+                cashier_id: req.user?.id,
+                transaction_type: 'payment',
+                revenue_type: 'staff_credit',
+                reference_type: 'credit_bill',
+                reference_id: credit.id,
+                payment_method,
+                amount: payment_amount,
+                payment_reference,
+                customer_name: credit.staff_name
+            });
+
+        res.json({
+            success: true,
+            message: 'Credit payment recorded successfully',
+            data: updatedCredit
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// ============================================
+// CASHIER SHIFTS
+// ============================================
+
+/**
+ * Get cashier shifts
+ */
+export const getCashierShifts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { branch_id, cashier_id, status, shift_date } = req.query;
+
+        let query = supabase
+            .from('cashier_shifts')
+            .select('*')
+            .order('shift_date', { ascending: false });
+
+        if (branch_id) {
+            query = query.eq('branch_id', branch_id as string);
+        }
+
+        if (cashier_id) {
+            query = query.eq('cashier_id', cashier_id as string);
+        }
+
+        if (status) {
+            query = query.eq('status', status as string);
+        }
+
+        if (shift_date) {
+            query = query.eq('shift_date', shift_date as string);
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+
+        res.json({
+            success: true,
+            message: 'Cashier shifts retrieved successfully',
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Start cashier shift
+ */
+export const startShift = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { branch_id, opening_float } = req.body;
+
+        // Check if cashier already has an open shift
+        const { data: existingShift } = await supabase
+            .from('cashier_shifts')
+            .select('*')
+            .eq('cashier_id', req.user?.id)
+            .eq('status', 'open')
+            .single();
+
+        if (existingShift) {
+            throw new AppError('You already have an open shift', 400);
+        }
+
+        // Generate shift number
+        const { data: shiftNumberData } = await supabase
+            .rpc('generate_shift_number');
+
+        const shift_number = shiftNumberData || `SH${Date.now()}`;
+
+        const { data, error } = await supabase
+            .from('cashier_shifts')
+            .insert({
+                shift_number,
+                branch_id,
+                cashier_id: req.user?.id,
+                opening_float: opening_float || 0,
+                start_time: new Date().toISOString(),
+                status: 'open'
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.status(201).json({
+            success: true,
+            message: 'Shift started successfully',
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Close cashier shift
+ */
+export const closeShift = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { closing_float, actual_cash, remarks } = req.body;
+
+        // Fetch shift
+        const { data: shift, error: fetchError } = await supabase
+            .from('cashier_shifts')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (fetchError) throw fetchError;
+        if (!shift) {
+            throw new AppError('Shift not found', 404);
+        }
+
+        // Get all transactions for this shift
+        const { data: transactions } = await supabase
+            .from('cashier_transactions')
+            .select('*')
+            .eq('shift_id', id);
+
+        // Calculate totals
+        const total_cash = transactions?.filter(t => t.payment_method === 'cash')
+            .reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0;
+
+        const total_mpesa = transactions?.filter(t => t.payment_method === 'mpesa')
+            .reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0;
+
+        const total_card = transactions?.filter(t => t.payment_method === 'card')
+            .reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0;
+
+        const total_revenue = transactions?.reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0;
+
+        const expected_cash = shift.opening_float + total_cash;
+        const cash_variance = actual_cash - expected_cash;
+
+        // Update shift
+        const { data, error } = await supabase
+            .from('cashier_shifts')
+            .update({
+                end_time: new Date().toISOString(),
+                closing_float,
+                expected_cash,
+                actual_cash,
+                cash_variance,
+                total_transactions: transactions?.length || 0,
+                total_cash_in: total_cash,
+                total_mpesa_in: total_mpesa,
+                total_card_in: total_card,
+                total_revenue,
+                remarks,
+                status: 'closed'
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.json({
+            success: true,
+            message: 'Shift closed successfully',
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Get cashier dashboard statistics
+ */
+export const getCashierStats = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { branch_id } = req.query;
+        const today = new Date().toISOString().split('T')[0];
+
+        // Get today's transactions
+        const { data: transactions } = await supabase
+            .from('cashier_transactions')
+            .select('*')
+            .eq('branch_id', branch_id as string)
+            .gte('transaction_date', today);
+
+        // Get unpaid bills
+        const { count: unpaidCount } = await supabase
+            .from('unpaid_bills')
+            .select('*', { count: 'exact', head: true })
+            .eq('branch_id', branch_id as string)
+            .eq('status', 'unpaid');
+
+        // Get pending credit bills
+        const { count: pendingCreditsCount } = await supabase
+            .from('credit_bills')
+            .select('*', { count: 'exact', head: true })
+            .eq('branch_id', branch_id as string)
+            .eq('approval_status', 'pending');
+
+        // Get active shift
+        const { data: activeShift } = await supabase
+            .from('cashier_shifts')
+            .select('*')
+            .eq('cashier_id', req.user?.id)
+            .eq('status', 'open')
+            .single();
+
+        const todayRevenue = transactions?.reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0;
+
+        res.json({
+            success: true,
+            message: 'Cashier statistics retrieved successfully',
+            data: {
+                todayTransactions: transactions?.length || 0,
+                todayRevenue,
+                unpaidBills: unpaidCount || 0,
+                pendingCreditApprovals: pendingCreditsCount || 0,
+                activeShift
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
