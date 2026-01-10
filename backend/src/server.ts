@@ -55,6 +55,7 @@ import rateLimit from 'express-rate-limit';
 import { initializeApp } from './init';
 import { errorHandler } from './middleware/errorHandler';
 import { logRequest } from './middleware/auth';
+import { securityMiddleware, rootPathLimiter } from './middleware/security';
 import { logger } from './utils/logger';
 import routes from './routes';
 import startupService from './services/startup.service';
@@ -115,6 +116,11 @@ initializeApp().then(({ app, httpServer }) => {
   }));
 
   app.use(morgan('dev'));
+
+  // Security middleware - block vulnerability scanners
+  app.use(securityMiddleware);
+  app.use(rootPathLimiter);
+
   app.use(logRequest);
 
   // Static files
