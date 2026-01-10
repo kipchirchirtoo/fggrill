@@ -3144,3 +3144,36 @@ export const cashierAPI = {
 };
 
 
+
+// =====================================================
+// UNIFIED API EXPORT
+// =====================================================
+
+export const api = {
+  auth: authAPI,
+  user: userAPI,
+  staff: staffAPI,
+  system: systemAPI,
+  rooms: roomsAPI,
+  guests: guestAPI,
+  bar: barAPI,
+  barInventory: barInventoryAPI,
+  barStockRequests: barStockRequestsAPI,
+  store: storeAPI,
+  kitchen: kitchenAPI,
+  finance: financeAPI,
+  accounting: accountingAPI,
+  reports: reportsAPI,
+  audit: auditAPI,
+  auditorReports: auditorReportsAPI,
+  conference: conferenceAPI,
+  catering: cateringAPI,
+  attendance: attendanceAPI,
+  attendanceAnalytics: attendanceAnalyticsAPI,
+  pettyCash: pettyCashAPI,
+  payroll: payrollAPI,
+  notifications: notificationsAPI,
+  cashier: cashierAPI
+};
+
+export default api;

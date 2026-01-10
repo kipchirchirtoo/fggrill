@@ -52,11 +52,6 @@ export default function BarInventoryPage() {
             setIsLoading(false);
         }
     }, [activeBranchId]);
-    // ...
-    // In the table render:
-    <td className="px-4 py-4 text-center">
-        <p className="text-[14px] sm:text-[15px] font-bold text-stone-900">{item.current_bottles} <span className="text-[10px] font-bold text-stone-400 ml-0.5">{item.unit}</span></p>
-    </td>
 
     useEffect(() => {
         fetchInventory();
