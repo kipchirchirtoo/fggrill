@@ -1749,11 +1749,8 @@ export const restaurantAPI = {
   generateReceipt: (orderId: string) => fetchAPI<any>(`/restaurant/orders/${orderId}/receipt`),
   processPayment: (orderId: string, data: any) => fetchAPI<any>(`/restaurant/orders/${orderId}/payment`, { method: 'POST', body: JSON.stringify(data) }),
   generateBill: (receiptData: any) => {
-    return fetch('http://localhost:5001/api/receipts/generate', {
+    return fetchPythonAPI<any>('/receipts/generate', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(receiptData)
     });
   },
@@ -1888,32 +1885,26 @@ export const receiptsAPI = {
     change_amount?: number;
     payment_reference?: string;
   }) => {
-    const response = await fetch(`${PYTHON_API_URL}/api/receipts/generate/base64`, {
+    return fetchPythonAPI<any>('/receipts/generate/base64', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(receiptData)
     });
-    return response.json();
   },
 
   // Print receipt to thermal printer
   printReceipt: async (receiptData: any) => {
-    const response = await fetch(`${PYTHON_API_URL}/api/receipts/printer/print`, {
+    return fetchPythonAPI<any>('/receipts/printer/print', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(receiptData)
     });
-    return response.json();
   },
 
   // Print and generate PDF
   printAndGenerate: async (receiptData: any) => {
-    const response = await fetch(`${PYTHON_API_URL}/api/receipts/printer/print-and-generate`, {
+    return fetchPythonAPI<any>('/receipts/printer/print-and-generate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(receiptData)
     });
-    return response.json();
   },
 
   // Configure thermal printer
