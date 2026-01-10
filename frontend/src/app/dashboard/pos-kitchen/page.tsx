@@ -9,20 +9,19 @@ import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription }
 import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { restaurantAPI } from '@/lib/api';
-import {
-  UtensilsCrossed, ShoppingCart, DollarSign, Clock, TrendingUp,
-  RefreshCw, ArrowRight, Building2, FileText, X
-} from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { UnifiedPOS } from '@/components/pos/UnifiedPOS';
+import {
+  UtensilsCrossed, ShoppingCart, DollarSign, Clock, TrendingUp,
+  RefreshCw, ArrowRight, Building2, FileText, X, ChefHat, Wine
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface Order {
-  // ... existing Order interface ...
-  // (Note: The LLM will manage the replacement properly, I should provided the full replaced block)
   id: string;
   order_number: string;
   table_number?: string;
@@ -114,17 +113,25 @@ export default function POSKitchenDashboard() {
   ].includes(user?.role as UserRole);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Get active tab from URL params
-  const activeTab = searchParams.get('tab') || 'overview';
+  // Get active tab from URL params with fallback for legacy 'pos' tab
+  const tabParam = searchParams.get('tab');
+  const activeTab = tabParam === 'pos' ? 'restaurant' : (tabParam || 'overview');
 
   // Function to handle tab changes with URL updates
   const handleTabChange = (tabId: string) => {
-    if (tabId === 'overview') {
-      router.push('/dashboard/pos-kitchen');
-    } else {
-      router.push(`/dashboard/pos-kitchen?tab=${tabId}`);
-    }
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', tabId);
+    router.push(`/dashboard/pos-kitchen?${params.toString()}`);
   };
+
+  // Effect to handle redirection of legacy 'pos' tab
+  useEffect(() => {
+    if (searchParams.get('tab') === 'pos') {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('tab', 'restaurant');
+      router.replace(`/dashboard/pos-kitchen?${params.toString()}`);
+    }
+  }, [searchParams, router]);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -547,22 +554,23 @@ export default function POSKitchenDashboard() {
             </div>
           </div>
 
-          {/* Tab Navigation */}
-          <div className="flex gap-1 p-1 bg-stone-100 rounded-lg w-full sm:w-fit overflow-x-auto no-scrollbar flex-shrink-0">
+          {/* Tab Navigation - Vibrant & Premium */}
+          <div className="flex gap-1 p-1.5 bg-stone-100 rounded-2xl w-full sm:w-fit overflow-x-auto no-scrollbar flex-shrink-0 border border-stone-200 shadow-inner">
             {[
-              { id: 'overview', label: 'Overview', icon: UtensilsCrossed },
-              { id: 'pos', label: 'POS', icon: ShoppingCart },
-              { id: 'recent', label: 'Recent', icon: Clock },
+              { id: 'overview', label: 'Overview', icon: UtensilsCrossed, color: 'text-amber-600' },
+              { id: 'restaurant', label: 'Restaurant POS', icon: ChefHat, color: 'text-orange-600' },
+              { id: 'bar', label: 'Bar POS', icon: Wine, color: 'text-indigo-600' },
+              { id: 'recent', label: 'Activity', icon: Clock, color: 'text-emerald-600' },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => handleTabChange(tab.id)}
-                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-md text-[12px] sm:text-[13px] font-medium transition-all whitespace-nowrap flex-1 sm:flex-none justify-center ${activeTab === tab.id
-                  ? 'bg-white text-stone-900 shadow-sm'
-                  : 'text-stone-500 hover:text-stone-700'
+                className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl text-[13px] font-bold transition-all whitespace-nowrap flex-1 sm:flex-none justify-center ${activeTab === tab.id
+                  ? 'bg-white text-stone-900 shadow-sm scale-100'
+                  : 'text-stone-500 hover:text-stone-700 hover:bg-stone-50'
                   }`}
               >
-                <tab.icon className="h-4 w-4" />
+                <tab.icon className={cn("h-4 w-4", activeTab === tab.id ? tab.color : "text-stone-400")} />
                 {tab.label}
               </button>
             ))}
