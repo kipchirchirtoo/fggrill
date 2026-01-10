@@ -1,4 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
+import dotenv from 'dotenv';
+dotenv.config();
 import { supabase } from '../config/supabase';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';

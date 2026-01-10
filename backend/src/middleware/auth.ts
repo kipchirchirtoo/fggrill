@@ -1,4 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
+import dotenv from 'dotenv';
+dotenv.config();
 import { supabase } from '../config/database';
 import { User, UserRole } from '../models/User';
 import { logger } from '../utils/logger';
@@ -45,10 +47,11 @@ export const protect = async (
     try {
       // First try to verify as our custom JWT token
       const jwtSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'fallback-secret-key';
-      
+
       try {
         const decoded = jwt.verify(token, jwtSecret) as any;
-        
+        logger.debug('Auth Middleware - JWT verified for sub:', decoded.sub);
+
         if (decoded && decoded.sub) {
           // Valid JWT - get user from database
           const { data: user, error: userError } = await supabase
@@ -72,7 +75,12 @@ export const protect = async (
             return;
           }
         }
-      } catch (jwtError) {
+      } catch (jwtError: any) {
+        logger.error('Auth Middleware - JWT verification failed:', {
+          error: jwtError.message,
+          tokenPrefix: token.substring(0, 10),
+          secretPrefix: jwtSecret.substring(0, 3)
+        });
         // JWT verification failed, try Supabase auth
       }
 
