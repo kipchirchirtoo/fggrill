@@ -17,7 +17,6 @@ router.get(
   authorize([
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
-    UserRole.CENTRAL_OPERATIONS_MANAGER,
     UserRole.CENTRAL_STOREKEEPER
   ]),
   async (req, res) => {
@@ -45,20 +44,19 @@ router.get(
   authorize([
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
-    UserRole.CENTRAL_OPERATIONS_MANAGER,
     UserRole.CENTRAL_STOREKEEPER
   ]),
   async (req, res) => {
     try {
       const vendorId = parseInt(req.params.id);
-      
+
       if (isNaN(vendorId)) {
         return res.status(400).json({
           success: false,
           message: 'Invalid vendor ID'
         });
       }
-      
+
       const vendorDetails = await vendorPerformanceService.getVendorPerformanceDetails(vendorId);
       res.json(vendorDetails);
     } catch (error) {
@@ -82,20 +80,19 @@ router.post(
   authorize([
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
-    UserRole.CENTRAL_OPERATIONS_MANAGER,
     UserRole.CENTRAL_STOREKEEPER
   ]),
   async (req, res) => {
     try {
       const delivery = req.body;
-      
+
       if (!delivery.vendor_id || !delivery.purchase_order_id || !delivery.delivery_date) {
         return res.status(400).json({
           success: false,
           message: 'Missing required fields'
         });
       }
-      
+
       const result = await vendorPerformanceService.recordDelivery(delivery);
       res.json(result);
     } catch (error) {
@@ -119,7 +116,6 @@ router.post(
   authorize([
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
-    UserRole.CENTRAL_OPERATIONS_MANAGER,
     UserRole.CENTRAL_STOREKEEPER
   ]),
   async (req, res) => {
@@ -128,14 +124,14 @@ router.post(
         ...req.body,
         created_by: req.user.id
       };
-      
+
       if (!rating.vendor_id || !rating.category || !rating.score) {
         return res.status(400).json({
           success: false,
           message: 'Missing required fields'
         });
       }
-      
+
       const result = await vendorPerformanceService.submitRating(rating);
       res.json(result);
     } catch (error) {
@@ -159,16 +155,16 @@ router.get(
   authorize([
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
-    UserRole.CENTRAL_OPERATIONS_MANAGER
+    UserRole.GENERAL_MANAGER
   ]),
   async (req, res) => {
     try {
       const { category } = req.query;
-      
+
       const rankings = await vendorPerformanceService.getVendorRankings(
         category ? String(category) : undefined
       );
-      
+
       res.json(rankings);
     } catch (error) {
       logger.error('Error generating vendor rankings:', error);
@@ -191,17 +187,17 @@ router.get(
   authorize([
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
-    UserRole.CENTRAL_OPERATIONS_MANAGER
+    UserRole.GENERAL_MANAGER
   ]),
   async (req, res) => {
     try {
       const { vendor_id, category } = req.query;
-      
+
       const report = await vendorPerformanceService.generatePerformanceReport(
         vendor_id ? Number(vendor_id) : undefined,
         category ? String(category) : undefined
       );
-      
+
       res.json(report);
     } catch (error) {
       logger.error('Error generating vendor performance report:', error);

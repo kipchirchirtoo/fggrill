@@ -426,7 +426,7 @@ export async function approveStockRequest(
 
       if (requestDetails) {
         await notificationService.notifyRole(
-          'central_operations_manager',
+          'general_manager',
           'Stock Request Approved',
           `Stock Request ${requestDetails.request_number} approved by Auditor. Ready for dispatch.`,
           {

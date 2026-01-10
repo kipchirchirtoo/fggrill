@@ -26,7 +26,7 @@ async function ensureUser() {
         console.log('👤 Ensuring user exists...');
 
         const email = 'allansamuel571@gmail.com';
-        const role = 'central_operations_manager'; // Or super_admin
+        const role = 'super_admin';
 
         // Check if user exists
         const { rows } = await client.query('SELECT * FROM users WHERE email = $1', [email]);

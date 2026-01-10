@@ -12,7 +12,8 @@ import {
   Building, Wrench, Brush, CheckCircle, FileSpreadsheet, ShieldCheck,
   Home, ArrowDownUp, LifeBuoy, Calendar, Store, TrendingUp, TrendingDown, LineChart, Award,
   UserCheck, Utensils, Wine, Receipt, CreditCard, PieChart, FileText,
-  BookOpen, ChefHat, ShoppingCart, Wallet, Scale, AlertCircle, UtensilsCrossed, Trash2, Clock, Shield, Menu, X
+  BookOpen, ChefHat, ShoppingCart, Wallet, Scale, AlertCircle, UtensilsCrossed, Trash2, Clock, Shield, Menu, X,
+  Apple, Beer
 } from 'lucide-react';
 
 interface NavItemProps {
@@ -179,131 +180,6 @@ export function ConsolidatedNav() {
     </>
   );
 
-  // Central Operations Manager Navigation
-  const centralOperationsNav = (
-    <>
-      <NavItem
-        href="/dashboard/central-operations"
-        icon={Building2}
-        label="Overview"
-        active={pathname === '/dashboard/central-operations'}
-      />
-
-      <NavGroup label="Warehouse" icon={Warehouse} defaultOpen>
-        <NavItem
-          href="/dashboard/central-operations/warehouse/inventory"
-          icon={Package}
-          label="Master Inventory"
-          active={pathname === '/dashboard/central-operations/warehouse/inventory'}
-        />
-        <NavItem
-          href="/dashboard/central-operations/warehouse/dispatches"
-          icon={Truck}
-          label="Dispatches"
-          active={pathname === '/dashboard/central-operations/warehouse/dispatches'}
-        />
-        <NavItem
-          href="/dashboard/central-operations/warehouse/transfers"
-          icon={ArrowDownUp}
-          label="Transfers"
-          active={pathname === '/dashboard/central-operations/warehouse/transfers'}
-        />
-        <NavItem
-          href="/dashboard/central-operations/warehouse/suppliers"
-          icon={Store}
-          label="Suppliers"
-          active={pathname === '/dashboard/central-operations/warehouse/suppliers'}
-        />
-        <NavItem
-          href="/dashboard/central-operations/warehouse/vendor-performance"
-          icon={Award}
-          label="Vendor Performance"
-          active={pathname === '/dashboard/central-operations/warehouse/vendor-performance'}
-        />
-      </NavGroup>
-
-      <NavGroup label="Branch Oversight" icon={Building}>
-        <NavItem
-          href="/dashboard/central-operations/branch-oversight/comparison"
-          icon={BarChart3}
-          label="Branch Comparison"
-          active={pathname === '/dashboard/central-operations/branch-oversight/comparison'}
-        />
-        <NavItem
-          href="/dashboard/central-operations/branch-oversight/performance"
-          icon={BarChart3}
-          label="Performance"
-          active={pathname === '/dashboard/central-operations/branch-oversight/performance'}
-        />
-        <NavItem
-          href="/dashboard/central-operations/branch-oversight/staff"
-          icon={Users}
-          label="Staff Overview"
-          active={pathname === '/dashboard/central-operations/branch-oversight/staff'}
-        />
-        <NavItem
-          href="/dashboard/central-operations/branch-oversight/compliance"
-          icon={ShieldCheck}
-          label="Compliance"
-          active={pathname === '/dashboard/central-operations/branch-oversight/compliance'}
-        />
-      </NavGroup>
-
-      <NavGroup label="Strategic Planning" icon={BarChart3}>
-        <NavItem
-          href="/dashboard/central-operations/strategic-planning/budgets"
-          icon={DollarSign}
-          label="Budgets"
-          active={pathname === '/dashboard/central-operations/strategic-planning/budgets'}
-        />
-        <NavItem
-          href="/dashboard/central-operations/strategic-planning/forecasting"
-          icon={BarChart3}
-          label="Forecasting"
-          active={pathname === '/dashboard/central-operations/strategic-planning/forecasting'}
-        />
-        <NavItem
-          href="/dashboard/central-operations/strategic-planning/ml-forecasting"
-          icon={LineChart}
-          label="ML Forecasting"
-          active={pathname === '/dashboard/central-operations/strategic-planning/ml-forecasting'}
-        />
-        <NavItem
-          href="/dashboard/central-operations/strategic-planning/procurement"
-          icon={Package}
-          label="Procurement"
-          active={pathname === '/dashboard/central-operations/strategic-planning/procurement'}
-        />
-      </NavGroup>
-
-      <NavGroup label="Analytics" icon={BarChart3}>
-        <NavItem
-          href="/dashboard/central-operations/analytics/reports"
-          icon={FileSpreadsheet}
-          label="Reports"
-          active={pathname === '/dashboard/central-operations/analytics/reports'}
-        />
-        <NavItem
-          href="/dashboard/central-operations/analytics/trends"
-          icon={BarChart3}
-          label="Trends"
-          active={pathname === '/dashboard/central-operations/analytics/trends'}
-        />
-        <NavItem
-          href="/dashboard/central-operations/analytics/executive"
-          icon={BarChart3}
-          label="Executive Dashboard"
-          active={pathname === '/dashboard/central-operations/analytics/executive'}
-        />
-        <NavItem
-          href="/dashboard/central-operations/wastage"
-          icon={Trash2}
-          label="Wastage Overview"
-          active={pathname === '/dashboard/central-operations/wastage'}
-        />
-      </NavGroup>
-    </>
-  );
 
   // Facilities Manager Navigation
   const facilitiesNav = (
@@ -712,24 +588,36 @@ export function ConsolidatedNav() {
 
       <NavGroup label="Inventory" icon={Package} defaultOpen>
         <NavItem
-          href="/dashboard/central-store/inventory"
-          icon={Package}
-          label="Inventory"
-          active={pathname === '/dashboard/central-store/inventory'}
+          href="/dashboard/central-store/foodstuffs"
+          icon={Apple}
+          label="Foodstuffs"
+          active={pathname === '/dashboard/central-store/foodstuffs'}
         />
         <NavItem
-          href="/dashboard/central-store/stock-takes"
-          icon={CheckCircle}
-          label="Stock Takes"
-          active={pathname === '/dashboard/central-store/stock-takes'}
+          href="/dashboard/central-store/bar-items"
+          icon={Beer}
+          label="Bar Items"
+          active={pathname === '/dashboard/central-store/bar-items'}
+        />
+        <NavItem
+          href="/dashboard/central-store/inventory"
+          icon={Package}
+          label="Master Inventory"
+          active={pathname === '/dashboard/central-store/inventory'}
         />
       </NavGroup>
 
-      <NavGroup label="Requests" icon={ClipboardList}>
+      <NavGroup label="Fulfillment" icon={ClipboardList}>
+        <NavItem
+          href="/dashboard/central-store/packing"
+          icon={Package}
+          label="Packing"
+          active={pathname === '/dashboard/central-store/packing'}
+        />
         <NavItem
           href="/dashboard/central-store/dispatch"
           icon={Truck}
-          label="Dispatch"
+          label="Dispatch & Notes"
           active={pathname === '/dashboard/central-store/dispatch'}
         />
       </NavGroup>
@@ -757,10 +645,10 @@ export function ConsolidatedNav() {
       </NavGroup>
 
       <NavItem
-        href="/dashboard/central-store/reports"
-        icon={BarChart3}
-        label="Reports"
-        active={pathname === '/dashboard/central-store/reports'}
+        href="/dashboard/central-store/suppliers"
+        icon={Store}
+        label="Suppliers"
+        active={pathname === '/dashboard/central-store/suppliers'}
       />
     </>
   );
@@ -1136,8 +1024,6 @@ export function ConsolidatedNav() {
         <>
           {adminNav}
           <hr className="my-4" />
-          {centralOperationsNav}
-          <hr className="my-4" />
           {branchOperationsNav}
           <hr className="my-4" />
           {facilitiesNav}
@@ -1145,10 +1031,6 @@ export function ConsolidatedNav() {
       );
     }
 
-    // Central Operations Manager Navigation
-    if (user.role === UserRole.CENTRAL_OPERATIONS_MANAGER) {
-      return centralOperationsNav;
-    }
 
     // Central Storekeeper Navigation (Legacy - has own dashboard)
     if (user.role === UserRole.CENTRAL_STOREKEEPER) {

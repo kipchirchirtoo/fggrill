@@ -10,6 +10,52 @@ import * as BranchInventoryService from '../../services/branch-inventory.service
 // @desc    Get all stock requests
 // @route   GET /api/stock-requests
 // @access  Private
+// @desc    Get branch performance data for Auditor
+// @route   GET /api/stock-requests/branch-performance/:branchId
+// @access  Private (Auditor, Admin)
+export const getBranchPerformance = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { branchId } = req.params;
+        const days = parseInt(req.query.days as string) || 1;
+
+        // Get sales data for the last X days
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - days);
+        startDate.setHours(0, 0, 0, 0);
+
+        const { data: sales, error: salesError } = await supabase
+            .from('restaurant_orders')
+            .select('id, total_amount, created_at')
+            .eq('branch_id', branchId)
+            .gte('created_at', startDate.toISOString())
+            .eq('status', 'PAID');
+
+        if (salesError) throw salesError;
+
+        const totalSales = sales?.reduce((sum, order) => sum + (order.total_amount || 0), 0) || 0;
+        const orderCount = sales?.length || 0;
+        const averageOrder = orderCount > 0 ? totalSales / orderCount : 0;
+
+        res.status(200).json({
+            success: true,
+            data: {
+                branchId,
+                period: `${days} day(s)`,
+                totalSales,
+                orderCount,
+                averageOrder,
+                startDate: startDate.toISOString()
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const getStockRequests = async (
     req: Request,
     res: Response,
@@ -21,7 +67,7 @@ export const getStockRequests = async (
         const status = req.query.status as string;
 
         // Allow central roles to fetch all requests (branchId is optional)
-        const isCentralRole = ['super_admin', 'general_manager', 'central_storekeeper', 'central_operations_manager', 'auditor'].includes(req.user?.role || '');
+        const isCentralRole = ['super_admin', 'general_manager', 'central_storekeeper', 'auditor'].includes(req.user?.role || '');
 
         if (branchId === null) {
             if (!isCentralRole) {

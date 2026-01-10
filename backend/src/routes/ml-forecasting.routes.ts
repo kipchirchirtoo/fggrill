@@ -17,7 +17,6 @@ router.get(
   authorize([
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
-    UserRole.CENTRAL_OPERATIONS_MANAGER,
     UserRole.FINANCE_MANAGER
   ]),
   async (req, res) => {
@@ -51,7 +50,6 @@ router.get(
   authorize([
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
-    UserRole.CENTRAL_OPERATIONS_MANAGER,
     UserRole.CENTRAL_STOREKEEPER
   ]),
   async (req, res) => {
@@ -85,7 +83,6 @@ router.get(
   authorize([
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
-    UserRole.CENTRAL_OPERATIONS_MANAGER,
     UserRole.BRANCH_MANAGER
   ]),
   async (req, res) => {
@@ -119,7 +116,6 @@ router.get(
   authorize([
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
-    UserRole.CENTRAL_OPERATIONS_MANAGER,
     UserRole.FINANCE_MANAGER
   ]),
   async (req, res) => {

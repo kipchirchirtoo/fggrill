@@ -16,11 +16,11 @@ const router = express.Router();
 router.get(
   '/status',
   protect,
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_OPERATIONS_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
   async (req, res) => {
     try {
       const activeJobs = schedulerService.getActiveJobs();
-      
+
       res.json({
         success: true,
         data: {
@@ -47,7 +47,7 @@ router.post(
   async (req, res) => {
     try {
       const jobs = schedulerService.startAll();
-      
+
       res.json({
         success: true,
         message: 'Automation system started',
@@ -74,7 +74,7 @@ router.post(
   async (req, res) => {
     try {
       schedulerService.stopAll();
-      
+
       res.json({
         success: true,
         message: 'Automation system stopped'
@@ -94,11 +94,11 @@ router.post(
 router.post(
   '/run/low-stock-check',
   protect,
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_OPERATIONS_MANAGER, UserRole.CENTRAL_STOREKEEPER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER]),
   async (req, res) => {
     try {
       const alertCount = await alertsService.checkLowStock();
-      
+
       res.json({
         success: true,
         message: `Low stock check completed, ${alertCount} alerts generated`,
@@ -119,12 +119,12 @@ router.post(
 router.post(
   '/run/compliance-check',
   protect,
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_OPERATIONS_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
   async (req, res) => {
     try {
       const { days = 14 } = req.body;
       const alertCount = await alertsService.checkComplianceExpiry(days);
-      
+
       res.json({
         success: true,
         message: `Compliance check completed, ${alertCount} alerts generated`,
@@ -145,12 +145,12 @@ router.post(
 router.post(
   '/run/budget-check',
   protect,
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_OPERATIONS_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
   async (req, res) => {
     try {
       const { threshold = 10 } = req.body;
       const alertCount = await alertsService.checkBudgetVariances(threshold);
-      
+
       res.json({
         success: true,
         message: `Budget variance check completed, ${alertCount} alerts generated`,
@@ -171,12 +171,12 @@ router.post(
 router.post(
   '/run/performance-check',
   protect,
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_OPERATIONS_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
   async (req, res) => {
     try {
       const { threshold = 15 } = req.body;
       const alertCount = await alertsService.checkPerformanceMetrics(threshold);
-      
+
       res.json({
         success: true,
         message: `Performance metrics check completed, ${alertCount} alerts generated`,
@@ -197,12 +197,12 @@ router.post(
 router.post(
   '/run/generate-reports',
   protect,
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_OPERATIONS_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
   async (req, res) => {
     try {
       const { period = 'daily' } = req.body;
       const reportsCount = await reportsService.generateScheduledReports(period as any);
-      
+
       res.json({
         success: true,
         message: `Report generation completed, ${reportsCount} reports generated`,

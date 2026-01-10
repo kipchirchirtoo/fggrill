@@ -6,37 +6,6 @@ import { UserRole } from '../models/User';
  * This middleware checks if a user has the appropriate role to access central operations features
  */
 
-// Validate user has central operations role
-export const validateCentralOperationsRole = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void => {
-  const centralOperationsRoles = [
-    UserRole.SUPER_ADMIN,
-    UserRole.GENERAL_MANAGER,
-    UserRole.CENTRAL_OPERATIONS_MANAGER,
-    UserRole.CENTRAL_STOREKEEPER
-  ];
-
-  if (!req.user) {
-    res.status(401).json({
-      success: false,
-      message: 'Not authorized to access this route'
-    });
-    return;
-  }
-
-  if (!centralOperationsRoles.includes(req.user.role)) {
-    res.status(403).json({
-      success: false,
-      message: `User role ${req.user.role} is not authorized to access Central Operations`
-    });
-    return;
-  }
-
-  next();
-};
 
 // Validate user has branch operations role
 export const validateBranchOperationsRole = (
@@ -79,7 +48,6 @@ export const validateWarehouseRole = (
   const warehouseRoles = [
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
-    UserRole.CENTRAL_OPERATIONS_MANAGER,
     UserRole.CENTRAL_STOREKEEPER,
     UserRole.BRANCH_STOREKEEPER
   ];

@@ -230,6 +230,14 @@ export const login = async (
 
     // Generate JWT token
     const jwtSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'fallback-secret-key';
+
+    logger.debug('Generating token for user login', {
+      userId,
+      email: userProfile.email,
+      hasSecret: !!jwtSecret,
+      secretLength: jwtSecret.length
+    });
+
     const accessToken = jwt.sign(
       {
         sub: userId,
@@ -600,6 +608,14 @@ export const posLogin = async (
 
     // Generate JWT token
     const jwtSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'fallback-secret-key';
+
+    logger.debug('Generating token for POS login', {
+      userId: user.id,
+      email: user.email,
+      hasSecret: !!jwtSecret,
+      secretLength: jwtSecret.length
+    });
+
     const accessToken = jwt.sign(
       {
         sub: user.id,

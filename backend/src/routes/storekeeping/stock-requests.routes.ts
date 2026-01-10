@@ -3,6 +3,7 @@ import { protect, authorize, UserRole } from '../../middleware/auth';
 import {
     getStockRequests,
     getStockRequest,
+    getBranchPerformance,
     createStockRequest,
     reviewStockRequest,
     approveStockRequest,
@@ -19,6 +20,8 @@ router.use(protect);
 router.route('/')
     .get(getStockRequests)
     .post(createStockRequest);
+
+router.get('/branch-performance/:branchId', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getBranchPerformance);
 
 router.route('/:id')
     .get(getStockRequest);

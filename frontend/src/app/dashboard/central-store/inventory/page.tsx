@@ -4,141 +4,306 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
-import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { storeAPI } from '@/lib/api';
-import { Package, RefreshCw, Search, Plus, Edit2, AlertTriangle, CheckCircle } from 'lucide-react';
-import { toast } from 'sonner';
+import { Package, Plus, RefreshCw, Search, Trash2, Edit, AlertTriangle, ChevronRight } from 'lucide-react';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
+import { toast } from 'sonner';
 import { formatNumber } from '@/lib/utils';
 
-interface Item { id: string; sku: string; name: string; category: string; quantity: number; min_quantity: number; unit: string; unit_price: number; }
+interface Item { id: string; sku: string; item_name: string; category: string; quantity: number; reorder_level: number; unit_of_measure: string; cost_price: number; }
 
-export default function CentralInventoryPage() {
-  const { user } = useAuth();
+export default function InventoryPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [addModalOpen, setAddModalOpen] = useState(false);
-  const [formData, setFormData] = useState({ name: '', sku: '', category: '', quantity: 0, min_quantity: 0, unit: 'pcs', unit_price: 0 });
+  const [isActionLoading, setIsActionLoading] = useState(false);
+  const [isEdit, setIsEdit] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [formData, setFormData] = useState({ item_name: '', category: '', unit_of_measure: '', reorder_level: 0, cost_price: 0, sku: '' });
 
   const fetchItems = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await storeAPI.getItems({ category: categoryFilter !== 'all' ? categoryFilter : undefined });
+      const response = await storeAPI.getItems();
       if (response.success) setItems(response.data || []);
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, [categoryFilter]);
+  }, []);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
-  const categories = [...new Set(items.map(i => i.category))].filter(Boolean);
-  const filteredItems = items.filter((i) => i.name?.toLowerCase().includes(searchQuery.toLowerCase()) || i.sku?.toLowerCase().includes(searchQuery.toLowerCase()));
-  const lowStockItems = items.filter(i => i.quantity <= i.min_quantity);
-
-  const handleAddItem = async () => {
-    if (!formData.name || !formData.sku) { toast.error('Fill required fields'); return; }
+  const handleCreateOrUpdate = async () => {
+    setIsActionLoading(true);
     try {
-      await storeAPI.createItem(formData);
-      toast.success('Item added');
-      setAddModalOpen(false);
-      fetchItems();
-    } catch (error: any) { toast.error(error.message || 'Failed'); }
+      const payload = { ...formData, quantity: isEdit ? selectedItem?.quantity : 0 };
+      const response = isEdit && selectedItem
+        ? await storeAPI.updateItem(selectedItem.id, payload)
+        : await storeAPI.createItem(payload);
+
+      if (response.success) {
+        toast.success(isEdit ? 'Item updated' : 'Item added');
+        setModalOpen(false);
+        fetchItems();
+      } else {
+        toast.error(response.message || 'Action failed');
+      }
+    } catch (error: any) { toast.error(error.message || 'Error occurred'); }
+    finally { setIsActionLoading(false); }
   };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this item?')) return;
+    try {
+      const res = await storeAPI.deleteItem(id);
+      if (res.success) { toast.success('Item removed'); fetchItems(); }
+    } catch (error) { toast.error('Failed to delete item'); }
+  };
+
+  const openEditModal = (item: Item) => {
+    setIsEdit(true);
+    setSelectedItem(item);
+    setFormData({
+      item_name: item.item_name,
+      category: item.category,
+      unit_of_measure: item.unit_of_measure,
+      reorder_level: item.reorder_level,
+      cost_price: item.cost_price,
+      sku: item.sku
+    });
+    setModalOpen(true);
+  };
+
+  const openAddModal = () => {
+    setIsEdit(false);
+    setSelectedItem(null);
+    setFormData({ item_name: '', category: '', unit_of_measure: '', reorder_level: 0, cost_price: 0, sku: '' });
+    setModalOpen(true);
+  };
+
+  const suggestAttributes = async (name: string) => {
+    if (name.length < 3) return;
+    try {
+      const res = await storeAPI.suggestAttributes(name);
+      if (res.success && res.data) {
+        setFormData(prev => ({
+          ...prev,
+          category: prev.category || res.data.category,
+          unit_of_measure: prev.unit_of_measure || res.data.unit_of_measure
+        }));
+      }
+    } catch (e) { /* ignore */ }
+  };
+
+  const filteredItems = items.filter((i) =>
+    i.item_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    i.sku?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div><h1 className="text-2xl font-bold text-gray-900">Inventory</h1><p className="text-gray-500">Central store items</p></div>
-            <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchItems} leftIcon={<RefreshCw />}>Refresh</IOSButton>
-              <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>Add Item</IOSButton>
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Master Inventory</h1>
+              <p className="text-stone-500 mt-0.5">Central catalog of all items and materials</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={fetchItems} className="btn-secondary h-10 px-3">
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
+              <button onClick={openAddModal} className="btn-primary h-10">
+                <Plus className="h-4 w-4" />
+                <span>Add New Item</span>
+              </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <IOSCard className="p-4"><Package className="h-6 w-6 text-[#007AFF] mb-2" /><p className="text-sm text-gray-500">Total Items</p><p className="text-xl font-bold">{items.length}</p></IOSCard>
-            <IOSCard className="p-4 border-l-4 border-yellow-500"><AlertTriangle className="h-6 w-6 text-yellow-600 mb-2" /><p className="text-sm text-gray-500">Low Stock</p><p className="text-xl font-bold text-yellow-600">{lowStockItems.length}</p></IOSCard>
-            <IOSCard className="p-4 border-l-4 border-green-500"><CheckCircle className="h-6 w-6 text-[#34C759] mb-2" /><p className="text-sm text-gray-500">Adequate</p><p className="text-xl font-bold text-[#34C759]">{items.length - lowStockItems.length}</p></IOSCard>
+          {/* Stats Summary - Minimal Stone */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
+              <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Total SKU</p>
+              <p className="text-2xl font-semibold text-stone-900 mt-1">{items.length}</p>
+            </div>
+            <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
+              <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">In Stock</p>
+              <p className="text-2xl font-semibold text-stone-900 mt-1">{items.filter(i => i.quantity > 0).length}</p>
+            </div>
+            <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm border-l-4 border-l-stone-400">
+              <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Low Stock</p>
+              <p className="text-2xl font-semibold text-amber-600 mt-1">{items.filter(i => i.quantity <= i.reorder_level).length}</p>
+            </div>
+            <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
+              <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Out of Stock</p>
+              <p className="text-2xl font-semibold text-stone-300 mt-1">{items.filter(i => i.quantity === 0).length}</p>
+            </div>
           </div>
 
-          <IOSCard className="p-4">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
-                <Input placeholder="Search items..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
-              </div>
-              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="px-3 py-2 border rounded-ios-lg">
-                <option value="all">All Categories</option>
-                {categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
-              </select>
+          {/* Search & Filter */}
+          <div className="bg-white p-4 rounded-lg border border-stone-100 shadow-sm">
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+              <input
+                placeholder="Search by name or SKU..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-stone-400"
+              />
             </div>
-          </IOSCard>
+          </div>
 
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
-          ) : (
+          {/* Items Table - Minimal Monochrome */}
+          <div className="bg-white rounded-lg border border-stone-100 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
+              <table className="w-full text-sm">
+                <thead className="bg-stone-50/50 border-b border-stone-100 text-left">
                   <tr>
-                    <th className="text-left p-3 font-medium">Item</th>
-                    <th className="text-left p-3 font-medium">SKU</th>
-                    <th className="text-left p-3 font-medium">Category</th>
-                    <th className="text-center p-3 font-medium">Quantity</th>
-                    <th className="text-center p-3 font-medium">Min</th>
-                    <th className="text-center p-3 font-medium">Status</th>
-                    <th className="text-right p-3 font-medium">Price</th>
+                    <th className="p-4 font-semibold text-stone-500 uppercase text-[11px] tracking-wider">Item Details</th>
+                    <th className="p-4 font-semibold text-stone-500 uppercase text-[11px] tracking-wider">Category</th>
+                    <th className="p-4 font-semibold text-stone-500 uppercase text-[11px] tracking-wider text-center">Stock Level</th>
+                    <th className="p-4 font-semibold text-stone-500 uppercase text-[11px] tracking-wider text-right">Unit Price</th>
+                    <th className="p-4 font-semibold text-stone-500 uppercase text-[11px] tracking-wider text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
-                  {filteredItems.map((item) => {
-                    const isLow = item.quantity <= item.min_quantity;
-                    return (
-                      <tr key={item.id} className={`hover:bg-gray-50 ${isLow ? 'bg-yellow-50' : ''}`}>
-                        <td className="p-3 font-medium">{item.name}</td>
-                        <td className="p-3 text-gray-500">{item.sku}</td>
-                        <td className="p-3 text-gray-500">{item.category}</td>
-                        <td className="p-3 text-center font-bold">{item.quantity} {item.unit}</td>
-                        <td className="p-3 text-center text-gray-500">{item.min_quantity}</td>
-                        <td className="p-3 text-center"><IOSBadge color={isLow ? 'warning' : 'success'}>{isLow ? 'Low' : 'OK'}</IOSBadge></td>
-                        <td className="p-3 text-right">KES {formatNumber(item.unit_price || 0)}</td>
-                      </tr>
-                    );
-                  })}
+                <tbody className="divide-y divide-stone-50">
+                  {isLoading ? (
+                    Array(5).fill(0).map((_, i) => (
+                      <tr key={i}><td colSpan={5} className="p-4"><Skeleton className="h-10 w-full" /></td></tr>
+                    ))
+                  ) : filteredItems.length === 0 ? (
+                    <tr><td colSpan={5} className="p-20 text-center text-stone-400">No items found matching your search.</td></tr>
+                  ) : (
+                    filteredItems.map((item) => {
+                      const isLow = item.quantity <= item.reorder_level;
+                      return (
+                        <tr key={item.id} className="hover:bg-stone-50/50 transition-colors">
+                          <td className="p-4">
+                            <p className="font-medium text-stone-900">{item.item_name}</p>
+                            <p className="text-[11px] font-mono text-stone-400 mt-0.5 uppercase tracking-tighter">{item.sku}</p>
+                          </td>
+                          <td className="p-4">
+                            <span className="text-[12px] bg-stone-100 px-2 py-0.5 rounded text-stone-600 capitalize font-medium">{item.category}</span>
+                          </td>
+                          <td className="p-4 text-center">
+                            <div className="flex flex-col items-center">
+                              <p className={`font-semibold ${isLow ? 'text-amber-600' : 'text-stone-900'}`}>{item.quantity} {item.unit_of_measure}</p>
+                              <p className="text-[10px] text-stone-400 mt-0.5">Min: {item.reorder_level}</p>
+                            </div>
+                          </td>
+                          <td className="p-4 text-right">
+                            <p className="font-medium text-stone-900">KES {formatNumber(item.cost_price)}</p>
+                            <p className="text-[10px] text-stone-400 mt-0.5">Per {item.unit_of_measure}</p>
+                          </td>
+                          <td className="p-4 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button onClick={() => openEditModal(item)} className="p-2 text-stone-400 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors">
+                                <Edit className="h-4 w-4" />
+                              </button>
+                              <button onClick={() => handleDelete(item.id)} className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
-          )}
+          </div>
         </div>
 
-        <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Add New Item</DialogTitle></DialogHeader>
-            <div className="space-y-4 mt-4">
-              <div><label className="text-sm font-medium">Name *</label><Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} /></div>
-              <div><label className="text-sm font-medium">SKU *</label><Input value={formData.sku} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} /></div>
-              <div><label className="text-sm font-medium">Category</label><Input value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm font-medium">Quantity</label><Input type="number" value={formData.quantity} onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })} /></div>
-                <div><label className="text-sm font-medium">Min Qty</label><Input type="number" value={formData.min_quantity} onChange={(e) => setFormData({ ...formData, min_quantity: parseInt(e.target.value) || 0 })} /></div>
+        {/* Upsert Modal - Standard Manager Styling */}
+        <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+          <DialogContent className="max-w-md bg-white border-none shadow-2xl p-0 overflow-hidden rounded-xl">
+            <div className="bg-stone-50 border-b border-stone-100 p-5">
+              <DialogHeader>
+                <DialogTitle className="text-[18px] font-semibold text-stone-900">{isEdit ? 'Update Item Details' : 'Add New Catalog Item'}</DialogTitle>
+                <p className="text-[12px] text-stone-500 mt-1">Configure item properties and stock parameters.</p>
+              </DialogHeader>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 block">Item Name</label>
+                <Input
+                  className="bg-white border-stone-200 focus:ring-stone-500"
+                  value={formData.item_name}
+                  onChange={(e) => {
+                    setFormData({ ...formData, item_name: e.target.value });
+                    if (!isEdit) suggestAttributes(e.target.value);
+                  }}
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm font-medium">Unit</label><Input value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} /></div>
-                <div><label className="text-sm font-medium">Price</label><Input type="number" value={formData.unit_price} onChange={(e) => setFormData({ ...formData, unit_price: parseFloat(e.target.value) || 0 })} /></div>
+                <div>
+                  <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 block">Category</label>
+                  <select
+                    className="w-full h-10 px-3 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-stone-400 transition-shadow"
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  >
+                    <option value="">Select...</option>
+                    <option value="food">Foodstuffs</option>
+                    <option value="beverage">Beverage</option>
+                    <option value="toiletries">Toiletries</option>
+                    <option value="linen">Linen</option>
+                    <option value="stationery">Stationery</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 block">Unit Measure</label>
+                  <select
+                    className="w-full h-10 px-3 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-stone-400 transition-shadow"
+                    value={formData.unit_of_measure}
+                    onChange={(e) => setFormData({ ...formData, unit_of_measure: e.target.value })}
+                  >
+                    <option value="">Select...</option>
+                    <option value="kg">Kilograms (kg)</option>
+                    <option value="liters">Liters (L)</option>
+                    <option value="packets">Packets</option>
+                    <option value="bottles">Bottles</option>
+                    <option value="units">Units</option>
+                  </select>
+                </div>
               </div>
-              <div className="flex gap-3">
-                <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                <IOSButton onClick={handleAddItem} className="flex-1">Add Item</IOSButton>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 block">Reorder Level</label>
+                  <Input
+                    type="number"
+                    className="bg-white border-stone-200"
+                    value={formData.reorder_level}
+                    onChange={(e) => setFormData({ ...formData, reorder_level: parseInt(e.target.value) })}
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 block">Cost Price (KES)</label>
+                  <Input
+                    type="number"
+                    className="bg-white border-stone-200"
+                    value={formData.cost_price}
+                    onChange={(e) => setFormData({ ...formData, cost_price: parseFloat(e.target.value) })}
+                  />
+                </div>
               </div>
+            </div>
+            <div className="p-5 bg-stone-50 border-t border-stone-100 flex justify-end gap-2">
+              <button onClick={() => setModalOpen(false)} className="btn-secondary">Cancel</button>
+              <button
+                onClick={handleCreateOrUpdate}
+                disabled={isActionLoading || !formData.item_name}
+                className="btn-primary"
+              >
+                {isActionLoading ? 'Saving...' : isEdit ? 'Update Catalog' : 'Add to Catalog'}
+              </button>
             </div>
           </DialogContent>
         </Dialog>

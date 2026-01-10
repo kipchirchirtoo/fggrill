@@ -110,8 +110,6 @@ INSERT INTO roles (role_name, description, permissions, created_at)
 VALUES 
   ('branch_operations_manager', 'Manages all branch operations including inventory and staff', 
    '{"inventory": {"read": true, "write": true}, "staff": {"read": true, "write": true}, "finances": {"read": true, "write": false}}', NOW()),
-  ('central_operations_manager', 'Manages central operations and oversees all branches', 
-   '{"inventory": {"read": true, "write": true}, "branches": {"read": true, "write": true}, "finances": {"read": true, "write": true}}', NOW()),
   ('facilities_manager', 'Manages housekeeping and maintenance operations', 
    '{"housekeeping": {"read": true, "write": true}, "maintenance": {"read": true, "write": true}}', NOW())
 ON CONFLICT (role_name) DO NOTHING;

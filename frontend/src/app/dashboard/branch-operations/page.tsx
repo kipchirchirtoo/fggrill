@@ -88,8 +88,7 @@ function BranchOperationsDashboardContent() {
       UserRole.BRANCH_MANAGER,
       UserRole.BRANCH_STOREKEEPER,
       UserRole.SUPER_ADMIN,
-      UserRole.GENERAL_MANAGER,
-      UserRole.CENTRAL_OPERATIONS_MANAGER
+      UserRole.GENERAL_MANAGER
     ]}>
       <BranchAwareDashboardLayout
         title="Branch Operations"

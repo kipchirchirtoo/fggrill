@@ -15,7 +15,7 @@ export const getDispatchNotes = async (
     try {
         const { from_branch_id, to_branch_id, status, from_date, to_date } = req.query;
         const user = req.user;
-        const isCentral = ['admin', 'central_operations_manager', 'general_manager'].includes(user?.role || '');
+        const isCentral = ['admin', 'general_manager'].includes(user?.role || '');
 
         let query = supabase
             .from('dispatch_notes')

@@ -1,10 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import { logger } from '../../utils/logger';
-import { 
-  generateSKU, 
-  generateAutoSKU, 
-  generateOrderNumber, 
+import {
+  generateSKU,
+  generateAutoSKU,
+  generateOrderNumber,
   previewSKU,
   getCategories,
   getCategoryCode
@@ -35,7 +35,7 @@ export const getItems = async (
       // Check for negative sign for descending
       const isDesc = orderStr.startsWith('-');
       const field = isDesc ? orderStr.substring(1) : orderStr;
-      
+
       // Special case for quantity if needed, but basic sort works
       query = query.order(field, { ascending: !isDesc });
     } else {
@@ -45,7 +45,7 @@ export const getItems = async (
     // Pagination
     const page = parseInt(req.query.page as string) || 1;
     // Default limit 25 to match reference records_per_page default
-    const limit = parseInt(req.query.limit as string) || 25; 
+    const limit = parseInt(req.query.limit as string) || 25;
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
@@ -54,7 +54,7 @@ export const getItems = async (
       .from('simple_items')
       .select('sku', { count: 'exact', head: true })
       .eq('is_active', true);
-      
+
     if (countError) throw countError;
 
     // Apply range
@@ -95,7 +95,7 @@ export const getItem = async (
       .single();
 
     if (error && error.code !== 'PGRST116') throw error;
-    
+
     if (!data) {
       res.status(404).json({
         success: false,
@@ -116,17 +116,90 @@ export const getItem = async (
 // @desc    Create item
 // @route   POST /api/store/items
 // @access  Private (Manager)
+// @desc    Suggest category and unit based on item name
+export const suggestItemAttributes = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { item_name } = req.body;
+    if (!item_name) {
+      res.status(400).json({ success: false, message: 'Item name is required' });
+      return;
+    }
+
+    const name = item_name.toLowerCase();
+    let category = 'other';
+    let unit_of_measure = 'pcs';
+
+    const foodKeywords = ['flour', 'sugar', 'milk', 'rice', 'salt', 'oil', 'beef', 'chicken', 'fish', 'potato', 'tomato', 'onion', 'bread', 'butter', 'egg', 'spice', 'garlic', 'ginger'];
+    const beverageKeywords = ['beer', 'wine', 'soda', 'juice', 'water', 'whiskey', 'gin', 'vodka', 'coke', 'sprite', 'fanta', 'pepsi', 'tonic', 'cocktail'];
+    const toiletriesKeywords = ['soap', 'shampoo', 'tissue', 'toothpaste', 'brush', 'lotion', 'towel'];
+
+    const kgKeywords = ['flour', 'sugar', 'rice', 'salt', 'beef', 'chicken', 'fish', 'meat', 'potato', 'onion', 'tomato'];
+    const literKeywords = ['milk', 'oil', 'juice', 'water', 'wine', 'whiskey', 'gin', 'vodka'];
+    const packetKeywords = ['spice', 'biscuits', 'snack', 'tea', 'coffee'];
+    const bottleKeywords = ['beer', 'soda', 'shampoo', 'lotion'];
+
+    if (foodKeywords.some(k => name.includes(k))) category = 'food';
+    else if (beverageKeywords.some(k => name.includes(k))) category = 'beverage';
+    else if (toiletriesKeywords.some(k => name.includes(k))) category = 'toiletries';
+
+    if (kgKeywords.some(k => name.includes(k))) unit_of_measure = 'kg';
+    else if (literKeywords.some(k => name.includes(k))) unit_of_measure = 'liters';
+    else if (packetKeywords.some(k => name.includes(k))) unit_of_measure = 'packets';
+    else if (bottleKeywords.some(k => name.includes(k))) unit_of_measure = 'bottles';
+
+    res.status(200).json({
+      success: true,
+      data: { category, unit_of_measure }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const createItem = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    let { 
-        sku, description, retail_price, quantity, 
-        barcode, item_name, category, unit_of_measure, 
-        cost_price, supplier, reorder_level, image_url 
+    let {
+      sku, description, retail_price, quantity,
+      barcode, item_name, category, unit_of_measure,
+      cost_price, supplier, reorder_level, image_url
     } = req.body;
+
+    // =====================================================
+    // SMART CATEGORIZATION & UNIT SUGGESTIONS
+    // =====================================================
+    if (item_name && (!category || !unit_of_measure)) {
+      const name = item_name.toLowerCase();
+
+      const foodKeywords = ['flour', 'sugar', 'milk', 'rice', 'salt', 'oil', 'beef', 'chicken', 'fish', 'potato', 'tomato', 'onion', 'bread', 'butter', 'egg', 'spice', 'garlic', 'ginger'];
+      const beverageKeywords = ['beer', 'wine', 'soda', 'juice', 'water', 'whiskey', 'gin', 'vodka', 'coke', 'sprite', 'fanta', 'pepsi', 'tonic', 'cocktail'];
+      const toiletriesKeywords = ['soap', 'shampoo', 'tissue', 'toothpaste', 'brush', 'lotion', 'towel'];
+
+      const kgKeywords = ['flour', 'sugar', 'rice', 'salt', 'beef', 'chicken', 'fish', 'meat', 'potato', 'onion', 'tomato'];
+      const literKeywords = ['milk', 'oil', 'juice', 'water', 'wine', 'whiskey', 'gin', 'vodka'];
+      const packetKeywords = ['spice', 'biscuits', 'snack', 'tea', 'coffee'];
+      const bottleKeywords = ['beer', 'soda', 'shampoo', 'lotion'];
+
+      if (!category) {
+        if (foodKeywords.some(k => name.includes(k))) category = 'food';
+        else if (beverageKeywords.some(k => name.includes(k))) category = 'beverage';
+        else if (toiletriesKeywords.some(k => name.includes(k))) category = 'toiletries';
+      }
+
+      if (!unit_of_measure) {
+        if (kgKeywords.some(k => name.includes(k))) unit_of_measure = 'kg';
+        else if (literKeywords.some(k => name.includes(k))) unit_of_measure = 'liters';
+        else if (packetKeywords.some(k => name.includes(k))) unit_of_measure = 'packets';
+        else if (bottleKeywords.some(k => name.includes(k))) unit_of_measure = 'bottles';
+      }
+    }
 
     // =====================================================
     // AUTO-GENERATE SKU IF NOT PROVIDED
@@ -134,7 +207,7 @@ export const createItem = async (
     // =====================================================
     let isAutoSku = false;
     let categoryCode = '';
-    
+
     if (!sku || sku.trim() === '') {
       // Generate SKU automatically
       const skuResult = await generateSKU(
@@ -145,7 +218,7 @@ export const createItem = async (
       sku = skuResult.sku;
       isAutoSku = skuResult.isAuto;
       categoryCode = skuResult.categoryCode;
-      
+
       logger.info(`Auto-generated SKU: ${sku} for item "${item_name || description}"`);
     } else {
       // User provided SKU - get category code
@@ -159,13 +232,13 @@ export const createItem = async (
         .select('*')
         .eq('barcode', barcode)
         .single();
-      
+
       if (existingByBarcode) {
         // Barcode already exists - return error or update
         if (existingByBarcode.is_active) {
-          res.status(400).json({ 
-            success: false, 
-            message: `Barcode already assigned to: ${existingByBarcode.item_name || existingByBarcode.sku}` 
+          res.status(400).json({
+            success: false,
+            message: `Barcode already assigned to: ${existingByBarcode.item_name || existingByBarcode.sku}`
           });
           return;
         }
@@ -188,14 +261,14 @@ export const createItem = async (
             description: description || existingItem.description,
             retail_price: retail_price || existingItem.retail_price,
             quantity: quantity !== undefined ? quantity : existingItem.quantity,
-            barcode: barcode || existingItem.barcode, 
-            item_name: item_name || existingItem.item_name, 
-            category: category || existingItem.category, 
+            barcode: barcode || existingItem.barcode,
+            item_name: item_name || existingItem.item_name,
+            category: category || existingItem.category,
             category_code: categoryCode,
-            unit_of_measure: unit_of_measure || existingItem.unit_of_measure, 
-            cost_price: cost_price || existingItem.cost_price, 
-            supplier: supplier || existingItem.supplier, 
-            reorder_level: reorder_level || existingItem.reorder_level, 
+            unit_of_measure: unit_of_measure || existingItem.unit_of_measure,
+            cost_price: cost_price || existingItem.cost_price,
+            supplier: supplier || existingItem.supplier,
+            reorder_level: reorder_level || existingItem.reorder_level,
             image_url: image_url || existingItem.image_url,
             is_active: true,
             is_auto_sku: isAutoSku,
@@ -206,12 +279,12 @@ export const createItem = async (
           .single();
 
         if (error) throw error;
-        
+
         // Log history if quantity changed
         if (quantity !== undefined && quantity !== existingItem.quantity) {
           // Generate order number for this stock-in
           const orderNum = await generateOrderNumber('STKIN');
-          
+
           await supabase.from('stock_history').insert({
             item_sku: existingItem.sku,
             change_type: 'IN',
@@ -227,9 +300,9 @@ export const createItem = async (
         res.status(200).json({ success: true, data, reactivated: true });
         return;
       } else {
-        res.status(400).json({ 
-          success: false, 
-          message: 'Item with this SKU already exists.' 
+        res.status(400).json({
+          success: false,
+          message: 'Item with this SKU already exists.'
         });
         return;
       }
@@ -249,14 +322,14 @@ export const createItem = async (
         description: description || item_name,
         retail_price,
         quantity: quantity || 0,
-        barcode, 
-        item_name: item_name || description, 
+        barcode,
+        item_name: item_name || description,
         category,
         category_code: categoryCode,
-        unit_of_measure, 
-        cost_price, 
-        supplier, 
-        reorder_level, 
+        unit_of_measure,
+        cost_price,
+        supplier,
+        reorder_level,
         image_url,
         is_active: true,
         is_auto_sku: isAutoSku,
@@ -306,14 +379,14 @@ export const updateItem = async (
   try {
     // First get current item to compare quantity
     const { data: currentItem } = await supabase
-        .from('simple_items')
-        .select('*')
-        .eq('sku', req.params.id)
-        .single();
-        
+      .from('simple_items')
+      .select('*')
+      .eq('sku', req.params.id)
+      .single();
+
     if (!currentItem) {
-        res.status(404).json({ message: "Item not found" });
-        return;
+      res.status(404).json({ message: "Item not found" });
+      return;
     }
 
     const { quantity, reason, reference, notes, ...otherFields } = req.body;
@@ -325,7 +398,7 @@ export const updateItem = async (
         quantity: quantity !== undefined ? quantity : currentItem.quantity,
         last_updated: new Date().toISOString()
       })
-      .eq('sku', req.params.id) 
+      .eq('sku', req.params.id)
       .select()
       .single();
 
@@ -333,20 +406,20 @@ export const updateItem = async (
 
     // Log history if quantity changed
     if (quantity !== undefined && quantity !== currentItem.quantity) {
-        const diff = quantity - currentItem.quantity;
-        const type = diff > 0 ? 'IN' : 'OUT';
-        
-        await supabase.from('stock_history').insert({
-            item_sku: req.params.id,
-            change_type: type,
-            quantity_change: Math.abs(diff),
-            previous_quantity: currentItem.quantity,
-            new_quantity: quantity,
-            reason: reason || (type === 'IN' ? 'PURCHASE' : 'USAGE'),
-            reference: reference,
-            notes: notes,
-            user_id: req.user.id
-        });
+      const diff = quantity - currentItem.quantity;
+      const type = diff > 0 ? 'IN' : 'OUT';
+
+      await supabase.from('stock_history').insert({
+        item_sku: req.params.id,
+        change_type: type,
+        quantity_change: Math.abs(diff),
+        previous_quantity: currentItem.quantity,
+        new_quantity: quantity,
+        reason: reason || (type === 'IN' ? 'PURCHASE' : 'USAGE'),
+        reference: reference,
+        notes: notes,
+        user_id: req.user.id
+      });
     }
 
     res.status(200).json({
@@ -371,9 +444,9 @@ export const addStock = async (
     const { quantity, notes, reference } = req.body;
 
     if (!quantity || quantity <= 0) {
-      res.status(400).json({ 
-        success: false, 
-        message: 'Quantity must be greater than 0' 
+      res.status(400).json({
+        success: false,
+        message: 'Quantity must be greater than 0'
       });
       return;
     }
@@ -386,9 +459,9 @@ export const addStock = async (
       .single();
 
     if (fetchError || !currentItem) {
-      res.status(404).json({ 
-        success: false, 
-        message: 'Item not found' 
+      res.status(404).json({
+        success: false,
+        message: 'Item not found'
       });
       return;
     }
@@ -478,10 +551,10 @@ export const previewSKUEndpoint = async (
 ): Promise<void> => {
   try {
     const { category, item_name } = req.body;
-    
+
     const preview = previewSKU(category || 'General', item_name || 'Item');
     const categoryCode = getCategoryCode(category || 'General');
-    
+
     res.status(200).json({
       success: true,
       preview,
@@ -504,7 +577,7 @@ export const getCategoriesEndpoint = async (
 ): Promise<void> => {
   try {
     const categories = await getCategories();
-    
+
     res.status(200).json({
       success: true,
       data: categories
@@ -524,13 +597,13 @@ export const generateSKUEndpoint = async (
 ): Promise<void> => {
   try {
     const { category, item_name, barcode } = req.body;
-    
+
     const result = await generateSKU(
       category || 'General',
       item_name || 'Item',
       barcode
     );
-    
+
     res.status(200).json({
       success: true,
       ...result
@@ -550,7 +623,7 @@ export const getStockHistory = async (
 ): Promise<void> => {
   try {
     const sku = req.params.id;
-    
+
     const { data, error } = await supabase
       .from('stock_history')
       .select('*')

@@ -21,7 +21,6 @@ export enum UserRole {
 
   // New consolidated roles
   BRANCH_OPERATIONS_MANAGER = 'branch_operations_manager',
-  CENTRAL_OPERATIONS_MANAGER = 'central_operations_manager',
   FACILITIES_MANAGER = 'facilities_manager',
 
   // Other roles
@@ -286,7 +285,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // New consolidated roles
       [UserRole.BRANCH_OPERATIONS_MANAGER]: '/dashboard/branch-operations',
-      [UserRole.CENTRAL_OPERATIONS_MANAGER]: '/dashboard/central-operations',
       [UserRole.FACILITIES_MANAGER]: '/dashboard/facilities',
 
       // Other roles

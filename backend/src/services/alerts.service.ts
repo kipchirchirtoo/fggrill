@@ -87,14 +87,14 @@ class AlertsService {
 
       let centralAlerts: StockAlert[] = [];
       let branchAlerts: StockAlert[] = [];
-      
+
       try {
         const centralResult = await this.db.query(centralQuery);
         centralAlerts = centralResult.rows;
       } catch (dbError) {
         logger.warn('Database unavailable for central stock check');
       }
-      
+
       try {
         const branchResult = await this.db.query(branchQuery);
         branchAlerts = branchResult.rows;
@@ -132,14 +132,11 @@ class AlertsService {
         ? `Central warehouse stock for ${alert.name} (${alert.sku}) is low. Current stock: ${alert.current_stock}, Reorder level: ${alert.reorder_level}`
         : `Branch ${alert.branch_name} stock for ${alert.name} (${alert.sku}) is low. Current stock: ${alert.current_stock}, Reorder level: ${alert.reorder_level}`;
 
-      // Create notification for central operations team
-      await notificationService.notifyRole('CENTRAL_OPERATIONS_MANAGER', title, message, {
+      // Create notification for general manager
+      await notificationService.notifyRole('GENERAL_MANAGER', title, message, {
         type: 'warning',
         category: 'inventory',
         priority: 'high',
-        actionUrl: isCentral 
-          ? '/dashboard/central-operations/warehouse/inventory' 
-          : `/dashboard/central-operations/branch-oversight/comparison?branch=${alert.branch_id}`,
         metadata: { sku: alert.sku, currentStock: alert.current_stock, reorderLevel: alert.reorder_level }
       });
 
@@ -160,7 +157,7 @@ class AlertsService {
           WHERE u.branch_id = $1 AND u.role IN ('BRANCH_MANAGER', 'STOREKEEPER')
         `;
         const { rows: users } = await this.db.query(usersQuery, [alert.branch_id]);
-        
+
         // Send email to branch staff
         for (const user of users) {
           await emailService.sendEmail({
@@ -183,10 +180,10 @@ class AlertsService {
         const usersQuery = `
           SELECT u.id, u.name, u.email, u.role 
           FROM users u
-          WHERE u.role = 'CENTRAL_OPERATIONS_MANAGER' OR u.role = 'CENTRAL_STOREKEEPER'
+          WHERE u.role = 'GENERAL_MANAGER' OR u.role = 'CENTRAL_STOREKEEPER'
         `;
         const { rows: users } = await this.db.query(usersQuery);
-        
+
         // Send email to central operations team
         for (const user of users) {
           await emailService.sendEmail({
@@ -234,7 +231,7 @@ class AlertsService {
       `;
 
       let alerts: ComplianceAlert[] = [];
-      
+
       try {
         const result = await this.db.query<ComplianceAlert>(query);
         alerts = result.rows;
@@ -263,16 +260,15 @@ class AlertsService {
       const title = `Compliance Alert: ${alert.requirement}`;
       const message = `${alert.requirement} for ${alert.branch_name} expires in ${alert.days_remaining} days (${new Date(alert.due_date).toLocaleDateString()})`;
 
-      // Create notification for central operations team
-      await notificationService.notifyRole('CENTRAL_OPERATIONS_MANAGER', title, message, {
+      // Create notification for general manager
+      await notificationService.notifyRole('GENERAL_MANAGER', title, message, {
         type: 'warning',
         category: 'compliance',
         priority: alert.days_remaining < 7 ? 'high' : 'medium',
-        actionUrl: `/dashboard/central-operations/branch-oversight/compliance?branch=${alert.branch_id}`,
-        metadata: { 
-          id: alert.id, 
-          dueDate: alert.due_date, 
-          daysRemaining: alert.days_remaining 
+        metadata: {
+          id: alert.id,
+          dueDate: alert.due_date,
+          daysRemaining: alert.days_remaining
         }
       });
 
@@ -282,10 +278,10 @@ class AlertsService {
         category: 'compliance',
         priority: alert.days_remaining < 7 ? 'high' : 'medium',
         actionUrl: '/dashboard/branch/compliance',
-        metadata: { 
-          id: alert.id, 
-          dueDate: alert.due_date, 
-          daysRemaining: alert.days_remaining 
+        metadata: {
+          id: alert.id,
+          dueDate: alert.due_date,
+          daysRemaining: alert.days_remaining
         }
       });
 
@@ -296,17 +292,17 @@ class AlertsService {
         WHERE u.branch_id = $1 AND u.role = 'BRANCH_MANAGER'
       `;
       const { rows: branchUsers } = await this.db.query(usersQuery, [alert.branch_id]);
-      
+
       // Get compliance team emails
       const complianceUsersQuery = `
         SELECT u.id, u.name, u.email, u.role 
         FROM users u
-        WHERE u.role = 'CENTRAL_OPERATIONS_MANAGER'
+        WHERE u.role = 'GENERAL_MANAGER'
       `;
       const { rows: complianceUsers } = await this.db.query(complianceUsersQuery);
-      
+
       const allUsers = [...branchUsers, ...complianceUsers];
-      
+
       // Send email to branch managers and compliance team
       for (const user of allUsers) {
         await emailService.sendEmail({
@@ -355,7 +351,7 @@ class AlertsService {
       `;
 
       let alerts: BudgetVarianceAlert[] = [];
-      
+
       try {
         const result = await this.db.query<BudgetVarianceAlert>(query, [percentThreshold]);
         alerts = result.rows;
@@ -385,13 +381,12 @@ class AlertsService {
       const title = `Budget Alert: ${alert.name} ${isOverBudget ? 'Over Budget' : 'Under Budget'}`;
       const message = `${alert.name} for ${alert.branch_name} is ${isOverBudget ? 'over' : 'under'} budget by ${Math.abs(alert.variance).toLocaleString()} (${alert.variance_percentage.toFixed(1)}%)`;
 
-      // Create notification for central operations team
-      await notificationService.notifyRole('CENTRAL_OPERATIONS_MANAGER', title, message, {
+      // Create notification for general manager
+      await notificationService.notifyRole('GENERAL_MANAGER', title, message, {
         type: 'warning',
         category: 'budget',
         priority: alert.variance_percentage >= 20 ? 'high' : 'medium',
-        actionUrl: `/dashboard/central-operations/strategic-planning/budgets?branch=${alert.branch_id}`,
-        metadata: { 
+        metadata: {
           id: alert.id,
           budgeted: alert.budgeted_amount,
           actual: alert.actual_amount,
@@ -406,7 +401,7 @@ class AlertsService {
         category: 'budget',
         priority: alert.variance_percentage >= 20 ? 'high' : 'medium',
         actionUrl: '/dashboard/branch/finances',
-        metadata: { 
+        metadata: {
           id: alert.id,
           budgeted: alert.budgeted_amount,
           actual: alert.actual_amount,
@@ -420,10 +415,10 @@ class AlertsService {
         SELECT u.id, u.name, u.email, u.role 
         FROM users u
         WHERE (u.branch_id = $1 AND u.role = 'BRANCH_MANAGER') OR
-              u.role IN ('CENTRAL_OPERATIONS_MANAGER', 'FINANCE_MANAGER')
+              u.role IN ('GENERAL_MANAGER', 'FINANCE_MANAGER')
       `;
       const { rows: users } = await this.db.query(usersQuery, [alert.branch_id]);
-      
+
       // Send email to branch managers and finance team
       for (const user of users) {
         await emailService.sendEmail({
@@ -507,7 +502,7 @@ class AlertsService {
       `;
 
       let alerts: PerformanceAlert[] = [];
-      
+
       try {
         const result = await this.db.query<PerformanceAlert>(query, [thresholdPercent]);
         alerts = result.rows;
@@ -537,13 +532,12 @@ class AlertsService {
       const title = `Performance Alert: ${alert.branch_name} ${metricName}`;
       const message = `${alert.branch_name} ${metricName} is below target: ${alert.current_value.toFixed(1)} vs target ${alert.target_value.toFixed(1)} (${alert.threshold.toFixed(1)}% below target)`;
 
-      // Create notification for central operations team
-      await notificationService.notifyRole('CENTRAL_OPERATIONS_MANAGER', title, message, {
+      // Create notification for general manager
+      await notificationService.notifyRole('GENERAL_MANAGER', title, message, {
         type: 'warning',
         category: 'performance',
         priority: alert.threshold >= 25 ? 'high' : 'medium',
-        actionUrl: `/dashboard/central-operations/branch-oversight/performance?branch=${alert.branch_id}`,
-        metadata: { 
+        metadata: {
           metric: alert.metric,
           current: alert.current_value,
           target: alert.target_value,
@@ -557,7 +551,7 @@ class AlertsService {
         category: 'performance',
         priority: alert.threshold >= 25 ? 'high' : 'medium',
         actionUrl: '/dashboard/branch/performance',
-        metadata: { 
+        metadata: {
           metric: alert.metric,
           current: alert.current_value,
           target: alert.target_value,
@@ -570,10 +564,10 @@ class AlertsService {
         SELECT u.id, u.name, u.email, u.role 
         FROM users u
         WHERE (u.branch_id = $1 AND u.role = 'BRANCH_MANAGER') OR
-              u.role IN ('CENTRAL_OPERATIONS_MANAGER', 'GENERAL_MANAGER')
+              u.role IN ('GENERAL_MANAGER')
       `;
       const { rows: users } = await this.db.query(usersQuery, [alert.branch_id]);
-      
+
       // Send email to branch managers and central operations
       for (const user of users) {
         await emailService.sendEmail({

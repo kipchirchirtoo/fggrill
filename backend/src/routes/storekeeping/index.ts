@@ -3,10 +3,12 @@ import stockRequestsRoutes from './stock-requests.routes';
 import dispatchNotesRoutes from './dispatch-notes.routes';
 import purchaseOrdersRoutes from './purchase-orders.routes';
 import resourcesRoutes from './resources.routes';
+import itemsRoutes from './items.routes';
 import { getWarehouseDashboard } from '../../controllers/storekeeping/dashboard.controller';
 
 const router = express.Router();
 
+router.use('/items', itemsRoutes);
 router.use('/stock-requests', stockRequestsRoutes);
 router.use('/dispatch-notes', dispatchNotesRoutes);
 router.use('/purchase-orders', purchaseOrdersRoutes);

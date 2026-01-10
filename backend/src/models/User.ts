@@ -72,7 +72,6 @@ export enum UserRole {
   PURCHASING_MANAGER = 'purchasing_manager',
 
   // Operations
-  CENTRAL_OPERATIONS_MANAGER = 'central_operations_manager',
   BRANCH_OPERATIONS_MANAGER = 'branch_operations_manager',
   FACILITIES_MANAGER = 'facilities_manager',
 

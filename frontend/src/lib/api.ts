@@ -215,6 +215,7 @@ export const storeAPI = {
   getCategories: () => fetchAPI<any>('/store/categories'),
   previewSKU: (data: any) => fetchAPI<any>('/store/preview-sku', { method: 'POST', body: JSON.stringify(data) }),
   generateSKU: (data: any) => fetchAPI<any>('/store/generate-sku', { method: 'POST', body: JSON.stringify(data) }),
+  suggestAttributes: (item_name: string) => fetchAPI<any>('/storekeeping/items/suggest', { method: 'POST', body: JSON.stringify({ item_name }) }),
 
   // Branch Stock
   getBranchStock: (branchId?: number) => {
@@ -3173,7 +3174,13 @@ export const api = {
   pettyCash: pettyCashAPI,
   payroll: payrollAPI,
   notifications: notificationsAPI,
-  cashier: cashierAPI
+  cashier: cashierAPI,
+  approveStockRequest: (id: string, data?: { approved_quantity_notes?: string }) =>
+    fetchAPI<any>(`/store/stock-requests/${id}/approve`, { method: 'PUT', body: JSON.stringify(data || {}) }),
+  rejectStockRequest: (id: string, data?: { review_notes?: string }) =>
+    fetchAPI<any>(`/store/stock-requests/${id}/reject`, { method: 'PUT', body: JSON.stringify(data || {}) }),
+  getBranchPerformance: (branchId: number, days: number = 1) =>
+    fetchAPI<any>(`/store/stock-requests/branch-performance/${branchId}?days=${days}`),
 };
 
 export default api;

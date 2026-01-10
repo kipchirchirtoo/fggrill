@@ -35,7 +35,7 @@ export function BranchSelector({
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newValue = e.target.value ? Number(e.target.value) : null;
-    
+
     if (onChange) {
       onChange(newValue);
     } else if (newValue !== null) {
@@ -126,7 +126,6 @@ export function useBranchFilter(initialBranchId?: number | null) {
     const multiAccessRoles = [
       'super_admin',
       'general_manager',
-      'central_operations_manager',
       'accountant',
       'finance_manager',
     ];

@@ -38,7 +38,7 @@ class ReportsService {
         description: 'Summary of key performance metrics across all branches',
         formats: ['pdf', 'excel'],
         recipients: {
-          roles: ['CENTRAL_OPERATIONS_MANAGER', 'GENERAL_MANAGER']
+          roles: ['GENERAL_MANAGER']
         },
         endpoint: '/api/reports/generate/branded-pdf?reportType=branch_performance',
         schedule: ['daily', 'weekly']
@@ -48,7 +48,7 @@ class ReportsService {
         description: 'Overview of staff performance and attendance',
         formats: ['pdf', 'excel'],
         recipients: {
-          roles: ['CENTRAL_OPERATIONS_MANAGER', 'HR_MANAGER']
+          roles: ['HR_MANAGER']
         },
         endpoint: '/api/reports/generate/branded-pdf?reportType=staff_overview',
         schedule: ['weekly']
@@ -58,7 +58,7 @@ class ReportsService {
         description: 'Summary of compliance status across all branches',
         formats: ['pdf'],
         recipients: {
-          roles: ['CENTRAL_OPERATIONS_MANAGER', 'GENERAL_MANAGER']
+          roles: ['GENERAL_MANAGER']
         },
         endpoint: '/api/reports/generate/branded-pdf?reportType=compliance',
         schedule: ['weekly']
@@ -68,7 +68,7 @@ class ReportsService {
         description: 'Current inventory levels and stock alerts',
         formats: ['pdf', 'excel'],
         recipients: {
-          roles: ['CENTRAL_OPERATIONS_MANAGER', 'CENTRAL_STOREKEEPER']
+          roles: ['CENTRAL_STOREKEEPER']
         },
         endpoint: '/api/reports/generate/branded-pdf?reportType=inventory',
         schedule: ['daily', 'weekly']
@@ -78,7 +78,7 @@ class ReportsService {
         description: 'Comparison of budgeted vs actual expenses',
         formats: ['pdf', 'excel'],
         recipients: {
-          roles: ['CENTRAL_OPERATIONS_MANAGER', 'FINANCE_MANAGER']
+          roles: ['FINANCE_MANAGER']
         },
         endpoint: '/api/reports/generate/branded-pdf?reportType=budget_variance',
         schedule: ['weekly', 'monthly']
@@ -88,7 +88,7 @@ class ReportsService {
         description: 'Audit of account reconciliations and discrepancies',
         formats: ['pdf'],
         recipients: {
-          roles: ['CENTRAL_OPERATIONS_MANAGER', 'FINANCE_MANAGER', 'GENERAL_MANAGER']
+          roles: ['FINANCE_MANAGER', 'GENERAL_MANAGER']
         },
         endpoint: '/api/reports/generate/branded-pdf?reportType=reconciliation_audit',
         schedule: ['weekly', 'monthly']

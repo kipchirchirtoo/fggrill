@@ -11,8 +11,9 @@ if (!fs.existsSync(logsDir)) {
 const logFormat = winston.format.combine(
   winston.format.timestamp(),
   winston.format.errors({ stack: true }),
-  winston.format.printf(({ timestamp, level, message, stack }) => {
-    return `${timestamp} [${level.toUpperCase()}]: ${message}${stack ? '\n' + stack : ''}`;
+  winston.format.printf(({ timestamp, level, message, stack, ...meta }) => {
+    const metaStr = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
+    return `${timestamp} [${level.toUpperCase()}]: ${message}${metaStr}${stack ? '\n' + stack : ''}`;
   })
 );
 

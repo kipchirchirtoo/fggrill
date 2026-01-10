@@ -86,7 +86,6 @@ export default function DocsPage() {
                 <h2 className="text-2xl font-bold text-stone-900 mb-6">System Modules</h2>
                 <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {[
-                        { title: 'Central Operations', icon: Building2, href: '/docs/roles/central-operations' },
                         { title: 'Branch Management', icon: Users, href: '/docs/roles/branch-manager' },
                         { title: 'Finance & Audit', icon: CreditCard, href: '/docs/roles/finance' },
                         { title: 'POS & Kitchen', icon: Layout, href: '/docs/roles/pos-kitchen' },

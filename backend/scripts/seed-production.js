@@ -26,7 +26,6 @@ async function seedProductionData() {
       { name: 'housekeeping_supervisor', display_name: 'Housekeeping Supervisor', description: 'Supervises housekeeping staff', level: 4 },
       { name: 'maintenance', display_name: 'Maintenance', description: 'Maintenance staff', level: 5 },
       { name: 'branch_operations_manager', display_name: 'Branch Operations Manager', description: 'Manages branch operations', level: 3 },
-      { name: 'central_operations_manager', display_name: 'Central Operations Manager', description: 'Manages central operations across branches', level: 2 },
       { name: 'facilities_manager', display_name: 'Facilities Manager', description: 'Manages facilities and maintenance', level: 3 },
       { name: 'receptionist', display_name: 'Receptionist', description: 'Front desk operations', level: 5 },
       { name: 'restaurant', display_name: 'Restaurant Staff', description: 'Restaurant operations', level: 5 },
@@ -51,15 +50,15 @@ async function seedProductionData() {
 
     // 2. Seed Role Permissions (module-based)
     console.log('🔐 Seeding role permissions...');
-    
+
     // Get role IDs
     const roleIds = await client.query(`SELECT id, role_name FROM roles`);
     const roleMap = {};
     roleIds.rows.forEach(r => roleMap[r.role_name] = r.id);
-    
+
     // Define modules and permissions per role
     const modules = ['users', 'branches', 'inventory', 'reservations', 'finance', 'reports', 'housekeeping', 'pos', 'settings', 'rooms', 'guests'];
-    
+
     // Super admin gets all permissions
     if (roleMap['super_admin']) {
       for (const mod of modules) {
@@ -74,12 +73,12 @@ async function seedProductionData() {
 
     // 3. Create Super Admin User
     console.log('👤 Creating super admin user...');
-    
+
     // Hash the password for auth.users table
     const password = 'Allan@13900';
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(password, salt);
-    
+
     // Check if user already exists in public.users
     const existingUser = await client.query(`
       SELECT id FROM public.users WHERE email = $1
@@ -88,7 +87,7 @@ async function seedProductionData() {
     let userId;
     if (existingUser.rows.length > 0) {
       userId = existingUser.rows[0].id;
-      
+
       // Update existing user in public.users
       await client.query(`
         UPDATE public.users SET 
@@ -98,7 +97,7 @@ async function seedProductionData() {
           updated_at = NOW()
         WHERE email = $4
       `, ['KIPCHIRCHIR', 'TOO', 'super_admin', 'kipchirchirtoo01@gmail.com']);
-      
+
       // Update auth.users password
       await client.query(`
         UPDATE auth.users SET 
@@ -106,13 +105,13 @@ async function seedProductionData() {
           updated_at = NOW()
         WHERE id = $2
       `, [hashedPassword, userId]);
-      
+
       console.log(`✅ Updated existing user: kipchirchirtoo01@gmail.com\n`);
     } else {
       // Generate UUID for new user
       const newId = await client.query(`SELECT gen_random_uuid() as id`);
       userId = newId.rows[0].id;
-      
+
       // Create user in auth.users with metadata (trigger will create public.users entry)
       await client.query(`
         INSERT INTO auth.users (
@@ -132,7 +131,7 @@ async function seedProductionData() {
         first_name: 'KIPCHIRCHIR',
         last_name: 'TOO'
       })]);
-      
+
       // Update the public.users entry created by trigger with correct data
       await client.query(`
         UPDATE public.users SET 
@@ -142,14 +141,14 @@ async function seedProductionData() {
           updated_at = NOW()
         WHERE id = $4
       `, ['KIPCHIRCHIR', 'TOO', 'super_admin', userId]);
-      
+
       console.log(`✅ Created new super admin user: kipchirchirtoo01@gmail.com\n`);
     }
 
     // 4. Ensure branches exist
     console.log('🏢 Checking branches...');
     const branchesCheck = await client.query(`SELECT COUNT(*) FROM branches`);
-    
+
     if (parseInt(branchesCheck.rows[0].count) === 0) {
       console.log('Creating default branches...');
       await client.query(`

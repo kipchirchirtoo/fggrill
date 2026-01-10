@@ -31,16 +31,6 @@ const demoUsers = [
     account_type: 'BUSINESS'
   },
   {
-    email: 'central-ops@famousgate.com',
-    password: 'central123',
-    firstName: 'Central',
-    lastName: 'Operations',
-    role: 'central_operations_manager',
-    branch_id: null,
-    is_central: true,
-    account_type: 'BUSINESS'
-  },
-  {
     email: 'facilities@famousgate.com',
     password: 'facil123',
     firstName: 'Facilities',
@@ -84,7 +74,7 @@ async function createUser(user, client) {
 
     if (existingUser.rows.length > 0) {
       console.log(`User ${user.email} already exists. Updating role to ${user.role}...`);
-      
+
       // Update existing user
       const updatedUser = await client.query(
         `UPDATE users 
@@ -93,7 +83,7 @@ async function createUser(user, client) {
          RETURNING *`,
         [user.firstName, user.lastName, user.role, user.branch_id, user.is_central, user.email]
       );
-      
+
       return updatedUser.rows[0];
     }
 
@@ -108,16 +98,16 @@ async function createUser(user, client) {
       FROM information_schema.columns 
       WHERE table_name = 'users' AND column_name IN ('hashed_password', 'account_type')`
     );
-    
+
     const hasHashedPassword = parseInt(columnsCheck.rows[0].has_hashed_password) > 0;
     const hasAccountType = parseInt(columnsCheck.rows[0].has_account_type) > 0;
-    
+
     // Prepare SQL query and parameters based on available columns
     let columns = ['id', 'email', 'first_name', 'last_name', 'role', 'branch_id', 'is_central', 'created_at'];
     let values = [uuidv4(), user.email, user.firstName, user.lastName, user.role, user.branch_id, user.is_central];
     let placeholders = ['$1', '$2', '$3', '$4', '$5', '$6', '$7', 'NOW()'];
     let paramIndex = 8;
-    
+
     if (hasHashedPassword) {
       columns.push('hashed_password');
       values.push(hashedPassword);
@@ -127,13 +117,13 @@ async function createUser(user, client) {
       values.push(hashedPassword);
       placeholders.push(`$${paramIndex++}`);
     }
-    
+
     if (hasAccountType) {
       columns.push('account_type');
       values.push(user.account_type || 'BUSINESS');
       placeholders.push(`$${paramIndex++}`);
     }
-    
+
     // Construct and execute query
     const query = `
       INSERT INTO users 
@@ -141,7 +131,7 @@ async function createUser(user, client) {
       VALUES (${placeholders.join(', ')})
       RETURNING *
     `;
-    
+
     const result = await client.query(query, values);
 
     return result.rows[0];
@@ -193,41 +183,30 @@ async function createBranchAccess(userId, branchId, isPrimary, client) {
  */
 async function createDemoUsers() {
   const client = await pool.connect();
-  
+
   try {
     // Begin transaction
     await client.query('BEGIN');
-    
+
     console.log('Creating demo users for consolidated roles...');
-    
+
     // Create each user
     for (const userData of demoUsers) {
       const user = await createUser(userData, client);
       console.log(`Created/updated user: ${user.email} with role: ${user.role}`);
-      
+
       // Create branch access
       if (user.branch_id) {
         await createBranchAccess(user.id, user.branch_id, true, client);
         console.log(`Created branch access for user ${user.email} to branch ${user.branch_id}`);
       }
-      
-      // For central operations, give access to all branches
-      if (user.role === 'central_operations_manager') {
-        // Get all branches
-        const branches = await client.query('SELECT id FROM branches');
-        
-        // Create access for each branch
-        for (const branch of branches.rows) {
-          await createBranchAccess(user.id, branch.id, branch.id === 1, client);
-          console.log(`Created branch access for user ${user.email} to branch ${branch.id}`);
-        }
-      }
+
     }
-    
+
     // Commit transaction
     await client.query('COMMIT');
     console.log('All demo users created successfully!');
-    
+
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error creating demo users:', error);

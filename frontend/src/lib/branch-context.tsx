@@ -69,7 +69,7 @@ export function BranchProvider({ children }: { children: ReactNode }) {
 
   // Helper to check if user can access all branches
   const canAccessAllBranches = (u: any): boolean => {
-    return ['super_admin', 'general_manager', 'central_operations_manager', 'central_storekeeper', 'accountant', 'auditor', 'branch_operations_manager'].includes(u?.role);
+    return ['super_admin', 'general_manager', 'central_storekeeper', 'accountant', 'auditor', 'branch_operations_manager'].includes(u?.role);
   };
 
   // Check if a branch is available for the user
@@ -119,7 +119,7 @@ export function BranchProvider({ children }: { children: ReactNode }) {
         let accessibleBranches: Branch[] = [];
 
         // Super admins, general managers, and central ops have access to all branches
-        if (['super_admin', 'general_manager', 'central_operations_manager', 'central_storekeeper', 'accountant', 'auditor', 'branch_operations_manager'].includes(user.role)) {
+        if (['super_admin', 'general_manager', 'central_storekeeper', 'accountant', 'auditor', 'branch_operations_manager'].includes(user.role)) {
           accessibleBranches = allBranches;
         } else if (user.branch_id) {
           // Branch-specific users only see their assigned branch
@@ -255,7 +255,7 @@ export function BranchSelector() {
 
   const branchesToShow = userBranches.length > 0 ? userBranches : branches;
   const isSingleBranchRole = user?.role && SINGLE_BRANCH_ROLES.includes(user.role);
-  const canSeeAll = ['super_admin', 'general_manager', 'central_operations_manager', 'auditor', 'accountant'].includes(user?.role || '');
+  const canSeeAll = ['super_admin', 'general_manager', 'auditor', 'accountant'].includes(user?.role || '');
 
   if (branchesToShow.length === 0 || !user || isSingleBranchRole || (branchesToShow.length <= 1 && !canSeeAll)) {
     return null;

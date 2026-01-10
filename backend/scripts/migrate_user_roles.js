@@ -35,14 +35,14 @@ const roleMigrations = [
   {
     id: 3,
     old_role: 'central_storekeeper',
-    new_role: 'central_operations_manager',
-    description: 'Consolidate Central Storekeeper into Central Operations Manager role',
+    new_role: 'general_manager',
+    description: 'Consolidate Central Storekeeper into General Manager role',
   },
   {
     id: 4,
     old_role: 'general_manager',
-    new_role: 'central_operations_manager',
-    description: 'Consolidate General Manager into Central Operations Manager role',
+    new_role: 'general_manager',
+    description: 'Consolidate General Manager into its standard role',
   },
   {
     id: 5,
@@ -211,7 +211,7 @@ async function createMigrationTables() {
   const client = await pool.connect();
   try {
     log('Creating migration tables if they don\'t exist...');
-    
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS role_migrations (
         id SERIAL PRIMARY KEY,

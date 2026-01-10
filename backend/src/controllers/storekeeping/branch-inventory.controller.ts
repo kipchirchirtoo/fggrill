@@ -241,7 +241,7 @@ export const getBranchRequests = async (
     });
 
     // Allow central roles to fetch all requests (branchId is optional)
-    const isCentralRole = ['super_admin', 'general_manager', 'central_storekeeper', 'central_operations_manager', 'auditor'].includes(req.user?.role || '');
+    const isCentralRole = ['super_admin', 'general_manager', 'central_storekeeper', 'auditor'].includes(req.user?.role || '');
 
     console.log('isCentralRole:', isCentralRole);
 

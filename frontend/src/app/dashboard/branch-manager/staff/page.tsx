@@ -340,8 +340,7 @@ export default function BranchStaffPage() {
           'branch_manager',
           'finance_manager',
           'hr_manager',
-          'central_storekeeper',
-          'central_operations_manager'
+          'central_storekeeper'
         ];
         return !excludedRoles.includes(role.value);
       }

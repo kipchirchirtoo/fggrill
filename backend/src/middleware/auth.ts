@@ -50,36 +50,45 @@ export const protect = async (
 
       try {
         const decoded = jwt.verify(token, jwtSecret) as any;
+
+        if (!decoded || !decoded.sub) {
+          logger.error('Auth Middleware - JWT decoded but missing sub', { decoded });
+          throw new jwt.JsonWebTokenError('Invalid token payload');
+        }
+
         logger.debug('Auth Middleware - JWT verified for sub:', decoded.sub);
 
-        if (decoded && decoded.sub) {
-          // Valid JWT - get user from database
-          const { data: user, error: userError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', decoded.sub)
-            .single();
+        // Valid JWT - get user from database
+        const { data: user, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', decoded.sub)
+          .single();
 
-          if (user && !userError) {
-            req.user = {
-              id: user.id,
-              email: user.email,
-              role: user.role,
-              branch_id: user.branch_id,
-              branchId: user.branch_id,
-              first_name: user.first_name,
-              last_name: user.last_name,
-              is_central: !user.branch_id
-            };
-            next();
-            return;
-          }
+        if (userError || !user) {
+          logger.error('Auth Middleware - User lookup failed for valid JWT', {
+            userId: decoded.sub,
+            error: userError?.message || 'User not found'
+          });
+          // Fallback to Supabase auth in case they used a Supabase token
+        } else {
+          req.user = {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            branch_id: user.branch_id,
+            branchId: user.branch_id,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            is_central: !user.branch_id
+          };
+          next();
+          return;
         }
       } catch (jwtError: any) {
-        logger.error('Auth Middleware - JWT verification failed:', {
+        logger.info('Auth Middleware - Custom JWT verification skipped or failed, trying Supabase auth', {
           error: jwtError.message,
-          tokenPrefix: token.substring(0, 10),
-          secretPrefix: jwtSecret.substring(0, 3)
+          tokenPrefix: token.substring(0, 10)
         });
         // JWT verification failed, try Supabase auth
       }

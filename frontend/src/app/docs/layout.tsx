@@ -39,7 +39,6 @@ export default function DocsLayout({
             items: [
                 { title: 'Superadmin', href: '/docs/roles/superadmin' },
                 { title: 'Branch Manager', href: '/docs/roles/branch-manager' },
-                { title: 'Central Operations', href: '/docs/roles/central-operations' },
                 { title: 'Accountant & Auditor', href: '/docs/roles/finance' },
                 { title: 'POS & Kitchen', href: '/docs/roles/pos-kitchen' },
                 { title: 'Bar & Restaurant', href: '/docs/roles/bar' },
