@@ -208,7 +208,6 @@ export const createUser = async (
 
   } catch (error: any) {
     logger.error('Error creating user:', error);
-    logger.error('Request body:', { email, firstName, lastName, role, branchId, phoneNumber });
     res.status(500).json({
       success: false,
       message: 'Failed to create user',
