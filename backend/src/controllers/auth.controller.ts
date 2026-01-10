@@ -561,7 +561,20 @@ export const posLogin = async (
 
     // Validate role against PIN prefix
     const prefix = pin[0];
-    if (prefix === 'R' && !['restaurant', 'manager', 'super_admin'].includes(user.role)) {
+    const restaurantRoles = [
+      'restaurant', 'restaurant_manager', 'head_chef', 'sous_chef',
+      'line_cook', 'prep_cook', 'waiter', 'waitress', 'head_waiter',
+      'food_runner', 'busser', 'host_hostess', 'pos_kitchen',
+      'kitchen', 'kitchen_helper', 'dishwasher', 'manager',
+      'branch_manager', 'super_admin', 'cashier'
+    ];
+
+    const barRoles = [
+      'barmaid', 'barman', 'bartender', 'barista', 'bar_manager',
+      'manager', 'branch_manager', 'super_admin', 'cashier'
+    ];
+
+    if (prefix === 'R' && !restaurantRoles.includes(user.role)) {
       res.status(403).json({
         success: false,
         message: 'This PIN is for restaurant staff only'
@@ -569,7 +582,7 @@ export const posLogin = async (
       return;
     }
 
-    if (prefix === 'B' && !['barmaid', 'barman', 'manager', 'super_admin'].includes(user.role)) {
+    if (prefix === 'B' && !barRoles.includes(user.role)) {
       res.status(403).json({
         success: false,
         message: 'This PIN is for bar staff only'

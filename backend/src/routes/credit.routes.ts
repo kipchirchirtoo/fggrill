@@ -7,9 +7,9 @@ const router = Router();
 router.use(protect);
 
 // Confirmations
-router.put('/:type/:id/confirm', authorize('accountant', 'auditor', 'super_admin'), confirmCreditBill);
+router.put('/:type/:id/confirm', authorize(['accountant', 'auditor', 'super_admin'] as any), confirmCreditBill);
 
 // Pending Lists
-router.get('/pending/:role', authorize('accountant', 'auditor', 'super_admin'), getPendingConfirmations);
+router.get('/pending/:role', authorize(['accountant', 'auditor', 'super_admin'] as any), getPendingConfirmations);
 
 export default router;
