@@ -154,7 +154,7 @@ export default function CashierPage() {
     };
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.CASHIER, UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT]}>
+        <ProtectedRoute allowedRoles={[UserRole.CASHIER, UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.RECEPTIONIST]}>
             <DashboardLayout>
                 <div className="space-y-6 max-w-[1600px] mx-auto">
                     {/* Header */}
