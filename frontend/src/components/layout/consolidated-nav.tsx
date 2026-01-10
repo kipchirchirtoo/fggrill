@@ -360,10 +360,10 @@ export function ConsolidatedNav() {
 
       <NavGroup label="Operations" icon={ChefHat} defaultOpen>
         <NavItem
-          href="/dashboard/pos-kitchen?tab=pos"
+          href="/dashboard/pos-kitchen?tab=restaurant"
           icon={ShoppingCart}
-          label="POS System"
-          active={pathname === '/dashboard/pos-kitchen' && pathname.includes('tab=pos')}
+          label="Restaurant POS"
+          active={pathname === '/dashboard/pos-kitchen' && pathname.includes('tab=restaurant')}
         />
         <NavItem
           href="/dashboard/kitchen"
@@ -387,10 +387,10 @@ export function ConsolidatedNav() {
 
       <NavGroup label="POS Operations" icon={ShoppingCart} defaultOpen>
         <NavItem
-          href="/dashboard/pos-kitchen?tab=pos"
+          href="/dashboard/pos-kitchen?tab=restaurant"
           icon={ShoppingCart}
           label="Take Orders"
-          active={pathname === '/dashboard/pos-kitchen' && pathname.includes('tab=pos')}
+          active={pathname === '/dashboard/pos-kitchen' && pathname.includes('tab=restaurant')}
         />
         <NavItem
           href="/dashboard/pos-kitchen?tab=recent"
@@ -439,18 +439,18 @@ export function ConsolidatedNav() {
         active={pathname === '/dashboard/bar'}
       />
 
-      <NavGroup label="Orders" icon={ShoppingCart} defaultOpen>
+      <NavGroup label="POS System" icon={ShoppingCart} defaultOpen>
         <NavItem
-          href="/dashboard/bar/pos"
+          href="/dashboard/pos-kitchen?tab=bar"
           icon={CreditCard}
-          label="New Order (POS)"
-          active={pathname === '/dashboard/bar/pos'}
+          label="Unified POS"
+          active={pathname === '/dashboard/pos-kitchen' && pathname.includes('tab=bar')}
         />
         <NavItem
-          href="/dashboard/bar/orders"
+          href="/dashboard/pos-kitchen?tab=recent"
           icon={ClipboardList}
-          label="All Orders"
-          active={pathname === '/dashboard/bar/orders'}
+          label="Order History"
+          active={pathname === '/dashboard/pos-kitchen' && pathname.includes('tab=recent')}
         />
         <NavItem
           href="/dashboard/bar/tabs"

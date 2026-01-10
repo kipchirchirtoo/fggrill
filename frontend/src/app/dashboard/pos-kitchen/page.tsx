@@ -18,13 +18,15 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
-import { POSTab } from './pos-tab';
+import { UnifiedPOS } from '@/components/pos/UnifiedPOS';
 
 interface Order {
+  // ... existing Order interface ...
+  // (Note: The LLM will manage the replacement properly, I should provided the full replaced block)
   id: string;
   order_number: string;
   table_number?: string;
-  order_type: 'dine_in' | 'takeaway' | 'room_service';
+  order_type: 'dine_in' | 'takeaway' | 'room_service' | 'bar';
   status: string;
   total: number;
   items_count: number;
@@ -128,23 +130,20 @@ export default function POSKitchenDashboard() {
     setIsLoading(true);
     try {
       const currentBranchId = activeBranchId || user?.branch_id;
-      const [ordersResult, salesResult, todayOrdersResult] = await Promise.allSettled([
-        restaurantAPI.getOrders(currentBranchId || undefined),
+      const [ordersResult, salesResult] = await Promise.allSettled([
+        restaurantAPI.getOrders({ branchId: currentBranchId || undefined }),
         restaurantAPI.getDailySales(currentBranchId || undefined),
-        restaurantAPI.getTodayOrders(currentBranchId || undefined),
       ]);
 
       const ordersRes = ordersResult.status === 'fulfilled' ? ordersResult.value : { success: false, data: [] };
       const salesRes = salesResult.status === 'fulfilled' ? salesResult.value : { success: false, data: { total: 0 } };
-      const todayOrdersRes = todayOrdersResult.status === 'fulfilled' ? todayOrdersResult.value : { success: false, data: [] };
 
       const allOrders = ordersRes.success ? (ordersRes.data || []) : [];
-      const todayOrdersData = todayOrdersRes.success ? (todayOrdersRes.data || []) : [];
 
       setOrders(allOrders.slice(0, 10));
-      setRecentOrders(todayOrdersData.slice(0, 50));
+      setRecentOrders(allOrders.slice(0, 50));
 
-      const pending = allOrders.filter((o: Order) => ['pending', 'preparing'].includes(o.status)).length;
+      const pending = allOrders.filter((o: Order) => ['pending', 'preparing', 'ready'].includes(o.status)).length;
       const todayTotal = allOrders.reduce((sum: number, o: Order) => sum + (o.total || 0), 0);
 
       setStats({
@@ -228,8 +227,7 @@ export default function POSKitchenDashboard() {
         document.body.removeChild(a);
         toast.success(`Bill for Order #${order.order_number} generated!`);
       } else {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        throw new Error(errorText || 'Failed to generate bill');
+        throw new Error('Failed to generate bill');
       }
     } catch (error: any) {
       console.error('Bill generation error:', error);
@@ -282,12 +280,12 @@ export default function POSKitchenDashboard() {
         ))}
       </div>
 
-      {/* Recent Orders */}
+      {/* Recent Orders Overview */}
       <IOSCard className="p-4 sm:p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base sm:text-lg font-semibold font-sf-pro-display">Recent Orders</h2>
-          <IOSButton variant="ghost" size="sm" onClick={() => handleTabChange('pos')}>
-            <span className="hidden xs:inline">View POS</span> <ArrowRight className="h-4 w-4 ml-1" />
+          <h2 className="text-base sm:text-lg font-semibold font-sf-pro-display">Recent Activity</h2>
+          <IOSButton variant="ghost" size="sm" onClick={() => handleTabChange('recent')}>
+            View All <ArrowRight className="h-4 w-4 ml-1" />
           </IOSButton>
         </div>
         {isLoading ? (
@@ -304,30 +302,21 @@ export default function POSKitchenDashboard() {
             {orders.map((order) => {
               const statusColor = orderStatusColors[order.status] || orderStatusColors.pending;
               return (
-                <div key={order.id} className="p-3 border border-stone-100 rounded-ios-lg flex items-center justify-between hover:bg-stone-50 transition-colors">
+                <div key={order.id} className="p-3 border border-stone-100 rounded-ios-lg flex items-center justify-between hover:bg-stone-50 transition-colors cursor-pointer" onClick={() => setSelectedOrder(order)}>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="font-bold text-sm">#{order.order_number}</p>
-                      {order.table_number && (
-                        <span className="text-[11px] font-medium text-stone-500 bg-stone-100 px-1.5 rounded">T{order.table_number}</span>
-                      )}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${order.order_type === 'bar' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                        {order.order_type === 'bar' ? 'Bar' : 'Food'}
+                      </span>
                     </div>
                     <p className="text-[12px] text-stone-500 mt-0.5 truncate">
-                      {order.items_count} items • KES {order.total?.toLocaleString()}
+                      {order.table_number && `Table ${order.table_number} • `}KES {order.total?.toLocaleString()}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => handleGenerateBill(order)}
-                      className="p-1.5 text-stone-400 hover:text-stone-600 transition-colors"
-                      title="Generate Bill"
-                    >
-                      <FileText className="h-4 w-4" />
-                    </button>
-                    <IOSBadge className={`${statusColor.bg} ${statusColor.text} text-[10px] h-5`}>
-                      {order.status}
-                    </IOSBadge>
-                  </div>
+                  <IOSBadge className={`${statusColor.bg} ${statusColor.text} text-[10px] h-5`}>
+                    {order.status}
+                  </IOSBadge>
                 </div>
               );
             })}
@@ -341,17 +330,17 @@ export default function POSKitchenDashboard() {
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
           <button
             className="bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg p-3 text-left transition-colors"
-            onClick={() => handleTabChange('pos')}
+            onClick={() => handleTabChange('restaurant')}
           >
-            <p className="text-sm font-medium text-gray-900">New Order</p>
-            <p className="text-xs text-gray-500 mt-1">Take new orders</p>
+            <p className="text-sm font-medium text-gray-900">New Restaurant Order</p>
+            <p className="text-xs text-gray-500 mt-1">Take new food orders</p>
           </button>
           <button
             className="bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg p-3 text-left transition-colors"
-            onClick={() => handleTabChange('recent')}
+            onClick={() => handleTabChange('bar')}
           >
-            <p className="text-sm font-medium text-gray-900">View Orders</p>
-            <p className="text-xs text-gray-500 mt-1">Recent orders</p>
+            <p className="text-sm font-medium text-gray-900">New Bar Order</p>
+            <p className="text-xs text-gray-500 mt-1">Take new drink orders</p>
           </button>
           <Link href="/dashboard/branch-manager/menu">
             <div className="bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg p-3 text-left transition-colors cursor-pointer">
@@ -363,8 +352,6 @@ export default function POSKitchenDashboard() {
       </div>
     </div>
   );
-
-  const renderPOS = () => <POSTab onOrderCreated={fetchData} />;
 
   const renderRecentOrders = () => (
     <div className="space-y-6">
@@ -525,14 +512,14 @@ export default function POSKitchenDashboard() {
   );
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.POS_KITCHEN, UserRole.RESTAURANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
+    <ProtectedRoute allowedRoles={[UserRole.POS_KITCHEN, UserRole.RESTAURANT, UserRole.BARTENDER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
-        <div className={`${activeTab === 'pos' ? 'flex flex-col h-[calc(100vh-140px)]' : 'space-y-6'}`}>
+        <div className={`${['restaurant', 'bar'].includes(activeTab) ? 'flex flex-col h-[calc(100vh-140px)]' : 'space-y-6'}`}>
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 flex-shrink-0">
             <div>
               <h1 className="text-[22px] sm:text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">POS System</h1>
-              <p className="text-gray-500 text-sm mt-0.5">Point of sale operations</p>
+              <p className="text-gray-500 text-sm mt-0.5">Unified Restaurant & Bar Point of Sale</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {userBranches.length > 1 && (
@@ -582,9 +569,10 @@ export default function POSKitchenDashboard() {
           </div>
 
           {/* Tab Content */}
-          <div className={activeTab === 'pos' ? 'flex-1 min-h-0 overflow-hidden' : ''}>
+          <div className={['restaurant', 'bar'].includes(activeTab) ? 'flex-1 min-h-0 overflow-hidden' : ''}>
             {activeTab === 'overview' && renderOverview()}
-            {activeTab === 'pos' && renderPOS()}
+            {activeTab === 'restaurant' && <UnifiedPOS mode="restaurant" onOrderCreated={fetchData} />}
+            {activeTab === 'bar' && <UnifiedPOS mode="bar" onOrderCreated={fetchData} />}
             {activeTab === 'recent' && renderRecentOrders()}
           </div>
         </div>
