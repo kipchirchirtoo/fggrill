@@ -82,12 +82,13 @@ export const createUser = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { email, password, firstName, lastName, role, branchId, phoneNumber } = req.body;
+    const { email, password, firstName, lastName, role, branchId, phoneNumber, pos_pin } = req.body;
 
-    if (!email || !password || !firstName || !lastName || !role) {
+    // Validate required fields
+    if (!firstName || !lastName || !role) {
       res.status(400).json({
         success: false,
-        message: 'Please provide all required fields'
+        message: 'Please provide firstName, lastName, and role'
       });
       return;
     }
@@ -109,19 +110,27 @@ export const createUser = async (
       return;
     }
 
-    // Check if user already exists
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', email)
-      .single();
+    // For POS users with PIN, email/password are optional
+    // Generate dummy credentials if not provided
+    const isPOSUser = !!pos_pin;
+    const userEmail = email || `pos_${Date.now()}_${Math.random().toString(36).substr(2, 9)}@pos.local`;
+    const userPassword = password || Math.random().toString(36).substr(2, 15);
 
-    if (existingUser) {
-      res.status(400).json({
-        success: false,
-        message: 'User with this email already exists'
-      });
-      return;
+    // Check if user already exists (only if email was provided)
+    if (email) {
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', email)
+        .single();
+
+      if (existingUser) {
+        res.status(400).json({
+          success: false,
+          message: 'User with this email already exists'
+        });
+        return;
+      }
     }
 
     // Use direct database insertion to create user in auth.users and public.users
