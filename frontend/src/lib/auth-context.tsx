@@ -212,7 +212,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await api.auth.posLogin(pin);
 
       if (res.success && res.data) {
-        const { user: apiUser, token } = res.data;
+        const { user: apiUser, session } = res.data;
+        const token = session?.access_token || res.data.token;
 
         const userData: User = {
           id: apiUser.id,
