@@ -6,15 +6,27 @@ import { logger } from '../../utils/logger';
 // DRINK CATEGORIES
 // ==========================================
 
+const FOOD_KEYWORDS = [
+  'breakfast', 'lunch', 'dinner', 'main course', 'main dish',
+  'appetizer', 'soup', 'food', 'starter', 'dessert', 'side',
+  'grill', 'pizza', 'burger', 'steak', 'snack', 'entree'
+];
+
 export const getCategories = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { data, error } = await supabase
+    const { data: categories, error } = await supabase
       .from('restaurant_menu_categories')
       .select('*')
       .eq('is_active', true)
-      .order('sort_order', { ascending: true }); // We might need to filter for 'Bar' specific categories if possible, or just return all
+      .order('sort_order', { ascending: true });
 
     if (error) throw error;
+
+    // Filter categories to only include bar-related ones by excluding food keywords
+    const data = (categories || []).filter(cat => {
+      const name = cat.name.toLowerCase();
+      return !FOOD_KEYWORDS.some(keyword => name.includes(keyword));
+    });
 
     res.status(200).json({ success: true, data });
   } catch (error) {
@@ -48,6 +60,19 @@ export const getDrinks = async (req: Request, res: Response, next: NextFunction)
   try {
     const { category_id, search } = req.query;
 
+    // First, get valid bar category IDs to ensure we only return drinks/bar items
+    const { data: categories } = await supabase
+      .from('restaurant_menu_categories')
+      .select('id, name')
+      .eq('is_active', true);
+
+    const barCategoryIds = (categories || [])
+      .filter(cat => {
+        const name = cat.name.toLowerCase();
+        return !FOOD_KEYWORDS.some(keyword => name.includes(keyword));
+      })
+      .map(cat => cat.id);
+
     let query = supabase
       .from('restaurant_menu_items')
       .select(`
@@ -56,13 +81,23 @@ export const getDrinks = async (req: Request, res: Response, next: NextFunction)
       `)
       .eq('is_available', true);
 
-    // Filter by branch if menu items had branch_id, but restaurant_menu_items usually doesn't (Global Menu).
-    // If it did, we would filter.
-    // However, we can filter by Category to showing only 'Drinks' or 'Beverages' if needed. 
-    // The Frontend likely sends a category_id for filtering.
-
     if (category_id) {
-      query = query.eq('category_id', category_id);
+      // If a specific category is requested, still ensure it's a bar category
+      if (barCategoryIds.includes(category_id as string)) {
+        query = query.eq('category_id', category_id);
+      } else {
+        // Requested category is not a bar category
+        res.status(200).json({ success: true, data: [] });
+        return;
+      }
+    } else {
+      // If no category_id, filter by all bar-related categories
+      if (barCategoryIds.length > 0) {
+        query = query.in('category_id', barCategoryIds);
+      } else {
+        res.status(200).json({ success: true, data: [] });
+        return;
+      }
     }
 
     if (search) {
