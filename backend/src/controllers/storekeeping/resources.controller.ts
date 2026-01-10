@@ -1,5 +1,6 @@
-import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
+import * as BranchInventoryService from '../../services/branch-inventory.service';
+import { logger } from '../../utils/logger';
 
 // =====================================================
 // VEHICLES
@@ -209,18 +210,26 @@ export const deleteSupplier = async (req: Request, res: Response) => {
 };
 
 // =====================================================
-// STOCK TAKES
+// STOCK TAKES (Aligned with stock_counts schema)
 // =====================================================
 
 export const getStockTakes = async (req: Request, res: Response) => {
   try {
-    const { data, error } = await supabase
-      .from('stock_takes')
+    const { branch_id, status } = req.query;
+
+    let query = supabase
+      .from('stock_counts')
       .select(`
         *,
-        branch:branches(id, name, code)
+        branch:branches(id, name, code),
+        counted_by_profile:staff_profiles!counted_by(first_name, last_name)
       `)
-      .order('created_at', { ascending: false });
+      .order('count_date', { ascending: false });
+
+    if (branch_id) query = query.eq('branch_id', branch_id);
+    if (status) query = query.eq('status', status);
+
+    const { data, error } = await query;
 
     if (error) throw error;
     res.json({ success: true, data });
@@ -231,57 +240,61 @@ export const getStockTakes = async (req: Request, res: Response) => {
 
 export const createStockTake = async (req: Request, res: Response) => {
   try {
-    const { branch_id, take_type, notes } = req.body;
+    const { branch_id, count_type, notes } = req.body;
     const userId = (req as any).user?.id;
 
     if (!branch_id) {
       return res.status(400).json({ success: false, message: 'Branch is required' });
     }
 
-    // Generate take number
-    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
-    const { count } = await supabase
-      .from('stock_takes')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', new Date().toISOString().split('T')[0]);
-    
-    const takeNumber = `FGH-ST-${dateStr}-${String((count || 0) + 1).padStart(4, '0')}`;
-
-    // Create stock take
-    const { data: take, error: takeError } = await supabase
-      .from('stock_takes')
+    // Create stock count session
+    const { data: count, error: countError } = await supabase
+      .from('stock_counts')
       .insert([{
-        take_number: takeNumber,
         branch_id,
-        take_type: take_type || 'FULL',
-        status: 'IN_PROGRESS',
-        started_by: userId,
-        started_at: new Date().toISOString(),
+        count_date: new Date().toISOString().split('T')[0],
+        count_type: count_type || 'daily',
+        status: 'draft',
         notes
       }])
       .select()
       .single();
 
-    if (takeError) throw takeError;
+    if (countError) throw countError;
 
-    // Get branch stock items and create stock take items
+    // Get branch stock items and map them to inventory_items
     const { data: stockItems } = await supabase
       .from('branch_stock')
       .select('item_sku, quantity')
       .eq('branch_id', branch_id);
 
     if (stockItems && stockItems.length > 0) {
-      const takeItems = stockItems.map(item => ({
-        stock_take_id: take.id,
-        item_sku: item.item_sku,
-        system_quantity: item.quantity,
-        status: 'PENDING'
-      }));
+      const skus = stockItems.map(i => i.item_sku);
 
-      await supabase.from('stock_take_items').insert(takeItems);
+      // Resolve inventory_item IDs and unit costs
+      const { data: inventoryItems } = await supabase
+        .from('inventory_items')
+        .select('id, code, unit_cost')
+        .in('code', skus);
+
+      const countItems = stockItems.map(stockItem => {
+        const invItem = inventoryItems?.find(i => i.code === stockItem.item_sku);
+        return {
+          stock_count_id: count.id,
+          item_id: invItem?.id,
+          system_quantity: stockItem.quantity,
+          physical_quantity: stockItem.quantity, // Default to system quantity for initialization
+          unit_cost: invItem?.unit_cost || 0
+        };
+      }).filter(item => item.item_id); // Only include items found in inventory_items
+
+      if (countItems.length > 0) {
+        await supabase.from('stock_count_items').insert(countItems);
+      }
     }
 
-    res.status(201).json({ success: true, data: take });
+    res.status(201).json({ success: true, data: count });
+    logger.info(`Stock count session created: ${count.id} for branch ${branch_id}`);
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -292,13 +305,12 @@ export const getStockTakeItems = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     const { data, error } = await supabase
-      .from('stock_take_items')
+      .from('stock_count_items')
       .select(`
         *,
-        item:simple_items(item_name, description)
+        item:inventory_items(name, code, category, unit)
       `)
-      .eq('stock_take_id', id)
-      .order('item_sku');
+      .eq('stock_count_id', id);
 
     if (error) throw error;
     res.json({ success: true, data });
@@ -310,15 +322,14 @@ export const getStockTakeItems = async (req: Request, res: Response) => {
 export const updateStockTakeItem = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { counted_quantity, variance_reason } = req.body;
+    const { physical_quantity, reason } = req.body;
 
     const { data, error } = await supabase
-      .from('stock_take_items')
+      .from('stock_count_items')
       .update({
-        counted_quantity,
-        variance_reason,
-        status: 'COUNTED',
-        counted_at: new Date().toISOString()
+        physical_quantity,
+        reason,
+        created_at: new Date().toISOString() // Using created_at as an 'updated_at' for the item if no updated_at exists
       })
       .eq('id', id)
       .select()
@@ -336,30 +347,47 @@ export const completeStockTake = async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user?.id;
 
-    // Get counts
-    const { data: items } = await supabase
-      .from('stock_take_items')
-      .select('*')
-      .eq('stock_take_id', id);
+    // Get the stock count and its items
+    const { data: count, error: countError } = await supabase
+      .from('stock_counts')
+      .select('*, items:stock_count_items(*, item:inventory_items(code))')
+      .eq('id', id)
+      .single();
 
-    const totalCounted = items?.filter(i => i.status === 'COUNTED').length || 0;
-    const withVariance = items?.filter(i => i.counted_quantity !== null && i.counted_quantity !== i.system_quantity).length || 0;
+    if (countError) throw countError;
+    if (!count) return res.status(404).json({ success: false, message: 'Stock count not found' });
 
-    const { data, error } = await supabase
-      .from('stock_takes')
+    // Transition to 'submitted' for auditor review
+    const { data: updatedCount, error: updateError } = await supabase
+      .from('stock_counts')
       .update({
-        status: 'COMPLETED',
-        total_items_counted: totalCounted,
-        items_with_variance: withVariance,
-        completed_by: userId,
-        completed_at: new Date().toISOString()
+        status: 'submitted',
+        counted_by: userId,
+        updated_at: new Date().toISOString()
       })
       .eq('id', id)
       .select()
       .single();
 
-    if (error) throw error;
-    res.json({ success: true, data });
+    if (updateError) throw updateError;
+
+    // Create approval request for auditor
+    await supabase.from('approval_requests').insert({
+      request_type: 'stock_take',
+      status: 'pending',
+      branch_id: count.branch_id,
+      requested_by: userId,
+      description: `Stock count submission review: ${count.count_number || id}`,
+      metadata: { stock_count_id: id }
+    });
+
+    res.json({
+      success: true,
+      message: 'Stock take submitted for auditor review',
+      data: updatedCount
+    });
+
+    logger.info(`Stock count ${id} submitted for audit by ${userId}`);
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -387,7 +415,7 @@ export const getAppConfig = async (req: Request, res: Response) => {
 export const updateAppConfig = async (req: Request, res: Response) => {
   try {
     const updates = req.body;
-    
+
     const { data, error } = await supabase
       .from('simple_app_config')
       .update({ ...updates, updated_at: new Date().toISOString() })

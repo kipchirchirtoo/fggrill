@@ -61,6 +61,9 @@ class DatabaseFetcher:
                 'exception_logs': self._fetch_exception_logs,
                 'reconciliation_audit': self._fetch_reconciliation_audit,
                 'sold_items_analytics': self._fetch_sold_items_agg,
+                'branch_performance': self._fetch_branch_performance,
+                'stock_usage': self._fetch_stock_usage,
+                'employee_credit': self._fetch_employee_credit,
             }
             
             fetcher = fetchers.get(report_type)
@@ -1534,5 +1537,199 @@ class DatabaseFetcher:
             
         except Exception as e:
             logger.error(f"Error fetching sold items agg: {e}")
+            
+        return data
+
+    def _fetch_branch_performance(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch Branch Performance Report data"""
+        start_date, end_date = self._parse_dates(filters)
+        branch_id = filters.get('branch_id')
+        
+        data = {
+            'period': {'start': start_date, 'end': end_date},
+            'sales': {'restaurant': 0, 'bar': 0, 'total': 0},
+            'expenses': {'total': 0, 'breakdown': {}},
+            'netProfit': 0,
+            'profitMargin': 0
+        }
+        
+        if not self.client or not branch_id:
+            return data
+            
+        try:
+            # 1. Restaurant Sales
+            rest_res = self.client.table('restaurant_orders').select('total_amount')\
+                .eq('branch_id', branch_id)\
+                .gte('created_at', f'{start_date}T00:00:00')\
+                .lte('created_at', f'{end_date}T23:59:59')\
+                .neq('status', 'cancelled').execute()
+            
+            data['sales']['restaurant'] = sum(float(o.get('total_amount', 0) or 0) for o in (rest_res.data or []))
+            
+            # 2. Bar Sales
+            bar_res = self.client.table('bar_orders').select('total')\
+                .eq('branch_id', branch_id)\
+                .gte('created_at', f'{start_date}T00:00:00')\
+                .lte('created_at', f'{end_date}T23:59:59')\
+                .neq('status', 'cancelled').execute()
+            
+            data['sales']['bar'] = sum(float(o.get('total', 0) or 0) for o in (bar_res.data or []))
+            data['sales']['total'] = data['sales']['restaurant'] + data['sales']['bar']
+            
+            # 3. Expenses
+            exp_res = self.client.table('expenses').select('amount, category')\
+                .eq('branch_id', branch_id)\
+                .gte('expense_date', start_date)\
+                .lte('expense_date', end_date).execute()
+            
+            for exp in (exp_res.data or []):
+                amt = float(exp.get('amount', 0) or 0)
+                cat = exp.get('category', 'Other')
+                data['expenses']['total'] += amt
+                data['expenses']['breakdown'][cat] = data['expenses']['breakdown'].get(cat, 0) + amt
+                
+            data['netProfit'] = data['sales']['total'] - data['expenses']['total']
+            if data['sales']['total'] > 0:
+                data['profitMargin'] = (data['netProfit'] / data['sales']['total']) * 100
+                
+        except Exception as e:
+            logger.error(f"Error fetching branch performance: {e}")
+            
+        return data
+
+    def _fetch_stock_usage(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch Stock Usage Report (Requested vs Used)"""
+        start_date, end_date = self._parse_dates(filters)
+        branch_id = filters.get('branch_id')
+        
+        data = {'items': []}
+        
+        if not self.client or not branch_id:
+            return data
+            
+        try:
+            # 1. Stock Requests
+            req_res = self.client.table('stock_requests').select('*, items:stock_request_items(item_sku, approved_quantity)')\
+                .eq('requesting_branch_id', branch_id)\
+                .eq('status', 'APPROVED')\
+                .gte('created_at', f'{start_date}T00:00:00')\
+                .lte('created_at', f'{end_date}T23:59:59').execute()
+            
+            requested_map = {}
+            for req in (req_res.data or []):
+                for item in req.get('items', []):
+                    sku = item.get('item_sku')
+                    qty = float(item.get('approved_quantity', 0) or 0)
+                    requested_map[sku] = requested_map.get(sku, 0) + qty
+                    
+            # 2. Usage (Stock Movements)
+            mov_res = self.client.table('branch_stock_movements').select('item_sku, quantity')\
+                .eq('branch_id', branch_id)\
+                .in_('movement_type', ['USAGE', 'SALE', 'WASTAGE'])\
+                .gte('created_at', f'{start_date}T00:00:00')\
+                .lte('created_at', f'{end_date}T23:59:59').execute()
+                
+            usage_map = {}
+            for mov in (mov_res.data or []):
+                sku = mov.get('item_sku')
+                qty = float(mov.get('quantity', 0) or 0)
+                usage_map[sku] = usage_map.get(sku, 0) + qty
+                
+            # Combine
+            all_skus = set(list(requested_map.keys()) + list(usage_map.keys()))
+            
+            # Get item names for these SKUs if possible
+            item_names = {}
+            if all_skus:
+                inv_res = self.client.table('inventory_items').select('sku, name')\
+                    .in_('sku', list(all_skus)).execute()
+                for item in (inv_res.data or []):
+                    item_names[item['sku']] = item['name']
+            
+            for sku in all_skus:
+                req_qty = requested_map.get(sku, 0)
+                use_qty = usage_map.get(sku, 0)
+                data['items'].append({
+                    'sku': sku,
+                    'name': item_names.get(sku, f"Item {sku}"),
+                    'requested': req_qty,
+                    'used': use_qty,
+                    'variance': req_qty - use_qty
+                })
+                
+        except Exception as e:
+            logger.error(f"Error fetching stock usage: {e}")
+            
+        return data
+
+    def _fetch_employee_credit(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch Employee Credit Report data with Aging Analysis"""
+        data = {
+            'summary': {
+                'current': 0,
+                'overdue_30': 0,
+                'overdue_60': 0,
+                'overdue_90': 0,
+                'total_outstanding': 0
+            },
+            'bills': []
+        }
+        
+        if not self.client:
+            return data
+            
+        try:
+            bills_res = self.client.table('employee_credit_bills').select('''
+                *,
+                employee:staff_profiles(id, first_name, last_name, employee_id),
+                branch:branches(name)
+            ''')\
+                .neq('status', 'paid')\
+                .order('bill_date', desc=True).execute()
+                
+            today = datetime.now()
+            
+            for bill in (bills_res.data or []):
+                balance = float(bill.get('balance', 0) or 0)
+                due_date_str = bill.get('due_date') or bill.get('bill_date')
+                
+                days_overdue = 0
+                if due_date_str:
+                    try:
+                        # Handle both date and datetime strings
+                        if 'T' in due_date_str:
+                            due_date = datetime.fromisoformat(due_date_str.replace('Z', '+00:00')).replace(tzinfo=None)
+                        else:
+                            due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
+                        
+                        days_overdue = (today - due_date).days
+                    except:
+                        pass
+                
+                bill_data = {
+                    'id': bill.get('id'),
+                    'bill_number': bill.get('bill_number'),
+                    'bill_date': bill.get('bill_date'),
+                    'balance': balance,
+                    'daysOverdue': max(0, days_overdue),
+                    'status': bill.get('status'),
+                    'employee': bill.get('employee', {}),
+                    'branch': bill.get('branch', {})
+                }
+                data['bills'].append(bill_data)
+                
+                # Update buckets
+                data['summary']['total_outstanding'] += balance
+                if days_overdue <= 0:
+                    data['summary']['current'] += balance
+                elif days_overdue <= 30:
+                    data['summary']['overdue_30'] += balance
+                elif days_overdue <= 60:
+                    data['summary']['overdue_60'] += balance
+                else:
+                    data['summary']['overdue_90'] += balance
+                    
+        except Exception as e:
+            logger.error(f"Error fetching employee credit: {e}")
             
         return data

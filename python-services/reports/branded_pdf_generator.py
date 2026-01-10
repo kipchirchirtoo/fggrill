@@ -282,6 +282,8 @@ class BrandedPDFGenerator:
             'procurement_analysis': self._generate_procurement_analysis_report,
             'exception_logs': self._generate_exception_logs_report,
             'reconciliation_audit': self._generate_reconciliation_audit_report,
+            'stock_usage': self._generate_stock_usage_report,
+            'employee_credit': self._generate_employee_credit_report,
         }
         
         generator = generators.get(report_type, self._generate_generic_report)
@@ -2444,5 +2446,174 @@ class BrandedPDFGenerator:
         for c in data.get('cancelled_bookings', []):
             cancel_data.append([c.get('id'), c.get('guest'), self._format_currency(c.get('amount', 0))])
         elements.append(Table(cancel_data, colWidths=[1.5*inch, 3.5*inch, 1.5*inch], style=self._get_table_style()))
+        
+        return self._create_pdf(elements)
+
+    def _generate_branch_performance_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Branch Performance Report PDF"""
+        elements = []
+        
+        start_date = filters.get('start_date', 'N/A')
+        end_date = filters.get('end_date', 'N/A')
+        date_range = f"{start_date} to {end_date}"
+        branch_name = filters.get('branch_name', 'Branch')
+        
+        elements.extend(self._create_header("BRANCH PERFORMANCE REPORT", date_range, branch_name))
+        
+        # Finance Summary
+        elements.append(Paragraph("<b>FINANCIAL SUMMARY</b>", self.styles['SectionHeader']))
+        
+        sales = data.get('sales', {})
+        expenses = data.get('expenses', {})
+        
+        summary_data = [
+            ['METRIC', 'AMOUNT', '% OF REVENUE'],
+            ['Restaurant Sales', self._format_currency(sales.get('restaurant', 0)), 
+             self._format_percent((sales.get('restaurant', 0) / sales.get('total', 1)) * 100 if sales.get('total', 0) > 0 else 0)],
+            ['Bar Sales', self._format_currency(sales.get('bar', 0)), 
+             self._format_percent((sales.get('bar', 0) / sales.get('total', 1)) * 100 if sales.get('total', 0) > 0 else 0)],
+            ['TOTAL REVENUE', self._format_currency(sales.get('total', 0)), '100%'],
+            ['TOTAL EXPENSES', self._format_currency(expenses.get('total', 0)), 
+             self._format_percent((expenses.get('total', 0) / sales.get('total', 1)) * 100 if sales.get('total', 0) > 0 else 0)],
+            ['NET PROFIT', self._format_currency(data.get('netProfit', 0)), 
+             self._format_percent(data.get('profitMargin', 0)) + ' Margin']
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[2.5*inch, 2*inch, 2*inch])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('BACKGROUND', (0, 3), (-1, 3), HEADER_GRAY),
+            ('BACKGROUND', (0, -1), (-1, -1), HEADER_GREEN if data.get('netProfit', 0) >= 0 else colors.HexColor('#FFCDD2')),
+            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Expense Breakdown
+        if expenses.get('breakdown'):
+            elements.append(Paragraph("<b>EXPENSE BREAKDOWN</b>", self.styles['SectionHeader']))
+            
+            exp_data = [['Category', 'Amount', '% of Total Expenses']]
+            total_exp = expenses.get('total', 1)
+            
+            sorted_exp = sorted(expenses.get('breakdown', {}).items(), key=lambda x: x[1], reverse=True)
+            for cat, amt in sorted_exp:
+                exp_data.append([
+                    cat, 
+                    self._format_currency(amt), 
+                    self._format_percent((amt / total_exp) * 100 if total_exp > 0 else 0)
+                ])
+                
+            exp_table = Table(exp_data, colWidths=[2.5*inch, 2*inch, 2*inch])
+            exp_table.setStyle(self._get_table_style())
+            elements.append(exp_table)
+            
+        return self._create_pdf(elements)
+
+    def _generate_stock_usage_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Stock Usage Report PDF"""
+        elements = []
+        
+        start_date = filters.get('start_date', 'N/A')
+        end_date = filters.get('end_date', 'N/A')
+        date_range = f"{start_date} to {end_date}"
+        branch_name = filters.get('branch_name', 'Branch')
+        
+        elements.extend(self._create_header("STOCK USAGE AUDIT REPORT", date_range, branch_name))
+        
+        elements.append(Paragraph("<b>USAGE ANALYSIS (REQUESTED VS ACTUAL)</b>", self.styles['SectionHeader']))
+        
+        headers = ['SKU', 'Item Name', 'Requested', 'Actual Used', 'Variance', 'Status']
+        usage_data = [headers]
+        
+        for item in data.get('items', []):
+            var = item.get('variance', 0)
+            status = 'OK'
+            if var > 0: status = 'SURPLUS'
+            elif var < 0: status = 'OVER-USED'
+            
+            usage_data.append([
+                item.get('sku', ''),
+                item.get('name', '')[:30],
+                self._format_number(item.get('requested', 0)),
+                self._format_number(item.get('used', 0)),
+                self._format_number(var),
+                status
+            ])
+            
+        if not data.get('items'):
+            usage_data.append(['No data', '-', '-', '-', '-', '-'])
+            
+        usage_table = Table(usage_data, colWidths=[1*inch, 2.5*inch, 1*inch, 1*inch, 1*inch, 1*inch])
+        usage_table.setStyle(self._get_table_style())
+        elements.append(usage_table)
+        
+        return self._create_pdf(elements)
+
+    def _generate_employee_credit_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Employee Credit Aging Report PDF"""
+        elements = []
+        
+        elements.extend(self._create_header("EMPLOYEE CREDIT AGING REPORT", f"As of {datetime.now().strftime('%d/%m/%Y')}"))
+        
+        # Summary Buckets
+        elements.append(Paragraph("<b>CREDIT AGING SUMMARY</b>", self.styles['SectionHeader']))
+        
+        summary = data.get('summary', {})
+        summary_data = [
+            ['CURRENT', '1-30 DAYS', '31-60 DAYS', '61-90 DAYS', 'TOTAL OVERDUE'],
+            [
+                self._format_currency(summary.get('current', 0)),
+                self._format_currency(summary.get('overdue_30', 0)),
+                self._format_currency(summary.get('overdue_60', 0)),
+                self._format_currency(summary.get('overdue_90', 0)),
+                self._format_currency(summary.get('total_outstanding', 0))
+            ]
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('BACKGROUND', (-1, 1), (-1, 1), HEADER_YELLOW)
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Detailed Bills
+        elements.append(Paragraph("<b>OUTSTANDING EMPLOYEE BILLS</b>", self.styles['SectionHeader']))
+        
+        headers = ['Employee', 'Emp ID', 'Branch', 'Bill Date', 'Balance', 'Days Overdue']
+        bill_data = [headers]
+        
+        for bill in data.get('bills', []):
+            employee = bill.get('employee', {})
+            emp_name = f"{employee.get('first_name', '')} {employee.get('last_name', '')}"
+            branch = bill.get('branch', {}).get('name', 'N/A')
+            
+            bill_data.append([
+                emp_name[:20],
+                employee.get('employee_id', 'N/A'),
+                branch,
+                bill.get('bill_date', ''),
+                self._format_currency(bill.get('balance', 0)),
+                f"{bill.get('daysOverdue', 0)} days"
+            ])
+            
+        if not data.get('bills'):
+            bill_data.append(['No outstanding credit', '-', '-', '-', '-', '-'])
+            
+        bill_table = Table(bill_data, colWidths=[2*inch, 1*inch, 1.2*inch, 1.2*inch, 1.1*inch, 1*inch])
+        bill_table.setStyle(self._get_table_style())
+        elements.append(bill_table)
         
         return self._create_pdf(elements)

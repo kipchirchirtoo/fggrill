@@ -127,9 +127,9 @@ export const updateLedgerEntry = async (req: Request, res: Response) => {
 
     // Recalculate closing balance if quantities change
     if (updateData.opening_balance !== undefined ||
-        updateData.received_quantity !== undefined ||
-        updateData.used_quantity !== undefined ||
-        updateData.wastage_quantity !== undefined) {
+      updateData.received_quantity !== undefined ||
+      updateData.used_quantity !== undefined ||
+      updateData.wastage_quantity !== undefined) {
 
       // Fetch current values
       const { data: current } = await supabase
@@ -267,7 +267,7 @@ export const createStoreReceipt = async (req: Request, res: Response) => {
         unit_of_measure: item.unit_of_measure,
         expected_portions: item.expected_portions,
         status: item.received_quantity < item.expected_quantity ? 'shortage' :
-                item.received_quantity > item.expected_quantity ? 'excess' : 'ok',
+          item.received_quantity > item.expected_quantity ? 'excess' : 'ok',
         remarks: item.remarks
       }));
 
@@ -442,13 +442,41 @@ export const createPortionTracking = async (req: Request, res: Response) => {
 export const updatePortionTracking = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { actual_portions_produced } = req.body;
+    const { actual_portions_produced, variance_reason, production_notes } = req.body;
+
+    const { data: current } = await supabase
+      .from('kitchen_portion_tracking')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (!current) {
+      return res.status(404).json({
+        success: false,
+        message: 'Portion tracking record not found'
+      });
+    }
+
+    const updateData: any = {
+      actual_portions_produced,
+      variance_reason,
+      production_notes,
+      updated_at: new Date().toISOString()
+    };
+
+    // If there is a variance and no reason provided, we might want to flag it
+    // but for now we'll just store what's given.
+    if (actual_portions_produced !== current.expected_portions && !variance_reason) {
+      updateData.status = 'variance_pending_reason';
+    } else if (actual_portions_produced !== current.expected_portions && variance_reason) {
+      updateData.status = 'variance_reported';
+    } else {
+      updateData.status = 'completed';
+    }
 
     const { data, error } = await supabase
       .from('kitchen_portion_tracking')
-      .update({
-        actual_portions_produced
-      })
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();

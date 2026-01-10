@@ -1,5 +1,5 @@
 import express from 'express';
-import { protect } from '../../middleware/auth';
+import { protect, authorize, UserRole } from '../../middleware/auth';
 import {
     getStockRequests,
     getStockRequest,
@@ -24,8 +24,11 @@ router.route('/:id')
     .get(getStockRequest);
 
 router.put('/:id/review', reviewStockRequest);
-router.put('/:id/approve', approveStockRequest);
-router.put('/:id/reject', rejectStockRequest);
+
+// Strict Auditor Approval Workflow
+router.put('/:id/approve', authorize([UserRole.AUDITOR]), approveStockRequest);
+router.put('/:id/reject', authorize([UserRole.AUDITOR]), rejectStockRequest);
+
 router.put('/:id/cancel', cancelStockRequest);
 
 export default router;

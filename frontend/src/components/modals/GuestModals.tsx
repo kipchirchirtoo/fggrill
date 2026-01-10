@@ -40,14 +40,26 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
 
   const handleSubmit = async () => {
     try {
+      const payload = {
+        first_name: guestData.firstName,
+        last_name: guestData.lastName,
+        email: guestData.email,
+        phone_number: guestData.phone,
+        id_number: guestData.idNumber,
+        nationality: guestData.nationality,
+        address: guestData.address,
+        company: guestData.company,
+        vip_status: guestData.vipStatus,
+        notes: guestData.notes
+      };
       if (mode === 'edit' && initialData?.id) {
-        await guestAPI.updateGuest(initialData.id, guestData);
+        await guestAPI.updateGuest(initialData.id, payload);
       } else {
-        await guestAPI.createGuest(guestData);
+        await guestAPI.createGuest(payload);
       }
       toast.success('Guest ' + (mode === 'create' ? 'created' : 'updated') + ' successfully!');
       onClose();
-    } catch (error:any) {
+    } catch (error: any) {
       toast.error(error.message || 'Failed to save guest');
     }
   };

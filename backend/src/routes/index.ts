@@ -48,6 +48,12 @@ import cashierRoutes from './cashier.routes';
 import wastageRoutes from './wastage.routes';
 import kitchenLedgerRoutes from './kitchen-ledger.routes';
 import additionalServicesRoutes from './additional-services.routes';
+import auditorReportsRoutes from './auditor-reports.routes';
+import conferenceRoutes from './conference.routes';
+import cateringRoutes from './catering.routes';
+import attendanceRoutes from './attendance.routes';
+import pettyCashRoutes from './petty-cash.routes';
+import creditRoutes from './credit.routes';
 
 console.log('Index routes: importing staffRoutes', staffRoutes);
 
@@ -113,6 +119,12 @@ router.use('/cashier', cashierRoutes);
 router.use('/wastage', wastageRoutes);
 router.use('/kitchen', kitchenLedgerRoutes);
 router.use('/additional-services', additionalServicesRoutes);
+router.use('/reports/auditor', auditorReportsRoutes);
+router.use('/conference', conferenceRoutes);
+router.use('/catering', cateringRoutes);
+router.use('/attendance', attendanceRoutes);
+router.use('/petty-cash', pettyCashRoutes);
+router.use('/credit', creditRoutes);
 
 // Email booking endpoints (public - no auth required)
 router.post('/email/send-booking/:bookingId', sendBookingEmail);

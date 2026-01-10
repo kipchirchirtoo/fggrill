@@ -137,11 +137,11 @@ export function StaffModal({ isOpen, onClose, mode = 'create', initialData, onSu
           email: staffData.email,
           phone_number: staffData.phoneNumber,
           role: staffData.role,
-          branch_id: staffData.branchId ? parseInt(staffData.branchId) : null
+          branch_id: staffData.branchId ? parseInt(staffData.branchId) : (initialData.branch_id || null)
         });
         toast.success('Staff member updated successfully!');
       }
-      
+
       if (onSuccess) onSuccess();
       onClose();
     } catch (error: any) {

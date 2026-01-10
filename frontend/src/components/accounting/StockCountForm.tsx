@@ -132,7 +132,7 @@ export default function StockCountForm({ branchId }: { branchId: string }) {
                                 </td>
                                 <td className="px-4 py-4 text-center">
                                     <span className={`text-[13px] font-bold px-2 py-1 rounded ${item.variance === 0 ? 'bg-stone-100 text-stone-500' :
-                                            item.variance < 0 ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
+                                        item.variance < 0 ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
                                         }`}>
                                         {item.variance > 0 ? '+' : ''}{item.variance}
                                     </span>

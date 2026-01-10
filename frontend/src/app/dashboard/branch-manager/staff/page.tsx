@@ -26,6 +26,7 @@ interface Staff {
   role: string;
   status: 'active' | 'inactive';
   employee_id?: string;
+  pos_pin?: string;
   created_at?: string;
 }
 
@@ -117,6 +118,7 @@ export default function BranchStaffPage() {
     email: '',
     phone: '',
     employee_id: '',
+    pos_pin: '',
     role: 'employee'
   });
 
@@ -146,6 +148,7 @@ export default function BranchStaffPage() {
           role: s.role || s.department || 'employee',
           status: s.status || 'active',
           employee_id: s.employee_id || '',
+          pos_pin: s.user?.pos_pin || s.pos_pin || '',
           created_at: s.created_at
         }));
         setStaff(mappedStaff);
@@ -234,6 +237,7 @@ export default function BranchStaffPage() {
       email: '',
       phone: '',
       employee_id: '',
+      pos_pin: '',
       role: 'employee'
     });
     setEditingStaff(null);
@@ -251,6 +255,7 @@ export default function BranchStaffPage() {
       email: member.email,
       phone: member.phone || '',
       employee_id: member.employee_id || '',
+      pos_pin: member.pos_pin || '',
       role: member.role
     });
     setEditingStaff(member);
@@ -279,6 +284,7 @@ export default function BranchStaffPage() {
         role: staffForm.role,
         department: staffForm.role, // Use role as department for now
         employeeId: staffForm.employee_id,
+        pos_pin: staffForm.pos_pin || null,
         branchId: currentBranchId,
         status: 'active'
       };
@@ -625,13 +631,14 @@ export default function BranchStaffPage() {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">Employee ID</label>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">POS PIN (Waiters: RXXX, Bar: BXXX)</label>
                   <input
                     type="text"
-                    value={staffForm.employee_id}
-                    onChange={(e) => setStaffForm({ ...staffForm, employee_id: e.target.value })}
-                    className="w-full h-10 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white"
-                    placeholder="Employee ID (optional)"
+                    value={staffForm.pos_pin}
+                    maxLength={4}
+                    onChange={(e) => setStaffForm({ ...staffForm, pos_pin: e.target.value.toUpperCase() })}
+                    className="w-full h-10 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white font-mono"
+                    placeholder="e.g. R123"
                   />
                 </div>
 

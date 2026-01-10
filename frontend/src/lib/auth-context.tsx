@@ -51,6 +51,8 @@ export interface User {
   branch_id?: number | null;
   branch_name?: string;
   is_central?: boolean;
+  isPosLogin?: boolean;
+  lastLoginAt?: string;
 }
 
 // Auth context interface
@@ -58,6 +60,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  posLogin: (pin: string) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
 }
@@ -202,6 +205,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const posLogin = async (pin: string): Promise<void> => {
+    if (isLoading) return;
+    setIsLoading(true);
+
+    try {
+      const res = await api.auth.posLogin(pin);
+
+      if (res.success && res.data) {
+        const { user: apiUser, token } = res.data;
+
+        const userData: User = {
+          id: apiUser.id,
+          email: apiUser.email || '',
+          firstName: apiUser.first_name,
+          lastName: apiUser.last_name,
+          role: apiUser.role as UserRole,
+          branch_id: apiUser.branch_id,
+          branch_name: apiUser.branch_name || (apiUser.branch_id ? 'Branch' : 'HQ'),
+          is_central: apiUser.is_central || false,
+          isPosLogin: true,
+          lastLoginAt: new Date().toISOString(),
+          department: apiUser.department || 'Staff'
+        };
+
+        // Store user and token
+        localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem('token', token);
+
+        // Set branch context
+        if (userData.branch_id) {
+          localStorage.setItem('activeBranchId', userData.branch_id.toString());
+        }
+
+        setUser(userData);
+        toast.success(`Signed in as ${userData.firstName}`);
+
+        // Redirect to appropriate dashboard
+        redirectToDashboard(userData.role, userData.is_central);
+      } else {
+        throw new Error(res.message || 'Login failed');
+      }
+    } catch (error: any) {
+      console.error('POS Login error:', error);
+      toast.error(error.message || 'Invalid PIN');
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const logout = async () => {
     try {
       await api.auth.logout();
@@ -255,7 +308,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, checkAuth }}>
+    <AuthContext.Provider value={{ user, isLoading, login, posLogin, logout, checkAuth }}>
       {children}
     </AuthContext.Provider>
   );

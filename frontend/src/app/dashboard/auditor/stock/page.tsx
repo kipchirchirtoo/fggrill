@@ -5,9 +5,9 @@ import { BranchAwareDashboardLayout } from '@/components/layout/branch-aware-das
 import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
-import { Package, AlertTriangle, ArrowRight, Check, X, Filter, ArrowLeft, RefreshCw, Box, Clock, FileText, Eye } from 'lucide-react';
+import { Package, AlertTriangle, ArrowRight, Check, X, Filter, ArrowLeft, RefreshCw, Box, Clock, FileText, Eye, FileDown } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { auditAPI, storeAPI } from '@/lib/api';
+import { auditAPI, storeAPI, auditorReportsAPI, reportsService } from '@/lib/api';
 import { toast } from 'sonner';
 
 const RequisitionDetailsModal = ({ request, isOpen, onClose, onAction }: { request: any, isOpen: boolean, onClose: () => void, onAction: (id: string, action: 'APPROVE' | 'REJECT') => void }) => {
@@ -144,10 +144,33 @@ export default function StockAuditPage() {
     const [consumptionData, setConsumptionData] = useState<any[]>([]);
     const [pendingRequests, setPendingRequests] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState<any>(null);
     const [selectedAuditItem, setSelectedAuditItem] = useState<any>(null);
     const [isReqModalOpen, setIsReqModalOpen] = useState(false);
     const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+
+    const handleExport = async () => {
+        setIsExporting(true);
+        try {
+            const today = new Date();
+            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+            const lastDay = today.toISOString().split('T')[0];
+
+            await reportsService.downloadReport('stock_usage', {
+                branch_id: activeBranchId || 1,
+                start_date: firstDay,
+                end_date: lastDay,
+                branch_name: activeBranchId === 0 ? 'All Branches' : `Branch #${activeBranchId}`
+            });
+            toast.success("Report downloaded successfully");
+        } catch (e) {
+            console.error(e);
+            toast.error("Failed to export report");
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     const fetchStockData = async () => {
         setIsLoading(true);
@@ -159,15 +182,29 @@ export default function StockAuditPage() {
             // Handle All Branches (0) or specific branch
             const effectiveBranchId = activeBranchId === 0 ? undefined : activeBranchId;
 
-            // 1. Fetch Consumption Variances
-            // Note: Currently the backend might require a branch_id for variances. 
+            // 1. Fetch Stock Usage vs Requested
+            // Note: Currently the backend might require a branch_id. 
             // If activeBranchId is 0, we'll try to fetch for branch 1 as fallback or handle empty
-            const varRes = await auditAPI.getConsumptionVariances({
+            const varRes = await auditorReportsAPI.getStockUsage({
                 branch_id: effectiveBranchId || 1,
-                from_date: firstDay,
-                to_date: lastDay
+                start_date: firstDay,
+                end_date: lastDay
             });
-            if (varRes.success) setConsumptionData(varRes.data || []);
+
+            if (varRes.success) {
+                // Map the new report format to the UI's expected format
+                // Report returns: { sku, requested, used, variance }
+                // UI expects: { item_name (use sku), theoretical (requested), actual (used), variance, unit (default 'units') }
+                const mappedData = (varRes.data || []).map((item: any) => ({
+                    item_name: item.sku, // The report groups by SKU
+                    item_sku: item.sku,
+                    theoretical: item.requested, // "Expected" based on requests
+                    actual: item.used, // "Actual" based on usage/transactions
+                    variance: item.variance,
+                    unit: 'units' // Default unit
+                }));
+                setConsumptionData(mappedData);
+            }
 
             // 2. Fetch Pending Requisitions
             const reqRes = await storeAPI.getBranchRequests('PENDING', effectiveBranchId || undefined);
@@ -209,6 +246,14 @@ export default function StockAuditPage() {
                 <div className="space-y-6">
                     {/* Header Actions */}
                     <div className="flex justify-end gap-2">
+                        <button
+                            onClick={handleExport}
+                            disabled={isExporting || isLoading}
+                            className="btn-primary"
+                        >
+                            <FileDown className={`h-4 w-4 mr-2 ${isExporting ? 'animate-bounce' : ''}`} />
+                            {isExporting ? 'Generating...' : 'Export Branded PDF'}
+                        </button>
                         <button onClick={() => router.back()} className="btn-secondary">
                             <ArrowLeft className="h-4 w-4" />
                             <span>Dashboard</span>

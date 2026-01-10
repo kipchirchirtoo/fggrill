@@ -11,10 +11,10 @@ interface ProtectedRouteProps {
   requireAuth?: boolean;
 }
 
-export function ProtectedRoute({ 
-  children, 
-  allowedRoles = [], 
-  requireAuth = true 
+export function ProtectedRoute({
+  children,
+  allowedRoles = [],
+  requireAuth = true
 }: ProtectedRouteProps) {
   const { user, isLoading } = useAuth();
   const router = useRouter();

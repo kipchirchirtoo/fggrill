@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
+import notificationService from '../services/notification.service';
 
 const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
@@ -162,46 +163,76 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
 
     // Customer mapping logic to handle string IDs
     let resolvedCustomerId = customer_id;
-    if (customer_id && !isUUID(customer_id)) {
-      // Check if already mapped in accounting_customers
-      const { data: mappedCustomer } = await supabase
-        .from('accounting_customers')
-        .select('id')
-        .eq('customer_code', customer_id)
-        .maybeSingle();
-
-      if (mappedCustomer) {
-        resolvedCustomerId = mappedCustomer.id;
-      } else {
-        // Not mapped, look up in customers/users table
-        const { data: customer } = await supabase
-          .from('customers') // Assuming a 'customers' table exists, otherwise might be 'users'
-          .select('*')
+    if (customer_id) {
+      // 1. Check if already exists in accounting_customers by internal ID (if UUID)
+      if (isUUID(customer_id)) {
+        const { data: existing } = await supabase
+          .from('accounting_customers')
+          .select('id')
           .eq('id', customer_id)
           .maybeSingle();
 
-        if (customer) {
-          // Auto-create mapping entry in accounting_customers
-          const { data: newCustomer, error: cError } = await supabase
+        if (existing) {
+          resolvedCustomerId = existing.id;
+        } else {
+          // 2. Check if it's a customer_code (external ID)
+          const { data: mapped } = await supabase
             .from('accounting_customers')
-            .insert([{
-              customer_code: customer.id,
-              customer_name: customer.name || `${customer.first_name} ${customer.last_name}`,
-              contact_person: customer.contact_person,
-              email: customer.email,
-              phone: customer.phone,
-              address: customer.address,
-              is_active: true
-            }])
-            .select()
-            .single();
+            .select('id')
+            .eq('customer_code', customer_id)
+            .maybeSingle();
 
-          if (cError) {
-            logger.error('Error auto-creating accounting_customer:', cError);
-          } else if (newCustomer) {
-            resolvedCustomerId = newCustomer.id;
-            logger.info(`Mapped customer ${customer_id} to accounting_customer ${resolvedCustomerId}`);
+          if (mapped) {
+            resolvedCustomerId = mapped.id;
+          } else {
+            // 3. Not mapped, try to find in source table
+            const { data: source } = await supabase
+              .from('customers')
+              .select('*')
+              .eq('id', customer_id)
+              .maybeSingle();
+
+            if (source) {
+              const { data: created, error: cError } = await supabase
+                .from('accounting_customers')
+                .insert([{
+                  customer_code: source.id,
+                  customer_name: source.name || `${source.first_name} ${source.last_name}`,
+                  contact_person: source.contact_person,
+                  email: source.email,
+                  phone: source.phone,
+                  address: source.address,
+                  is_active: true
+                }])
+                .select()
+                .single();
+
+              if (cError) {
+                logger.error('Error auto-creating accounting_customer:', cError);
+              } else if (created) {
+                resolvedCustomerId = created.id;
+                logger.info(`Mapped customer ${customer_id} to accounting_customer ${resolvedCustomerId}`);
+              } else {
+                logger.error('Failed to resolve customer mapping for UUID:', customer_id);
+              }
+            } else {
+              logger.error('Customer not found in source table:', customer_id);
+            }
           }
+        }
+      } else {
+        // Non-UUID: Check if it's a customer_code
+        const { data: mapped } = await supabase
+          .from('accounting_customers')
+          .select('id')
+          .eq('customer_code', customer_id)
+          .maybeSingle();
+
+        if (mapped) {
+          resolvedCustomerId = mapped.id;
+        } else {
+          // Look up by customer_code equivalent if applicable
+          logger.warn(`Non-UUID customer_id provided but no mapping found: ${customer_id}`);
         }
       }
     }
@@ -227,8 +258,23 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
 
     if (error) throw error;
 
-    res.status(201).json({ success: true, data });
     logger.info(`Invoice created: ${invoice_number}`);
+
+    // Notify Auditor
+    notificationService.notifyRole(
+      'auditor',
+      'New Invoice Created',
+      `Invoice ${invoice_number} for ${total_amount} has been created.`,
+      {
+        type: 'info',
+        category: 'finance',
+        priority: 'medium',
+        actionUrl: '/dashboard/auditor/invoices',
+        metadata: { invoice_id: data.id }
+      }
+    ).catch(e => logger.error('Failed to notify auditor of new invoice', e));
+
+    res.status(201).json({ success: true, data });
   } catch (error) {
     next(error);
   }
@@ -239,13 +285,23 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
     const { customer_id, status, overdue } = req.query;
 
     let resolvedCustomerId = customer_id as string;
-    if (resolvedCustomerId && !isUUID(resolvedCustomerId)) {
-      const { data: mapped } = await supabase
+    if (resolvedCustomerId) {
+      // Try internal ID first
+      const { data: exists } = await supabase
         .from('accounting_customers')
         .select('id')
-        .eq('customer_code', resolvedCustomerId)
+        .eq('id', resolvedCustomerId)
         .maybeSingle();
-      if (mapped) resolvedCustomerId = mapped.id;
+
+      if (!exists) {
+        // Try mapping code
+        const { data: mapped } = await supabase
+          .from('accounting_customers')
+          .select('id')
+          .eq('customer_code', resolvedCustomerId)
+          .maybeSingle();
+        if (mapped) resolvedCustomerId = mapped.id;
+      }
     }
 
     let query = supabase
@@ -275,61 +331,195 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
   }
 };
 
+export const recordInvoicePayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { amount, payment_date, bank_account_id, payment_method, reference, notes } = req.body;
+
+    // 1. Get the invoice
+    const { data: invoice, error: invoiceError } = await supabase
+      .from('accounting_ar_invoices')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (invoiceError || !invoice) {
+      res.status(404).json({ success: false, message: 'Invoice not found' });
+      return;
+    }
+
+    // 2. Update invoice balance and status
+    const paymentAmount = Number(amount);
+    const newPaidAmount = (invoice.paid_amount || 0) + paymentAmount;
+    const newBalance = invoice.total_amount - newPaidAmount;
+    const newStatus = newBalance <= 0 ? 'paid' : (newPaidAmount > 0 ? 'partially_paid' : 'unpaid');
+
+    const { error: updateError } = await supabase
+      .from('accounting_ar_invoices')
+      .update({
+        paid_amount: newPaidAmount,
+        balance: newBalance,
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (updateError) throw updateError;
+
+    // 3. Record bank transaction if account provided
+    if (bank_account_id) {
+      await supabase.from('accounting_bank_transactions').insert({
+        bank_account_id,
+        transaction_date: payment_date || new Date().toISOString().split('T')[0],
+        debit_amount: paymentAmount,
+        credit_amount: 0,
+        reference: reference || `PYMT-INV-${invoice.invoice_number}`,
+        description: notes || `Payment received for invoice ${invoice.invoice_number}`,
+        reconciled: false
+      });
+
+      // Update bank balance
+      const { data: bankAcc } = await supabase.from('accounting_bank_accounts').select('current_balance').eq('id', bank_account_id).single();
+      if (bankAcc) {
+        await supabase.from('accounting_bank_accounts').update({
+          current_balance: (bankAcc.current_balance || 0) + paymentAmount,
+          updated_at: new Date().toISOString()
+        }).eq('id', bank_account_id);
+      }
+    }
+
+    logger.info(`Payment of ${amount} recorded for invoice ${invoice.invoice_number}`);
+
+    // Notify Accountant
+    notificationService.notifyRole(
+      'accountant',
+      'Payment Received',
+      `Payment of ${amount} received for invoice ${invoice.invoice_number}.`,
+      {
+        type: 'success',
+        category: 'finance',
+        priority: 'medium',
+        actionUrl: '/dashboard/branch-accounting/invoices',
+        metadata: { invoice_id: id }
+      }
+    ).catch(e => logger.error('Failed to notify accountant of payment', e));
+
+    res.status(200).json({ success: true, message: 'Payment recorded successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ============ ACCOUNTS PAYABLE ============
 
 export const createBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { vendor_id, bill_date, due_date, subtotal, tax_amount, reference, notes } = req.body;
 
+    // Validate required fields
+    if (!vendor_id) {
+      res.status(400).json({
+        success: false,
+        message: 'vendor_id is required'
+      });
+      return;
+    }
+
     const total_amount = subtotal + (tax_amount || 0);
     const bill_number = `BILL-${Date.now()}`;
 
-    // Vendor mapping logic to handle string IDs from 'suppliers' table
+    // Vendor mapping logic to handle IDs from 'suppliers' table
     let resolvedVendorId = vendor_id as string;
 
-    if (vendor_id && !isUUID(vendor_id)) {
-      // Check if already mapped in accounting_vendors
-      const { data: mappedVendor } = await supabase
-        .from('accounting_vendors')
-        .select('id')
-        .eq('vendor_code', vendor_id)
-        .maybeSingle();
-
-      if (mappedVendor) {
-        resolvedVendorId = mappedVendor.id;
-      } else {
-        // Not mapped, look up in suppliers table
-        const { data: supplier } = await supabase
-          .from('suppliers')
-          .select('*')
+    if (vendor_id) {
+      // 1. First check if it exists in accounting_vendors by internal ID (if UUID)
+      if (isUUID(vendor_id)) {
+        logger.info(`Checking if vendor exists in accounting_vendors by ID: ${vendor_id}`);
+        const { data: existingVendor } = await supabase
+          .from('accounting_vendors')
+          .select('id')
           .eq('id', vendor_id)
           .maybeSingle();
 
-        if (supplier) {
-          // Auto-create mapping entry in accounting_vendors
-          const { data: newVendor, error: vError } = await supabase
+        if (existingVendor) {
+          resolvedVendorId = existingVendor.id;
+        } else {
+          // 2. Not an internal ID, check if it's a vendor_code (external ID)
+          logger.info(`Not found by ID, checking vendor_code mapping: ${vendor_id}`);
+          const { data: mappedByCode } = await supabase
             .from('accounting_vendors')
-            .insert([{
-              vendor_code: supplier.id,
-              vendor_name: supplier.name,
-              contact_person: supplier.contact_person,
-              email: supplier.email,
-              phone: supplier.phone,
-              address: supplier.address,
-              is_active: true
-            }])
-            .select()
-            .single();
+            .select('id')
+            .eq('vendor_code', vendor_id)
+            .maybeSingle();
 
-          if (vError) {
-            logger.error('Error auto-creating accounting_vendor:', vError);
-          } else if (newVendor) {
-            resolvedVendorId = newVendor.id;
-            logger.info(`Mapped supplier ${vendor_id} to accounting_vendor ${resolvedVendorId}`);
+          if (mappedByCode) {
+            resolvedVendorId = mappedByCode.id;
+          } else {
+            // 3. Not mapped, try to resolve from suppliers table and create mapping
+            logger.info(`Not mapped, checking suppliers table: ${vendor_id}`);
+            const { data: supplier, error: supplierError } = await supabase
+              .from('suppliers')
+              .select('*')
+              .eq('id', vendor_id)
+              .maybeSingle();
+
+            if (supplierError) {
+              logger.error('Error fetching supplier:', supplierError);
+            }
+
+            if (supplier) {
+              logger.info(`Found supplier: ${supplier.name}, creating accounting_vendor mapping`);
+              const { data: newVendor, error: vError } = await supabase
+                .from('accounting_vendors')
+                .insert([{
+                  vendor_code: supplier.id,
+                  vendor_name: supplier.name,
+                  contact_person: supplier.contact_person,
+                  email: supplier.email,
+                  phone: supplier.phone,
+                  address: supplier.address,
+                  is_active: true
+                }])
+                .select()
+                .single();
+
+              if (vError) {
+                logger.error('Error auto-creating accounting_vendor:', vError);
+                throw new Error(`Failed to create vendor mapping: ${vError.message}`);
+              } else if (newVendor) {
+                resolvedVendorId = newVendor.id;
+                logger.info(`Mapped supplier ${vendor_id} to accounting_vendor ${resolvedVendorId}`);
+              }
+            } else {
+              logger.error(`Vendor not found in either accounting_vendors or suppliers: ${vendor_id}`);
+              throw new Error(`Vendor not found: ${vendor_id}. Please ensure the vendor exists in the system.`);
+            }
           }
+        }
+      } else {
+        // Non-UUID: Check if already mapped by vendor_code
+        logger.info(`Non-UUID vendor_id provided, checking vendor_code mapping: ${vendor_id}`);
+        const { data: mappedVendor } = await supabase
+          .from('accounting_vendors')
+          .select('id')
+          .eq('vendor_code', vendor_id)
+          .maybeSingle();
+
+        if (mappedVendor) {
+          resolvedVendorId = mappedVendor.id;
+        } else {
+          logger.warn(`Non-UUID vendor_id provided but no mapping found: ${vendor_id}`);
+          // Possibly handle non-UUID lookups in suppliers if supported by schema
         }
       }
     }
+
+    // Final validation before insert
+    if (!resolvedVendorId) {
+      throw new Error('Could not resolve vendor_id');
+    }
+
+    logger.info(`Creating bill with resolved vendor_id: ${resolvedVendorId}`);
 
     const { data, error } = await supabase
       .from('accounting_ap_bills')
@@ -352,8 +542,23 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
 
     if (error) throw error;
 
-    res.status(201).json({ success: true, data });
     logger.info(`Bill created: ${bill_number}`);
+
+    // Notify Auditor
+    notificationService.notifyRole(
+      'auditor',
+      'New Bill Created',
+      `Bill ${bill_number} for ${total_amount} has been recorded.`,
+      {
+        type: 'info',
+        category: 'finance',
+        priority: 'medium',
+        actionUrl: '/dashboard/auditor/expenses',
+        metadata: { bill_id: data.id }
+      }
+    ).catch(e => logger.error('Failed to notify auditor of new bill', e));
+
+    res.status(201).json({ success: true, data });
   } catch (error) {
     next(error);
   }
@@ -364,13 +569,23 @@ export const getBills = async (req: Request, res: Response, next: NextFunction):
     const { vendor_id, status, overdue } = req.query;
 
     let resolvedVendorId = vendor_id as string;
-    if (resolvedVendorId && !isUUID(resolvedVendorId)) {
-      const { data: mapped } = await supabase
+    if (resolvedVendorId) {
+      // Try internal ID first
+      const { data: exists } = await supabase
         .from('accounting_vendors')
         .select('id')
-        .eq('vendor_code', resolvedVendorId)
+        .eq('id', resolvedVendorId)
         .maybeSingle();
-      if (mapped) resolvedVendorId = mapped.id;
+
+      if (!exists) {
+        // Try mapping code
+        const { data: mapped } = await supabase
+          .from('accounting_vendors')
+          .select('id')
+          .eq('vendor_code', resolvedVendorId)
+          .maybeSingle();
+        if (mapped) resolvedVendorId = mapped.id;
+      }
     }
 
     let query = supabase
@@ -395,6 +610,207 @@ export const getBills = async (req: Request, res: Response, next: NextFunction):
     if (error) throw error;
 
     res.status(200).json({ success: true, count: data?.length || 0, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const recordBillPayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { amount, payment_date, bank_account_id, payment_method, reference, notes } = req.body;
+
+    // 1. Get the bill
+    const { data: bill, error: billError } = await supabase
+      .from('accounting_ap_bills')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (billError || !bill) {
+      res.status(404).json({ success: false, message: 'Bill not found' });
+      return;
+    }
+
+    // 2. Update bill balance and status
+    const paymentAmount = Number(amount);
+    const newPaidAmount = (bill.paid_amount || 0) + paymentAmount;
+    const newBalance = bill.total_amount - newPaidAmount;
+    const newStatus = newBalance <= 0 ? 'paid' : (newPaidAmount > 0 ? 'partially_paid' : 'unpaid');
+
+    const { error: updateError } = await supabase
+      .from('accounting_ap_bills')
+      .update({
+        paid_amount: newPaidAmount,
+        balance: newBalance,
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (updateError) throw updateError;
+
+    // 3. Record bank transaction if account provided
+    if (bank_account_id) {
+      await supabase.from('accounting_bank_transactions').insert({
+        bank_account_id,
+        transaction_date: payment_date || new Date().toISOString().split('T')[0],
+        debit_amount: 0,
+        credit_amount: paymentAmount,
+        reference: reference || `PYMT-BILL-${bill.bill_number}`,
+        description: notes || `Payment made for bill ${bill.bill_number}`,
+        reconciled: false
+      });
+
+      // Update bank balance
+      const { data: bankAcc } = await supabase.from('accounting_bank_accounts').select('current_balance').eq('id', bank_account_id).single();
+      if (bankAcc) {
+        await supabase.from('accounting_bank_accounts').update({
+          current_balance: (bankAcc.current_balance || 0) - paymentAmount,
+          updated_at: new Date().toISOString()
+        }).eq('id', bank_account_id);
+      }
+    }
+
+    logger.info(`Payment of ${amount} recorded for bill ${bill.bill_number}`);
+
+    // Notify Auditor
+    notificationService.notifyRole(
+      'auditor',
+      'Bill Payment Recorded',
+      `Payment of ${amount} recorded for bill ${bill.bill_number}.`,
+      {
+        type: 'info',
+        category: 'finance',
+        priority: 'medium',
+        actionUrl: '/dashboard/auditor/expenses',
+        metadata: { bill_id: id }
+      }
+    ).catch(e => logger.error('Failed to notify auditor of bill payment', e));
+
+    res.status(200).json({ success: true, message: 'Payment recorded successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const submitInvoiceForAudit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+    const userId = req.user?.id;
+
+    // 1. Get invoice
+    const { data: invoice, error: invoiceError } = await supabase
+      .from('accounting_ar_invoices')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (invoiceError || !invoice) {
+      res.status(404).json({ success: false, message: 'Invoice not found' });
+      return;
+    }
+
+    // 2. Update status
+    const { error: updateError } = await supabase
+      .from('accounting_ar_invoices')
+      .update({ status: 'posted_to_audit', updated_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (updateError) throw updateError;
+
+    // 3. Create approval request
+    const { error: approvalError } = await supabase.from('approval_requests').insert({
+      request_type: 'invoice',
+      status: 'pending',
+      requested_by: userId,
+      amount: invoice.total_amount,
+      description: `Audit request for invoice ${invoice.invoice_number}`,
+      notes,
+      metadata: { invoice_id: id }
+    });
+
+    if (approvalError) throw approvalError;
+
+    logger.info(`Invoice ${invoice.invoice_number} submitted for audit by ${userId}`);
+
+    // Notify Auditor
+    notificationService.notifyRole(
+      'auditor',
+      'Audit Request: Invoice',
+      `Invoice ${invoice.invoice_number} submitted for audit.`,
+      {
+        type: 'warning',
+        category: 'audit',
+        priority: 'high',
+        actionUrl: '/dashboard/auditor/audit-requests',
+        metadata: { invoice_id: id, type: 'invoice' }
+      }
+    ).catch(e => logger.error('Failed to notify auditor of invoice audit request', e));
+
+    res.status(200).json({ success: true, message: 'Invoice submitted for audit' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const submitBillForAudit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+    const userId = req.user?.id;
+
+    // 1. Get bill
+    const { data: bill, error: billError } = await supabase
+      .from('accounting_ap_bills')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (billError || !bill) {
+      res.status(404).json({ success: false, message: 'Bill not found' });
+      return;
+    }
+
+    // 2. Update status
+    const { error: updateError } = await supabase
+      .from('accounting_ap_bills')
+      .update({ status: 'posted_to_audit', updated_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (updateError) throw updateError;
+
+    // 3. Create approval request
+    const { error: approvalError } = await supabase.from('approval_requests').insert({
+      request_type: 'bill',
+      status: 'pending',
+      requested_by: userId,
+      amount: bill.total_amount,
+      description: `Audit request for bill ${bill.bill_number}`,
+      notes,
+      metadata: { bill_id: id }
+    });
+
+    if (approvalError) throw approvalError;
+
+    logger.info(`Bill ${bill.bill_number} submitted for audit by ${userId}`);
+
+    // Notify Auditor
+    notificationService.notifyRole(
+      'auditor',
+      'Audit Request: Bill',
+      `Bill ${bill.bill_number} submitted for audit.`,
+      {
+        type: 'warning',
+        category: 'audit',
+        priority: 'high',
+        actionUrl: '/dashboard/auditor/audit-requests',
+        metadata: { bill_id: id, type: 'bill' }
+      }
+    ).catch(e => logger.error('Failed to notify auditor of bill audit request', e));
+
+    res.status(200).json({ success: true, message: 'Bill submitted for audit' });
   } catch (error) {
     next(error);
   }
@@ -523,21 +939,21 @@ export const getAccountingDashboard = async (req: Request, res: Response, next: 
 
     const dashboard = {
       receivables: {
-        total: invoices?.reduce((sum, inv) => sum + (inv.balance || 0), 0) || 0,
-        overdue: invoices?.filter(inv => inv.status === 'unpaid' && inv.due_date < today)
-          .reduce((sum, inv) => sum + (inv.balance || 0), 0) || 0,
-        current: invoices?.filter(inv => inv.status === 'unpaid' && inv.due_date >= today)
-          .reduce((sum, inv) => sum + (inv.balance || 0), 0) || 0
+        total: invoices?.reduce((sum: number, inv: any) => sum + (inv.balance || 0), 0) || 0,
+        overdue: invoices?.filter((inv: any) => inv.status === 'unpaid' && inv.due_date < today)
+          .reduce((sum: number, inv: any) => sum + (inv.balance || 0), 0) || 0,
+        current: invoices?.filter((inv: any) => inv.status === 'unpaid' && inv.due_date >= today)
+          .reduce((sum: number, inv: any) => sum + (inv.balance || 0), 0) || 0
       },
       payables: {
-        total: bills?.reduce((sum, bill) => sum + (bill.balance || 0), 0) || 0,
-        overdue: bills?.filter(bill => bill.status === 'unpaid' && bill.due_date < today)
-          .reduce((sum, bill) => sum + (bill.balance || 0), 0) || 0,
-        current: bills?.filter(bill => bill.status === 'unpaid' && bill.due_date >= today)
-          .reduce((sum, bill) => sum + (bill.balance || 0), 0) || 0
+        total: bills?.reduce((sum: number, bill: any) => sum + (bill.balance || 0), 0) || 0,
+        overdue: bills?.filter((bill: any) => bill.status === 'unpaid' && bill.due_date < today)
+          .reduce((sum: number, bill: any) => sum + (bill.balance || 0), 0) || 0,
+        current: bills?.filter((bill: any) => bill.status === 'unpaid' && bill.due_date >= today)
+          .reduce((sum: number, bill: any) => sum + (bill.balance || 0), 0) || 0
       },
       cash: {
-        total: bankAccounts?.reduce((sum, acc) => sum + (acc.current_balance || 0), 0) || 0,
+        total: bankAccounts?.reduce((sum: number, acc: any) => sum + (acc.current_balance || 0), 0) || 0,
         accounts: bankAccounts?.length || 0
       }
     };

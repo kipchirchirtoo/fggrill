@@ -139,6 +139,52 @@ export const getBillDetails = async (
             return;
         }
 
+        // Check if it's an unpaid bill from other streams (CON, POL, CWS)
+        const otherPrefixes = ['CON', 'POL', 'CWS', 'BILL'];
+        const billPrefix = otherPrefixes.find(p => bookingId.startsWith(p));
+
+        if (billPrefix) {
+            let query = supabase
+                .from('unpaid_bills')
+                .select('*')
+                .eq('bill_number', bookingId);
+
+            if (req.user?.branch_id) {
+                query = query.eq('branch_id', req.user.branch_id);
+            }
+
+            const { data: bill, error: billError } = await query.single();
+
+            if (billError || !bill) {
+                throw new AppError('Bill not found', 404);
+            }
+
+            res.json({
+                success: true,
+                data: {
+                    type: 'unpaid_bill',
+                    bill_type: bill.bill_type,
+                    revenue_type: bill.revenue_type || bill.bill_type,
+                    bill: {
+                        id: bill.id,
+                        bill_number: bill.bill_number,
+                        customer_name: bill.customer_name,
+                        room_number: bill.room_number,
+                        status: bill.status,
+                        due_date: bill.due_date,
+                        remarks: bill.remarks
+                    },
+                    financials: {
+                        total_amount: bill.total_amount,
+                        amount_paid: bill.paid_amount || 0,
+                        balance: bill.balance_amount || (bill.total_amount - (bill.paid_amount || 0)),
+                        currency: 'KES'
+                    }
+                }
+            });
+            return;
+        }
+
         // Otherwise assume it's a hotel booking (UUID)
         // Fetch booking details with guest info
         let query = supabase
@@ -790,6 +836,64 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
     }
 };
 
+/**
+ * Accountant/Auditor confirm unpaid bill
+ */
+export const confirmUnpaidBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { role } = req.body; // 'accountant' or 'auditor'
+
+        // 1. Fetch current bill
+        const { data: bill, error: fetchError } = await supabase
+            .from('unpaid_bills')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !bill) {
+            throw new AppError('Bill not found', 404);
+        }
+
+        const updateData: any = {};
+        if (role === 'accountant') {
+            if (bill.accountant_confirmed_at) {
+                throw new AppError('Bill already confirmed by accountant', 400);
+            }
+            updateData.accountant_confirmed_at = new Date().toISOString();
+            updateData.accountant_id = req.user?.id;
+        } else if (role === 'auditor') {
+            if (bill.auditor_confirmed_at) {
+                throw new AppError('Bill already confirmed by auditor', 400);
+            }
+            // Optional: require accountant confirmation first
+            // if (!bill.accountant_confirmed_at) throw new AppError('Accountant confirmation required first', 400);
+
+            updateData.auditor_confirmed_at = new Date().toISOString();
+            updateData.auditor_id = req.user?.id;
+        } else {
+            throw new AppError('Invalid role for confirmation. Use accountant or auditor', 400);
+        }
+
+        const { data, error } = await supabase
+            .from('unpaid_bills')
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.json({
+            success: true,
+            message: `Bill confirmed by ${role} successfully`,
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 // ============================================
 // CREDIT BILLS MANAGEMENT
 // ============================================
@@ -905,20 +1009,51 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
 };
 
 /**
- * Approve/reject credit bill
+ * Accountant/Auditor confirm credit bill
  */
-export const approveCreditBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const confirmCreditBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { id } = req.params;
-        const { approval_status } = req.body;
+        const { role } = req.body; // 'accountant' or 'auditor'
+
+        // 1. Fetch current credit bill
+        const { data: bill, error: fetchError } = await supabase
+            .from('credit_bills')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !bill) {
+            throw new AppError('Credit bill not found', 404);
+        }
+
+        const updateData: any = {};
+        if (role === 'accountant') {
+            if (bill.accountant_confirmed_at) {
+                throw new AppError('Credit bill already confirmed by accountant', 400);
+            }
+            updateData.accountant_confirmed_at = new Date().toISOString();
+            updateData.accountant_id = req.user?.id;
+        } else if (role === 'auditor') {
+            if (bill.auditor_confirmed_at) {
+                throw new AppError('Credit bill already confirmed by auditor', 400);
+            }
+            // if (!bill.accountant_confirmed_at) throw new AppError('Accountant confirmation required first', 400);
+
+            updateData.auditor_confirmed_at = new Date().toISOString();
+            updateData.auditor_id = req.user?.id;
+
+            // If both are confirmed, we could optionally update approval_status to 'confirmed'
+            if (bill.accountant_confirmed_at) {
+                updateData.approval_status = 'confirmed';
+            }
+        } else {
+            throw new AppError('Invalid role for confirmation', 400);
+        }
 
         const { data, error } = await supabase
             .from('credit_bills')
-            .update({
-                approval_status,
-                approved_by: req.user?.id,
-                approved_at: new Date().toISOString()
-            })
+            .update(updateData)
             .eq('id', id)
             .select()
             .single();
@@ -927,7 +1062,7 @@ export const approveCreditBill = async (req: Request, res: Response, next: NextF
 
         res.json({
             success: true,
-            message: `Credit bill ${approval_status} successfully`,
+            message: `Credit bill confirmed by ${role} successfully`,
             data
         });
     } catch (error) {
@@ -1213,12 +1348,20 @@ export const getCashierStats = async (req: Request, res: Response, next: NextFun
 
         const todayRevenue = transactions?.reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0;
 
+        // Get revenue breakdown by type
+        const revenueByType: Record<string, number> = {};
+        transactions?.forEach(t => {
+            const type = t.revenue_type || 'other';
+            revenueByType[type] = (revenueByType[type] || 0) + parseFloat(t.amount);
+        });
+
         res.json({
             success: true,
             message: 'Cashier statistics retrieved successfully',
             data: {
                 todayTransactions: transactions?.length || 0,
                 todayRevenue,
+                revenueBreakdown: revenueByType,
                 unpaidBills: unpaidCount || 0,
                 pendingCreditApprovals: pendingCreditsCount || 0,
                 activeShift

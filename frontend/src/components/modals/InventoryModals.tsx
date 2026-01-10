@@ -104,7 +104,21 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await inventoryAPI.createItem(formData);
+      // Map frontend fields to database schema names
+      const payload = {
+        item_code: formData.code,
+        name: formData.name,
+        description: formData.description,
+        category: formData.category.toLowerCase().replace(/ & /g, '_').replace(/ /g, '_'), // Map to enum if needed
+        unit: formData.unit,
+        min_stock_level: formData.minStock,
+        max_stock_level: formData.maxStock,
+        unit_cost: formData.unitCost,
+        supplier: formData.supplier,
+        branch_id: formData.branch === 'Bomet' ? 1 : (formData.branch === 'Kericho' ? 2 : (formData.branch === 'Kapsoit' ? 3 : 4)), // Temporary hardcoded mapping
+        is_active: true
+      };
+      await inventoryAPI.createItem(payload);
       toast.success('Item created successfully');
       onSuccess?.();
       onClose();

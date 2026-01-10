@@ -11,48 +11,39 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
 import {
     Package, Search, RefreshCw, ShoppingCart,
-    AlertTriangle, ArrowLeft, ArrowRight, Warehouse
+    AlertTriangle, ArrowLeft, ArrowRight, Warehouse, Plus
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { api } from '@/lib/api';
+import { BarStockRequestModal } from '@/components/modals/BarModals';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
-interface InventoryItem {
+interface BarInventoryItem {
     id: string;
-    sku: string;
-    item_name: string;
+    name: string;
     category: string;
-    quantity: number;
-    reorder_level: number;
-    unit_of_measure: string;
-    retail_price: number;
+    current_bottles: number;
+    unit: string;
+    par_level: number;
+    supplier_id?: string;
+    // Add other fields from restaurant_bar_inventory as needed
 }
 
 export default function BarInventoryPage() {
     const { user } = useAuth();
     const { activeBranchId } = useBranch();
-    const [items, setItems] = useState<InventoryItem[]>([]);
+    const [items, setItems] = useState<BarInventoryItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [showRequestModal, setShowRequestModal] = useState(false);
 
     const fetchInventory = useCallback(async () => {
         setIsLoading(true);
         try {
-            const token = localStorage.getItem('token');
-            const branchQuery = activeBranchId ? `?branch_id=${activeBranchId}` : '';
-            const response = await fetch(`${API_URL}/api/store/items${branchQuery}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const res = await api.barInventory.getStock({ branch_id: activeBranchId });
 
-            if (response.ok) {
-                const data = await response.json();
-                // Filter for Bar & Beverages
-                const allItems = Array.isArray(data.data) ? data.data : [];
-                const barItems = allItems.filter((item: any) =>
-                    item.category === 'Bar & Beverages' || item.category === 'Bar' || item.category === 'Beverages'
-                );
-                setItems(barItems);
+            if (res.success) {
+                setItems(res.data || []);
             }
         } catch (error) {
             console.error('Error fetching inventory:', error);
@@ -61,17 +52,21 @@ export default function BarInventoryPage() {
             setIsLoading(false);
         }
     }, [activeBranchId]);
+    // ...
+    // In the table render:
+    <td className="px-4 py-4 text-center">
+        <p className="text-[14px] sm:text-[15px] font-bold text-stone-900">{item.current_bottles} <span className="text-[10px] font-bold text-stone-400 ml-0.5">{item.unit}</span></p>
+    </td>
 
     useEffect(() => {
         fetchInventory();
     }, [fetchInventory]);
 
     const filteredItems = items.filter(item =>
-        item.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.sku.toLowerCase().includes(searchTerm.toLowerCase())
+        item.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const lowStockItems = items.filter(item => item.quantity <= item.reorder_level);
+    const lowStockItems = items.filter(item => item.current_bottles <= item.par_level);
 
     return (
         <ProtectedRoute allowedRoles={[UserRole.BARTENDER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
@@ -99,12 +94,13 @@ export default function BarInventoryPage() {
                                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                                 <span className="hidden xs:inline">Refresh</span>
                             </button>
-                            <Link href="/dashboard/storekeeping/requests" className="flex-1 sm:flex-none">
-                                <button className="btn-primary w-full h-[44px] px-4 flex items-center justify-center gap-2">
-                                    <ShoppingCart className="h-4 w-4" />
-                                    <span>Request Stock</span>
-                                </button>
-                            </Link>
+                            <button
+                                onClick={() => setShowRequestModal(true)}
+                                className="btn-primary flex-1 sm:flex-none h-[44px] px-4 flex items-center justify-center gap-2"
+                            >
+                                <ShoppingCart className="h-4 w-4" />
+                                <span>Request Stock</span>
+                            </button>
                         </div>
                     </div>
 
@@ -143,7 +139,7 @@ export default function BarInventoryPage() {
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
                         <Input
-                            placeholder="Search drinks, snacks or SKUs..."
+                            placeholder="Search drinks..."
                             className="pl-10 h-11 bg-white"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -158,8 +154,8 @@ export default function BarInventoryPage() {
                                     <tr className="bg-stone-50 border-b border-stone-100">
                                         <th className="px-4 ps-6 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Item Details</th>
                                         <th className="px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-widest text-center">In Stock</th>
-                                        <th className="px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-widest text-center">Status</th>
-                                        <th className="px-4 pe-6 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-widest text-right">Action</th>
+                                        <th className="px-4 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-widest text-center">Par Level</th>
+                                        <th className="px-4 pe-6 py-3 text-[10px] font-bold text-stone-400 uppercase tracking-widest text-right">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-stone-100">
@@ -177,30 +173,25 @@ export default function BarInventoryPage() {
                                         </tr>
                                     ) : (
                                         filteredItems.map((item) => (
-                                            <tr key={item.sku} className="hover:bg-stone-50/50 transition-colors">
+                                            <tr key={item.id} className="hover:bg-stone-50/50 transition-colors">
                                                 <td className="px-4 ps-6 py-4">
-                                                    <p className="text-[13px] sm:text-[14px] font-bold text-stone-900">{item.item_name}</p>
-                                                    <p className="text-[10px] text-stone-400 font-mono mt-0.5">{item.sku}</p>
+                                                    <p className="text-[13px] sm:text-[14px] font-bold text-stone-900">{item.name}</p>
+                                                    <p className="text-[10px] text-stone-400 font-mono mt-0.5">{item.category}</p>
                                                 </td>
                                                 <td className="px-4 py-4 text-center">
-                                                    <p className="text-[14px] sm:text-[15px] font-bold text-stone-900">{item.quantity} <span className="text-[10px] font-bold text-stone-400 ml-0.5">{item.unit_of_measure}</span></p>
+                                                    <p className="text-[14px] sm:text-[15px] font-bold text-stone-900">{item.current_bottles} <span className="text-[10px] font-bold text-stone-400 ml-0.5">Bottles</span></p>
                                                 </td>
                                                 <td className="px-4 py-4 text-center">
-                                                    {item.quantity <= 0 ? (
-                                                        <IOSBadge size="sm" className="bg-red-50 text-red-600 border-red-100">Out</IOSBadge>
-                                                    ) : item.quantity <= item.reorder_level ? (
-                                                        <IOSBadge size="sm" className="bg-amber-50 text-amber-600 border-amber-100">Low</IOSBadge>
+                                                    <span className="text-xs text-stone-500 font-medium">{item.par_level}</span>
+                                                </td>
+                                                <td className="px-4 pe-6 py-4 text-right">
+                                                    {item.current_bottles <= 0 ? (
+                                                        <IOSBadge size="sm" className="bg-red-50 text-red-600 border-red-100">Out of Stock</IOSBadge>
+                                                    ) : item.current_bottles <= item.par_level ? (
+                                                        <IOSBadge size="sm" className="bg-amber-50 text-amber-600 border-amber-100">Low Stock</IOSBadge>
                                                     ) : (
                                                         <IOSBadge size="sm" className="bg-green-50 text-green-600 border-green-100">OK</IOSBadge>
                                                     )}
-                                                </td>
-                                                <td className="px-4 pe-6 py-4 text-right">
-                                                    <Link href={`/dashboard/storekeeping/requests`}>
-                                                        <button className="h-8 px-3 text-[11px] font-bold text-stone-900 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors inline-flex items-center gap-1.5 whitespace-nowrap">
-                                                            Order
-                                                            <ArrowRight className="h-3 w-3" />
-                                                        </button>
-                                                    </Link>
                                                 </td>
                                             </tr>
                                         ))
@@ -210,6 +201,12 @@ export default function BarInventoryPage() {
                         </div>
                     </IOSCard>
                 </div>
+
+                <BarStockRequestModal
+                    isOpen={showRequestModal}
+                    onClose={() => setShowRequestModal(false)}
+                    onSuccess={fetchInventory}
+                />
             </DashboardLayout>
         </ProtectedRoute>
     );

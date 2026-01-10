@@ -26,7 +26,7 @@ export const getStockRequests = async (
         fulfilled_by_user:users!bar_stock_requests_fulfilled_by_fkey(id, first_name, last_name),
         items:bar_stock_request_items(
           *,
-          drink:bar_drinks(name, category_id)
+          item:restaurant_bar_inventory(name, category)
         )
       `)
       .order('created_at', { ascending: false });
@@ -79,7 +79,7 @@ export const getStockRequest = async (
         fulfilled_by_user:users!bar_stock_requests_fulfilled_by_fkey(id, first_name, last_name),
         items:bar_stock_request_items(
           *,
-          drink:bar_drinks(name, category_id, unit)
+          item:restaurant_bar_inventory(name, category, bottle_size_ml)
         )
       `)
       .eq('id', id)
@@ -138,7 +138,7 @@ export const createStockRequest = async (
     // Create request items
     const requestItems = items.map((item: any) => ({
       request_id: request.id,
-      drink_id: item.drink_id,
+      inventory_item_id: item.inventory_item_id || item.drink_id, // Handle legacy format if frontend sends drink_id
       item_name: item.item_name,
       requested_quantity: item.requested_quantity,
       unit: item.unit,
@@ -160,7 +160,7 @@ export const createStockRequest = async (
         *,
         items:bar_stock_request_items(
           *,
-          drink:bar_drinks(name, category_id, unit)
+          item:restaurant_bar_inventory(name, category)
         )
       `)
       .eq('id', request.id)
@@ -266,7 +266,7 @@ export const fulfillStockRequest = async (
 
     if (fetchError) throw fetchError;
 
-    if (request.status !== 'approved') {
+    if (request.status !== 'approved' && request.status !== 'partial') {
       res.status(400).json({
         success: false,
         message: 'Only approved requests can be fulfilled'
@@ -286,43 +286,50 @@ export const fulfillStockRequest = async (
           .select()
           .single();
 
-        // Update bar stock if item has drink_id
-        if (item && item.drink_id) {
-          // Try to use RPC if it exists, otherwise update directly
-          try {
-            await supabase.rpc('increment_bar_stock', {
-              p_drink_id: item.drink_id,
-              p_branch_id: request.bar_branch_id,
-              p_quantity: itemUpdate.fulfilled_quantity
-            });
-          } catch (rpcError) {
-            // If RPC doesn't exist, get current stock and update
-            const { data: currentStock } = await supabase
-              .from('bar_stock')
-              .select('quantity')
-              .eq('drink_id', item.drink_id)
-              .eq('branch_id', request.bar_branch_id)
-              .single();
+        // Update bar stock if item has inventory_item_id
+        if (item && item.inventory_item_id) {
+          // Increment Bar Stock
+          // Note: using direct update instead of RPC for simplicity unless concurrent updates are high
+          const { data: currentStock } = await supabase
+            .from('restaurant_bar_inventory')
+            .select('current_bottles')
+            .eq('id', item.inventory_item_id)
+            .single();
 
-            if (currentStock) {
-              await supabase
-                .from('bar_stock')
-                .update({
-                  quantity: currentStock.quantity + itemUpdate.fulfilled_quantity,
-                  last_restocked: new Date().toISOString()
-                })
-                .eq('drink_id', item.drink_id)
-                .eq('branch_id', request.bar_branch_id);
-            }
+          if (currentStock) {
+            await supabase
+              .from('restaurant_bar_inventory')
+              .update({
+                current_bottles: (currentStock.current_bottles || 0) + itemUpdate.fulfilled_quantity,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', item.inventory_item_id);
+          }
+
+          // Log to bar_stock_records
+          // Using try-catch to ignore error if bar_stock_records setup is incomplete or table missing FK
+          try {
+            await supabase.from('bar_stock_records').insert({
+              branch_id: request.bar_branch_id,
+              drink_id: item.inventory_item_id, // Assuming we mapped this FK to match or use text link
+              record_type: 'received',
+              quantity: itemUpdate.fulfilled_quantity,
+              unit: 'bottles',
+              recorded_by: userId,
+              notes: `Received from Request ${request.request_number}`
+            });
+          } catch (logError) {
+            logger.warn('Failed to log bar stock record', logError);
           }
         }
       }
     }
 
-    // Update request
+    // Update request to fulfilled
     await supabase
       .from('bar_stock_requests')
       .update({
+        status: 'fulfilled',
         fulfilled_by: userId,
         fulfilled_at: new Date().toISOString()
       })
@@ -351,21 +358,16 @@ export const getLowStockItems = async (
 ): Promise<void> => {
   try {
     const { branch_id } = req.query;
-    const userBranchId = req.user?.branch_id;
-    const targetBranchId = branch_id || userBranchId;
 
-    // Get all stock for the branch and filter in memory
-    // Supabase doesn't support comparing column to column directly in filter
+    // Use restaurant_bar_inventory directly
     const { data: allStock, error } = await supabase
-      .from('bar_stock')
-      .select(`
-        *,
-        drink:bar_drinks(id, name, category_id, unit)
-      `)
-      .eq('branch_id', targetBranchId);
+      .from('restaurant_bar_inventory')
+      .select('*')
+      .order('name');
+    // Filter by branch if we had branch_id column
 
-    // Filter for low stock items (quantity <= min_stock)
-    const data = allStock?.filter(item => item.quantity <= item.min_stock) || [];
+    // Filter for low stock items (current_bottles <= par_level)
+    const data = allStock?.filter(item => item.current_bottles <= item.par_level) || [];
 
     if (error) throw error;
 

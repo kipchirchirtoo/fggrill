@@ -12,13 +12,17 @@ import {
   Loader2,
   ArrowRight,
   Shield,
-  CheckCircle2
+  Key,
+  CheckCircle2,
+  ChefHat,
+  GlassWater
 } from 'lucide-react';
 
 export default function LoginPage() {
-  const { login, isLoading } = useAuth();
+  const { login, posLogin, isLoading } = useAuth();
+  const [loginMode, setLoginMode] = useState<'standard' | 'pos'>('standard');
   const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [formData, setFormData] = useState({ email: '', password: '', pin: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [rememberMe, setRememberMe] = useState(false);
 
@@ -26,24 +30,43 @@ export default function LoginPage() {
     e.preventDefault();
     setErrors({});
 
-    // Validation
-    if (!formData.email) {
-      setErrors(prev => ({ ...prev, email: 'Email is required' }));
-      return;
-    }
-    if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      setErrors(prev => ({ ...prev, email: 'Please enter a valid email' }));
-      return;
-    }
-    if (!formData.password) {
-      setErrors(prev => ({ ...prev, password: 'Password is required' }));
-      return;
-    }
+    if (loginMode === 'standard') {
+      // Validation
+      if (!formData.email) {
+        setErrors(prev => ({ ...prev, email: 'Email is required' }));
+        return;
+      }
+      if (!/\S+@\S+\.\S+/.test(formData.email)) {
+        setErrors(prev => ({ ...prev, email: 'Please enter a valid email' }));
+        return;
+      }
+      if (!formData.password) {
+        setErrors(prev => ({ ...prev, password: 'Password is required' }));
+        return;
+      }
 
-    try {
-      await login(formData.email, formData.password);
-    } catch (error: any) {
-      setErrors({ general: error.message || 'Invalid email or password' });
+      try {
+        await login(formData.email, formData.password);
+      } catch (error: any) {
+        setErrors({ general: error.message || 'Invalid email or password' });
+      }
+    } else {
+      // POS PIN Login
+      if (!formData.pin) {
+        setErrors(prev => ({ ...prev, pin: 'PIN is required' }));
+        return;
+      }
+      const pinRegex = /^[RB]\d{3}$/;
+      if (!pinRegex.test(formData.pin)) {
+        setErrors(prev => ({ ...prev, pin: 'Format: RXXX or BXXX' }));
+        return;
+      }
+
+      try {
+        await posLogin(formData.pin);
+      } catch (error: any) {
+        setErrors({ general: error.message || 'Invalid POS PIN' });
+      }
     }
   };
 
@@ -56,7 +79,7 @@ export default function LoginPage() {
         className="w-full max-w-md"
       >
         {/* Logo & Header */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white shadow-sm border border-stone-200 mb-6 overflow-hidden">
             <Image
               src="/fglogo.png"
@@ -68,15 +91,45 @@ export default function LoginPage() {
             />
           </div>
           <h1 className="text-2xl font-semibold text-stone-900 tracking-tight mb-2">
-            Welcome back
+            Famous Gate Hotel
           </h1>
           <p className="text-stone-500 text-sm">
-            Sign in to your dashboard to manage operations
+            Select your preferred login method
           </p>
         </div>
 
+        {/* Mode Selector */}
+        <div className="bg-stone-200/50 p-1 rounded-xl mb-6 flex gap-1">
+          <button
+            onClick={() => {
+              setLoginMode('standard');
+              setErrors({});
+            }}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${loginMode === 'standard'
+              ? 'bg-white text-stone-900 shadow-sm'
+              : 'text-stone-500 hover:text-stone-700'
+              }`}
+          >
+            <Shield className="w-4 h-4" />
+            Standard
+          </button>
+          <button
+            onClick={() => {
+              setLoginMode('pos');
+              setErrors({});
+            }}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${loginMode === 'pos'
+              ? 'bg-white text-stone-900 shadow-sm'
+              : 'text-stone-500 hover:text-stone-700'
+              }`}
+          >
+            <Key className="w-4 h-4" />
+            Waiters/Bar
+          </button>
+        </div>
+
         {/* Login Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden min-h-[400px]">
           <div className="p-6 sm:p-8">
             {errors.general && (
               <motion.div
@@ -93,80 +146,138 @@ export default function LoginPage() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1.5">Email address</label>
-                <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-stone-400 pointer-events-none" />
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                    className={`w-full pl-10 pr-4 py-2.5 bg-stone-50 border rounded-xl text-sm text-stone-900 placeholder:text-stone-400 transition-all focus:bg-white focus:outline-none focus:ring-2 ${errors.email
-                      ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
-                      : 'border-stone-200 focus:border-stone-400 focus:ring-stone-100'
-                      }`}
-                    placeholder="name@company.com"
-                    autoComplete="email"
-                  />
-                </div>
-                {errors.email && <p className="mt-1.5 text-xs text-red-500">{errors.email}</p>}
-              </div>
+              {loginMode === 'standard' ? (
+                <motion.div
+                  key="standard"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="space-y-5"
+                >
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1.5">Email address</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-stone-400 pointer-events-none" />
+                      <input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                        className={`w-full pl-10 pr-4 py-2.5 bg-stone-50 border rounded-xl text-sm text-stone-900 placeholder:text-stone-400 transition-all focus:bg-white focus:outline-none focus:ring-2 ${errors.email
+                          ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
+                          : 'border-stone-200 focus:border-stone-400 focus:ring-stone-100'
+                          }`}
+                        placeholder="name@company.com"
+                        autoComplete="email"
+                      />
+                    </div>
+                    {errors.email && <p className="mt-1.5 text-xs text-red-500">{errors.email}</p>}
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1.5">Password</label>
-                <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-stone-400 pointer-events-none" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={formData.password}
-                    onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                    className={`w-full pl-10 pr-10 py-2.5 bg-stone-50 border rounded-xl text-sm text-stone-900 placeholder:text-stone-400 transition-all focus:bg-white focus:outline-none focus:ring-2 ${errors.password
-                      ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
-                      : 'border-stone-200 focus:border-stone-400 focus:ring-stone-100'
-                      }`}
-                    placeholder="Enter your password"
-                    autoComplete="current-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-stone-400 hover:text-stone-600 transition-colors"
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-                {errors.password && <p className="mt-1.5 text-xs text-red-500">{errors.password}</p>}
-              </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-sm font-medium text-stone-700">Password</label>
+                      <button type="button" className="text-xs font-medium text-amber-600 hover:text-amber-700 transition-colors">
+                        Forgot password?
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-stone-400 pointer-events-none" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={formData.password}
+                        onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                        className={`w-full pl-10 pr-10 py-2.5 bg-stone-50 border rounded-xl text-sm text-stone-900 placeholder:text-stone-400 transition-all focus:bg-white focus:outline-none focus:ring-2 ${errors.password
+                          ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
+                          : 'border-stone-200 focus:border-stone-400 focus:ring-stone-100'
+                          }`}
+                        placeholder="Enter your password"
+                        autoComplete="current-password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-stone-400 hover:text-stone-600 transition-colors"
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {errors.password && <p className="mt-1.5 text-xs text-red-500">{errors.password}</p>}
+                  </div>
 
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 rounded border-stone-300 text-stone-900 focus:ring-stone-900"
-                  />
-                  <span className="text-sm text-stone-600">Remember me</span>
-                </label>
-                <button type="button" className="text-sm font-medium text-amber-600 hover:text-amber-700 transition-colors">
-                  Forgot password?
-                </button>
-              </div>
+                  <div className="flex items-center">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          checked={rememberMe}
+                          onChange={(e) => setRememberMe(e.target.checked)}
+                          className="peer sr-only"
+                        />
+                        <div className="w-5 h-5 border-2 border-stone-200 rounded-md peer-checked:bg-stone-900 peer-checked:border-stone-900 transition-all group-hover:border-stone-300" />
+                        <CheckCircle2 className="absolute inset-0 w-5 h-5 text-white scale-0 peer-checked:scale-100 transition-transform p-0.5" />
+                      </div>
+                      <span className="text-sm text-stone-600 group-hover:text-stone-900 transition-colors">Keep me signed in</span>
+                    </label>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="pos"
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="space-y-6"
+                >
+                  <div className="text-center pb-4">
+                    <div className="inline-flex gap-4 mb-4">
+                      <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center text-orange-600 shadow-inner">
+                        <ChefHat className="w-6 h-6" />
+                      </div>
+                      <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shadow-inner">
+                        <GlassWater className="w-6 h-6" />
+                      </div>
+                    </div>
+                    <p className="text-sm text-stone-500 px-4">
+                      Enter your specialized 4-character POS PIN to quickly log into your branch station.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1.5 text-center">Enter PIN</label>
+                    <div className="relative max-w-[180px] mx-auto">
+                      <input
+                        type="text"
+                        value={formData.pin}
+                        autoFocus
+                        maxLength={4}
+                        onChange={(e) => setFormData(prev => ({ ...prev, pin: e.target.value.toUpperCase() }))}
+                        className={`w-full text-center text-2xl font-bold tracking-[0.5em] py-4 bg-stone-50 border rounded-2xl transition-all focus:bg-white focus:outline-none focus:ring-4 ${errors.pin
+                          ? 'border-red-300 focus:ring-red-100 text-red-600'
+                          : 'border-stone-200 focus:border-stone-400 focus:ring-stone-100 text-stone-900'
+                          }`}
+                        placeholder="R000"
+                      />
+                    </div>
+                    {errors.pin && <p className="mt-2 text-xs text-red-500 text-center">{errors.pin}</p>}
+                    <p className="mt-4 text-[10px] text-stone-400 text-center flex items-center justify-center gap-1.5 uppercase tracking-widest font-semibold">
+                      <Shield className="w-3 h-3" /> Branch-Level Security
+                    </p>
+                  </div>
+                </motion.div>
+              )}
 
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full h-11 bg-stone-900 hover:bg-stone-800 disabled:bg-stone-400 text-white font-medium rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:shadow-none"
+                className="w-full h-12 bg-stone-900 hover:bg-stone-800 disabled:bg-stone-400 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:shadow-none"
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Signing in...</span>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <span>Authorizing...</span>
                   </>
                 ) : (
                   <>
-                    <span>Sign in</span>
-                    <ArrowRight className="h-4 w-4" />
+                    <span>Enter Dashboard</span>
+                    <ArrowRight className="h-5 w-5" />
                   </>
                 )}
               </button>
@@ -175,9 +286,9 @@ export default function LoginPage() {
 
           {/* Footer Info */}
           <div className="px-6 py-4 bg-stone-50 border-t border-stone-200">
-            <div className="flex items-center justify-center gap-2 text-xs text-stone-500">
+            <div className="flex items-center justify-center gap-2 text-[10px] text-stone-400 font-medium tracking-tight">
               <Shield className="w-3 h-3" />
-              <span>Secure, encrypted connection</span>
+              <span>AES-256 END-TO-END ENCRYPTED</span>
             </div>
           </div>
         </div>

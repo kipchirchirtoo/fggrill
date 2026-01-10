@@ -6,9 +6,10 @@ import {
     getUnpaidBills,
     createUnpaidBill,
     recordBillPayment,
+    confirmUnpaidBill,
     getCreditBills,
     createCreditBill,
-    approveCreditBill,
+    confirmCreditBill,
     recordCreditPayment,
     getCashierShifts,
     startShift,
@@ -56,6 +57,12 @@ router.route('/unpaid-bills')
 router.route('/unpaid-bills/:id/payment')
     .post(recordBillPayment);
 
+router.route('/unpaid-bills/:id/confirm')
+    .patch(
+        authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, 'auditor', 'branch_accountant'] as any),
+        confirmUnpaidBill
+    );
+
 // ============================================
 // CREDIT BILLS ROUTES
 // ============================================
@@ -64,10 +71,10 @@ router.route('/credit-bills')
     .get(getCreditBills)
     .post(createCreditBill);
 
-router.route('/credit-bills/:id/approve')
+router.route('/credit-bills/:id/confirm')
     .patch(
-        authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
-        approveCreditBill
+        authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, 'auditor', 'branch_accountant'] as any),
+        confirmCreditBill
     );
 
 router.route('/credit-bills/:id/payment')

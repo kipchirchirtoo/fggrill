@@ -259,32 +259,115 @@ export const getPayrollVariances = async (req: Request, res: Response, next: Nex
 // ============================================================
 
 /**
- * Submit an approval for a transaction/process
+ * Handle a pending approval request (Approve/Reject)
+ */
+export const handleApprovalRequest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { requestId, status, notes } = req.body;
+        const auditorId = req.user?.id;
+
+        if (!['approved', 'rejected'].includes(status)) {
+            res.status(400).json({ success: false, message: 'Invalid status' });
+            return;
+        }
+
+        // 1. Get the request
+        const { data: request, error: fetchError } = await supabase
+            .from('approval_requests')
+            .select('*')
+            .eq('id', requestId)
+            .single();
+
+        if (fetchError || !request) {
+            res.status(404).json({ success: false, message: 'Approval request not found' });
+            return;
+        }
+
+        // 2. Update request
+        const { error: updateReqError } = await supabase
+            .from('approval_requests')
+            .update({
+                status,
+                approved_by: status === 'approved' ? auditorId : null,
+                approved_at: status === 'approved' ? new Date().toISOString() : null,
+                rejected_at: status === 'rejected' ? new Date().toISOString() : null,
+                notes: notes || request.notes,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', requestId);
+
+        if (updateReqError) throw updateReqError;
+
+        // 3. Process side effects
+        const metadata = request.metadata || {};
+        const entityStatus = status === 'approved' ? 'approved' : 'unpaid'; // Revert to unpaid if rejected
+
+        if (request.request_type === 'invoice') {
+            await supabase.from('accounting_ar_invoices')
+                .update({ status: entityStatus, updated_at: new Date().toISOString() })
+                .eq('id', metadata.invoice_id);
+        } else if (request.request_type === 'bill') {
+            await supabase.from('accounting_ap_bills')
+                .update({ status: entityStatus, updated_at: new Date().toISOString() })
+                .eq('id', metadata.bill_id);
+        } else if (request.request_type === 'stock_take') {
+            if (status === 'approved') {
+                // Perform stock adjustments
+                const stockCountId = metadata.stock_count_id;
+                // We'd ideally call BranchInventoryService here or trigger a background job
+                // For now, update stock_counts status
+                await supabase.from('stock_counts')
+                    .update({ status: 'approved', updated_at: new Date().toISOString() })
+                    .eq('id', stockCountId);
+
+                logger.info(`Stock take ${stockCountId} approved and adjustments pending/applied`);
+            } else {
+                await supabase.from('stock_counts')
+                    .update({ status: 'rejected', updated_at: new Date().toISOString() })
+                    .eq('id', metadata.stock_count_id);
+            }
+        }
+
+        // 4. Log to audit trail
+        await supabase.from('audit_trail').insert({
+            user_id: auditorId,
+            action: `AUDIT_${status.toUpperCase()}`,
+            entity_type: request.request_type,
+            entity_id: requestId,
+            new_values: { status, notes },
+            performed_at: new Date().toISOString()
+        });
+
+        res.status(200).json({ success: true, message: `Request ${status} successfully` });
+        logger.info(`Audit request ${requestId} (${request.request_type}) ${status} by ${auditorId}`);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Submit an approval for a transaction/process (Legacy/Unified Wrapper)
  */
 export const submitApproval = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { entity_type, entity_id, status, comments } = req.body;
         const auditor_id = req.user?.id;
 
+        // Redirect to handleApprovalRequest logic implicitly or use it as a wrapper
+        // For now, we'll keep it for backward compatibility but use approval_requests table
         const { data, error } = await supabase
-            .from('audit_approvals')
+            .from('approval_requests')
             .insert({
-                entity_type,
-                entity_id,
-                auditor_id,
-                status,
-                comments,
-                performed_at: new Date().toISOString()
+                request_type: entity_type.toLowerCase() === 'stock_request' ? 'other' : entity_type.toLowerCase(),
+                status: status.toLowerCase(),
+                requested_by: auditor_id, // In this case, the auditor is performing the action
+                notes: comments,
+                metadata: { entity_id }
             })
             .select()
             .single();
 
         if (error) throw error;
-
-        // If it's a stock request, update its status
-        if (entity_type === 'STOCK_REQUEST' && status === 'APPROVED') {
-            await supabase.from('stock_requests').update({ status: 'AUDITED_APPROVED' }).eq('id', entity_id);
-        }
 
         res.status(201).json({ success: true, data });
     } catch (error) {

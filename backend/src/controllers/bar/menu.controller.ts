@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { supabase } from '../../config/database';
+import { supabase } from '../../config/supabase';
 import { logger } from '../../utils/logger';
 
 // ==========================================
@@ -9,10 +9,10 @@ import { logger } from '../../utils/logger';
 export const getCategories = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { data, error } = await supabase
-      .from('bar_drink_categories')
+      .from('restaurant_menu_categories')
       .select('*')
       .eq('is_active', true)
-      .order('sort_order', { ascending: true });
+      .order('sort_order', { ascending: true }); // We might need to filter for 'Bar' specific categories if possible, or just return all
 
     if (error) throw error;
 
@@ -27,7 +27,7 @@ export const createCategory = async (req: Request, res: Response, next: NextFunc
     const { name, sort_order, description } = req.body;
 
     const { data, error } = await supabase
-      .from('bar_drink_categories')
+      .from('restaurant_menu_categories')
       .insert([{ name, sort_order, description, is_active: true }])
       .select()
       .single();
@@ -49,16 +49,20 @@ export const getDrinks = async (req: Request, res: Response, next: NextFunction)
     const { category_id, search } = req.query;
 
     let query = supabase
-      .from('bar_drinks')
+      .from('restaurant_menu_items')
       .select(`
         *,
-        category:bar_drink_categories(name)
+        category:restaurant_menu_categories(name)
       `)
-    // .eq('is_available', true); // Removed to show all drinks to manager
+      .eq('is_available', true);
 
-    const branchId = req.user?.branch_id || req.query.branch_id;
-    if (branchId) {
-      query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
+    // Filter by branch if menu items had branch_id, but restaurant_menu_items usually doesn't (Global Menu).
+    // If it did, we would filter.
+    // However, we can filter by Category to showing only 'Drinks' or 'Beverages' if needed. 
+    // The Frontend likely sends a category_id for filtering.
+
+    if (category_id) {
+      query = query.eq('category_id', category_id);
     }
 
     if (search) {
@@ -79,7 +83,7 @@ export const getDrink = async (req: Request, res: Response, next: NextFunction):
   try {
     const { id } = req.params;
     const { data, error } = await supabase
-      .from('bar_drinks')
+      .from('restaurant_menu_items')
       .select('*')
       .eq('id', id)
       .single();
@@ -99,29 +103,29 @@ export const createDrink = async (req: Request, res: Response, next: NextFunctio
       unit, branch_id, image_url
     } = req.body;
 
-    const branchId = req.user?.branch_id || branch_id;
+    // We no longer require branch_id for menu items as they are global in the new schema
+    // Preparation time is required in new schema, default to 5 mins for drinks
 
     const { data, error } = await supabase
-      .from('bar_drinks')
+      .from('restaurant_menu_items')
       .insert([{
-        category_id, name, description, price, cost_price,
-        unit, branch_id: branchId, image_url, is_available: true
+        category_id,
+        name,
+        description,
+        price,
+        // cost_price is not in restaurant_menu_items, strictly speaking. 
+        // But for compatibility with frontend we might just ignore it here, or store it elsewhere (recipe).
+        image_url,
+        preparation_time: 5, // Default for drinks
+        is_available: true
       }])
       .select()
       .single();
 
     if (error) throw error;
 
-    // Automatically initialize stock entry for this drink if branchId is present
-    if (data && branchId) {
-      await supabase.from('bar_stock').insert({
-        drink_id: data.id,
-        branch_id: branchId,
-        quantity: 0,
-        min_stock: 10, // Default par level
-        cost_per_unit: cost_price
-      });
-    }
+    // Note: We removed the auto-creation of bar_stock. 
+    // Inventory should be managed via the Inventory module (creating a restaurant_bar_inventory item).
 
     res.status(201).json({ success: true, data });
   } catch (error) {
@@ -134,9 +138,12 @@ export const updateDrink = async (req: Request, res: Response, next: NextFunctio
     const { id } = req.params;
     const updates = req.body;
 
+    // Filter out fields that might not exist in target table
+    const { cost_price, branch_id, unit, ...validUpdates } = updates;
+
     const { data, error } = await supabase
-      .from('bar_drinks')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .from('restaurant_menu_items')
+      .update({ ...validUpdates, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
       .single();
@@ -155,7 +162,7 @@ export const toggleDrinkAvailability = async (req: Request, res: Response, next:
 
     // Get current status
     const { data: current } = await supabase
-      .from('bar_drinks')
+      .from('restaurant_menu_items')
       .select('is_available')
       .eq('id', id)
       .single();
@@ -163,7 +170,7 @@ export const toggleDrinkAvailability = async (req: Request, res: Response, next:
     if (!current) throw new Error('Drink not found');
 
     const { data, error } = await supabase
-      .from('bar_drinks')
+      .from('restaurant_menu_items')
       .update({ is_available: !current.is_available })
       .eq('id', id)
       .select()
@@ -180,7 +187,7 @@ export const toggleDrinkAvailability = async (req: Request, res: Response, next:
 export const deleteDrink = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    const { error } = await supabase.from('bar_drinks').delete().eq('id', id);
+    const { error } = await supabase.from('restaurant_menu_items').delete().eq('id', id);
     if (error) throw error;
     res.status(200).json({ success: true, message: 'Drink deleted' });
   } catch (error) {
@@ -198,11 +205,9 @@ export const uploadDrinkImage = async (req: Request, res: Response, next: NextFu
       return;
     }
 
-    // Convert base64 to buffer
     const buffer = Buffer.from(imageBase64.split(',')[1], 'base64');
-    const path = `bar-drinks/${id}/${Date.now()}-${fileName || 'image.jpg'}`;
+    const path = `menu-items/${id}/${Date.now()}-${fileName || 'image.jpg'}`;
 
-    // Upload to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('menu-items')
       .upload(path, buffer, {
@@ -212,14 +217,12 @@ export const uploadDrinkImage = async (req: Request, res: Response, next: NextFu
 
     if (uploadError) throw uploadError;
 
-    // Get public URL
     const { data: { publicUrl } } = supabase.storage
       .from('menu-items')
       .getPublicUrl(path);
 
-    // Update drink record
     const { data: drink, error: updateError } = await supabase
-      .from('bar_drinks')
+      .from('restaurant_menu_items')
       .update({ image_url: publicUrl })
       .eq('id', id)
       .select()

@@ -17,6 +17,7 @@ import {
   getConsumptionVariances,
   submitApproval,
   getApprovalHistory,
+  handleApprovalRequest,
   getPayrollVariances
 } from '../controllers/auditor-advanced.controller';
 import { protect, authorize } from '../middleware/auth';
@@ -105,6 +106,11 @@ router.post('/approvals',
 router.get('/approvals',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
   getApprovalHistory
+);
+
+router.post('/approvals/handle',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
+  handleApprovalRequest
 );
 
 router.get('/payroll/variances',

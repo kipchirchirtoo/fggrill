@@ -5,6 +5,7 @@
 
 import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
+import notificationService from './notification.service';
 
 // ============================================================
 // TYPES
@@ -232,6 +233,24 @@ export async function createStockRequest(
 
   logger.info(`Stock request created: ${requestNumber} by branch ${branchCode}`);
 
+  // Notify Central Storekeeper
+  try {
+    await notificationService.notifyRole(
+      'central_storekeeper',
+      'New Stock Request',
+      `Branch ${branchCode} has submitted a new stock request (${requestNumber}). Priority: ${priority}`,
+      {
+        type: 'info',
+        category: 'stock',
+        priority: priority === 'URGENT' ? 'urgent' : 'medium',
+        actionUrl: '/dashboard/central-store/dispatch',
+        metadata: { request_id: request.id, branch_code: branchCode }
+      }
+    );
+  } catch (error) {
+    logger.error('Failed to send stock request notification', error);
+  }
+
   return { ...request, items: requestItems };
 }
 
@@ -394,6 +413,49 @@ export async function approveStockRequest(
   }
 
   logger.info(`Stock request ${requestId} reviewed: ${newStatus}`);
+
+  // Notify Central Ops Manager if Approved
+  if (newStatus === 'APPROVED') {
+    try {
+      // Fetch request details for notification
+      const { data: requestDetails } = await supabase
+        .from('stock_requests')
+        .select('request_number, requesting_branch_id')
+        .eq('id', requestId)
+        .single();
+
+      if (requestDetails) {
+        await notificationService.notifyRole(
+          'central_operations_manager',
+          'Stock Request Approved',
+          `Stock Request ${requestDetails.request_number} approved by Auditor. Ready for dispatch.`,
+          {
+            type: 'info',
+            category: 'stock',
+            priority: 'high',
+            actionUrl: '/dashboard/central-store/dispatch',
+            metadata: { request_id: requestId, branch_id: requestDetails.requesting_branch_id }
+          }
+        );
+
+        // Also notify requesting branch
+        await notificationService.notifyBranch(
+          requestDetails.requesting_branch_id,
+          `Stock Request ${newStatus}`,
+          `Your stock request ${requestDetails.request_number} has been ${newStatus.toLowerCase()} by the Auditor.`,
+          {
+            type: 'success',
+            category: 'stock',
+            priority: 'high',
+            actionUrl: '/dashboard/branch-store/request-history',
+            metadata: { request_id: requestId, status: newStatus }
+          }
+        );
+      }
+    } catch (e) {
+      logger.error('Failed to notify central ops of stock request approval', e);
+    }
+  }
 
   return { status: newStatus };
 }

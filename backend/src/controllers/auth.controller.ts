@@ -515,3 +515,134 @@ export const forgotPassword = async (
   }
 };
 
+// @desc    POS PIN Login
+// @route   POST /api/auth/pos-login
+// @access  Public
+export const posLogin = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { pin } = req.body;
+
+    if (!pin) {
+      res.status(400).json({
+        success: false,
+        message: 'Please provide a PIN'
+      });
+      return;
+    }
+
+    // Validate PIN format (RXXX or BXXX)
+    const pinRegex = /^[RB]\d{3}$/;
+    if (!pinRegex.test(pin)) {
+      res.status(400).json({
+        success: false,
+        message: 'Invalid PIN format. Waiters use RXXX, Bar staff use BXXX'
+      });
+      return;
+    }
+
+    // Find user by PIN
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('pos_pin', pin)
+      .single();
+
+    if (userError || !user) {
+      res.status(401).json({
+        success: false,
+        message: 'Invalid PIN'
+      });
+      return;
+    }
+
+    // Validate role against PIN prefix
+    const prefix = pin[0];
+    if (prefix === 'R' && !['restaurant', 'manager', 'super_admin'].includes(user.role)) {
+      res.status(403).json({
+        success: false,
+        message: 'This PIN is for restaurant staff only'
+      });
+      return;
+    }
+
+    if (prefix === 'B' && !['barmaid', 'barman', 'manager', 'super_admin'].includes(user.role)) {
+      res.status(403).json({
+        success: false,
+        message: 'This PIN is for bar staff only'
+      });
+      return;
+    }
+
+    // Update last login
+    await supabase
+      .from('users')
+      .update({ last_login: new Date().toISOString() })
+      .eq('id', user.id);
+
+    // Generate JWT token
+    const jwtSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'fallback-secret-key';
+    const accessToken = jwt.sign(
+      {
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+        aud: 'authenticated',
+        isPosLogin: true
+      },
+      jwtSecret,
+      { expiresIn: '12h' }
+    );
+
+    const refreshToken = jwt.sign(
+      { sub: user.id, type: 'refresh' },
+      jwtSecret,
+      { expiresIn: '7d' }
+    );
+
+    // Auto Clock-in for Staff Attendance
+    try {
+      const { data: existingAttendance } = await supabase
+        .from('staff_attendance')
+        .select('id')
+        .eq('user_id', user.id)
+        .is('clock_out', null)
+        .maybeSingle();
+
+      if (!existingAttendance) {
+        await supabase
+          .from('staff_attendance')
+          .insert([{
+            user_id: user.id,
+            branch_id: user.branch_id,
+            clock_in: new Date().toISOString(),
+            status: 'present',
+            notes: 'Auto clock-in via POS login'
+          }]);
+        logger.info(`Auto clock-in for user ${user.id} during POS login`);
+      }
+    } catch (attendanceError) {
+      logger.error('Failed to auto clock-in during POS login:', attendanceError);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        user,
+        session: {
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          expires_at: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
+          user: { id: user.id, email: user.email }
+        }
+      }
+    });
+
+    logger.info(`User ${user.email} logged in via POS PIN: ${pin}`);
+  } catch (error) {
+    next(error);
+  }
+};

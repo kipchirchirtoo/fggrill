@@ -9,6 +9,10 @@ import {
   getInvoices,
   createBill,
   getBills,
+  recordInvoicePayment,
+  recordBillPayment,
+  submitInvoiceForAudit,
+  submitBillForAudit,
   createBankTransaction,
   getBankTransactions,
   getBudgets,
@@ -65,6 +69,16 @@ router.post('/invoices',
   createInvoice
 );
 
+router.post('/invoices/:id/payments',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  recordInvoicePayment
+);
+
+router.post('/invoices/:id/submit-audit',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  submitInvoiceForAudit
+);
+
 // Accounts Payable
 router.get('/bills',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
@@ -74,6 +88,16 @@ router.get('/bills',
 router.post('/bills',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   createBill
+);
+
+router.post('/bills/:id/payments',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  recordBillPayment
+);
+
+router.post('/bills/:id/submit-audit',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  submitBillForAudit
 );
 
 // Banking

@@ -12,7 +12,7 @@ import {
     Receipt, Plus, Search, Calendar,
     TrendingDown, PieChart, Wallet, Loader2
 } from 'lucide-react';
-import { accountingAPI } from '@/lib/api';
+import { accountingAPI, storeAPI } from '@/lib/api';
 import { toast } from 'sonner';
 
 export default function ExpensesPage() {
@@ -20,6 +20,7 @@ export default function ExpensesPage() {
     const [bills, setBills] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [suppliers, setSuppliers] = useState<any[]>([]);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -44,8 +45,21 @@ export default function ExpensesPage() {
         }
     };
 
+    const fetchSuppliers = async () => {
+        try {
+            const res = await storeAPI.getSuppliers();
+            if (res.success && res.data) {
+                setSuppliers(res.data);
+            }
+        } catch (error) {
+            console.error('Failed to fetch suppliers:', error);
+            toast.error('Failed to load suppliers');
+        }
+    };
+
     useEffect(() => {
         fetchBills();
+        fetchSuppliers();
     }, []);
 
     const handleCreate = async () => {
@@ -81,13 +95,6 @@ export default function ExpensesPage() {
             setLoading(false);
         }
     };
-
-    // Mock vendors
-    const mockVendors = [
-        { id: '00000000-0000-0000-0000-000000000001', name: 'General Supplies Ltd' },
-        { id: '00000000-0000-0000-0000-000000000002', name: 'Local Market Vendor' },
-        { id: '00000000-0000-0000-0000-000000000003', name: 'Utility Company' }
-    ];
 
     return (
         <ProtectedRoute allowedRoles={[UserRole.BRANCH_ACCOUNTANT, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
@@ -178,9 +185,9 @@ export default function ExpensesPage() {
                                         value={formData.vendor_id}
                                         onChange={(e) => setFormData({ ...formData, vendor_id: e.target.value })}
                                     >
-                                        <option value="">Select Vendor...</option>
-                                        {mockVendors.map(v => (
-                                            <option key={v.id} value={v.id}>{v.name}</option>
+                                        <option value="">Select Supplier...</option>
+                                        {suppliers.map((s: any) => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
                                         ))}
                                     </select>
                                 </div>

@@ -69,14 +69,41 @@ export const createItem = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const {
+      item_code, code,
+      name,
+      description,
+      category,
+      unit,
+      min_stock_level, minStock,
+      max_stock_level, maxStock,
+      reorder_level, reorderPoint,
+      unit_cost, unitCost,
+      supplier,
+      branch_id, branchId, branch,
+      is_active
+    } = req.body;
+
+    // Robust mapping from possible frontend names to DB names
     const item = {
-      ...req.body,
-      created_by_id: req.user.id,
+      item_code: item_code || code,
+      name,
+      description,
+      category: category || 'other',
+      unit: unit || 'pcs',
+      min_stock_level: min_stock_level || minStock || 0,
+      max_stock_level: max_stock_level || maxStock || 0,
+      reorder_level: reorder_level || reorderPoint || min_stock_level || minStock || 0,
+      unit_cost: unit_cost || unitCost || 0,
+      supplier,
+      branch_id: branch_id || branchId || (branch === 'Bomet' ? 1 : branch === 'Kericho' ? 2 : branch === 'Kapsoit' ? 3 : branch === 'Litein' ? 4 : null),
+      is_active: is_active !== undefined ? is_active : true,
+      created_by_id: req.user?.id,
       created_at: new Date().toISOString()
     };
 
     const { data, error } = await supabase
-      .from('inventory_items')
+      .from('restaurant_inventory_items') // Use correct table name
       .insert([item])
       .select()
       .single();
@@ -238,7 +265,7 @@ export const getLowStockItems = async (
     if (error) throw error;
 
     // Filter items where quantity <= reorder_level
-    const lowStockItems = (data || []).filter(item => 
+    const lowStockItems = (data || []).filter(item =>
       (item.quantity || 0) <= (item.reorder_level || 10)
     );
 
@@ -278,7 +305,7 @@ export const getInventoryStats = async (
     if (itemsError) throw itemsError;
 
     // Calculate low stock and total value
-    const lowStockCount = (items || []).filter(item => 
+    const lowStockCount = (items || []).filter(item =>
       (item.quantity || 0) <= (item.reorder_level || 10)
     ).length;
 

@@ -101,9 +101,8 @@ export function FolioModal({ isOpen, onClose, initialData }: FinanceModalProps) 
                 </div>
                 <div className="bg-gray-50 p-4 rounded-ios-lg">
                   <p className="text-sm text-gray-500">Status</p>
-                  <span className={`inline-block px-2 py-1 text-xs rounded-full mt-1 ${
-                    folio?.status === 'closed' ? 'bg-gray-200 text-gray-800' : 'bg-green-100 text-green-800'
-                  }`}>
+                  <span className={`inline-block px-2 py-1 text-xs rounded-full mt-1 ${folio?.status === 'closed' ? 'bg-gray-200 text-gray-800' : 'bg-green-100 text-green-800'
+                    }`}>
                     {(folio?.status || 'OPEN').toUpperCase()}
                   </span>
                 </div>
@@ -170,18 +169,16 @@ export function FolioModal({ isOpen, onClose, initialData }: FinanceModalProps) 
                               <div className="text-xs text-gray-400">{new Date(t.createdAt).toLocaleTimeString()}</div>
                             </td>
                             <td className="px-4 py-3">
-                              <span className={`px-2 py-0.5 text-xs rounded-full ${
-                                t.type === 'payment' ? 'bg-green-100 text-green-800' :
+                              <span className={`px-2 py-0.5 text-xs rounded-full ${t.type === 'payment' ? 'bg-green-100 text-green-800' :
                                 t.type === 'refund' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-blue-100 text-blue-800'
-                              }`}>
+                                  'bg-blue-100 text-blue-800'
+                                }`}>
                                 {t.type.toUpperCase()}
                               </span>
                             </td>
                             <td className="px-4 py-3 text-gray-900">{t.description}</td>
-                            <td className={`px-4 py-3 text-right font-medium ${
-                              t.type === 'payment' ? 'text-green-600' : 'text-gray-900'
-                            }`}>
+                            <td className={`px-4 py-3 text-right font-medium ${t.type === 'payment' ? 'text-green-600' : 'text-gray-900'
+                              }`}>
                               {t.type === 'payment' ? '-' : ''}KES {t.amount.toLocaleString()}
                             </td>
                             <td className="px-4 py-3 text-gray-500 text-xs">
@@ -210,8 +207,8 @@ export function FolioModal({ isOpen, onClose, initialData }: FinanceModalProps) 
         isOpen={showPayment}
         onClose={() => setShowPayment(false)}
         initialData={{ bookingId: initialData?.id }}
-        // You might need to add onSuccess prop to PaymentModal to refresh folio
-        // For now, assume user refreshes manually or we trigger fetchFolio on close
+      // You might need to add onSuccess prop to PaymentModal to refresh folio
+      // For now, assume user refreshes manually or we trigger fetchFolio on close
       />
     </>
   );
@@ -228,7 +225,14 @@ export function AddChargeModal({ isOpen, onClose, initialData, onSuccess }: any)
 
   const handleSubmit = async () => {
     try {
-      await folioAPI.addTransaction(initialData.bookingId, charge);
+      // Map 'type' to 'transaction_type' for backend consistency
+      const payload = {
+        ...charge,
+        transaction_type: charge.type === 'payment' ? 'credit' : 'debit',
+        amount: charge.amount,
+        description: charge.description
+      };
+      await folioAPI.addTransaction(initialData.bookingId, payload);
       toast.success('Charge added');
       onSuccess?.();
       onClose();
@@ -299,7 +303,15 @@ export function PaymentModal({ isOpen, onClose, mode = 'create', initialData }: 
 
   const handleSubmit = async () => {
     try {
-      await financeAPI.processPayment(paymentData);
+      const payload = {
+        invoiceId: paymentData.invoiceId,
+        bookingId: paymentData.bookingId,
+        amount: Number(paymentData.amount),
+        paymentMethod: paymentData.paymentMethod,
+        paymentReference: paymentData.paymentReference || paymentData.reference,
+        notes: paymentData.notes
+      };
+      await financeAPI.processPayment(payload);
       toast.success('Payment processed successfully!');
       onClose();
     } catch (error: any) {
@@ -384,8 +396,8 @@ export function PaymentModal({ isOpen, onClose, mode = 'create', initialData }: 
             </label>
             <input
               type="text"
-              name="reference"
-              value={paymentData.reference}
+              name="paymentReference"
+              value={paymentData.paymentReference || paymentData.reference || ''}
               onChange={handleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
             />
@@ -422,8 +434,10 @@ export function PaymentModal({ isOpen, onClose, mode = 'create', initialData }: 
 export function InvoiceModal({ isOpen, onClose, mode = 'create', initialData }: FinanceModalProps) {
   const [invoiceData, setInvoiceData] = useState(initialData || {
     bookingId: '',
+    guestId: '',
     customerName: '',
     items: [],
+    totalAmount: 0,
     dueDate: '',
     notes: ''
   });

@@ -343,6 +343,24 @@ def get_report_types():
             'name': 'Restaurant Sales Report',
             'category': 'operations',
             'description': 'Restaurant revenue and orders'
+        },
+        {
+            'id': 'branch_performance',
+            'name': 'Branch Performance',
+            'category': 'auditor',
+            'description': 'Advanced financial metrics for branch auditing'
+        },
+        {
+            'id': 'stock_usage',
+            'name': 'Stock Usage & Variance',
+            'category': 'auditor',
+            'description': 'Theoretical vs actual inventory usage'
+        },
+        {
+            'id': 'employee_credit',
+            'name': 'Employee Credit Aging',
+            'category': 'auditor',
+            'description': 'Detailed aging analysis of staff credit'
         }
     ]
     

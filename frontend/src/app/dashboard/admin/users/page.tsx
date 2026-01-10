@@ -15,16 +15,17 @@ import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
-interface UserData { 
-  id: string; 
-  email: string; 
-  first_name: string; 
-  last_name: string; 
-  role: string; 
+interface UserData {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: string;
   branch_id?: number;
-  branch_name?: string; 
+  branch_name?: string;
   phone_number?: string;
-  status: 'active' | 'inactive'; 
+  pos_pin?: string;
+  status: 'active' | 'inactive';
 }
 
 // Role display names mapping
@@ -84,9 +85,9 @@ export default function AdminUsersPage() {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [branches, setBranches] = useState<{id: number, name: string, code: string, status?: string}[]>([]);
-  const [formData, setFormData] = useState({ id: '', email: '', first_name: '', last_name: '', role: '', branch_id: '', password: '', phone_number: '', status: 'active' });
-  
+  const [branches, setBranches] = useState<{ id: number, name: string, code: string, status?: string }[]>([]);
+  const [formData, setFormData] = useState({ id: '', email: '', first_name: '', last_name: '', role: '', branch_id: '', password: '', phone_number: '', pos_pin: '', status: 'active' });
+
   // Get all available roles from the UserRole enum
   const availableRoles = useMemo(() => {
     return Object.values(UserRole).map((role: string) => ({
@@ -95,17 +96,17 @@ export default function AdminUsersPage() {
       displayName: ROLE_DISPLAY_NAMES[role] || role.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
     }));
   }, []);
-  
+
   // Check if selected role requires branch
   const selectedRoleRequiresBranch = useMemo(() => {
     return BRANCH_REQUIRED_ROLES.includes(formData.role as UserRole);
   }, [formData.role]);
-  
+
   // Check if selected role is a central role (should not have branch)
   const selectedRoleIsCentral = useMemo(() => {
     return CENTRAL_ROLES.includes(formData.role as UserRole);
   }, [formData.role]);
-  const [formErrors, setFormErrors] = useState<{[key: string]: string}>({});
+  const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -127,44 +128,52 @@ export default function AdminUsersPage() {
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
   const filteredUsers = users.filter((u) => {
-    const matchesSearch = 
+    const matchesSearch =
       `${u.first_name} ${u.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.role?.toLowerCase().includes(searchQuery.toLowerCase());
-      
+
     const matchesRole = roleFilter ? u.role === roleFilter : true;
-    
+
     return matchesSearch && matchesRole;
   });
 
   const validateForm = () => {
-    const errors: {[key: string]: string} = {};
-    
+    const errors: { [key: string]: string } = {};
+
     if (!formData.email) errors.email = 'Email is required';
     else if (!/\S+@\S+\.\S+/.test(formData.email)) errors.email = 'Email is invalid';
-    
+
     if (!formData.first_name) errors.first_name = 'First name is required';
     if (!formData.role) errors.role = 'Role is required';
-    
+
     // Validate branch assignment for roles that require it
     if (selectedRoleRequiresBranch && !formData.branch_id) {
       errors.branch_id = `${ROLE_DISPLAY_NAMES[formData.role as UserRole] || 'This role'} requires a branch assignment`;
     }
-    
+
     // Ensure central roles don't have branch assignment
     if (selectedRoleIsCentral && formData.branch_id) {
       errors.branch_id = `${ROLE_DISPLAY_NAMES[formData.role as UserRole] || 'This role'} should not have a branch assignment (it's a central role)`;
     }
-    
+
     if (!formData.id && !formData.password) errors.password = 'Password is required';
     else if (!formData.id && formData.password.length < 6) errors.password = 'Password must be at least 6 characters';
-    
+
+    // Validate POS PIN format if provided
+    if (formData.pos_pin) {
+      const pinRegex = /^[RB]\d{3}$/;
+      if (!pinRegex.test(formData.pos_pin)) {
+        errors.pos_pin = 'PIN must be 4 characters (e.g., R123 or B123)';
+      }
+    }
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
   const resetForm = () => {
-    setFormData({ id: '', email: '', first_name: '', last_name: '', role: '', branch_id: '', password: '', phone_number: '', status: 'active' });
+    setFormData({ id: '', email: '', first_name: '', last_name: '', role: '', branch_id: '', password: '', phone_number: '', pos_pin: '', status: 'active' });
     setFormErrors({});
   };
 
@@ -178,6 +187,7 @@ export default function AdminUsersPage() {
       branch_id: user.branch_id?.toString() || '',
       password: '',
       phone_number: user.phone_number || '',
+      pos_pin: user.pos_pin || '',
       status: user.status
     });
     setEditModalOpen(true);
@@ -190,7 +200,7 @@ export default function AdminUsersPage() {
 
   const handleCreateUser = async () => {
     if (!validateForm()) return;
-    
+
     setIsSubmitting(true);
     try {
       // Transform field names to match backend expectations
@@ -202,9 +212,10 @@ export default function AdminUsersPage() {
         role: formData.role,
         branchId: formData.branch_id ? parseInt(formData.branch_id) : null,
         phoneNumber: formData.phone_number || null,
+        pos_pin: formData.pos_pin || null,
         status: formData.status,
       };
-      
+
       const response = await userAPI.createUser(payload);
       if (response.success) {
         toast.success('User created successfully');
@@ -220,10 +231,10 @@ export default function AdminUsersPage() {
       setIsSubmitting(false);
     }
   };
-  
+
   const handleUpdateUser = async () => {
     if (!validateForm()) return;
-    
+
     setIsSubmitting(true);
     try {
       // Transform field names to match backend expectations
@@ -234,14 +245,15 @@ export default function AdminUsersPage() {
         role: formData.role,
         branch_id: formData.branch_id ? parseInt(formData.branch_id) : null,
         phone_number: formData.phone_number || null,
+        pos_pin: formData.pos_pin || null,
         status: formData.status,
       };
-      
+
       // Don't send password if it's empty (no change)
       if (formData.password) {
         payload.password = formData.password;
       }
-      
+
       const response = await userAPI.updateUser(formData.id, payload);
       if (response.success) {
         toast.success('User updated successfully');
@@ -257,7 +269,7 @@ export default function AdminUsersPage() {
       setIsSubmitting(false);
     }
   };
-  
+
   const handleConfirmDelete = async () => {
     setIsSubmitting(true);
     try {
@@ -289,18 +301,18 @@ export default function AdminUsersPage() {
             <div className="grid md:grid-cols-3 gap-4">
               <div className="md:col-span-2 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
-                <Input 
-                  placeholder="Search users by name or email..." 
-                  value={searchQuery} 
+                <Input
+                  placeholder="Search users by name or email..."
+                  value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
                     setCurrentPage(1); // Reset to first page on search
-                  }} 
-                  className="pl-9" 
+                  }}
+                  className="pl-9"
                 />
               </div>
               <div>
-                <select 
+                <select
                   value={roleFilter}
                   onChange={(e) => {
                     setRoleFilter(e.target.value);
@@ -337,40 +349,40 @@ export default function AdminUsersPage() {
                     {filteredUsers
                       .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
                       .map((u) => (
-                    <tr key={u.id} className="hover:bg-gray-50">
-                      <td className="p-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center"><User className="h-4 w-4 text-[#007AFF]" /></div>
-                          <span className="font-medium">{u.first_name} {u.last_name}</span>
-                        </div>
-                      </td>
-                      <td className="p-3 text-gray-500">{u.email}</td>
-                      <td className="p-3"><IOSBadge variant="light" color="info">{ROLE_DISPLAY_NAMES[u.role] || u.role}</IOSBadge></td>
-                      <td className="p-3 text-gray-500">{u.branch_name || 'All'}</td>
-                      <td className="p-3 text-center"><IOSBadge color={u.status === 'active' ? 'success' : 'secondary'}>{u.status}</IOSBadge></td>
-                      <td className="p-3 text-right flex justify-end space-x-1">
-                        <IOSButton 
-                          size="sm" 
-                          variant="ghost" 
-                          onClick={() => handleEditUser(u)}
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </IOSButton>
-                        <IOSButton 
-                          size="sm" 
-                          variant="ghost" 
-                          className="text-red-500 hover:bg-red-50"
-                          onClick={() => handleDeleteUser(u)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </IOSButton>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        <tr key={u.id} className="hover:bg-gray-50">
+                          <td className="p-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center"><User className="h-4 w-4 text-[#007AFF]" /></div>
+                              <span className="font-medium">{u.first_name} {u.last_name}</span>
+                            </div>
+                          </td>
+                          <td className="p-3 text-gray-500">{u.email}</td>
+                          <td className="p-3"><IOSBadge variant="light" color="info">{ROLE_DISPLAY_NAMES[u.role] || u.role}</IOSBadge></td>
+                          <td className="p-3 text-gray-500">{u.branch_name || 'All'}</td>
+                          <td className="p-3 text-center"><IOSBadge color={u.status === 'active' ? 'success' : 'secondary'}>{u.status}</IOSBadge></td>
+                          <td className="p-3 text-right flex justify-end space-x-1">
+                            <IOSButton
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleEditUser(u)}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </IOSButton>
+                            <IOSButton
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-500 hover:bg-red-50"
+                              onClick={() => handleDeleteUser(u)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </IOSButton>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
               </div>
-              
+
               {/* Pagination */}
               {filteredUsers.length > itemsPerPage && (
                 <div className="flex items-center justify-between pt-4 border-t">
@@ -378,19 +390,19 @@ export default function AdminUsersPage() {
                     Showing {Math.min(filteredUsers.length, (currentPage - 1) * itemsPerPage + 1)} to {Math.min(filteredUsers.length, currentPage * itemsPerPage)} of {filteredUsers.length} users
                   </div>
                   <div className="flex gap-1">
-                    <IOSButton 
-                      size="sm" 
-                      variant="secondary" 
+                    <IOSButton
+                      size="sm"
+                      variant="secondary"
                       onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                       disabled={currentPage === 1}
                     >
                       Previous
                     </IOSButton>
-                    
+
                     {Array.from({ length: Math.ceil(filteredUsers.length / itemsPerPage) }).map((_, idx) => (
-                      <IOSButton 
-                        key={idx} 
-                        size="sm" 
+                      <IOSButton
+                        key={idx}
+                        size="sm"
                         variant={currentPage === idx + 1 ? 'primary' : 'secondary'}
                         onClick={() => setCurrentPage(idx + 1)}
                         className="w-9"
@@ -401,10 +413,10 @@ export default function AdminUsersPage() {
                       Math.max(0, currentPage - 3),
                       Math.min(Math.ceil(filteredUsers.length / itemsPerPage), currentPage + 2)
                     )}
-                    
-                    <IOSButton 
-                      size="sm" 
-                      variant="secondary" 
+
+                    <IOSButton
+                      size="sm"
+                      variant="secondary"
                       onClick={() => setCurrentPage(prev => Math.min(Math.ceil(filteredUsers.length / itemsPerPage), prev + 1))}
                       disabled={currentPage === Math.ceil(filteredUsers.length / itemsPerPage)}
                     >
@@ -443,45 +455,45 @@ export default function AdminUsersPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium">First Name <span className="text-red-500">*</span></label>
-                  <Input 
-                    value={formData.first_name} 
-                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })} 
+                  <Input
+                    value={formData.first_name}
+                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
                     className={formErrors.first_name ? 'border-red-500' : ''}
                   />
                   {formErrors.first_name && <p className="text-red-500 text-xs mt-1">{formErrors.first_name}</p>}
                 </div>
                 <div>
                   <label className="text-sm font-medium">Last Name</label>
-                  <Input 
-                    value={formData.last_name} 
-                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })} 
+                  <Input
+                    value={formData.last_name}
+                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
                   />
                 </div>
               </div>
               <div>
                 <label className="text-sm font-medium">Email <span className="text-red-500">*</span></label>
-                <Input 
-                  type="email" 
-                  value={formData.email} 
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })} 
+                <Input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className={formErrors.email ? 'border-red-500' : ''}
                 />
                 {formErrors.email && <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>}
               </div>
               <div>
                 <label className="text-sm font-medium">Password <span className="text-red-500">*</span></label>
-                <Input 
-                  type="password" 
-                  value={formData.password} 
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })} 
+                <Input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className={formErrors.password ? 'border-red-500' : ''}
                 />
                 {formErrors.password && <p className="text-red-500 text-xs mt-1">{formErrors.password}</p>}
               </div>
               <div>
                 <label className="text-sm font-medium">Role <span className="text-red-500">*</span></label>
-                <select 
-                  value={formData.role} 
+                <select
+                  value={formData.role}
                   onChange={(e) => {
                     const newRole = e.target.value;
                     // Clear branch_id if selecting a central role
@@ -490,7 +502,7 @@ export default function AdminUsersPage() {
                     } else {
                       setFormData({ ...formData, role: newRole });
                     }
-                  }} 
+                  }}
                   className={`w-full p-2 border rounded-ios-lg ${formErrors.role ? 'border-red-500' : ''}`}
                 >
                   <option value="">Select role</option>
@@ -503,9 +515,9 @@ export default function AdminUsersPage() {
                   Branch {selectedRoleRequiresBranch && <span className="text-red-500">*</span>}
                   {selectedRoleIsCentral && <span className="text-gray-400 text-xs ml-1">(Central role - no branch)</span>}
                 </label>
-                <select 
-                  value={formData.branch_id} 
-                  onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })} 
+                <select
+                  value={formData.branch_id}
+                  onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })}
                   className={`w-full p-2 border rounded-ios-lg ${selectedRoleRequiresBranch && !formData.branch_id ? 'border-amber-400' : ''}`}
                   disabled={selectedRoleIsCentral}
                 >
@@ -518,18 +530,29 @@ export default function AdminUsersPage() {
               </div>
               <div>
                 <label className="text-sm font-medium">Phone Number</label>
-                <Input 
-                  type="tel" 
-                  value={formData.phone_number} 
-                  onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })} 
+                <Input
+                  type="tel"
+                  value={formData.phone_number}
+                  onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
                   placeholder="+254 7XX XXX XXX"
                 />
               </div>
               <div>
+                <label className="text-sm font-medium text-blue-600">POS PIN (Waiters: RXXX, Bar: BXXX)</label>
+                <Input
+                  value={formData.pos_pin}
+                  onChange={(e) => setFormData({ ...formData, pos_pin: e.target.value.toUpperCase() })}
+                  placeholder="e.g. R123"
+                  maxLength={4}
+                  className={formErrors.pos_pin ? 'border-red-500' : ''}
+                />
+                {formErrors.pos_pin && <p className="text-red-500 text-xs mt-1">{formErrors.pos_pin}</p>}
+              </div>
+              <div>
                 <label className="text-sm font-medium">Status</label>
-                <select 
-                  value={formData.status} 
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })} 
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
                   className="w-full p-2 border rounded-ios-lg"
                 >
                   <option value="active">Active</option>
@@ -557,37 +580,37 @@ export default function AdminUsersPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium">First Name <span className="text-red-500">*</span></label>
-                  <Input 
-                    value={formData.first_name} 
-                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })} 
+                  <Input
+                    value={formData.first_name}
+                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
                     className={formErrors.first_name ? 'border-red-500' : ''}
                   />
                   {formErrors.first_name && <p className="text-red-500 text-xs mt-1">{formErrors.first_name}</p>}
                 </div>
                 <div>
                   <label className="text-sm font-medium">Last Name</label>
-                  <Input 
-                    value={formData.last_name} 
-                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })} 
+                  <Input
+                    value={formData.last_name}
+                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
                   />
                 </div>
               </div>
               <div>
                 <label className="text-sm font-medium">Email <span className="text-red-500">*</span></label>
-                <Input 
-                  type="email" 
-                  value={formData.email} 
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })} 
+                <Input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className={formErrors.email ? 'border-red-500' : ''}
                 />
                 {formErrors.email && <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>}
               </div>
               <div>
                 <label className="text-sm font-medium">Password (Leave empty to keep current)</label>
-                <Input 
-                  type="password" 
-                  value={formData.password} 
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })} 
+                <Input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className={formErrors.password ? 'border-red-500' : ''}
                   placeholder="••••••••"
                 />
@@ -595,8 +618,8 @@ export default function AdminUsersPage() {
               </div>
               <div>
                 <label className="text-sm font-medium">Role <span className="text-red-500">*</span></label>
-                <select 
-                  value={formData.role} 
+                <select
+                  value={formData.role}
                   onChange={(e) => {
                     const newRole = e.target.value;
                     // Clear branch_id if selecting a central role
@@ -605,7 +628,7 @@ export default function AdminUsersPage() {
                     } else {
                       setFormData({ ...formData, role: newRole });
                     }
-                  }} 
+                  }}
                   className={`w-full p-2 border rounded-ios-lg ${formErrors.role ? 'border-red-500' : ''}`}
                 >
                   <option value="">Select role</option>
@@ -618,9 +641,9 @@ export default function AdminUsersPage() {
                   Branch {selectedRoleRequiresBranch && <span className="text-red-500">*</span>}
                   {selectedRoleIsCentral && <span className="text-gray-400 text-xs ml-1">(Central role - no branch)</span>}
                 </label>
-                <select 
-                  value={formData.branch_id} 
-                  onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })} 
+                <select
+                  value={formData.branch_id}
+                  onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })}
                   className={`w-full p-2 border rounded-ios-lg ${selectedRoleRequiresBranch && !formData.branch_id ? 'border-amber-400' : ''}`}
                   disabled={selectedRoleIsCentral}
                 >
@@ -633,18 +656,29 @@ export default function AdminUsersPage() {
               </div>
               <div>
                 <label className="text-sm font-medium">Phone Number</label>
-                <Input 
-                  type="tel" 
-                  value={formData.phone_number} 
-                  onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })} 
+                <Input
+                  type="tel"
+                  value={formData.phone_number}
+                  onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
                   placeholder="+254 7XX XXX XXX"
                 />
               </div>
               <div>
+                <label className="text-sm font-medium text-blue-600">POS PIN (Waiters: RXXX, Bar: BXXX)</label>
+                <Input
+                  value={formData.pos_pin}
+                  onChange={(e) => setFormData({ ...formData, pos_pin: e.target.value.toUpperCase() })}
+                  placeholder="e.g. R123"
+                  maxLength={4}
+                  className={formErrors.pos_pin ? 'border-red-500' : ''}
+                />
+                {formErrors.pos_pin && <p className="text-red-500 text-xs mt-1">{formErrors.pos_pin}</p>}
+              </div>
+              <div>
                 <label className="text-sm font-medium">Status</label>
-                <select 
-                  value={formData.status} 
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })} 
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
                   className="w-full p-2 border rounded-ios-lg"
                 >
                   <option value="active">Active</option>
@@ -660,7 +694,7 @@ export default function AdminUsersPage() {
             </div>
           </DialogContent>
         </Dialog>
-        
+
         {/* Delete Confirmation Dialog */}
         <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
           <DialogContent className="max-w-sm">

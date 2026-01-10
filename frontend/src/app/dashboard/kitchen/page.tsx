@@ -5,11 +5,12 @@ import { useAuth, UserRole } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { restaurantAPI } from '@/lib/api';
+import { restaurantAPI, kitchenAPI } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 import {
   ChefHat, RefreshCw, Timer, AlertTriangle, Bell, Play,
-  Trash2, TrendingDown, Package, Building2, Clock
+  Trash2, TrendingDown, Package, Building2, Clock, BookOpen, ClipboardCheck,
+  CheckCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -66,6 +67,10 @@ export default function KitchenDashboard() {
     wastageValue: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [ledgerEntries, setLedgerEntries] = useState<any[]>([]);
+  const [storeReceipts, setStoreReceipts] = useState<any[]>([]);
+  const [portionTracking, setPortionTracking] = useState<any[]>([]);
+  const [kitchenStats, setKitchenStats] = useState<any>(null);
   // Compute the effective branch ID
   const effectiveBranchId = activeBranchId || user?.branch_id || undefined;
 
@@ -96,7 +101,7 @@ export default function KitchenDashboard() {
           ? Math.round(ordersWithTime.reduce((sum: number, o: Order) => sum + (o.elapsed_minutes || 0), 0) / ordersWithTime.length)
           : 0;
 
-        setStats(prev => ({
+        setStats((prev: DashboardStats) => ({
           ...prev,
           pendingOrders: pending,
           preparingOrders: preparing,
@@ -112,7 +117,7 @@ export default function KitchenDashboard() {
     try {
       const result = await restaurantAPI.getWastageRecords();
       if (result.success) {
-        setStats(prev => ({
+        setStats((prev: DashboardStats) => ({
           ...prev,
           totalWastage: result.summary?.totalRecords || 0,
           wastageValue: result.summary?.totalCost || 0,
@@ -123,14 +128,33 @@ export default function KitchenDashboard() {
     }
   }, []);
 
+  const fetchLedgerData = useCallback(async (branchId?: number) => {
+    try {
+      const [ledgerRes, receiptsRes, trackingRes, statsRes] = await Promise.all([
+        kitchenAPI.getLedger({ branch_id: branchId }),
+        kitchenAPI.getReceipts({ branch_id: branchId }),
+        kitchenAPI.getPortionTracking({ branch_id: branchId }),
+        kitchenAPI.getStats(branchId)
+      ]);
+
+      if (ledgerRes.success) setLedgerEntries(ledgerRes.data || []);
+      if (receiptsRes.success) setStoreReceipts(receiptsRes.data || []);
+      if (trackingRes.success) setPortionTracking(trackingRes.data || []);
+      if (statsRes.success) setKitchenStats(statsRes.data);
+    } catch (error) {
+      console.error('Error fetching ledger data:', error);
+    }
+  }, []);
+
   const fetchData = useCallback(async (branchId?: number) => {
     setIsLoading(true);
     await Promise.all([
       fetchOrders(branchId),
-      fetchWastage()
+      fetchWastage(),
+      fetchLedgerData(branchId)
     ]);
     setIsLoading(false);
-  }, [fetchOrders, fetchWastage]);
+  }, [fetchOrders, fetchWastage, fetchLedgerData]);
 
   // Re-fetch when branch changes and setup real-time subscription
   useEffect(() => {
@@ -337,6 +361,195 @@ export default function KitchenDashboard() {
     </div>
   );
 
+  const handleUpdatePortions = async (id: string, actual: number, expected: number) => {
+    let reason = '';
+    if (actual !== expected) {
+      const input = prompt(`Production discrepancy detected (Expected: ${expected}, Actual: ${actual}). Please provide a reason:`);
+      if (input === null) return; // Cancelled
+      if (!input.trim()) {
+        toast.error('Reason is required for discrepancies');
+        return;
+      }
+      reason = input.trim();
+    }
+
+    try {
+      await kitchenAPI.updatePortionTracking(id, {
+        actual_portions_produced: actual,
+        variance_reason: reason
+      });
+      toast.success('Portions updated successfully');
+      fetchLedgerData(effectiveBranchId);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update portions');
+    }
+  };
+
+  const handleReceiveReceipt = async (id: string) => {
+    try {
+      await kitchenAPI.verifyReceipt(id, { is_verified: true });
+      toast.success('Items received in kitchen');
+      fetchLedgerData(effectiveBranchId);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to receive items');
+    }
+  };
+
+  const renderLedger = () => (
+    <div className="space-y-6">
+      {/* Ledger Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="h-8 w-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+              <ClipboardCheck className="h-4 w-4 text-emerald-600" />
+            </div>
+            <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">Store Receipts</p>
+          </div>
+          <p className="text-2xl font-bold text-stone-900">{storeReceipts.filter(r => !r.is_verified).length}</p>
+          <p className="text-[11px] text-stone-500">Pending reception from store</p>
+        </div>
+        <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center">
+              <TrendingDown className="h-4 w-4 text-blue-600" />
+            </div>
+            <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">Active Portions</p>
+          </div>
+          <p className="text-2xl font-bold text-stone-900">{portionTracking.filter(p => !p.actual_portions_produced).length}</p>
+          <p className="text-[11px] text-stone-500">Items currently being prepared</p>
+        </div>
+        <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="h-8 w-8 rounded-lg bg-amber-50 flex items-center justify-center">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+            </div>
+            <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">Variances</p>
+          </div>
+          <p className="text-2xl font-bold text-stone-900">
+            {portionTracking.filter(p => p.actual_portions_produced && p.actual_portions_produced !== p.expected_portions).length}
+          </p>
+          <p className="text-[11px] text-stone-500">Discrepancies recorded today</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Pending Receipts */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-stone-900 flex items-center gap-2">
+            <Package className="h-5 w-5" /> Pending Store Items
+          </h2>
+          <div className="space-y-3">
+            {storeReceipts.filter(r => !r.is_verified).length === 0 ? (
+              <div className="p-8 text-center bg-stone-50 rounded-2xl border-2 border-dashed border-stone-200">
+                <p className="text-stone-500 text-sm">No pending receipts from store</p>
+              </div>
+            ) : (
+              storeReceipts.filter(r => !r.is_verified).map((receipt) => (
+                <div key={receipt.id} className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <p className="font-bold text-stone-900">{receipt.item_name}</p>
+                      <p className="text-xs text-stone-500">Qty: {receipt.quantity} {receipt.unit} • From Store</p>
+                    </div>
+                    <button
+                      onClick={() => handleReceiveReceipt(receipt.id)}
+                      className="px-3 py-1.5 bg-stone-900 text-white text-[11px] font-bold rounded-lg hover:bg-black transition-colors"
+                    >
+                      Receive Items
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-stone-400">
+                    <Clock className="w-3 h-3" />
+                    <span>Sent at {new Date(receipt.created_at).toLocaleString()}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Portion Tracking */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-stone-900 flex items-center gap-2">
+            <ClipboardCheck className="h-5 w-5" /> Portion Tracking
+          </h2>
+          <div className="space-y-3">
+            {portionTracking.filter(p => !p.actual_portions_produced).length === 0 ? (
+              <div className="p-8 text-center bg-stone-50 rounded-2xl border-2 border-dashed border-stone-200">
+                <p className="text-stone-500 text-sm">No active portion tracking</p>
+              </div>
+            ) : (
+              portionTracking.filter(p => !p.actual_portions_produced).map((item) => (
+                <div key={item.id} className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <p className="font-bold text-stone-900">{item.item_name}</p>
+                      <p className="text-xs text-stone-500">Expected: <span className="font-bold text-stone-900">{item.expected_portions}</span> portions</p>
+                    </div>
+                    <div className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
+                      In Production
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      placeholder="Actual portions"
+                      className="flex-1 h-9 bg-stone-50 border border-stone-200 rounded-lg px-3 text-sm focus:outline-none focus:ring-1 focus:ring-stone-900"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleUpdatePortions(item.id, Number((e.target as any).value), item.expected_portions);
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={(e) => {
+                        const input = (e.currentTarget.previousSibling as HTMLInputElement);
+                        handleUpdatePortions(item.id, Number(input.value), item.expected_portions);
+                      }}
+                      className="h-9 px-4 bg-emerald-600 text-white text-[11px] font-bold rounded-lg hover:bg-emerald-700 transition-colors"
+                    >
+                      Record Production
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Recently Completed (History) */}
+          {portionTracking.filter(p => p.actual_portions_produced).length > 0 && (
+            <div className="mt-8 pt-6 border-t border-stone-100">
+              <h3 className="text-sm font-bold text-stone-400 uppercase tracking-widest mb-4">Recent Production</h3>
+              <div className="space-y-2">
+                {portionTracking.filter(p => p.actual_portions_produced).slice(0, 5).map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-3 bg-stone-50 rounded-xl text-xs">
+                    <div>
+                      <p className="font-bold text-stone-900">{item.item_name}</p>
+                      <p className="text-stone-500">Produced {item.actual_portions_produced} / {item.expected_portions}</p>
+                    </div>
+                    {item.variance_reason ? (
+                      <div className="flex items-center gap-1.5 text-amber-600 font-medium">
+                        <AlertTriangle className="w-3 h-3" />
+                        <span>Variance Logged</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-emerald-600 font-medium">
+                        <CheckCircle className="w-3 h-3" />
+                        <span>Completed</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   const renderWastage = () => <WastageTab onDataChange={fetchData} />;
 
   return (
@@ -400,6 +613,7 @@ export default function KitchenDashboard() {
           <div className="flex gap-1 p-1 bg-stone-100/50 border border-stone-200 rounded-xl w-full sm:w-fit overflow-x-auto no-scrollbar">
             {[
               { id: 'kitchen', label: 'Kitchen Display', icon: ChefHat },
+              { id: 'ledger', label: 'Food Ledger', icon: BookOpen },
               { id: 'wastage', label: 'Wastage Recording', icon: Trash2 },
             ].map((tab) => (
               <button
@@ -419,6 +633,7 @@ export default function KitchenDashboard() {
           {/* Tab Content */}
           <div>
             {activeTab === 'kitchen' && renderKitchen()}
+            {activeTab === 'ledger' && renderLedger()}
             {activeTab === 'wastage' && renderWastage()}
           </div>
         </div>

@@ -67,6 +67,83 @@ async function sendBookingConfirmationEmail(bookingId: string): Promise<void> {
   }
 }
 
+/**
+ * Shared helper to record accounting payments from gateways
+ */
+async function processAccountingPayment(
+  type: 'invoice' | 'bill',
+  id: string,
+  amount: number,
+  reference: string,
+  method: string,
+  notes?: string
+): Promise<void> {
+  try {
+    const table = type === 'invoice' ? 'accounting_ar_invoices' : 'accounting_ap_bills';
+    const idField = 'id';
+
+    // 1. Get the document
+    const { data: doc, error: docError } = await supabase
+      .from(table)
+      .select('*')
+      .eq(idField, id)
+      .single();
+
+    if (docError || !doc) {
+      logger.error(`Accounting ${type} not found: ${id}`);
+      return;
+    }
+
+    // 2. Calculate new totals
+    const paymentAmount = Number(amount);
+    const newPaidAmount = (doc.paid_amount || 0) + paymentAmount;
+    const newBalance = doc.total_amount - newPaidAmount;
+    const newStatus = newBalance <= 0 ? 'paid' : (newPaidAmount > 0 ? 'partially_paid' : 'unpaid');
+
+    // 3. Update document
+    await supabase
+      .from(table)
+      .update({
+        paid_amount: newPaidAmount,
+        balance: newBalance,
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq(idField, id);
+
+    // 4. Record bank transaction
+    // Find first active M-Pesa/Bank account
+    const { data: bankAcc } = await supabase
+      .from('accounting_bank_accounts')
+      .select('*')
+      .eq('account_type', method === 'mpesa' ? 'mpesa' : 'savings')
+      .eq('is_active', true)
+      .limit(1)
+      .single();
+
+    if (bankAcc) {
+      await supabase.from('accounting_bank_transactions').insert({
+        bank_account_id: bankAcc.id,
+        transaction_date: new Date().toISOString().split('T')[0],
+        debit_amount: type === 'invoice' ? paymentAmount : 0,
+        credit_amount: type === 'bill' ? paymentAmount : 0,
+        reference: reference,
+        description: notes || `Payment via ${method} for ${type} ${doc.invoice_number || doc.bill_number}`,
+        reconciled: false
+      });
+
+      // Update balance
+      const balanceChange = type === 'invoice' ? paymentAmount : -paymentAmount;
+      await supabase.from('accounting_bank_accounts').update({
+        current_balance: (bankAcc.current_balance || 0) + balanceChange,
+        updated_at: new Date().toISOString()
+      }).eq('id', bankAcc.id);
+    }
+  } catch (error) {
+    logger.error(`Error in processAccountingPayment (${type}):`, error);
+  }
+}
+
 interface PaymentIntent {
   id: string;
   amount: number;
@@ -264,7 +341,7 @@ export const initiateMpesaPayment = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { phoneNumber, amount, bookingId, accountReference } = req.body;
+    const { phoneNumber, amount, bookingId, invoiceId, billId, accountReference } = req.body;
 
     if (!phoneNumber || !amount) {
       throw new AppError('Phone number and amount are required', 400);
@@ -292,6 +369,8 @@ export const initiateMpesaPayment = async (
         payment_method: 'mpesa',
         status: 'pending',
         booking_id: bookingId,
+        invoice_id: invoiceId,
+        bill_id: billId,
         metadata: {
           phoneNumber,
           merchantRequestId: stkResponse.MerchantRequestID,
@@ -438,6 +517,30 @@ export const mpesaCallback = async (
       }
     }
 
+    // If payment successful and has invoice_id, update invoice
+    if (status === 'completed' && payment.invoice_id) {
+      await processAccountingPayment(
+        'invoice',
+        payment.invoice_id,
+        payment.amount,
+        metadata.mpesaReceiptNumber || payment.reference,
+        'mpesa',
+        `M-Pesa payment received. Receipt: ${metadata.mpesaReceiptNumber || 'N/A'}`
+      );
+    }
+
+    // If payment successful and has bill_id, update bill
+    if (status === 'completed' && payment.bill_id) {
+      await processAccountingPayment(
+        'bill',
+        payment.bill_id,
+        payment.amount,
+        metadata.mpesaReceiptNumber || payment.reference,
+        'mpesa',
+        `M-Pesa payment made. Receipt: ${metadata.mpesaReceiptNumber || 'N/A'}`
+      );
+    }
+
     logger.info(`Payment ${payment.id} updated to status: ${status}`);
 
     res.json({
@@ -462,7 +565,7 @@ export const initiatePaystackPayment = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { email, amount, bookingId, metadata } = req.body;
+    const { email, amount, bookingId, invoiceId, billId, metadata } = req.body;
 
     if (!email || !amount) {
       throw new AppError('Email and amount are required', 400);
@@ -493,6 +596,8 @@ export const initiatePaystackPayment = async (
         payment_method: 'paystack',
         status: 'pending',
         booking_id: bookingId,
+        invoice_id: invoiceId,
+        bill_id: billId,
         metadata: {
           email,
           authorization_url: paystackResponse.data.authorization_url,
@@ -611,6 +716,30 @@ export const paystackWebhook = async (
           } catch (folioErr) {
             logger.error('Failed to update folio after Paystack payment:', folioErr);
           }
+        }
+
+        // If payment successful and has invoice_id, update invoice
+        if (payment.invoice_id) {
+          await processAccountingPayment(
+            'invoice',
+            payment.invoice_id,
+            payment.amount,
+            payment.reference,
+            'paystack',
+            `Paystack payment received. Ref: ${payment.reference}`
+          );
+        }
+
+        // If payment successful and has bill_id, update bill
+        if (payment.bill_id) {
+          await processAccountingPayment(
+            'bill',
+            payment.bill_id,
+            payment.amount,
+            payment.reference,
+            'paystack',
+            `Paystack payment made. Ref: ${payment.reference}`
+          );
         }
 
         logger.info(`Paystack payment ${payment.id} completed successfully`);

@@ -2337,6 +2337,99 @@ export const auditAPI = {
   },
 };
 
+export const auditorReportsAPI = {
+  getBranchPerformance: (params: { branch_id: number; start_date: string; end_date: string }) => {
+    const query = new URLSearchParams();
+    query.append('branch_id', String(params.branch_id));
+    query.append('start_date', params.start_date);
+    query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/reports/auditor/performance?${query}`);
+  },
+  getStockUsage: (params: { branch_id: number; start_date: string; end_date: string }) => {
+    const query = new URLSearchParams();
+    query.append('branch_id', String(params.branch_id));
+    query.append('start_date', params.start_date);
+    query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/reports/auditor/stock-usage?${query}`);
+  },
+  getEmployeeCredit: () => {
+    return fetchAPI<any>('/reports/auditor/employee-credit');
+  },
+};
+
+export const conferenceAPI = {
+  getHalls: (branchId?: number) => {
+    const query = branchId ? `?branch_id=${branchId}` : '';
+    return fetchAPI<any>(`/conference/halls${query}`);
+  },
+  createHall: (data: any) =>
+    fetchAPI<any>('/conference/halls', { method: 'POST', body: JSON.stringify(data) }),
+  getBookings: (params?: { branch_id?: number; status?: string; startDate?: string; endDate?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.status) query.append('status', params.status);
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    return fetchAPI<any>(`/conference/bookings?${query.toString()}`);
+  },
+  createBooking: (data: any) =>
+    fetchAPI<any>('/conference/bookings', { method: 'POST', body: JSON.stringify(data) }),
+  updateBookingStatus: (id: string, status: string) =>
+    fetchAPI<any>(`/conference/bookings/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status })
+    }),
+};
+
+export const cateringAPI = {
+  getBookings: (params?: { branch_id?: number; status?: string; startDate?: string; endDate?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.status) query.append('status', params.status);
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    return fetchAPI<any>(`/catering/bookings?${query.toString()}`);
+  },
+  createBooking: (data: any) =>
+    fetchAPI<any>('/catering/bookings', { method: 'POST', body: JSON.stringify(data) }),
+  updateStatus: (id: string, status: string) =>
+    fetchAPI<any>(`/catering/bookings/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status })
+    }),
+};
+
+export const attendanceAPI = {
+  getAttendance: (params?: { branch_id?: number; userId?: string; startDate?: string; endDate?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.userId) query.append('userId', params.userId);
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    return fetchAPI<any>(`/attendance?${query.toString()}`);
+  },
+  clockIn: () => fetchAPI<any>('/attendance/clock-in', { method: 'POST' }),
+  clockOut: () => fetchAPI<any>('/attendance/clock-out', { method: 'POST' }),
+};
+
+export const pettyCashAPI = {
+  getTransactions: (params?: { branch_id?: number; category?: string; status?: string; startDate?: string; endDate?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.category) query.append('category', params.category);
+    if (params?.status) query.append('status', params.status);
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    return fetchAPI<any>(`/petty-cash?${query.toString()}`);
+  },
+  request: (data: any) => fetchAPI<any>('/petty-cash', { method: 'POST', body: JSON.stringify(data) }),
+  updateStatus: (id: string, status: 'approved' | 'rejected', remarks?: string) =>
+    fetchAPI<any>(`/petty-cash/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, remarks })
+    }),
+};
+
 
 // =====================================================
 // USER MANAGEMENT API
@@ -2371,6 +2464,7 @@ export const authAPI = {
   // Authentication
   register: (data: any) => fetchAPI<any>('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
   login: (data: any) => fetchAPI<any>('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
+  posLogin: (pin: string) => fetchAPI<any>('/auth/pos-login', { method: 'POST', body: JSON.stringify({ pin }) }),
   logout: () => fetchAPI<any>('/auth/logout', { method: 'POST' }),
   refreshToken: (data: any) => fetchAPI<any>('/auth/refresh-token', { method: 'POST', body: JSON.stringify(data) }),
 
@@ -2906,29 +3000,53 @@ export const roomServiceAPI = {
   }
 };
 
-export const api = {
-  store: storeAPI,
-  system: systemAPI,
-  staff: staffAPI,
-  rooms: roomsAPI,
-  bookings: bookingsAPI,
-  housekeeping: housekeepingAPI,
-  maintenance: maintenanceAPI,
-  restaurant: restaurantAPI,
-  finance: financeAPI,
-  accounting: accountingAPI,
-  reports: reportsAPI,
-  audit: auditAPI,
-  users: userAPI,
-  auth: authAPI,
-  payroll: payrollAPI,
-  bar: barAPI,
-  notifications: notificationsAPI,
-  reportsService: reportsService,
-  roomService: roomServiceAPI,
+
+// =====================================================
+// BAR API
+// =====================================================
+
+export const barStockRequestsAPI = {
+  getAll: (params?: { status?: string; branch_id?: number | string; date_from?: string; date_to?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.date_from) query.append('date_from', params.date_from);
+    if (params?.date_to) query.append('date_to', params.date_to);
+    return fetchAPI<any>(`/bar/stock-requests?${query}`);
+  },
+  getOne: (id: string) => fetchAPI<any>(`/bar/stock-requests/${id}`),
+  create: (data: { bar_branch_id: number | string; items: any[]; priority?: string; notes?: string }) =>
+    fetchAPI<any>('/bar/stock-requests', { method: 'POST', body: JSON.stringify(data) }),
+  updateStatus: (id: string, data: { status: string; review_notes?: string; approved_quantities?: any[] }) =>
+    fetchAPI<any>(`/bar/stock-requests/${id}/status`, { method: 'PUT', body: JSON.stringify(data) }),
+  fulfill: (id: string, data: { fulfilled_quantities: any[] }) =>
+    fetchAPI<any>(`/bar/stock-requests/${id}/fulfill`, { method: 'PUT', body: JSON.stringify(data) }),
+  getLowStock: (branchId?: number | string) => {
+    const query = branchId ? `?branch_id=${branchId}` : '';
+    return fetchAPI<any>(`/bar/stock-requests/low-stock${query}`);
+  },
+  delete: (id: string) => fetchAPI<any>(`/bar/stock-requests/${id}`, { method: 'DELETE' }),
 };
 
-export default api;
+export const barInventoryAPI = {
+  getStock: (params?: { branch_id?: number | string; low_stock?: boolean; category?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.low_stock) query.append('low_stock', 'true');
+    if (params?.category) query.append('category', params.category);
+    return fetchAPI<any>(`/bar/stock?${query}`);
+  },
+  updateStock: (id: string, data: { quantity: number; reason?: string; notes?: string }) =>
+    fetchAPI<any>(`/bar/stock/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getLogs: (params?: { branch_id?: number | string; start_date?: string; end_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/bar/stock/logs?${query}`);
+  },
+};
+
 
 // Export the fetchAPI function for direct use
 export { fetchAPI };
@@ -2946,3 +3064,83 @@ export const attendanceAnalyticsAPI = {
     return fetch(`${PYTHON_API_URL}/api/attendance/monitoring?branch_id=${branchId}`).then(res => res.json());
   }
 };
+// =====================================================
+// KITCHEN LEDGER API
+// =====================================================
+
+export const kitchenAPI = {
+  // Ledger
+  getLedger: (params?: { branch_id?: number; start_date?: string; end_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/kitchen/ledger?${query}`);
+  },
+  createLedgerEntry: (data: any) => fetchAPI<any>('/kitchen/ledger', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Receipts (from store)
+  getReceipts: (params?: { branch_id?: number; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.status) query.append('status', params.status);
+    return fetchAPI<any>(`/kitchen/receipts?${query}`);
+  },
+  createReceipt: (data: any) => fetchAPI<any>('/kitchen/receipts', { method: 'POST', body: JSON.stringify(data) }),
+  verifyReceipt: (id: string, data: { is_verified: boolean; notes?: string }) =>
+    fetchAPI<any>(`/kitchen/receipts/${id}/verify`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  // Portion Tracking
+  getPortionTracking: (params?: { branch_id?: number; entry_id?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.entry_id) query.append('entry_id', params.entry_id);
+    return fetchAPI<any>(`/kitchen/portion-tracking?${query}`);
+  },
+  createPortionTracking: (data: any) => fetchAPI<any>('/kitchen/portion-tracking', { method: 'POST', body: JSON.stringify(data) }),
+  updatePortionTracking: (id: string, data: { actual_portions_produced: number; variance_reason?: string; production_notes?: string }) =>
+    fetchAPI<any>(`/kitchen/portion-tracking/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  // Variance Logs
+  getVarianceLogs: (params?: { branch_id?: number; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.status) query.append('status', params.status);
+    return fetchAPI<any>(`/kitchen/variance-logs?${query}`);
+  },
+  getStats: (branchId?: number) => fetchAPI<any>(`/kitchen/stats${branchId ? `?branch_id=${branchId}` : ''}`),
+};
+
+// =====================================================
+// CASHIER API
+// =====================================================
+
+export const cashierAPI = {
+  // Unpaid Bills
+  getUnpaidBills: (params?: { branch_id?: number; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.status) query.append('status', params.status);
+    return fetchAPI<any>(`/cashier/unpaid-bills?${query}`);
+  },
+  createUnpaidBill: (data: any) => fetchAPI<any>('/cashier/unpaid-bills', { method: 'POST', body: JSON.stringify(data) }),
+  confirmUnpaidBill: (id: string, role: 'accountant' | 'auditor') =>
+    fetchAPI<any>(`/credit/guest/${id}/confirm`, { method: 'PUT', body: JSON.stringify({ role }) }),
+
+  // Credit Bills
+  getCreditBills: (params?: { branch_id?: number; staff_id?: string; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.staff_id) query.append('staff_id', params.staff_id);
+    if (params?.status) query.append('status', params.status);
+    return fetchAPI<any>(`/cashier/credit-bills?${query}`);
+  },
+  // Map to new credit controller
+  confirmCreditBill: (id: string, role: 'accountant' | 'auditor') =>
+    fetchAPI<any>(`/credit/employee/${id}/confirm`, { method: 'PUT', body: JSON.stringify({ role }) }),
+
+  // Stats
+  getStats: (branch_id?: number) => fetchAPI<any>(`/cashier/stats?branch_id=${branch_id}`),
+};
+
+
