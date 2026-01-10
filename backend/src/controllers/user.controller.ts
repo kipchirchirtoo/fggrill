@@ -92,6 +92,23 @@ export const createUser = async (
       return;
     }
 
+    // Validate name lengths to match database constraints
+    if (firstName.trim().length < 2 || firstName.trim().length > 50) {
+      res.status(400).json({
+        success: false,
+        message: 'First name must be between 2 and 50 characters'
+      });
+      return;
+    }
+
+    if (lastName.trim().length < 2 || lastName.trim().length > 50) {
+      res.status(400).json({
+        success: false,
+        message: 'Last name must be between 2 and 50 characters'
+      });
+      return;
+    }
+
     // Check if user already exists
     const { data: existingUser } = await supabase
       .from('users')
@@ -120,7 +137,7 @@ export const createUser = async (
 
       // Start transaction
       const client = await pool.connect();
-      
+
       try {
         await client.query('BEGIN');
 
@@ -155,7 +172,7 @@ export const createUser = async (
             phone_number = $5,
             updated_at = NOW()
           WHERE id = $6
-        `, [firstName, lastName, role, branchId || null, phoneNumber || null, userId]);
+        `, [firstName.trim(), lastName.trim(), role, branchId || null, phoneNumber || null, userId]);
 
         await client.query('COMMIT');
 
@@ -175,7 +192,7 @@ export const createUser = async (
           data: profile,
           message: 'User created successfully'
         });
-        
+
         logger.info(`User created by admin: ${email} (${role})`);
 
       } catch (txError) {
@@ -209,7 +226,7 @@ export const updateUser = async (
 ): Promise<void> => {
   try {
     const { password, ...userFields } = req.body;
-    
+
     // Update user profile in public.users table
     const { data, error } = await supabase
       .from('users')
@@ -229,7 +246,7 @@ export const updateUser = async (
         req.params.id,
         { password }
       );
-      
+
       if (authError) {
         console.error('Password update error:', authError);
         // Don't fail the entire request if password update fails
@@ -456,7 +473,7 @@ export const testCreateUser = async (
       message: 'User created successfully (development mode)',
       note: 'This user may not be able to log in without proper Supabase Auth configuration'
     });
-    
+
     logger.info(`Dev user created: ${email} (${role})`);
   } catch (error) {
     next(error);
@@ -473,7 +490,7 @@ export const uploadProfilePhoto = async (
 ): Promise<void> => {
   try {
     const file = req.file as Express.Multer.File;
-    
+
     if (!file) {
       res.status(400).json({
         success: false,
