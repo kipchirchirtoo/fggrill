@@ -16,7 +16,7 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { pettyCashAPI } from '@/lib/api';
-import { useBranch } from '@/hooks/useBranch';
+import { useBranch } from '@/lib/branch-context';
 
 interface PettyCashModalProps {
     isOpen: boolean;

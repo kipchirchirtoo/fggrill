@@ -21,7 +21,7 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { cateringAPI } from '@/lib/api';
-import { useBranch } from '@/hooks/useBranch';
+import { useBranch } from '@/lib/branch-context';
 
 interface OutsideCateringBookingModalProps {
     isOpen: boolean;
