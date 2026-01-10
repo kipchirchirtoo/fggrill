@@ -19,6 +19,7 @@ interface Drink {
   price: number;
   category_id: string;
   category_name?: string;
+  category?: { name: string };
   is_available: boolean;
   unit?: string;
   image_url?: string;
@@ -49,10 +50,27 @@ export default function BarPOSPage() {
         barAPI.getTabs(activeBranchId || undefined, 'open')
       ]);
       if (drinksRes.success) {
-        const availableDrinks = (drinksRes.data || []).filter((d: Drink) => d.is_available !== false);
+        const availableDrinks = (drinksRes.data || []).filter((d: Drink) => {
+          if (d.is_available === false) return false;
+
+          // Filter out Kitchen/Food items
+          const catName = d.category?.name?.toLowerCase() || '';
+          const foodKeywords = ['food', 'kitchen', 'main', 'starter', 'breakfast', 'lunch', 'dinner', 'dessert', 'platter', 'soup', 'salad', 'grill', 'burger', 'pizza', 'pasta', 'meal'];
+          if (foodKeywords.some(k => catName.includes(k))) return false;
+
+          return true;
+        });
         setDrinks(availableDrinks);
       }
-      if (categoriesRes.success) setCategories(categoriesRes.data || []);
+      if (categoriesRes.success) {
+        const allCategories = categoriesRes.data || [];
+        const foodKeywords = ['food', 'kitchen', 'main', 'starter', 'breakfast', 'lunch', 'dinner', 'dessert', 'platter', 'soup', 'salad', 'grill', 'burger', 'pizza', 'pasta', 'meal'];
+        const barCategories = allCategories.filter((c: Category) => {
+          const name = c.name?.toLowerCase() || '';
+          return !foodKeywords.some(k => name.includes(k));
+        });
+        setCategories(barCategories);
+      }
       if (tabsRes.success) setOpenTabs(tabsRes.data || []);
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }

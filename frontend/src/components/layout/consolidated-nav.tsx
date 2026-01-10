@@ -13,7 +13,7 @@ import {
   Home, ArrowDownUp, LifeBuoy, Calendar, Store, TrendingUp, TrendingDown, LineChart, Award,
   UserCheck, Utensils, Wine, Receipt, CreditCard, PieChart, FileText,
   BookOpen, ChefHat, ShoppingCart, Wallet, Scale, AlertCircle, UtensilsCrossed, Trash2, Clock, Shield, Menu, X,
-  Apple, Beer
+  Apple, Beer, Pencil
 } from 'lucide-react';
 
 interface NavItemProps {
@@ -460,6 +460,15 @@ export function ConsolidatedNav() {
         />
       </NavGroup>
 
+      <NavGroup label="Shift & Cash" icon={BookOpen}>
+        <NavItem
+          href="/dashboard/bar/cashier"
+          icon={BookOpen}
+          label="Bar Cashier Log"
+          active={pathname === '/dashboard/bar/cashier'}
+        />
+      </NavGroup>
+
 
     </>
   );
@@ -600,6 +609,12 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/central-store/bar-items'}
         />
         <NavItem
+          href="/dashboard/central-store/stationery"
+          icon={Pencil}
+          label="Stationery Items"
+          active={pathname === '/dashboard/central-store/stationery'}
+        />
+        <NavItem
           href="/dashboard/central-store/inventory"
           icon={Package}
           label="Master Inventory"
@@ -620,14 +635,15 @@ export function ConsolidatedNav() {
           label="Dispatch & Notes"
           active={pathname === '/dashboard/central-store/dispatch'}
         />
+        <NavItem
+          href="/dashboard/central-store/suppliers"
+          icon={Store}
+          label="Suppliers"
+          active={pathname === '/dashboard/central-store/suppliers'}
+        />
       </NavGroup>
 
-      <NavItem
-        href="/dashboard/central-store/suppliers"
-        icon={Store}
-        label="Suppliers"
-        active={pathname === '/dashboard/central-store/suppliers'}
-      />
+
 
       <NavGroup label="Fleet" icon={Truck}>
         <NavItem
@@ -644,12 +660,7 @@ export function ConsolidatedNav() {
         />
       </NavGroup>
 
-      <NavItem
-        href="/dashboard/central-store/suppliers"
-        icon={Store}
-        label="Suppliers"
-        active={pathname === '/dashboard/central-store/suppliers'}
-      />
+
     </>
   );
 

@@ -255,7 +255,12 @@ export default function InventoryPage() {
                     <option value="beverage">Beverage</option>
                     <option value="toiletries">Toiletries</option>
                     <option value="linen">Linen</option>
-                    <option value="stationery">Stationery</option>
+                    <option value="office_supplies">Stationery & Office</option>
+                    <option value="cleaning_supplies">Cleaning Supplies</option>
+                    <option value="maintenance_items">Maintenance</option>
+                    <option value="kitchen_equipment">Kitchen Equipment</option>
+                    <option value="amenities">Amenities/Guest</option>
+                    <option value="other">Other</option>
                   </select>
                 </div>
                 <div>
