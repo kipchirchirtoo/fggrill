@@ -221,20 +221,28 @@ export default function POSKitchenDashboard() {
 
       const response = await restaurantAPI.generateBill(receiptData);
 
-      if (response.ok) {
-        const blob = await response.blob();
+      if (response.success && response.data?.pdf_base64) {
+        // Convert base64 to blob
+        const byteCharacters = atob(response.data.pdf_base64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'application/pdf' });
+
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = url;
-        a.download = `bill_${order.order_number}.pdf`;
+        a.download = response.data.filename || `bill_${order.order_number}.pdf`;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
         toast.success(`Bill for Order #${order.order_number} generated!`);
       } else {
-        throw new Error('Failed to generate bill');
+        throw new Error(response.message || 'Failed to generate bill');
       }
     } catch (error: any) {
       console.error('Bill generation error:', error);

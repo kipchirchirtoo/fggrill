@@ -1749,7 +1749,7 @@ export const restaurantAPI = {
   generateReceipt: (orderId: string) => fetchAPI<any>(`/restaurant/orders/${orderId}/receipt`),
   processPayment: (orderId: string, data: any) => fetchAPI<any>(`/restaurant/orders/${orderId}/payment`, { method: 'POST', body: JSON.stringify(data) }),
   generateBill: (receiptData: any) => {
-    return fetchPythonAPI<any>('/receipts/generate', {
+    return fetchPythonAPI<any>('/receipts/generate/base64', {
       method: 'POST',
       body: JSON.stringify(receiptData)
     });
