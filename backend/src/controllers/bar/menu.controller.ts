@@ -6,10 +6,10 @@ import { logger } from '../../utils/logger';
 // DRINK CATEGORIES
 // ==========================================
 
-const FOOD_KEYWORDS = [
-  'breakfast', 'lunch', 'dinner', 'main course', 'main dish',
-  'appetizer', 'soup', 'food', 'starter', 'dessert', 'side',
-  'grill', 'pizza', 'burger', 'steak', 'snack', 'entree'
+const BAR_KEYWORDS = [
+  'beverage', 'drink', 'beer', 'wine', 'cocktail', 'spirit',
+  'juice', 'tea', 'coffee', 'water', 'soda', 'shisha',
+  'liquor', 'whiskey', 'vodka', 'gin', 'rum', 'brandy', 'tequila'
 ];
 
 export const getCategories = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -22,10 +22,10 @@ export const getCategories = async (req: Request, res: Response, next: NextFunct
 
     if (error) throw error;
 
-    // Filter categories to only include bar-related ones by excluding food keywords
+    // Filter categories to only include bar-related ones (Allow-list)
     const data = (categories || []).filter(cat => {
       const name = cat.name.toLowerCase();
-      return !FOOD_KEYWORDS.some(keyword => name.includes(keyword));
+      return BAR_KEYWORDS.some(keyword => name.includes(keyword));
     });
 
     res.status(200).json({ success: true, data });
@@ -69,7 +69,7 @@ export const getDrinks = async (req: Request, res: Response, next: NextFunction)
     const barCategoryIds = (categories || [])
       .filter(cat => {
         const name = cat.name.toLowerCase();
-        return !FOOD_KEYWORDS.some(keyword => name.includes(keyword));
+        return BAR_KEYWORDS.some(keyword => name.includes(keyword));
       })
       .map(cat => cat.id);
 

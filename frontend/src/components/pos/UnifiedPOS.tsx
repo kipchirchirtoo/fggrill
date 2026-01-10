@@ -116,10 +116,10 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
 
                 if (drinksRes.success) setItems(drinksRes.data || []);
                 if (categoriesRes.success) {
-                    const foodKeywords = ['food', 'kitchen', 'main', 'starter', 'breakfast', 'lunch', 'dinner', 'dessert', 'platter', 'soup', 'salad', 'grill', 'burger', 'pizza', 'pasta', 'meal'];
+                    const barKeywords = ['beverage', 'drink', 'beer', 'wine', 'cocktail', 'spirit', 'juice', 'tea', 'coffee', 'water', 'soda', 'shisha', 'liquor'];
                     const filteredCats = (categoriesRes.data || []).filter((c: any) => {
                         const name = c.name?.toLowerCase() || '';
-                        return !foodKeywords.some(k => name.includes(k));
+                        return barKeywords.some(k => name.includes(k));
                     });
                     setCategories(filteredCats);
                 }
