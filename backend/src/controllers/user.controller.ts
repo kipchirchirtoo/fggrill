@@ -157,8 +157,8 @@ export const createUser = async (
             NOW(), NOW()
           )
         `, [userId, email, hashedPassword, JSON.stringify({
-          first_name: firstName,
-          last_name: lastName
+          first_name: firstName.trim(),
+          last_name: lastName.trim()
         })]);
 
         // 2. Update the public.users entry created by trigger with correct data
@@ -208,6 +208,7 @@ export const createUser = async (
 
   } catch (error: any) {
     logger.error('Error creating user:', error);
+    logger.error('Request body:', { email, firstName, lastName, role, branchId, phoneNumber });
     res.status(500).json({
       success: false,
       message: 'Failed to create user',
