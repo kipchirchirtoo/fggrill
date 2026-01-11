@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { paymentVerificationService } from '../services/payment.verification.service';
+import { mpesaService } from '../services/mpesa.service';
 
 /**
  * Get Bill Details by Booking ID (or Barcode)
@@ -1365,6 +1366,375 @@ export const getCashierStats = async (req: Request, res: Response, next: NextFun
                 unpaidBills: unpaidCount || 0,
                 pendingCreditApprovals: pendingCreditsCount || 0,
                 activeShift
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// ============================================
+// CASHIER LOGBOOK
+// ============================================
+
+/**
+ * Get today's logbook for a specific type (reception/bar)
+ */
+export const getCashierLogbookToday = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { type } = req.query;
+        const branch_id = req.headers['x-branch-id'];
+
+        if (!type || !branch_id) {
+            throw new AppError('Type and Branch ID are required', 400);
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+
+        // 1. Try to fetch existing logbook for today
+        const { data: logbook, error: fetchError } = await supabase
+            .from('cashier_logbooks')
+            .select(`
+                *,
+                credit_bills:cashier_logbook_lines(*),
+                unpaid_bills:cashier_logbook_lines(*),
+                paid_bills:cashier_logbook_lines(*)
+            `)
+            .eq('branch_id', branch_id)
+            .eq('type', type)
+            .eq('log_date', today)
+            .single();
+
+        if (logbook) {
+            // Filter lines by section (the nested select above gets all lines for all 3 aliases if not filtered)
+            // Actually supabase nested select doesn't filter by sub-criteria easily without JS filtering here
+            const allLines = logbook.credit_bills || [];
+            res.json({
+                success: true,
+                data: {
+                    ...logbook,
+                    credit_bills: allLines.filter((l: any) => l.section === 'credit_bill'),
+                    unpaid_bills: allLines.filter((l: any) => l.section === 'unpaid_bill'),
+                    paid_bills: allLines.filter((l: any) => l.section === 'paid_bill')
+                }
+            });
+            return;
+        }
+
+        // 2. If not found, calculate initial data from today's transactions
+        // Get total sales, mpesa, swipe for today's transactions in this branch/type
+        // Note: For 'bar' type, we look at bar-related transactions. For 'reception', hotel-related.
+        // For simplicity now, we aggregate by branch and optionally type if transactions are tagged.
+        const { data: stats, error: statsError } = await supabase
+            .from('cashier_transactions')
+            .select('amount, payment_method')
+            .eq('branch_id', branch_id)
+            .gte('created_at', `${today}T00:00:00Z`)
+            .lte('created_at', `${today}T23:59:59Z`);
+
+        const sales_breakdown: Record<string, number> = {};
+        let total_mpesa = 0;
+        let total_swipe = 0;
+
+        stats?.forEach(tx => {
+            if (tx.payment_method?.toLowerCase() === 'mpesa') total_mpesa += Number(tx.amount);
+            if (tx.payment_method?.toLowerCase() === 'swipe' || tx.payment_method?.toLowerCase() === 'card') total_swipe += Number(tx.amount);
+        });
+
+        res.json({
+            success: true,
+            data: {
+                opening_float: 0,
+                closing_float: 0,
+                sales_breakdown,
+                total_mpesa,
+                total_swipe,
+                notes: '',
+                credit_bills: [],
+                unpaid_bills: [],
+                paid_bills: []
+            }
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Save or Update cashier logbook
+ */
+export const saveCashierLogbook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const {
+            id, type, opening_float, closing_float, sales_breakdown,
+            total_mpesa, total_swipe, notes, status,
+            credit_bills, unpaid_bills, paid_bills
+        } = req.body;
+        const branch_id = req.headers['x-branch-id'];
+        const cashier_id = req.user?.id;
+
+        if (!type || !branch_id || !cashier_id) {
+            throw new AppError('Type, Branch ID and Cashier are required', 400);
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+
+        // 1. Upsert the main logbook record
+        const { data: logbook, error: logbookError } = await supabase
+            .from('cashier_logbooks')
+            .upsert({
+                id: id || undefined,
+                branch_id,
+                cashier_id,
+                type,
+                log_date: today,
+                opening_float,
+                closing_float,
+                sales_breakdown,
+                total_mpesa,
+                total_swipe,
+                notes,
+                status: status || 'open',
+                updated_at: new Date()
+            })
+            .select()
+            .single();
+
+        if (logbookError) throw logbookError;
+
+        // 2. Clear and recreate lines (simple replacement strategy)
+        if (logbook.id) {
+            await supabase.from('cashier_logbook_lines').delete().eq('logbook_id', logbook.id);
+
+            const allLines = [
+                ...(credit_bills || []).map((l: any) => ({ ...l, logbook_id: logbook.id, section: 'credit_bill' })),
+                ...(unpaid_bills || []).map((l: any) => ({ ...l, logbook_id: logbook.id, section: 'unpaid_bill' })),
+                ...(paid_bills || []).map((l: any) => ({ ...l, logbook_id: logbook.id, section: 'paid_bill' }))
+            ].map(({ id, ...line }) => line); // Remove temp IDs if any
+
+            if (allLines.length > 0) {
+                const { error: linesError } = await supabase
+                    .from('cashier_logbook_lines')
+                    .insert(allLines);
+                if (linesError) throw linesError;
+            }
+        }
+
+        res.json({
+            success: true,
+            message: 'Logbook saved successfully',
+            data: logbook
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * POS: Create a new transaction
+ */
+export const createPOSTransaction = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { items, customer_name, customer_phone, branch_id, total_amount, tax_amount, discount_amount } = req.body;
+
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            throw new AppError('Items are required', 400);
+        }
+
+        // Generate unique transaction_ref: CS-{pos_id}-{ISOdate}-{random6}
+        const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+        const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
+        const transaction_ref = `CS-${branch_id || '01'}-${dateStr}-${randomStr}`;
+
+        // 1. Create transaction header
+        const { data: transaction, error: txError } = await supabase
+            .from('pos_transactions')
+            .insert({
+                transaction_ref,
+                cashier_id: req.user?.id,
+                branch_id: branch_id || req.user?.branch_id,
+                total_amount,
+                tax_amount: tax_amount || 0,
+                discount_amount: discount_amount || 0,
+                status: 'PENDING',
+                customer_name,
+                customer_phone
+            })
+            .select()
+            .single();
+
+        if (txError) throw txError;
+
+        // 2. Create transaction items
+        const itemRecords = items.map((item: any) => ({
+            transaction_id: transaction.id,
+            product_id: item.product_id,
+            qty: item.qty,
+            unit_price: item.unit_price,
+            discount_amount: item.discount_amount || 0,
+            tax_amount: item.tax_amount || 0,
+            line_total: item.line_total
+        }));
+
+        const { error: itemsError } = await supabase
+            .from('pos_transaction_items')
+            .insert(itemRecords);
+
+        if (itemsError) throw itemsError;
+
+        res.status(201).json({
+            success: true,
+            data: {
+                transaction_id: transaction.id,
+                transaction_ref: transaction.transaction_ref,
+                total_amount: transaction.total_amount
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * POS: Initiate Payment for a transaction
+ */
+export const initiatePOSTransactionPayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { method, phone_number } = req.body;
+
+        // 1. Fetch transaction
+        const { data: transaction, error: txError } = await supabase
+            .from('pos_transactions')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (txError || !transaction) {
+            throw new AppError('Transaction not found', 404);
+        }
+
+        if (transaction.status === 'PAID') {
+            throw new AppError('Transaction already paid', 400);
+        }
+
+        if (method === 'MPESA') {
+            if (!phone_number) throw new AppError('Phone number required for M-Pesa', 400);
+
+            // Trigger STK Push via payment controller logic or call payment service directly
+            const description = `Payment for POS Ref: ${transaction.transaction_ref}`;
+            const stkResponse = await mpesaService.stkPush(
+                phone_number,
+                transaction.total_amount,
+                transaction.transaction_ref,
+                description
+            );
+
+            // Store payment record
+            await supabase
+                .from('payments')
+                .insert({
+                    reference: stkResponse.CheckoutRequestID,
+                    amount: transaction.total_amount,
+                    currency: 'KES',
+                    payment_method: 'mpesa',
+                    status: 'pending',
+                    pos_transaction_id: transaction.id,
+                    metadata: {
+                        phoneNumber: phone_number,
+                        merchantRequestId: stkResponse.MerchantRequestID,
+                        checkoutRequestId: stkResponse.CheckoutRequestID,
+                        transaction_ref: transaction.transaction_ref
+                    }
+                });
+
+            res.json({
+                success: true,
+                message: 'STK Push initiated'
+            });
+        } else if (method === 'CASH') {
+            // Cashier confirms amount received
+            await supabase
+                .from('pos_transactions')
+                .update({
+                    status: 'PAID',
+                    payment_method: 'CASH',
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', id);
+
+            // Record legacy transaction
+            await supabase.from('cashier_transactions').insert({
+                transaction_number: `POS-${transaction.transaction_ref}`,
+                branch_id: transaction.branch_id,
+                cashier_id: transaction.cashier_id,
+                transaction_type: 'payment',
+                revenue_type: 'POS_SALE',
+                reference_type: 'pos_transaction',
+                reference_id: transaction.id,
+                payment_method: 'cash',
+                amount: transaction.total_amount,
+                customer_name: transaction.customer_name
+            });
+
+            res.json({
+                success: true,
+                message: 'Cash payment confirmed'
+            });
+        } else {
+            throw new AppError('Payment method not supported yet or in development', 400);
+        }
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * POS: Reconciliation Report
+ */
+export const getPOSReconciliation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { date, branch_id } = req.query;
+        const targetDate = date ? (date as string) : new Date().toISOString().split('T')[0];
+
+        // 1. Get transactions for the day
+        const { data: transactions, error: txError } = await supabase
+            .from('pos_transactions')
+            .select('*')
+            .eq('branch_id', branch_id || req.user?.branch_id)
+            .gte('created_at', `${targetDate}T00:00:00Z`)
+            .lte('created_at', `${targetDate}T23:59:59Z`);
+
+        if (txError) throw txError;
+
+        // 2. Breakdown per method
+        const totals: Record<string, { count: number, total: number }> = {
+            CASH: { count: 0, total: 0 },
+            MPESA: { count: 0, total: 0 },
+            CARD: { count: 0, total: 0 },
+            PENDING: { count: 0, total: 0 }
+        };
+
+        transactions?.forEach(tx => {
+            if (tx.status === 'PAID') {
+                const method = tx.payment_method || 'UNKNOWN';
+                if (!totals[method]) totals[method] = { count: 0, total: 0 };
+                totals[method].count++;
+                totals[method].total += Number(tx.total_amount);
+            } else if (tx.status === 'PENDING') {
+                totals.PENDING.count++;
+                totals.PENDING.total += Number(tx.total_amount);
+            }
+        });
+
+        res.json({
+            success: true,
+            data: {
+                date: targetDate,
+                summary: totals,
+                gross_total: Object.values(totals).reduce((sum, t) => sum + t.total, 0)
             }
         });
     } catch (error) {

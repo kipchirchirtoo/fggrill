@@ -1310,6 +1310,7 @@ ON CONFLICT DO NOTHING;
 -- =====================================================
 
 -- Room status overview view
+DROP VIEW IF EXISTS vw_hk_room_status_overview CASCADE;
 CREATE OR REPLACE VIEW vw_hk_room_status_overview AS
 SELECT 
   r.id,
@@ -1333,6 +1334,7 @@ LEFT JOIN users u ON sp.user_id = u.id
 LEFT JOIN hk_tasks t ON t.room_id = r.id AND t.status NOT IN ('completed', 'cancelled', 'inspection_passed');
 
 -- Staff workload view
+DROP VIEW IF EXISTS vw_hk_staff_workload CASCADE;
 CREATE OR REPLACE VIEW vw_hk_staff_workload AS
 SELECT 
   sp.id,
@@ -1356,6 +1358,7 @@ GROUP BY sp.id, sp.staff_code, u.first_name, u.last_name, sp.designation,
          sp.max_rooms_per_shift, sp.max_credits_per_shift, sp.quality_score;
 
 -- Daily summary view
+DROP VIEW IF EXISTS vw_hk_daily_summary CASCADE;
 CREATE OR REPLACE VIEW vw_hk_daily_summary AS
 SELECT 
   CURRENT_DATE as summary_date,

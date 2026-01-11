@@ -341,14 +341,14 @@ export const initiateMpesaPayment = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { phoneNumber, amount, bookingId, invoiceId, billId, accountReference } = req.body;
+    const { phoneNumber, amount, bookingId, invoiceId, billId, posTransactionId, accountReference } = req.body;
 
     if (!phoneNumber || !amount) {
       throw new AppError('Phone number and amount are required', 400);
     }
 
     // Generate unique account reference
-    const reference = accountReference || `FGH-${bookingId || Date.now()}`;
+    const reference = accountReference || `FGH-${bookingId || posTransactionId || Date.now()}`;
     const description = `Payment for booking ${reference}`;
 
     // Call actual M-Pesa STK Push
@@ -539,6 +539,36 @@ export const mpesaCallback = async (
         'mpesa',
         `M-Pesa payment made. Receipt: ${metadata.mpesaReceiptNumber || 'N/A'}`
       );
+    }
+
+    // If payment successful and has pos_transaction_id, update POS transaction
+    if (status === 'completed' && payment.pos_transaction_id) {
+      const { data: updateRes, error: updateResError } = await supabase
+        .from('pos_transactions')
+        .update({
+          status: 'PAID',
+          payment_method: 'MPESA',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', payment.pos_transaction_id)
+        .select()
+        .single();
+
+      if (!updateResError && updateRes) {
+        await supabase.from('cashier_transactions').insert({
+          transaction_number: `POS-${updateRes.transaction_ref}`,
+          branch_id: updateRes.branch_id,
+          cashier_id: updateRes.cashier_id,
+          transaction_type: 'payment',
+          revenue_type: 'POS_SALE',
+          reference_type: 'pos_transaction',
+          reference_id: updateRes.id,
+          payment_method: 'mpesa',
+          amount: payment.amount,
+          payment_reference: metadata.mpesaReceiptNumber || payment.reference,
+          customer_name: updateRes.customer_name
+        });
+      }
     }
 
     logger.info(`Payment ${payment.id} updated to status: ${status}`);

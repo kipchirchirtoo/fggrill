@@ -17,8 +17,8 @@ analytics_bp = Blueprint('analytics', __name__)
 
 # Initialize services (assuming they are moved or accessible)
 # For now, we'll assume they are in the same directory structure or updated
-sales_analytics = SalesAnalytics()
-demand_forecast = DemandForecast()
+sales_analytics = SalesAnalytics(supabase_client=supabase)
+demand_forecast = DemandForecast(supabase_client=supabase)
 menu_optimization = MenuOptimization()
 inventory_optimizer = InventoryOptimizer()
 customer_segmentation = CustomerSegmentation()
@@ -106,4 +106,44 @@ def predictive_maintenance_analysis():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Add more routes as needed
+@analytics_bp.route('/pos/insights', methods=['GET'])
+def get_pos_insights():
+    try:
+        branch_id = request.args.get('branch_id', type=int)
+        days = request.args.get('days', 7, type=int)
+        
+        velocity = sales_analytics.analyze_pos_velocity(days, branch_id)
+        heatmap = sales_analytics.get_hourly_heatmap(days, branch_id)
+        mix = sales_analytics.get_payment_method_mix(days, branch_id)
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "top_items": velocity[:5],
+                "hourly_heatmap": heatmap,
+                "payment_mix": mix
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@analytics_bp.route('/pos/forecast', methods=['POST'])
+def get_pos_forecast():
+    try:
+        data = request.get_json()
+        branch_id = data.get('branch_id')
+        periods = data.get('periods', 7)
+        
+        result = demand_forecast.forecast_pos_sales(periods, branch_id)
+        return jsonify({"success": True, "data": result}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@analytics_bp.route('/pos/stock-alerts', methods=['GET'])
+def get_stock_alerts():
+    try:
+        branch_id = request.args.get('branch_id', type=int)
+        alerts = sales_analytics.get_stock_out_predictions(branch_id)
+        return jsonify({"success": True, "data": alerts}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

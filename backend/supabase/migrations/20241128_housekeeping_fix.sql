@@ -473,6 +473,7 @@ ON CONFLICT DO NOTHING;
 -- =====================================================
 
 -- Staff Workload View
+DROP VIEW IF EXISTS vw_hk_staff_workload CASCADE;
 CREATE OR REPLACE VIEW vw_hk_staff_workload AS
 SELECT 
   s.id,
@@ -502,6 +503,7 @@ LEFT JOIN (
 ) completed ON completed.completed_by = s.id;
 
 -- Daily Summary View
+DROP VIEW IF EXISTS vw_hk_daily_summary CASCADE;
 CREATE OR REPLACE VIEW vw_hk_daily_summary AS
 SELECT 
   r.branch_id,

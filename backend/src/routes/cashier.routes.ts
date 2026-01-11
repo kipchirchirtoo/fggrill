@@ -14,7 +14,12 @@ import {
     getCashierShifts,
     startShift,
     closeShift,
-    getCashierStats
+    getCashierStats,
+    getCashierLogbookToday,
+    saveCashierLogbook,
+    createPOSTransaction,
+    initiatePOSTransactionPayment,
+    getPOSReconciliation
 } from '../controllers/cashier.controller';
 import { protect as authenticate, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -24,14 +29,30 @@ const router = Router();
 // Protect all cashier routes
 router.use(authenticate);
 
-// Restrict to Cashier and Admin
+// Restrict to Cashier, Admin and related roles
 router.use((req: any, res, next) => {
-    const allowedRoles = ['cashier', 'super_admin', 'accountant', 'branch_accountant', 'receptionist', 'branch_manager'];
+    const allowedRoles = [
+        'cashier',
+        'super_admin',
+        'accountant',
+        'branch_accountant',
+        'receptionist',
+        'branch_manager',
+        'bartender',
+        'waiter',
+        'restaurant_manager'
+    ];
     if (allowedRoles.includes(req.user.role)) {
         return next();
     }
     res.status(403).json({ message: 'Forbidden: Cashier access required' });
 });
+
+// ============================================
+// LOGBOOK ROUTES
+// ============================================
+router.get('/logbook/today', getCashierLogbookToday);
+router.post('/logbook', saveCashierLogbook);
 
 // ============================================
 // EXISTING ROUTES
@@ -45,6 +66,16 @@ router.post('/pay', processCashierPayment);
 
 // Verify payment
 router.post('/verify-payment/:paymentId', verifyPayment);
+
+// ============================================
+// POS TRANSACTIONS ROUTES
+// ============================================
+
+router.route('/pos/transactions')
+    .post(createPOSTransaction);
+
+router.post('/pos/transactions/:id/pay', initiatePOSTransactionPayment);
+router.get('/pos/reconciliation', getPOSReconciliation);
 
 // ============================================
 // UNPAID BILLS ROUTES

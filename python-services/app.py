@@ -42,7 +42,13 @@ from room_service.routes import room_bp
 from attendance.routes import attendance_bp
 
 app = Flask(__name__)
-CORS(app, origins=['http://localhost:3000', 'http://localhost:3001', '*'])
+CORS(app, origins=[
+    'http://localhost:3000', 
+    'http://localhost:3001', 
+    'https://famousgate.hirall.com',
+    'https://api.hirall.com',
+    '*'
+])
 
 # Register existing blueprints
 app.register_blueprint(receipts_bp)

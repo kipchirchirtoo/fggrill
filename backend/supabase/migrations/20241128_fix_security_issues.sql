@@ -19,16 +19,12 @@ SELECT
     cr.id,
     cr.item_id,
     ii.name as item_name,
-    ii.sku,
+    ii.item_code,
     cr.quantity,
-    cr.consumption_type,
     cr.recorded_by,
-    cr.recorded_at,
-    cr.branch_id,
-    b.name as branch_name
+    cr.created_at as recorded_at
 FROM consumption_records cr
-LEFT JOIN inventory_items ii ON cr.item_id = ii.id
-LEFT JOIN branches b ON cr.branch_id = b.id;
+LEFT JOIN inventory_items ii ON cr.item_id = ii.id;
 
 -- 2. v_in_transit_summary
 DROP VIEW IF EXISTS public.v_in_transit_summary;
@@ -39,17 +35,9 @@ SELECT
     its.item_sku,
     ii.name as item_name,
     its.quantity,
-    its.from_branch_id,
-    fb.name as from_branch_name,
-    its.to_branch_id,
-    tb.name as to_branch_name,
-    its.status,
-    its.dispatched_at,
-    its.expected_arrival
+    its.dispatched_at
 FROM in_transit_stock its
-LEFT JOIN inventory_items ii ON its.item_sku = ii.sku
-LEFT JOIN branches fb ON its.from_branch_id = fb.id
-LEFT JOIN branches tb ON its.to_branch_id = tb.id;
+LEFT JOIN inventory_items ii ON its.item_sku = ii.item_code;
 
 -- 3. v_inventory_alerts
 DROP VIEW IF EXISTS public.v_inventory_alerts;
@@ -59,38 +47,20 @@ SELECT
     bs.item_sku,
     ii.name as item_name,
     bs.quantity,
-    ii.reorder_level,
+    ii.reorder_point,
     bs.branch_id,
     b.name as branch_name,
     CASE 
         WHEN bs.quantity <= 0 THEN 'OUT_OF_STOCK'
-        WHEN bs.quantity <= COALESCE(ii.reorder_level, 10) THEN 'LOW_STOCK'
+        WHEN bs.quantity <= COALESCE(ii.reorder_point, 10) THEN 'LOW_STOCK'
         ELSE 'OK'
     END as alert_type
 FROM branch_stock bs
-LEFT JOIN inventory_items ii ON bs.item_sku = ii.sku
+LEFT JOIN inventory_items ii ON bs.item_sku = ii.item_code
 LEFT JOIN branches b ON bs.branch_id = b.id
-WHERE bs.quantity <= COALESCE(ii.reorder_level, 10);
+WHERE bs.quantity <= COALESCE(ii.reorder_point, 10);
 
--- 4. store_items (view)
-DROP VIEW IF EXISTS public.store_items;
-CREATE VIEW public.store_items AS
-SELECT 
-    ii.id,
-    ii.sku,
-    ii.name,
-    ii.description,
-    ii.category,
-    ii.unit,
-    ii.cost_price,
-    ii.selling_price,
-    ii.reorder_level,
-    ii.is_trackable,
-    ii.status,
-    ii.created_at,
-    ii.updated_at
-FROM inventory_items ii
-WHERE ii.status = 'active';
+-- store_items view skipped as it is already a table
 
 -- 5. v_low_stock_alerts
 DROP VIEW IF EXISTS public.v_low_stock_alerts;
@@ -101,14 +71,14 @@ SELECT
     ii.name as item_name,
     ii.category,
     bs.quantity as current_quantity,
-    COALESCE(ii.reorder_level, 10) as reorder_level,
+    COALESCE(ii.reorder_point, 10) as reorder_point,
     bs.branch_id,
     b.name as branch_name,
     b.code as branch_code
 FROM branch_stock bs
-JOIN inventory_items ii ON bs.item_sku = ii.sku
+JOIN inventory_items ii ON bs.item_sku = ii.item_code
 JOIN branches b ON bs.branch_id = b.id
-WHERE bs.quantity <= COALESCE(ii.reorder_level, 10)
+WHERE bs.quantity <= COALESCE(ii.reorder_point, 10)
 ORDER BY bs.quantity ASC;
 
 -- 6. v_requisition_summary
@@ -121,16 +91,14 @@ SELECT
     r.priority,
     r.requested_by,
     r.approved_by,
-    r.branch_id,
-    b.name as branch_name,
+    r.branch as branch_name,
     r.created_at,
     r.updated_at,
     COUNT(ri.id) as items_count,
     SUM(ri.quantity * COALESCE(ri.unit_price, 0)) as total_value
 FROM requisitions r
 LEFT JOIN requisition_items ri ON r.id = ri.requisition_id
-LEFT JOIN branches b ON r.branch_id = b.id
-GROUP BY r.id, b.name;
+GROUP BY r.id, r.branch;
 
 -- 7. v_purchase_order_summary
 DROP VIEW IF EXISTS public.v_purchase_order_summary;
@@ -141,10 +109,8 @@ SELECT
     po.status,
     po.supplier_id,
     s.name as supplier_name,
-    po.created_by,
     po.approved_by,
     po.created_at,
-    po.expected_delivery,
     COUNT(poi.id) as items_count,
     SUM(poi.quantity * poi.unit_price) as total_value
 FROM purchase_orders po
@@ -169,7 +135,7 @@ SELECT
     st.created_at
 FROM stock_take_items sti
 JOIN stock_takes st ON sti.stock_take_id = st.id
-LEFT JOIN inventory_items ii ON sti.item_sku = ii.sku
+LEFT JOIN inventory_items ii ON sti.item_sku = ii.item_code
 LEFT JOIN branches b ON st.branch_id = b.id
 WHERE sti.actual_quantity != sti.system_quantity;
 
@@ -182,33 +148,19 @@ SELECT
     sr.status,
     sr.priority,
     sr.requested_by,
-    sr.branch_id,
+    sr.requesting_branch_id as branch_id,
     b.name as branch_name,
     b.code as branch_code,
     sr.created_at,
-    sr.notes,
+    sr.reason as notes,
     COUNT(sri.id) as items_count
 FROM stock_requests sr
 LEFT JOIN stock_request_items sri ON sr.id = sri.request_id
-LEFT JOIN branches b ON sr.branch_id = b.id
+LEFT JOIN branches b ON sr.requesting_branch_id = b.id
 WHERE sr.status IN ('PENDING', 'APPROVED')
-GROUP BY sr.id, b.name, b.code;
+GROUP BY sr.id, b.name, b.code, sr.requesting_branch_id;
 
--- 10. store_suppliers (view)
-DROP VIEW IF EXISTS public.store_suppliers;
-CREATE VIEW public.store_suppliers AS
-SELECT 
-    id,
-    name,
-    contact_person,
-    email,
-    phone,
-    address,
-    payment_terms,
-    status,
-    created_at
-FROM suppliers
-WHERE status = 'active';
+-- store_suppliers view skipped
 
 -- 11. v_supplier_performance
 DROP VIEW IF EXISTS public.v_supplier_performance;
@@ -239,11 +191,11 @@ SELECT
     b.id as branch_id,
     b.name as branch_name,
     b.code as branch_code,
-    COUNT(CASE WHEN bs.quantity <= COALESCE(ii.reorder_level, 10) THEN 1 END) as low_stock_count,
+    COUNT(CASE WHEN bs.quantity <= COALESCE(ii.reorder_point, 10) THEN 1 END) as low_stock_count,
     COUNT(CASE WHEN bs.quantity = 0 THEN 1 END) as out_of_stock_count
 FROM branches b
 LEFT JOIN branch_stock bs ON b.id = bs.branch_id
-LEFT JOIN inventory_items ii ON bs.item_sku = ii.sku
+LEFT JOIN inventory_items ii ON bs.item_sku = ii.item_code
 WHERE b.status = 'active'
 GROUP BY b.id, b.name, b.code;
 
@@ -266,7 +218,7 @@ SELECT
     kue.reason,
     kue.created_at as entry_time
 FROM kitchen_usage_records kur
-LEFT JOIN inventory_items ii ON kur.item_sku = ii.sku
+LEFT JOIN inventory_items ii ON kur.item_sku = ii.item_code
 LEFT JOIN branches b ON kur.branch_id = b.id
 LEFT JOIN kitchen_usage_entries kue ON kur.id = kue.usage_record_id;
 
@@ -284,7 +236,7 @@ SELECT
     COALESCE(SUM(CASE WHEN kue.usage_type IN ('SPOILT', 'DAMAGED', 'EXPIRED') THEN kue.quantity ELSE 0 END), 0) as wastage,
     kur.received_quantity - COALESCE(SUM(kue.quantity), 0) as remaining
 FROM kitchen_usage_records kur
-LEFT JOIN inventory_items ii ON kur.item_sku = ii.sku
+LEFT JOIN inventory_items ii ON kur.item_sku = ii.item_code
 LEFT JOIN branches b ON kur.branch_id = b.id
 LEFT JOIN kitchen_usage_entries kue ON kur.id = kue.usage_record_id
 GROUP BY kur.usage_date, kur.branch_id, b.name, kur.item_sku, ii.name, kur.received_quantity;
@@ -321,14 +273,14 @@ SELECT
     ii.category,
     ii.unit,
     bs.quantity,
-    COALESCE(ii.reorder_level, 10) as reorder_level,
-    ii.cost_price,
-    (bs.quantity * COALESCE(ii.cost_price, 0)) as stock_value,
+    COALESCE(ii.reorder_point, 10) as reorder_point,
+    ii.unit_cost,
+    (bs.quantity * COALESCE(ii.unit_cost, 0)) as stock_value,
     bs.branch_id,
     b.name as branch_name,
     bs.updated_at as last_updated
 FROM branch_stock bs
-JOIN inventory_items ii ON bs.item_sku = ii.sku
+JOIN inventory_items ii ON bs.item_sku = ii.item_code
 JOIN branches b ON bs.branch_id = b.id;
 
 -- 17. v_expiring_items
@@ -345,7 +297,7 @@ SELECT
     b.name as branch_name,
     (ib.expiry_date - CURRENT_DATE) as days_until_expiry
 FROM inventory_batches ib
-JOIN inventory_items ii ON ib.item_sku = ii.sku
+JOIN inventory_items ii ON ib.item_sku = ii.item_code
 JOIN branches b ON ib.branch_id = b.id
 WHERE ib.expiry_date IS NOT NULL 
   AND ib.expiry_date <= (CURRENT_DATE + INTERVAL '30 days')
@@ -383,10 +335,10 @@ SELECT
     b.code as branch_code,
     COUNT(DISTINCT bs.item_sku) as total_items,
     SUM(bs.quantity) as total_quantity,
-    SUM(bs.quantity * COALESCE(ii.cost_price, 0)) as total_value
+    SUM(bs.quantity * COALESCE(ii.unit_cost, 0)) as total_value
 FROM branches b
 LEFT JOIN branch_stock bs ON b.id = bs.branch_id
-LEFT JOIN inventory_items ii ON bs.item_sku = ii.sku
+LEFT JOIN inventory_items ii ON bs.item_sku = ii.item_code
 WHERE b.status = 'active'
 GROUP BY b.id, b.name, b.code;
 
@@ -588,7 +540,7 @@ CREATE POLICY "stock_requests_select_policy" ON public.stock_requests
   FOR SELECT TO authenticated
   USING (
     get_user_role() IN ('super_admin', 'general_manager', 'central_storekeeper', 'auditor')
-    OR branch_id = get_user_branch_id()
+    OR requesting_branch_id = get_user_branch_id()
   );
 
 DROP POLICY IF EXISTS "stock_requests_insert_policy" ON public.stock_requests;
@@ -603,7 +555,7 @@ CREATE POLICY "stock_requests_update_policy" ON public.stock_requests
   FOR UPDATE TO authenticated
   USING (
     get_user_role() IN ('super_admin', 'general_manager', 'central_storekeeper')
-    OR (get_user_role() IN ('branch_storekeeper', 'branch_manager') AND branch_id = get_user_branch_id())
+    OR (get_user_role() IN ('branch_storekeeper', 'branch_manager') AND requesting_branch_id = get_user_branch_id())
   );
 
 -- =====================================================
@@ -660,11 +612,11 @@ CREATE POLICY "kitchen_usage_records_policy" ON public.kitchen_usage_records
   FOR ALL TO authenticated
   USING (
     get_user_role() IN ('super_admin', 'general_manager', 'auditor')
-    OR branch_id = get_user_branch_id()
+    -- OR branch_id = get_user_branch_id()
   )
   WITH CHECK (
     get_user_role() IN ('super_admin', 'general_manager')
-    OR branch_id = get_user_branch_id()
+    -- OR branch_id = get_user_branch_id()
   );
 
 DROP POLICY IF EXISTS "kitchen_usage_entries_policy" ON public.kitchen_usage_entries;
@@ -720,11 +672,11 @@ CREATE POLICY "staff_attendance_policy" ON public.staff_attendance
   FOR ALL TO authenticated
   USING (
     get_user_role() IN ('super_admin', 'general_manager', 'auditor')
-    OR branch_id = get_user_branch_id()
+    -- OR branch_id = get_user_branch_id()
   )
   WITH CHECK (
     get_user_role() IN ('super_admin', 'general_manager')
-    OR branch_id = get_user_branch_id()
+    -- OR branch_id = get_user_branch_id()
   );
 
 -- =====================================================
@@ -799,8 +751,8 @@ CREATE POLICY "stock_transfers_policy" ON public.stock_transfers
   FOR ALL TO authenticated
   USING (
     get_user_role() IN ('super_admin', 'general_manager', 'central_storekeeper', 'auditor')
-    OR from_branch_id = get_user_branch_id()
-    OR to_branch_id = get_user_branch_id()
+    OR from_branch = get_user_branch_id()::text
+    OR to_branch = get_user_branch_id()::text
   )
   WITH CHECK (true);
 
