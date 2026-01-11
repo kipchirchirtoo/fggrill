@@ -317,11 +317,12 @@ export default function CashierPage() {
             }
 
             try {
-                const response = await fetchAPI(`/mpesa/status/${checkoutRequestId}`) as any;
+                // Correct path: /payments/mpesa/...
+                const response = await fetchAPI(`/payments/mpesa/status/${checkoutRequestId}`) as any;
                 if (response.success && response.data.status === 'completed') {
                     setMpesaCode(response.data.mpesaReceiptNumber);
                     setMpesaTransactionDetails({
-                        name: 'Verified Customer', // API should ideally return name
+                        name: response.data.customerMessage || 'Verified Customer',
                         receipt: response.data.mpesaReceiptNumber,
                         amount: response.data.amount
                     });
@@ -358,7 +359,8 @@ export default function CashierPage() {
                 limit: '5'
             }).toString();
 
-            const response = await fetchAPI(`/mpesa/search?${query}`) as any;
+            // Correct path: /payments/mpesa/...
+            const response = await fetchAPI(`/payments/mpesa/search?${query}`) as any;
 
             if (response.success && response.data.length > 0) {
                 // Show the latest one
@@ -384,7 +386,8 @@ export default function CashierPage() {
         setIsProcessing(true);
         try {
             const identifier = (billData.type === 'restaurant' || billData.type === 'bar') ? billData.order.order_number : billData.booking.id;
-            const response = await fetchAPI('/mpesa/initiate', {
+            // Correct path: /payments/mpesa/...
+            const response = await fetchAPI('/payments/mpesa/initiate', {
                 method: 'POST',
                 body: JSON.stringify({
                     phoneNumber: customerPhone,
