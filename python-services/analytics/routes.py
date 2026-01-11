@@ -15,6 +15,13 @@ from analytics.reports.excel_exporter import ExcelExporter
 
 analytics_bp = Blueprint('analytics', __name__)
 
+from supabase import create_client
+
+# Initialize Supabase client
+supabase_url = os.environ.get("SUPABASE_URL")
+supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
+supabase = create_client(supabase_url, supabase_key)
+
 # Initialize services (assuming they are moved or accessible)
 # For now, we'll assume they are in the same directory structure or updated
 sales_analytics = SalesAnalytics(supabase_client=supabase)
