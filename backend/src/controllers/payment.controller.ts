@@ -359,6 +359,35 @@ export const initiateMpesaPayment = async (
       description
     );
 
+    // Resolve billId if it's an order number (not a UUID)
+    let resolvedBillId = billId;
+    if (billId && !billId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      // It's an order number, look up the UUID
+      const { data: order } = await supabase
+        .from('restaurant_orders')
+        .select('id')
+        .eq('order_number', billId)
+        .single();
+
+      if (order) {
+        resolvedBillId = order.id;
+      } else {
+        // Try bar_orders table
+        const { data: barOrder } = await supabase
+          .from('bar_orders')
+          .select('id')
+          .eq('order_number', billId)
+          .single();
+
+        if (barOrder) {
+          resolvedBillId = barOrder.id;
+        } else {
+          logger.warn(`Order not found for number: ${billId}, proceeding without billId`);
+          resolvedBillId = null;
+        }
+      }
+    }
+
     // Store payment record in database
     const { data: payment, error } = await supabase
       .from('payments')
@@ -370,7 +399,7 @@ export const initiateMpesaPayment = async (
         status: 'pending',
         booking_id: bookingId,
         invoice_id: invoiceId,
-        bill_id: billId,
+        bill_id: resolvedBillId,
         pos_transaction_id: posTransactionId,
         metadata: {
           phoneNumber,
