@@ -126,6 +126,8 @@ export const CreateDynamicBillModal = ({ isOpen, onClose, onSuccess }: ModalProp
                                 <div className="relative">
                                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
                                     <Input
+                                        id="customer_name"
+                                        name="customer_name"
                                         required
                                         placeholder="Guest Name"
                                         value={formData.customer_name}
@@ -140,6 +142,8 @@ export const CreateDynamicBillModal = ({ isOpen, onClose, onSuccess }: ModalProp
                                 <div className="relative">
                                     <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
                                     <Input
+                                        id="room_number"
+                                        name="room_number"
                                         placeholder="Room #"
                                         value={formData.room_number}
                                         onChange={(e) => setFormData({ ...formData, room_number: e.target.value })}
@@ -153,6 +157,8 @@ export const CreateDynamicBillModal = ({ isOpen, onClose, onSuccess }: ModalProp
                                 <div className="relative">
                                     <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
                                     <Input
+                                        id="total_amount"
+                                        name="total_amount"
                                         required
                                         type="number"
                                         placeholder="0.00"
@@ -168,6 +174,8 @@ export const CreateDynamicBillModal = ({ isOpen, onClose, onSuccess }: ModalProp
                                 <div className="relative">
                                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
                                     <Input
+                                        id="due_date"
+                                        name="due_date"
                                         type="date"
                                         value={formData.due_date}
                                         onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
@@ -181,6 +189,8 @@ export const CreateDynamicBillModal = ({ isOpen, onClose, onSuccess }: ModalProp
                                 <div className="relative">
                                     <FileText className="absolute left-3 top-3 h-4 w-4 text-stone-400" />
                                     <textarea
+                                        id="remarks"
+                                        name="remarks"
                                         rows={3}
                                         placeholder="Additional details..."
                                         value={formData.remarks}
@@ -202,7 +212,7 @@ export const CreateDynamicBillModal = ({ isOpen, onClose, onSuccess }: ModalProp
                             </IOSButton>
                             <IOSButton
                                 type="submit"
-                                isLoading={isLoading}
+                                loading={isLoading}
                                 className="flex-[2] h-12 bg-emerald-600 text-white hover:bg-emerald-700 rounded-2xl shadow-lg shadow-emerald-500/20 text-base font-bold"
                             >
                                 Create & Print Bill
@@ -275,7 +285,7 @@ export const BillDetailsModal = ({
                                     <span className="text-xs text-stone-400">{new Date(bill.accountant_confirmed_at).toLocaleDateString()}</span>
                                 ) : (
                                     isAccountant && (
-                                        <IOSButton size="sm" onClick={() => handleConfirm('accountant')} isLoading={isConfirming}>Confirm</IOSButton>
+                                        <IOSButton size="sm" onClick={() => handleConfirm('accountant')} loading={isConfirming}>Confirm</IOSButton>
                                     )
                                 )}
                             </div>
@@ -294,7 +304,7 @@ export const BillDetailsModal = ({
                                         <IOSButton
                                             size="sm"
                                             onClick={() => handleConfirm('auditor')}
-                                            isLoading={isConfirming}
+                                            loading={isConfirming}
                                             disabled={!bill.accountant_confirmed_at}
                                             className={!bill.accountant_confirmed_at ? 'opacity-50 cursor-not-allowed' : ''}
                                         >
