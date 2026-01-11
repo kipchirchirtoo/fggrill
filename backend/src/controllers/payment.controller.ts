@@ -999,12 +999,104 @@ export const getFolioPayments = async (
       .order('created_at', { ascending: false });
 
     if (error) {
-      throw new AppError('Failed to fetch payment history', 500);
+      throw new AppError('Failed to fetch folio payments', 500);
     }
 
     res.json({
       success: true,
-      data: transactions,
+      data: transactions
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Check M-Pesa transaction status by CheckoutRequestID
+ */
+export const checkMpesaStatus = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { checkoutRequestId } = req.params;
+
+    const { data: payment, error } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('reference', checkoutRequestId) // Matches CheckoutRequestID stored in reference
+      .single();
+
+    if (error || !payment) {
+      throw new AppError('Payment not found', 404);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        status: payment.status,
+        mpesaReceiptNumber: payment.metadata?.mpesaReceiptNumber,
+        failureReason: payment.metadata?.failureReason,
+        amount: payment.amount,
+        customerMessage: payment.status === 'completed' ? 'Payment Received' : 'Waiting for confirmation...'
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Search recent M-Pesa transactions manually (Fallback)
+ */
+export const searchMpesaHistory = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { amount, phone, limit = 5 } = req.query;
+
+    let query = supabase
+      .from('payments')
+      .select('*')
+      .eq('payment_method', 'mpesa')
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false })
+      .limit(Number(limit));
+
+    if (amount) {
+      query = query.eq('amount', amount);
+    }
+
+    // Note: Phone is in metadata jsonb column, so filtering might be tricky depending on Supabase version/index
+    // We'll filter in code if needed or use specific json operator
+    // Using text operator for now if metadata->>phoneNumber exists
+    // query = query.textSearch('metadata', phoneNumber) - This is complex
+
+    const { data: payments, error } = await query;
+
+    if (error) throw new AppError('Search failed', 500);
+
+    // Client-side filtering for phone if needed (simpler for now)
+    let results = payments || [];
+    if (phone) {
+      results = results.filter(p => p.metadata?.phoneNumber?.includes(String(phone)) || p.metadata?.PhoneNumber?.includes(String(phone)));
+    }
+
+    const mappedResults = results.map(p => ({
+      id: p.id,
+      receipt: p.metadata?.mpesaReceiptNumber || p.metadata?.MpesaReceiptNumber,
+      amount: p.amount,
+      phone: p.metadata?.phoneNumber || p.metadata?.PhoneNumber || 'N/A',
+      date: p.created_at,
+      name: p.metadata?.senderName || 'Unknown Sender' // Assuming we might save sender name later
+    }));
+
+    res.json({
+      success: true,
+      data: mappedResults
     });
   } catch (error) {
     next(error);

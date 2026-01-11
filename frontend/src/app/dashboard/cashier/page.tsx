@@ -39,6 +39,8 @@ export default function CashierPage() {
     const [paymentAmount, setPaymentAmount] = useState('');
     const [paymentMethod, setPaymentMethod] = useState('cash');
     const [mpesaCode, setMpesaCode] = useState('');
+    const [isPollingMpesa, setIsPollingMpesa] = useState(false);
+    const [mpesaTransactionDetails, setMpesaTransactionDetails] = useState<any>(null);
     const [transactionHistory, setTransactionHistory] = useState<any[]>([]);
     const [isPOSType, setIsPOSType] = useState(false);
     const [cart, setCart] = useState<any[]>([]);
@@ -302,6 +304,78 @@ export default function CashierPage() {
         }
     };
 
+    const pollMpesaStatus = async (checkoutRequestId: string) => {
+        setIsPollingMpesa(true);
+        let attempts = 0;
+        const maxAttempts = 20; // 1 minute roughly (3s interval)
+
+        const poll = async () => {
+            if (attempts >= maxAttempts) {
+                setIsPollingMpesa(false);
+                toast.error('M-Pesa polling timed out. Please enter code manually.');
+                return;
+            }
+
+            try {
+                const response = await fetchAPI(`/mpesa/status/${checkoutRequestId}`) as any;
+                if (response.success && response.data.status === 'completed') {
+                    setMpesaCode(response.data.mpesaReceiptNumber);
+                    setMpesaTransactionDetails({
+                        name: 'Verified Customer', // API should ideally return name
+                        receipt: response.data.mpesaReceiptNumber,
+                        amount: response.data.amount
+                    });
+                    toast.success('Payment received and verified!');
+                    setIsPollingMpesa(false);
+                } else if (response.success && response.data.status === 'failed') {
+                    toast.error(`Payment failed: ${response.data.failureReason}`);
+                    setIsPollingMpesa(false);
+                } else {
+                    attempts++;
+                    setTimeout(poll, 3000);
+                }
+            } catch (error) {
+                console.error('Polling error', error);
+                attempts++;
+                setTimeout(poll, 3000);
+            }
+        };
+
+        poll();
+    };
+
+    const handleSearchPayment = async () => {
+        if (!paymentAmount) {
+            toast.error('Enter amount to search');
+            return;
+        }
+
+        setIsProcessing(true);
+        try {
+            const query = new URLSearchParams({
+                amount: paymentAmount,
+                phone: customerPhone || '',
+                limit: '5'
+            }).toString();
+
+            const response = await fetchAPI(`/mpesa/search?${query}`) as any;
+
+            if (response.success && response.data.length > 0) {
+                // Show the latest one
+                const latest = response.data[0];
+                setMpesaTransactionDetails(latest);
+                toast.success('Found matching payment!');
+            } else {
+                toast.error('No recent matching payments found');
+                setMpesaTransactionDetails(null);
+            }
+        } catch (error) {
+            toast.error('Search failed');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
     const handleMpesaPromptStandard = async () => {
         if (!billData || !customerPhone) {
             toast.error('Customer phone required');
@@ -316,13 +390,16 @@ export default function CashierPage() {
                     phoneNumber: customerPhone,
                     amount: parseFloat(paymentAmount),
                     bookingId: billData.type === 'hotel' ? identifier : undefined,
-                    billId: billData.type === 'restaurant' || billData.type === 'bar' ? identifier : undefined
+                    billId: billData.type === 'restaurant' || billData.type === 'bar' ? identifier : undefined,
+                    accountReference: `POS-${identifier.slice(-5)}`
                 })
             }) as any;
 
             if (response.success) {
-                toast.success('STK Push sent successfully');
-                // The callback will update the payment status
+                toast.success('STK Push sent. Waiting for payment...');
+                if (response.data.checkoutRequestId) {
+                    pollMpesaStatus(response.data.checkoutRequestId);
+                }
             }
         } catch (error: any) {
             toast.error(error.message || 'STK Push failed');
@@ -604,6 +681,27 @@ export default function CashierPage() {
                                                 onChange={(e) => setCustomerPhone(e.target.value)}
                                             />
                                         </div>
+
+                                        {/* M-Pesa Automation Results */}
+                                        {mpesaTransactionDetails && (
+                                            <div className="mb-6 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between animate-in fade-in">
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-emerald-800 uppercase">Payment Verified</p>
+                                                    <p className="text-sm font-bold text-stone-900">{mpesaTransactionDetails.receipt} - {mpesaTransactionDetails.name}</p>
+                                                    <p className="text-xs text-stone-500">KES {mpesaTransactionDetails.amount.toLocaleString()}</p>
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        setMpesaCode(mpesaTransactionDetails.receipt);
+                                                        setMpesaTransactionDetails(null);
+                                                        toast.success('Reference code applied!');
+                                                    }}
+                                                    className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700"
+                                                >
+                                                    Use This
+                                                </button>
+                                            </div>
+                                        )}
                                         <div className="flex justify-between text-xl font-black mb-6">
                                             <span>Total</span>
                                             <span className="text-orange-600">
@@ -743,15 +841,36 @@ export default function CashierPage() {
                                             </div>
 
                                             {paymentMethod === 'mpesa' && (
-                                                <div>
-                                                    <label className="block text-[10px] font-bold text-stone-400 uppercase mb-1.5">M-Pesa Reference</label>
-                                                    <Input
-                                                        type="text"
-                                                        placeholder="e.g. QWE123RTY"
-                                                        value={mpesaCode}
-                                                        onChange={(e) => setMpesaCode(e.target.value.toUpperCase())}
-                                                        className="h-11 bg-stone-50 border-stone-200 font-mono"
-                                                    />
+                                                <div className="space-y-4 pt-2">
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-stone-400 uppercase mb-1.5">Customer Phone (for STK Push)</label>
+                                                        <Input
+                                                            type="tel"
+                                                            placeholder="e.g. 0712345678"
+                                                            value={customerPhone}
+                                                            onChange={(e) => setCustomerPhone(e.target.value)}
+                                                            className="h-11 bg-stone-50 border-stone-200"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-stone-400 uppercase mb-1.5">M-Pesa Reference (After Payment)</label>
+                                                        <div className="flex gap-2">
+                                                            <Input
+                                                                type="text"
+                                                                placeholder="e.g. QWE123RTY (Verified automatically if online)"
+                                                                value={mpesaCode}
+                                                                onChange={(e) => setMpesaCode(e.target.value.toUpperCase())}
+                                                                className="h-11 bg-stone-50 border-stone-200 font-mono flex-1"
+                                                            />
+                                                            <button
+                                                                onClick={handleSearchPayment}
+                                                                title="Search recent payment"
+                                                                className="h-11 px-3 bg-stone-100 hover:bg-stone-200 rounded-lg text-stone-600 transition-colors"
+                                                            >
+                                                                <Search size={18} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             )}
 

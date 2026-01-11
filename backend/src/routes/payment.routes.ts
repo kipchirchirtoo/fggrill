@@ -11,7 +11,9 @@ import {
   confirmPayment,
   cancelPayment,
   getFolioPayments,
-  verifyStrictPayment
+  verifyStrictPayment,
+  checkMpesaStatus,
+  searchMpesaHistory
 } from '../controllers/payment.controller';
 import { protect as authenticate } from '../middleware/auth';
 import { supabase } from '../config/supabase';
@@ -81,6 +83,12 @@ router.post('/mpesa/initiate', initiateMpesaPayment);
 
 // Paystack specific payment initiation
 router.post('/paystack/initiate', initiatePaystackPayment);
+
+// M-Pesa automated status check (Polling)
+router.get('/mpesa/status/:checkoutRequestId', authenticate, checkMpesaStatus);
+
+// M-Pesa manual search (Fallback)
+router.get('/mpesa/search', authenticate, searchMpesaHistory);
 
 // =====================================================
 // PAYMENT VERIFICATION ROUTES
