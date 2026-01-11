@@ -19,12 +19,17 @@ export const getItems = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { search, ordering } = req.query;
+    const { search, ordering, category } = req.query;
 
     let query = supabase
       .from('simple_items')
       .select('*')
       .eq('is_active', true);
+
+    // Filter by category if provided
+    if (category) {
+      query = query.eq('category', category);
+    }
 
     if (search) {
       query = query.or(`description.ilike.%${search}%,sku.ilike.%${search}%`);
