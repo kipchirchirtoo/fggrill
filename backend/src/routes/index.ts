@@ -129,4 +129,10 @@ router.post('/email/send-booking/:bookingId', sendBookingEmail);
 router.post('/email/send-all-bookings', sendAllConfirmedBookingEmails);
 router.get('/email/test-connection', testEmailService);
 
+// Legacy M-Pesa Route Fix (for cached clients calling /api/mpesa/initiate)
+import { initiateMpesaPayment, mpesaCallback } from '../controllers/payment.controller';
+import { protect } from '../middleware/auth.middleware';
+router.post('/mpesa/initiate', protect, initiateMpesaPayment);
+router.post('/mpesa/callback', mpesaCallback);
+
 export default router;
