@@ -43,12 +43,14 @@ export function BranchProvider({ children }: { children: ReactNode }) {
   const [activeBranchId, setActiveBranchId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Calculate the active branch object
-  const activeBranch = activeBranchId
-    ? branches.find(branch => branch.id === activeBranchId) || null
-    : activeBranchId === 0
-      ? { id: 0, name: 'All Branches', code: 'ALL', location: 'Multiple Locations', is_main_branch: false } as Branch
-      : null;
+  // Calculate the active branch object - Memoized to prevent object reference changes
+  const activeBranch = React.useMemo(() => (
+    activeBranchId
+      ? branches.find(branch => branch.id === activeBranchId) || null
+      : activeBranchId === 0
+        ? { id: 0, name: 'All Branches', code: 'ALL', location: 'Multiple Locations', is_main_branch: false } as Branch
+        : null
+  ), [activeBranchId, branches]);
 
   // Set initial active branch
   useEffect(() => {
@@ -65,7 +67,7 @@ export function BranchProvider({ children }: { children: ReactNode }) {
         setActiveBranchId(userBranches[0].id);
       }
     }
-  }, [branches, user, userBranches]);
+  }, [branches, user, userBranches, activeBranchId]);
 
   // Helper to check if user can access all branches
   const canAccessAllBranches = (u: any): boolean => {
@@ -73,27 +75,27 @@ export function BranchProvider({ children }: { children: ReactNode }) {
   };
 
   // Check if a branch is available for the user
-  const isBranchAvailable = (branchId: number): boolean => {
+  const isBranchAvailable = React.useCallback((branchId: number): boolean => {
     if (branchId === 0) return canAccessAllBranches(user);
     return userBranches.some(branch => branch.id === branchId);
-  };
+  }, [user, userBranches]);
 
   // Set active branch
-  const setActiveBranch = (branchId: number) => {
+  const setActiveBranch = React.useCallback((branchId: number) => {
     if (isBranchAvailable(branchId) || branchId === 0) {
       setActiveBranchId(branchId);
       localStorage.setItem('activeBranchId', branchId.toString());
     }
-  };
+  }, [isBranchAvailable]);
 
   // Check if a branch is active
-  const isBranchActive = (branchId: number): boolean => {
+  const isBranchActive = React.useCallback((branchId: number): boolean => {
     const branch = branches.find(b => b.id === branchId);
     return branch?.status === 'active';
-  };
+  }, [branches]);
 
   // Fetch branches from API
-  const fetchBranches = async () => {
+  const fetchBranches = React.useCallback(async () => {
     if (!user) return;
 
     setIsLoading(true);
@@ -155,46 +157,45 @@ export function BranchProvider({ children }: { children: ReactNode }) {
         console.error('Error parsing cached branch data:', e);
       }
 
-      // If no cached data is available or it failed to parse
       setBranches([]);
       setUserBranches([]);
-
-      // Don't show alerts that disrupt the UX
       console.warn('Failed to load branch data. Please check network connection.');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user]);
 
   // Check if user has access to branch
-  const hasAccessToBranch = (branchId: number): boolean => {
+  const hasAccessToBranch = React.useCallback((branchId: number): boolean => {
     return userBranches.some(branch => branch.id === branchId);
-  };
+  }, [userBranches]);
 
   // Fetch branches on mount or when user changes
   useEffect(() => {
     if (user) {
       fetchBranches();
     }
-  }, [user]);
+  }, [user, fetchBranches]);
 
   // Refresh branches
-  const refreshBranches = async () => {
+  const refreshBranches = React.useCallback(async () => {
     return fetchBranches();
-  };
+  }, [fetchBranches]);
+
+  const contextValue = React.useMemo(() => ({
+    branches,
+    userBranches,
+    activeBranchId,
+    activeBranch,
+    setActiveBranch,
+    isLoading,
+    hasAccessToBranch,
+    refreshBranches,
+    isBranchActive
+  }), [branches, userBranches, activeBranchId, activeBranch, isLoading, setActiveBranch, hasAccessToBranch, refreshBranches, isBranchActive]);
 
   return (
-    <BranchContext.Provider value={{
-      branches,
-      userBranches,
-      activeBranchId,
-      activeBranch,
-      setActiveBranch,
-      isLoading,
-      hasAccessToBranch,
-      refreshBranches,
-      isBranchActive
-    }}>
+    <BranchContext.Provider value={contextValue}>
       {children}
     </BranchContext.Provider>
   );

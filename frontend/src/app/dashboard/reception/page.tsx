@@ -631,7 +631,10 @@ export default function ReceptionDashboard(): JSX.Element {
                   <p className="text-xl font-bold text-rose-600">{creditBills.filter((b: any) => b.status === 'unpaid').length} Items</p>
                 </IOSCard>
                 <IOSButton
-                  onClick={() => setShowDynamicBillModal(true)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDynamicBillModal(true);
+                  }}
                   className="h-full bg-emerald-600 text-white hover:bg-emerald-700 rounded-2xl"
                 >
                   <PlusCircle className="h-4 w-4 mr-2" /> Dynamic Bill
@@ -775,25 +778,34 @@ export default function ReceptionDashboard(): JSX.Element {
         <CheckInModal isOpen={showCheckInModal} onClose={() => setShowCheckInModal(false)} />
         <CheckOutModal isOpen={showCheckOutModal} onClose={() => setShowCheckOutModal(false)} />
         <ReservationModal isOpen={showReservationModal} onClose={() => setShowReservationModal(false)} />
-        <CashierModals.CreateDynamicBillModal
-          isOpen={showDynamicBillModal}
-          onClose={() => setShowDynamicBillModal(false)}
-          onSuccess={() => {
-            setShowDynamicBillModal(false);
-            fetchCashierData();
-          }}
-        />
-        <CashierModals.BillDetailsModal
-          isOpen={!!selectedBill}
-          bill={selectedBill}
-          // Distinguish by checking for employee_id or if it came from credit list
-          type={selectedBill?.employee_id || selectedBill?.credit_limit ? 'credit' : 'unpaid'}
-          onClose={() => setSelectedBill(null)}
-          onSuccess={() => {
-            fetchCashierData();
-            setSelectedBill(null);
-          }}
-        />
+        <AnimatePresence mode="wait">
+          {showDynamicBillModal && (
+            <CashierModals.CreateDynamicBillModal
+              isOpen={showDynamicBillModal}
+              onClose={() => setShowDynamicBillModal(false)}
+              onSuccess={() => {
+                setShowDynamicBillModal(false);
+                fetchCashierData();
+              }}
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence mode="wait">
+          {selectedBill && (
+            <CashierModals.BillDetailsModal
+              isOpen={!!selectedBill}
+              bill={selectedBill}
+              // Distinguish by checking for employee_id or if it came from credit list
+              type={selectedBill?.employee_id || selectedBill?.credit_limit ? 'credit' : 'unpaid'}
+              onClose={() => setSelectedBill(null)}
+              onSuccess={() => {
+                fetchCashierData();
+                setSelectedBill(null);
+              }}
+            />
+          )}
+        </AnimatePresence>
 
         <ConferenceBookingModal
           isOpen={showConferenceBookingModal}

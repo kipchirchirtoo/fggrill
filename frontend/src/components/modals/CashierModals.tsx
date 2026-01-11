@@ -84,175 +84,183 @@ export const CreateDynamicBillModal = ({ isOpen, onClose, onSuccess }: ModalProp
     };
 
     return (
-        <AnimatePresence mode="wait">
-            {isOpen && (
-                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={onClose}
-                        className="absolute inset-0 bg-stone-900/60 backdrop-blur-[2px]"
-                    />
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.9, y: 30 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.9, y: 30 }}
-                        transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                        className="relative w-full max-w-lg bg-white rounded-[32px] shadow-2xl overflow-hidden z-10"
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onClose();
+                }}
+                className="absolute inset-0 bg-stone-900/60 backdrop-blur-[2px]"
+            />
+            <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 30 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 30 }}
+                transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                onClick={(e) => e.stopPropagation()}
+                className="relative w-full max-w-lg bg-white rounded-[32px] shadow-2xl overflow-hidden z-10"
+            >
+                {/* Header */}
+                <div className="p-6 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-emerald-100 rounded-2xl">
+                            <Receipt className="h-6 w-6 text-emerald-600" />
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-bold text-stone-900">Create Dynamic Bill</h2>
+                            <p className="text-sm text-stone-500 font-medium whitespace-nowrap overflow-hidden text-ellipsis">Generate an unpaid bill for services</p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onClose();
+                        }}
+                        className="p-2 hover:bg-stone-200 rounded-full transition-colors group"
                     >
-                        {/* Header */}
-                        <div className="p-6 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2.5 bg-emerald-100 rounded-2xl">
-                                    <Receipt className="h-6 w-6 text-emerald-600" />
-                                </div>
-                                <div>
-                                    <h2 className="text-xl font-bold text-stone-900">Create Dynamic Bill</h2>
-                                    <p className="text-sm text-stone-500 font-medium whitespace-nowrap overflow-hidden text-ellipsis">Generate an unpaid bill for services</p>
-                                </div>
+                        <X className="h-5 w-5 text-stone-400 group-hover:text-stone-600" />
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="p-7 space-y-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
+                    <div className="space-y-5">
+                        {/* Service Type Selection */}
+                        <div className="space-y-3">
+                            <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Service Type</label>
+                            <div className="grid grid-cols-2 gap-2.5">
+                                {revenueStreams.map((stream) => (
+                                    <button
+                                        key={stream.id}
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, bill_type: stream.id })}
+                                        className={`px-4 py-2.5 rounded-2xl text-xs font-bold border-2 transition-all flex items-center justify-center text-center
+                                            ${formData.bill_type === stream.id
+                                                ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm shadow-emerald-200/50'
+                                                : 'border-stone-100 bg-white text-stone-500 hover:border-stone-200 active:scale-95'}`}
+                                    >
+                                        {stream.label}
+                                    </button>
+                                ))}
                             </div>
-                            <button
-                                onClick={onClose}
-                                className="p-2 hover:bg-stone-200 rounded-full transition-colors group"
-                            >
-                                <X className="h-5 w-5 text-stone-400 group-hover:text-stone-600" />
-                            </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="p-7 space-y-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                            <div className="space-y-5">
-                                {/* Service Type Selection */}
-                                <div className="space-y-3">
-                                    <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Service Type</label>
-                                    <div className="grid grid-cols-2 gap-2.5">
-                                        {revenueStreams.map((stream) => (
-                                            <button
-                                                key={stream.id}
-                                                type="button"
-                                                onClick={() => setFormData({ ...formData, bill_type: stream.id })}
-                                                className={`px-4 py-2.5 rounded-2xl text-xs font-bold border-2 transition-all flex items-center justify-center text-center
-                                                    ${formData.bill_type === stream.id
-                                                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm shadow-emerald-200/50'
-                                                        : 'border-stone-100 bg-white text-stone-500 hover:border-stone-200 active:scale-95'}`}
-                                            >
-                                                {stream.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-5">
-                                    {/* Customer Name */}
-                                    <div className="col-span-2 sm:col-span-1 space-y-2.5">
-                                        <label htmlFor="customer_name" className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Customer Name</label>
-                                        <div className="relative group">
-                                            <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 group-focus-within:text-emerald-500 transition-colors" />
-                                            <Input
-                                                id="customer_name"
-                                                name="customer_name"
-                                                required
-                                                placeholder="Guest Name"
-                                                value={formData.customer_name}
-                                                onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
-                                                className="pl-10 h-12 bg-stone-50/50 border-stone-100 hover:border-stone-200 focus:bg-white focus:border-emerald-500 transition-all rounded-[16px]"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* Room Number */}
-                                    <div className="col-span-2 sm:col-span-1 space-y-2.5">
-                                        <label htmlFor="room_number" className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Room Number (Opt)</label>
-                                        <div className="relative group">
-                                            <Hash className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 group-focus-within:text-emerald-500 transition-colors" />
-                                            <Input
-                                                id="room_number"
-                                                name="room_number"
-                                                placeholder="Room #"
-                                                value={formData.room_number}
-                                                onChange={(e) => setFormData({ ...formData, room_number: e.target.value })}
-                                                className="pl-10 h-12 bg-stone-50/50 border-stone-100 hover:border-stone-200 focus:bg-white focus:border-emerald-500 transition-all rounded-[16px]"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* Total Amount */}
-                                    <div className="col-span-2 sm:col-span-1 space-y-2.5">
-                                        <label htmlFor="total_amount" className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Total Amount (KES)</label>
-                                        <div className="relative group">
-                                            <DollarSign className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-500 group-focus-within:text-emerald-600 transition-colors" />
-                                            <Input
-                                                id="total_amount"
-                                                name="total_amount"
-                                                required
-                                                type="number"
-                                                placeholder="0.00"
-                                                value={formData.total_amount}
-                                                onChange={(e) => setFormData({ ...formData, total_amount: e.target.value })}
-                                                className="pl-10 h-12 bg-emerald-50/30 border-emerald-100 hover:border-emerald-200 focus:bg-white focus:border-emerald-500 transition-all rounded-[16px] font-bold text-emerald-700"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* Due Date */}
-                                    <div className="col-span-2 sm:col-span-1 space-y-2.5">
-                                        <label htmlFor="due_date" className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Due Date</label>
-                                        <div className="relative group">
-                                            <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 group-focus-within:text-emerald-500 transition-colors" />
-                                            <Input
-                                                id="due_date"
-                                                name="due_date"
-                                                type="date"
-                                                value={formData.due_date}
-                                                onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
-                                                className="pl-10 h-12 bg-stone-50/50 border-stone-100 hover:border-stone-200 focus:bg-white focus:border-emerald-500 transition-all rounded-[16px]"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* Remarks */}
-                                    <div className="col-span-2 space-y-2.5">
-                                        <label htmlFor="remarks" className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Remarks</label>
-                                        <div className="relative group">
-                                            <FileText className="absolute left-3.5 top-3.5 h-4 w-4 text-stone-400 group-focus-within:text-emerald-500 transition-colors" />
-                                            <textarea
-                                                id="remarks"
-                                                name="remarks"
-                                                rows={3}
-                                                placeholder="Additional details about this bill..."
-                                                value={formData.remarks}
-                                                onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
-                                                className="w-full pl-10 pr-4 py-3 bg-stone-50/50 border border-stone-100 rounded-[16px] text-sm focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 outline-none transition-all resize-none group-hover:border-stone-200"
-                                            />
-                                        </div>
-                                    </div>
+                        <div className="grid grid-cols-2 gap-5">
+                            {/* Customer Name */}
+                            <div className="col-span-2 sm:col-span-1 space-y-2.5">
+                                <label htmlFor="customer_name" className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Customer Name</label>
+                                <div className="relative group">
+                                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 group-focus-within:text-emerald-500 transition-colors" />
+                                    <Input
+                                        id="customer_name"
+                                        name="customer_name"
+                                        required
+                                        placeholder="Guest Name"
+                                        value={formData.customer_name}
+                                        onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
+                                        className="pl-10 h-12 bg-stone-50/50 border-stone-100 hover:border-stone-200 focus:bg-white focus:border-emerald-500 transition-all rounded-[16px]"
+                                    />
                                 </div>
                             </div>
 
-                            {/* Actions */}
-                            <div className="flex gap-4 pt-4 border-t border-stone-100">
-                                <IOSButton
-                                    type="button"
-                                    variant="outline"
-                                    onClick={onClose}
-                                    className="flex-1 h-13 rounded-2xl font-bold border-stone-200 text-stone-600 hover:bg-stone-50"
-                                >
-                                    Cancel
-                                </IOSButton>
-                                <IOSButton
-                                    type="submit"
-                                    loading={isLoading}
-                                    className="flex-[1.5] h-13 bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98] rounded-2xl shadow-xl shadow-emerald-500/20 text-base font-bold transition-all"
-                                >
-                                    Create & Print Bill
-                                </IOSButton>
+                            {/* Room Number */}
+                            <div className="col-span-2 sm:col-span-1 space-y-2.5">
+                                <label htmlFor="room_number" className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Room Number (Opt)</label>
+                                <div className="relative group">
+                                    <Hash className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 group-focus-within:text-emerald-500 transition-colors" />
+                                    <Input
+                                        id="room_number"
+                                        name="room_number"
+                                        placeholder="Room #"
+                                        value={formData.room_number}
+                                        onChange={(e) => setFormData({ ...formData, room_number: e.target.value })}
+                                        className="pl-10 h-12 bg-stone-50/50 border-stone-100 hover:border-stone-200 focus:bg-white focus:border-emerald-500 transition-all rounded-[16px]"
+                                    />
+                                </div>
                             </div>
-                        </form>
-                    </motion.div>
-                </div>
-            )}
-        </AnimatePresence>
+
+                            {/* Total Amount */}
+                            <div className="col-span-2 sm:col-span-1 space-y-2.5">
+                                <label htmlFor="total_amount" className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Total Amount (KES)</label>
+                                <div className="relative group">
+                                    <DollarSign className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-500 group-focus-within:text-emerald-600 transition-colors" />
+                                    <Input
+                                        id="total_amount"
+                                        name="total_amount"
+                                        required
+                                        type="number"
+                                        placeholder="0.00"
+                                        value={formData.total_amount}
+                                        onChange={(e) => setFormData({ ...formData, total_amount: e.target.value })}
+                                        className="pl-10 h-12 bg-emerald-50/30 border-emerald-100 hover:border-emerald-200 focus:bg-white focus:border-emerald-500 transition-all rounded-[16px] font-bold text-emerald-700"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Due Date */}
+                            <div className="col-span-2 sm:col-span-1 space-y-2.5">
+                                <label htmlFor="due_date" className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Due Date</label>
+                                <div className="relative group">
+                                    <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 group-focus-within:text-emerald-500 transition-colors" />
+                                    <Input
+                                        id="due_date"
+                                        name="due_date"
+                                        type="date"
+                                        value={formData.due_date}
+                                        onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                                        className="pl-10 h-12 bg-stone-50/50 border-stone-100 hover:border-stone-200 focus:bg-white focus:border-emerald-500 transition-all rounded-[16px]"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Remarks */}
+                            <div className="col-span-2 space-y-2.5">
+                                <label htmlFor="remarks" className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Remarks</label>
+                                <div className="relative group">
+                                    <FileText className="absolute left-3.5 top-3.5 h-4 w-4 text-stone-400 group-focus-within:text-emerald-500 transition-colors" />
+                                    <textarea
+                                        id="remarks"
+                                        name="remarks"
+                                        rows={3}
+                                        placeholder="Additional details about this bill..."
+                                        value={formData.remarks}
+                                        onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                                        className="w-full pl-10 pr-4 py-3 bg-stone-50/50 border border-stone-100 rounded-[16px] text-sm focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 outline-none transition-all resize-none group-hover:border-stone-200"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-4 pt-4 border-t border-stone-100">
+                        <IOSButton
+                            type="button"
+                            variant="outline"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onClose();
+                            }}
+                            className="flex-1 h-13 rounded-2xl font-bold border-stone-200 text-stone-600 hover:bg-stone-50"
+                        >
+                            Cancel
+                        </IOSButton>
+                        <IOSButton
+                            type="submit"
+                            loading={isLoading}
+                            className="flex-[1.5] h-13 bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98] rounded-2xl shadow-xl shadow-emerald-500/20 text-base font-bold transition-all"
+                        >
+                            Create & Print Bill
+                        </IOSButton>
+                    </div>
+                </form>
+            </motion.div>
+        </div>
     );
+
 };
 
 export const BillDetailsModal = ({
