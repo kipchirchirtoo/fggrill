@@ -605,7 +605,7 @@ export function ConsolidatedNav() {
         <NavItem
           href="/dashboard/central-store/bar-items"
           icon={Beer}
-          label="Bar Items"
+          label="Bar & Beverages"
           active={pathname === '/dashboard/central-store/bar-items'}
         />
         <NavItem
