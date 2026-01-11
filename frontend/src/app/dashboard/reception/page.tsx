@@ -773,10 +773,13 @@ export default function ReceptionDashboard(): JSX.Element {
         <ReservationModal isOpen={showReservationModal} onClose={() => setShowReservationModal(false)} />
         <CashierModals.CreateDynamicBillModal
           isOpen={showDynamicBillModal}
-          onClose={() => setShowDynamicBillModal(false)}
-          onSuccess={() => {
-            fetchCashierData();
+          onClose={() => {
             setShowDynamicBillModal(false);
+          }}
+          onSuccess={() => {
+            setShowDynamicBillModal(false);
+            // Delay fetch to prevent immediate re-render
+            setTimeout(() => fetchCashierData(), 100);
           }}
         />
         <CashierModals.BillDetailsModal
