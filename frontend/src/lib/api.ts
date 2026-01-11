@@ -3132,7 +3132,7 @@ export const cashierAPI = {
     fetchAPI<any>(`/credit/employee/${id}/confirm`, { method: 'PUT', body: JSON.stringify({ role }) }),
 
   // Stats
-  getStats: (branch_id?: number) => fetchAPI<any>(`/cashier/stats?branch_id=${branch_id}`),
+  getStats: (branch_id?: number) => fetchAPI<any>(`/cashier/stats${branch_id ? `?branch_id=${branch_id}` : ''}`),
 };
 
 

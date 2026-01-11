@@ -135,7 +135,8 @@ export default function ReceptionDashboard(): JSX.Element {
   // Fetch data
   const fetchDashboardData = useCallback(async () => {
     setIsLoading(true);
-    const branchId = activeBranchId || undefined;
+    const branchId = activeBranchId;
+    if (!branchId) return;
 
     try {
       const [bookingsRes, roomsRes] = await Promise.allSettled([
@@ -222,12 +223,13 @@ export default function ReceptionDashboard(): JSX.Element {
   }, [activeBranchId]);
 
   const fetchCashierData = useCallback(async () => {
-    const branchId = activeBranchId || undefined;
+    const branchId = activeBranchId;
+    if (!branchId) return;
     try {
       const [unpaidRes, creditRes, statsRes] = await Promise.all([
-        cashierAPI.getUnpaidBills({ branch_id: branchId }),
-        cashierAPI.getCreditBills({ branch_id: branchId }),
-        cashierAPI.getStats(branchId)
+        cashierAPI.getUnpaidBills({ branch_id: branchId as any }),
+        cashierAPI.getCreditBills({ branch_id: branchId as any }),
+        cashierAPI.getStats(branchId as any)
       ]);
 
       if (unpaidRes.success) setUnpaidBills(unpaidRes.data || []);
@@ -239,14 +241,16 @@ export default function ReceptionDashboard(): JSX.Element {
   }, [activeBranchId]);
 
   useEffect(() => {
-    fetchDashboardData();
-    fetchCashierData();
-    const interval = setInterval(() => {
+    if (activeBranchId) {
       fetchDashboardData();
       fetchCashierData();
-    }, 60000);
-    return () => clearInterval(interval);
-  }, [fetchDashboardData, fetchCashierData]);
+      const interval = setInterval(() => {
+        fetchDashboardData();
+        fetchCashierData();
+      }, 60000);
+      return () => clearInterval(interval);
+    }
+  }, [activeBranchId, fetchDashboardData, fetchCashierData]);
 
   const filteredRooms = rooms.filter(r =>
     !searchQuery || r.room_number.includes(searchQuery) || r.guest_name?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -487,7 +491,7 @@ export default function ReceptionDashboard(): JSX.Element {
                       <IOSCard key={hall.id} className="p-4 bg-white border-none shadow-sm">
                         <div className="flex justify-between items-start mb-2">
                           <h4 className="font-bold text-stone-900">{hall.name}</h4>
-                          <IOSBadge variant={hall.status === 'available' ? 'success' : 'warning'}>
+                          <IOSBadge color={hall.status === 'available' ? 'success' : 'warning'}>
                             {hall.status}
                           </IOSBadge>
                         </div>
@@ -535,7 +539,7 @@ export default function ReceptionDashboard(): JSX.Element {
                                 </div>
                               </td>
                               <td className="px-4 py-3">
-                                <IOSBadge variant={b.payment_status === 'paid' ? 'success' : 'warning'}>
+                                <IOSBadge color={b.payment_status === 'paid' ? 'success' : 'warning'}>
                                   {b.booking_status}
                                 </IOSBadge>
                               </td>
@@ -598,7 +602,7 @@ export default function ReceptionDashboard(): JSX.Element {
                             <div className="text-[10px] text-stone-500 truncate max-w-[200px]">{b.menu_details || 'Standard Menu'}</div>
                           </td>
                           <td className="px-4 py-3">
-                            <IOSBadge variant={b.payment_status === 'paid' ? 'success' : 'warning'}>
+                            <IOSBadge color={b.payment_status === 'paid' ? 'success' : 'warning'}>
                               {b.status}
                             </IOSBadge>
                           </td>
