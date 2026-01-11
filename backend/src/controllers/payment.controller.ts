@@ -371,6 +371,7 @@ export const initiateMpesaPayment = async (
         booking_id: bookingId,
         invoice_id: invoiceId,
         bill_id: billId,
+        pos_transaction_id: posTransactionId,
         metadata: {
           phoneNumber,
           merchantRequestId: stkResponse.MerchantRequestID,

@@ -366,6 +366,9 @@ export default function CashierPage() {
                 // Show the latest one
                 const latest = response.data[0];
                 setMpesaTransactionDetails(latest);
+                if (latest.receipt) {
+                    setMpesaCode(latest.receipt);
+                }
                 toast.success('Found matching payment!');
             } else {
                 toast.error('No recent matching payments found');
