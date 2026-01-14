@@ -28,15 +28,15 @@ router.put('/orders/:id/status', orderController.updateOrderStatus);
 // MENU (Categories & Drinks)
 // ====================
 router.get('/categories', menuController.getCategories);
-router.post('/categories', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), menuController.createCategory); // Only admins create cats
+router.post('/categories', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), menuController.createCategory); // Only admins create cats
 
 router.get('/drinks', menuController.getDrinks);
 router.get('/drinks/:id', menuController.getDrink);
-router.post('/drinks', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), menuController.createDrink);
-router.put('/drinks/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), menuController.updateDrink);
-router.delete('/drinks/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), menuController.deleteDrink);
+router.post('/drinks', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), menuController.createDrink);
+router.put('/drinks/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), menuController.updateDrink);
+router.delete('/drinks/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), menuController.deleteDrink);
 router.put('/drinks/:id/toggle', menuController.toggleDrinkAvailability);
-router.post('/drinks/:id/image', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), menuController.uploadDrinkImage);
+router.post('/drinks/:id/image', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), menuController.uploadDrinkImage);
 
 // ====================
 // TABS
@@ -53,7 +53,7 @@ router.post('/tabs/:id/close', tabController.closeTab);
 // ====================
 router.get('/stock', inventoryController.getStock);
 router.get('/stock/logs', inventoryController.getStockLogs);
-router.put('/stock/:id', inventoryController.updateStock);
+router.put('/stock/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER]), inventoryController.updateStock);
 
 // ====================
 // REPORTS

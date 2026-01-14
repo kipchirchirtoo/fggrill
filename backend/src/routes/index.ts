@@ -53,6 +53,7 @@ import cateringRoutes from './catering.routes';
 import attendanceRoutes from './attendance.routes';
 import pettyCashRoutes from './petty-cash.routes';
 import creditRoutes from './credit.routes';
+import kitchenRoutes from './kitchen.routes';
 
 console.log('Index routes: importing staffRoutes', staffRoutes);
 
@@ -123,6 +124,7 @@ router.use('/catering', cateringRoutes);
 router.use('/attendance', attendanceRoutes);
 router.use('/petty-cash', pettyCashRoutes);
 router.use('/credit', creditRoutes);
+router.use('/kitchen', kitchenRoutes);
 
 // Email booking endpoints (public - no auth required)
 router.post('/email/send-booking/:bookingId', sendBookingEmail);

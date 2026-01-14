@@ -1,0 +1,286 @@
+import { Request, Response } from 'express';
+import { supabase } from '../config/supabase';
+import { createLedgerEntry } from './stock.controller';
+
+/**
+ * Create recipe
+ * POST /api/kitchen/recipes
+ */
+export const createRecipe = async (req: Request, res: Response) => {
+    try {
+        const { menu_item_id, menu_item_name, portion_size, portions_per_recipe, selling_price, ingredients, cooking_instructions } = req.body;
+        const userId = (req as any).user?.id;
+
+        if (!menu_item_name || !ingredients || !Array.isArray(ingredients)) {
+            return res.status(400).json({ success: false, message: 'Menu item name and ingredients are required' });
+        }
+
+        // Create recipe
+        const { data: recipe, error: recipeError } = await supabase
+            .from('recipes')
+            .insert({
+                menu_item_id,
+                menu_item_name,
+                portion_size,
+                portions_per_recipe: portions_per_recipe || 1,
+                selling_price,
+                cooking_instructions,
+                created_by: userId
+            })
+            .select()
+            .single();
+
+        if (recipeError) throw recipeError;
+
+        // Create recipe items
+        let totalCost = 0;
+        for (const ingredient of ingredients) {
+            const itemCost = (ingredient.quantity_per_portion || 0) * (ingredient.unit_cost || 0);
+            totalCost += itemCost;
+
+            await supabase
+                .from('recipe_items')
+                .insert({
+                    recipe_id: recipe.id,
+                    item_sku: ingredient.item_sku,
+                    item_name: ingredient.item_name,
+                    quantity_per_portion: ingredient.quantity_per_portion,
+                    unit_of_measure: ingredient.unit_of_measure,
+                    unit_cost: ingredient.unit_cost,
+                    total_cost: itemCost,
+                    notes: ingredient.notes
+                });
+        }
+
+        // Update recipe with calculated cost
+        const foodCostPercentage = selling_price > 0 ? (totalCost / selling_price * 100) : 0;
+        await supabase
+            .from('recipes')
+            .update({
+                standard_cost: totalCost,
+                food_cost_percentage: foodCostPercentage
+            })
+            .eq('id', recipe.id);
+
+        res.json({ success: true, data: { ...recipe, standard_cost: totalCost, food_cost_percentage: foodCostPercentage } });
+    } catch (error: any) {
+        console.error('Error creating recipe:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Get recipes
+ * GET /api/kitchen/recipes
+ */
+export const getRecipes = async (req: Request, res: Response) => {
+    try {
+        const { active_only } = req.query;
+
+        let query = supabase
+            .from('recipes')
+            .select(`
+        *,
+        ingredients:recipe_items(*)
+      `)
+            .order('menu_item_name');
+
+        if (active_only === 'true') {
+            query = query.eq('is_active', true);
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+
+        res.json({ success: true, data });
+    } catch (error: any) {
+        console.error('Error fetching recipes:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Get single recipe
+ * GET /api/kitchen/recipes/:id
+ */
+export const getRecipe = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+
+        const { data, error } = await supabase
+            .from('recipes')
+            .select(`
+        *,
+        ingredients:recipe_items(*)
+      `)
+            .eq('id', id)
+            .single();
+
+        if (error) throw error;
+
+        res.json({ success: true, data });
+    } catch (error: any) {
+        console.error('Error fetching recipe:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Update recipe
+ * PUT /api/kitchen/recipes/:id
+ */
+export const updateRecipe = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { menu_item_name, portion_size, portions_per_recipe, selling_price, ingredients, cooking_instructions, is_active } = req.body;
+
+        // Update recipe
+        const { error: recipeError } = await supabase
+            .from('recipes')
+            .update({
+                menu_item_name,
+                portion_size,
+                portions_per_recipe,
+                selling_price,
+                cooking_instructions,
+                is_active,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id);
+
+        if (recipeError) throw recipeError;
+
+        // If ingredients provided, update them
+        if (ingredients && Array.isArray(ingredients)) {
+            // Delete existing ingredients
+            await supabase
+                .from('recipe_items')
+                .delete()
+                .eq('recipe_id', id);
+
+            // Insert new ingredients
+            let totalCost = 0;
+            for (const ingredient of ingredients) {
+                const itemCost = (ingredient.quantity_per_portion || 0) * (ingredient.unit_cost || 0);
+                totalCost += itemCost;
+
+                await supabase
+                    .from('recipe_items')
+                    .insert({
+                        recipe_id: id,
+                        item_sku: ingredient.item_sku,
+                        item_name: ingredient.item_name,
+                        quantity_per_portion: ingredient.quantity_per_portion,
+                        unit_of_measure: ingredient.unit_of_measure,
+                        unit_cost: ingredient.unit_cost,
+                        total_cost: itemCost,
+                        notes: ingredient.notes
+                    });
+            }
+
+            // Update recipe cost
+            const foodCostPercentage = selling_price > 0 ? (totalCost / selling_price * 100) : 0;
+            await supabase
+                .from('recipes')
+                .update({
+                    standard_cost: totalCost,
+                    food_cost_percentage: foodCostPercentage
+                })
+                .eq('id', id);
+        }
+
+        res.json({ success: true, message: 'Recipe updated successfully' });
+    } catch (error: any) {
+        console.error('Error updating recipe:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Deactivate recipe
+ * DELETE /api/kitchen/recipes/:id
+ */
+export const deleteRecipe = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+
+        const { error } = await supabase
+            .from('recipes')
+            .update({ is_active: false })
+            .eq('id', id);
+
+        if (error) throw error;
+
+        res.json({ success: true, message: 'Recipe deactivated' });
+    } catch (error: any) {
+        console.error('Error deactivating recipe:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Auto-deduct ingredients from POS order
+ * POST /api/kitchen/recipes/auto-deduct
+ */
+export const autoDeductIngredients = async (req: Request, res: Response) => {
+    try {
+        const { order_id, menu_item_id, quantity, branch_id } = req.body;
+
+        if (!order_id || !menu_item_id || !quantity || !branch_id) {
+            return res.status(400).json({ success: false, message: 'Order ID, menu item ID, quantity, and branch ID are required' });
+        }
+
+        // Get recipe for menu item
+        const { data: recipe, error: recipeError } = await supabase
+            .from('recipes')
+            .select('*, ingredients:recipe_items(*)')
+            .eq('menu_item_id', menu_item_id)
+            .eq('is_active', true)
+            .single();
+
+        if (recipeError || !recipe) {
+            console.warn(`No active recipe found for menu item ${menu_item_id}`);
+            return res.json({ success: true, message: 'No recipe found, skipping deduction' });
+        }
+
+        // Deduct each ingredient
+        for (const ingredient of recipe.ingredients) {
+            const totalQuantity = ingredient.quantity_per_portion * quantity;
+
+            // Create usage entry
+            await supabase
+                .from('kitchen_usage')
+                .insert({
+                    branch_id,
+                    usage_date: new Date().toISOString().split('T')[0],
+                    usage_type: 'SALES',
+                    item_sku: ingredient.item_sku,
+                    item_name: ingredient.item_name,
+                    quantity: totalQuantity,
+                    unit_of_measure: ingredient.unit_of_measure,
+                    linked_order_id: order_id,
+                    linked_menu_item_id: menu_item_id,
+                    recipe_id: recipe.id
+                });
+
+            // Create ledger entry
+            await createLedgerEntry({
+                branch_id,
+                item_sku: ingredient.item_sku,
+                item_name: ingredient.item_name,
+                transaction_type: 'USAGE',
+                reference_type: 'POS_ORDER',
+                reference_id: order_id.toString(),
+                quantity_out: totalQuantity,
+                unit_of_measure: ingredient.unit_of_measure,
+                notes: `Auto-deducted for ${recipe.menu_item_name} (Order #${order_id})`
+            });
+        }
+
+        res.json({ success: true, message: 'Ingredients deducted successfully' });
+    } catch (error: any) {
+        console.error('Error auto-deducting ingredients:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
