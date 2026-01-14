@@ -201,20 +201,20 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                     <head>
                         <title>Receipt #${receiptNumber}</title>
                         <style>
-                            @page { size: 80mm auto; margin: 0; }
+                            @page { size: 58mm auto; margin: 0; }
                             body { 
-                                width: 72mm; 
+                                width: 50mm; 
                                 font-family: 'Helvetica', 'Arial', sans-serif; 
-                                font-size: 8px; 
+                                font-size: 10px; 
                                 line-height: 1.2; 
                                 color: #000;
-                                margin: 0;
-                                padding: 4mm;
+                                margin: 0 auto;
+                                padding: 2mm 1mm;
                             }
                             .center { text-align: center; }
                             .bold { font-weight: bold; }
-                            .header-title { font-size: 14px; margin-bottom: 2px; }
-                            .receipt-type { font-size: 11px; margin-top: 5px; }
+                            .header-title { font-size: 15px; margin-bottom: 2px; }
+                            .receipt-type { font-size: 12px; margin-top: 5px; }
                             .dashed-line { 
                                 border-top: 1px dashed #000; 
                                 margin: 6px 0;
@@ -222,14 +222,14 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                             }
                             .flex { display: flex; justify-content: space-between; }
                             .items-table { width: 100%; border-collapse: collapse; margin: 6px 0; }
-                            .items-table th { text-align: left; border-bottom: none; font-size: 8px; font-weight: bold; }
-                            .items-table td { padding: 2px 0; vertical-align: top; font-size: 8px; }
-                            .total-section { font-size: 9px; }
-                            .final-total { font-size: 11px; margin-top: 5px; }
-                            .footer-thanks { font-size: 10px; margin-top: 10px; }
-                            .footer-small { font-size: 7px; margin-top: 2px; }
-                            .hirall-branding { font-size: 7px; font-weight: bold; margin-top: 15px; border-top: 1px dashed #000; padding-top: 8px; }
-                            .hirall-contact { font-size: 6px; font-weight: normal; }
+                            .items-table th { text-align: left; border-bottom: none; font-size: 10px; font-weight: bold; }
+                            .items-table td { padding: 3px 0; vertical-align: top; font-size: 10px; }
+                            .total-section { font-size: 11px; }
+                            .final-total { font-size: 13px; margin-top: 5px; }
+                            .footer-thanks { font-size: 11px; margin-top: 10px; }
+                            .footer-small { font-size: 9px; margin-top: 2px; }
+                            .hirall-branding { font-size: 8px; font-weight: bold; margin-top: 15px; border-top: 1px dashed #000; padding-top: 8px; }
+                            .hirall-contact { font-size: 7px; font-weight: normal; }
                         </style>
                     </head>
                     <body>
