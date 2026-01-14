@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { supabase } from '../config/supabase';
+import { supabase } from '../../config/supabase';
 
 /**
  * Get current kitchen stock for a branch

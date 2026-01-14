@@ -43,6 +43,7 @@ const ROLE_DISPLAY_NAMES: Record<string, string> = {
   [UserRole.RECEPTIONIST]: 'Receptionist',
   [UserRole.RESTAURANT]: 'Restaurant',
   [UserRole.POS_KITCHEN]: 'POS Kitchen',
+  [UserRole.KITCHEN_OPERATIONS]: 'Kitchen Operations',
   [UserRole.BARTENDER]: 'Bartender',
   [UserRole.ACCOUNTANT]: 'Accountant',
   [UserRole.AUDITOR]: 'Auditor',
@@ -61,6 +62,7 @@ const BRANCH_REQUIRED_ROLES = [
   UserRole.RECEPTIONIST,
   UserRole.RESTAURANT,
   UserRole.POS_KITCHEN,
+  UserRole.KITCHEN_OPERATIONS,
   UserRole.BARTENDER,
   UserRole.EMPLOYEE,
 ];
