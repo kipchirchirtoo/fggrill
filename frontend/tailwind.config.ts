@@ -22,13 +22,13 @@ module.exports = {
         display: ['"Inter"', 'system-ui', 'sans-serif'],
       },
       fontSize: {
-        'xs': ['0.75rem', { lineHeight: '1rem', letterSpacing: '0.01em' }],
-        'sm': ['0.8125rem', { lineHeight: '1.25rem', letterSpacing: '0' }],
-        'base': ['0.9375rem', { lineHeight: '1.5rem', letterSpacing: '-0.01em' }],
-        'lg': ['1.0625rem', { lineHeight: '1.625rem', letterSpacing: '-0.01em' }],
-        'xl': ['1.25rem', { lineHeight: '1.75rem', letterSpacing: '-0.015em' }],
-        '2xl': ['1.5rem', { lineHeight: '2rem', letterSpacing: '-0.02em' }],
-        '3xl': ['1.75rem', { lineHeight: '2.25rem', letterSpacing: '-0.02em' }],
+        'xs': ['0.75rem', { lineHeight: '1rem', letterSpacing: '0.01em' }],          // 12px
+        'sm': ['0.8125rem', { lineHeight: '1.125rem', letterSpacing: '0' }],       // 13px
+        'base': ['0.875rem', { lineHeight: '1.25rem', letterSpacing: '-0.01em' }], // 14px (Standard)
+        'lg': ['1rem', { lineHeight: '1.5rem', letterSpacing: '-0.01em' }],        // 16px
+        'xl': ['1.125rem', { lineHeight: '1.625rem', letterSpacing: '-0.015em' }], // 18px
+        '2xl': ['1.25rem', { lineHeight: '1.75rem', letterSpacing: '-0.02em' }],   // 20px
+        '3xl': ['1.5rem', { lineHeight: '2rem', letterSpacing: '-0.02em' }],       // 24px
       },
       colors: {
         border: "hsl(var(--border))",
