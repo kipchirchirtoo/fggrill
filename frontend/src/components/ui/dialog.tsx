@@ -29,7 +29,7 @@ const DialogContent = React.forwardRef<
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
-      className="fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%] w-full max-w-md p-5 bg-white backdrop-blur-sm shadow-lg rounded-lg border border-gray-200/50"
+      className="fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%] w-full max-w-md p-4 bg-white backdrop-blur-sm shadow-lg rounded-lg border border-gray-200/50"
       aria-describedby={undefined}
       {...props}
     >
@@ -43,7 +43,7 @@ const DialogHeader = ({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className="flex flex-col space-y-1.5 text-center sm:text-left" {...props} />
+  <div className="flex flex-col space-y-1 text-center sm:text-left" {...props} />
 );
 DialogHeader.displayName = "DialogHeader";
 
