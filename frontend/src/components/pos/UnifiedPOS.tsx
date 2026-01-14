@@ -46,7 +46,7 @@ interface UnifiedPOSProps {
 
 export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
     const { user, logout } = useAuth();
-    const { activeBranchId } = useBranch();
+    const { activeBranchId, activeBranch } = useBranch();
     const currentBranchId = activeBranchId || user?.branch_id;
 
     // Theme values
@@ -179,47 +179,158 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
 
     const handlePrintReceipt = async (orderData: any) => {
         setIsPrinting(orderData.id);
+
         try {
-            const receiptData = {
-                receipt_type: 'sale' as const,
-                receipt_number: orderData.order_number || orderData.id?.substring(0, 8),
-                date: new Date().toISOString(),
-                table_number: orderData.table_number || '',
-                items: (orderData.items || []).map((item: any) => ({
-                    name: item.name,
-                    quantity: item.quantity,
-                    unit_price: item.unit_price || item.price,
-                    total: (item.unit_price || item.price) * item.quantity
-                })),
-                total_amount: orderData.total || orderData.total_amount,
-                payment_method: orderData.payment_method || paymentMethod,
-                cashier_name: `${user?.firstName} ${user?.lastName}`,
-                served_by: `${user?.firstName} ${user?.lastName}`
-            };
-            const receiptRes = await receiptsAPI.generateReceipt(receiptData);
-            if (receiptRes.success && receiptRes.data?.pdf_base64) {
-                const pdfWindow = window.open("");
-                if (pdfWindow) {
-                    pdfWindow.document.write(`
-                        <html>
-                            <body style="margin:0;padding:0;height:100vh;">
-                                <iframe width='100%' height='100%' src='data:application/pdf;base64,${receiptRes.data.pdf_base64}' frameborder='0'></iframe>
-                            </body>
-                            <script>
-                                setTimeout(() => {
-                                    window.frames[0].focus();
-                                    window.frames[0].print();
-                                }, 500);
-                            </script>
-                        </html>
-                    `);
-                }
+            const receiptNumber = orderData.order_number || orderData.id?.substring(0, 8);
+            const dateStr = new Date(orderData.created_at || new Date()).toLocaleString();
+            const items = (orderData.items || []).map((item: any) => ({
+                name: item.name,
+                quantity: item.quantity,
+                unit_price: item.unit_price || item.price,
+                total: (item.unit_price || item.price) * item.quantity
+            }));
+            const totalAmount = orderData.total || orderData.total_amount;
+            const b = activeBranch || { name: 'FAMOUS GATE HOTEL', location: 'Kericho, Kenya', settings: { phone: '+254 700 000 000', pin: '', email: 'info@famousgate.co.ke' } };
+            const companyName = b.name.toUpperCase();
+            const companyAddress = b.location;
+            const companyPhone = b.settings?.phone || '+254 700 000 000';
+            const companyEmail = b.settings?.email || 'info@famousgate.co.ke';
+
+            const receiptHtml = `
+                <html>
+                    <head>
+                        <title>Receipt #${receiptNumber}</title>
+                        <style>
+                            @page { size: 80mm auto; margin: 0; }
+                            body { 
+                                width: 72mm; 
+                                font-family: 'Helvetica', 'Arial', sans-serif; 
+                                font-size: 8px; 
+                                line-height: 1.2; 
+                                color: #000;
+                                margin: 0;
+                                padding: 4mm;
+                            }
+                            .center { text-align: center; }
+                            .bold { font-weight: bold; }
+                            .header-title { font-size: 14px; margin-bottom: 2px; }
+                            .receipt-type { font-size: 11px; margin-top: 5px; }
+                            .dashed-line { 
+                                border-top: 1px dashed #000; 
+                                margin: 6px 0;
+                                width: 100%;
+                            }
+                            .flex { display: flex; justify-content: space-between; }
+                            .items-table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+                            .items-table th { text-align: left; border-bottom: none; font-size: 8px; font-weight: bold; }
+                            .items-table td { padding: 2px 0; vertical-align: top; font-size: 8px; }
+                            .total-section { font-size: 9px; }
+                            .final-total { font-size: 11px; margin-top: 5px; }
+                            .footer-thanks { font-size: 10px; margin-top: 10px; }
+                            .footer-small { font-size: 7px; margin-top: 2px; }
+                            .hirall-branding { font-size: 7px; font-weight: bold; margin-top: 15px; border-top: 1px dashed #000; padding-top: 8px; }
+                            .hirall-contact { font-size: 6px; font-weight: normal; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="center">
+                            <!-- Logo Placeholder - matches Python's logic -->
+                            <div style="margin-bottom: 5px;">
+                                <img src="/fglogo.png" style="width: 24mm; height: 24mm; object-fit: contain;" onerror="this.style.display='none'">
+                            </div>
+                            <div class="bold header-title">${companyName}</div>
+                            <div>${companyAddress}</div>
+                            <div>Tel: ${companyPhone}</div>
+                            <div class="bold receipt-type">${(orderData.receipt_type || 'CASH RECEIPT').toUpperCase()}</div>
+                        </div>
+
+                        <div class="dashed-line"></div>
+
+                        <div style="font-size: 8px;">
+                            <div class="flex"><span>Receipt #: ${receiptNumber}</span></div>
+                            <div class="flex"><span>Date: ${dateStr}</span></div>
+                            ${orderData.table_number ? `<div class="flex"><span>Table: ${orderData.table_number}</span></div>` : ''}
+                            ${orderData.room_number ? `<div class="flex"><span>Room: ${orderData.room_number}</span></div>` : ''}
+                            ${orderData.customer_name ? `<div class="flex"><span>Customer: ${orderData.customer_name}</span></div>` : ''}
+                            <div class="flex"><span>Served by: ${user?.firstName} ${user?.lastName}</span></div>
+                        </div>
+
+                        <div class="dashed-line"></div>
+
+                        <table class="items-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 70%;">Description</th>
+                                    <th style="width: 30%; text-align: right;">Price</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.map((item: any) => `
+                                    <tr>
+                                        <td>${item.quantity}x ${item.name}</td>
+                                        <td style="text-align: right;">${item.total.toLocaleString()}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+
+                        <div class="dashed-line"></div>
+
+                        <div class="total-section">
+                            <div class="flex">
+                                <span>SUBTOTAL</span>
+                                <span>KES ${Math.round(totalAmount / 1.16).toLocaleString()}</span>
+                            </div>
+                            <div class="flex">
+                                <span>TAX (16% incl.)</span>
+                                <span>KES ${Math.round(totalAmount - (totalAmount / 1.16)).toLocaleString()}</span>
+                            </div>
+                            <div class="flex bold final-total">
+                                <span>TOTAL:</span>
+                                <span>KES ${totalAmount.toLocaleString()}</span>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 10px; font-size: 8px;">
+                            <div class="flex"><span>Payment: ${(orderData.payment_method || paymentMethod).toUpperCase()}</span></div>
+                            <div class="flex"><span>Paid: KES ${totalAmount.toLocaleString()}</span></div>
+                            <div class="flex"><span>Change: KES 0</span></div>
+                        </div>
+
+                        <div class="dashed-line"></div>
+
+                        <div class="center">
+                            <div class="bold footer-thanks">THANK YOU!</div>
+                            <div class="footer-small">Please come again</div>
+                            <div class="footer-small">${companyEmail}</div>
+                        </div>
+
+                        <div class="center hirall-branding">
+                            <div>System managed and made by Hirall</div>
+                            <div class="hirall-contact">+254 710 944 249 | admin@hirall.com</div>
+                        </div>
+
+                        <script>
+                            window.onload = function() {
+                                window.focus();
+                                window.print();
+                                setTimeout(() => { window.close(); }, 300);
+                            };
+                        </script>
+                    </body>
+                </html>
+            `;
+
+            const printWindow = window.open('', '_blank', 'width=450,height=600');
+            if (printWindow) {
+                printWindow.document.write(receiptHtml);
+                printWindow.document.close();
             } else {
-                toast.error('Failed to generate receipt PDF');
+                toast.error('Pop-up blocked! Allow pop-ups to print receipts.');
             }
         } catch (e) {
-            console.error('Receipt generation error', e);
-            toast.error('Printing failed');
+            console.error('Print Error:', e);
+            toast.error('Printing failed.');
         } finally {
             setIsPrinting(null);
         }
