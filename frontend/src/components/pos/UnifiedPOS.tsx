@@ -282,7 +282,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
             {/* Header Removed to maximize vertical space as per user request */}
 
             {/* Main Content Area */}
-            <div className="flex-1 flex flex-row container mx-auto p-4 gap-4 overflow-hidden max-w-[1700px]">
+            <div className="flex-1 flex flex-row container mx-auto p-4 gap-4 overflow-hidden max-w-[1700px] min-h-0">
                 {/* Left Side - Product Explorer */}
                 <div className="flex-1 flex flex-col min-w-0">
                     {/* Integrated Search & View Toggle in Column */}
@@ -557,46 +557,48 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                         </div>
                     </div>
 
-                    {/* Cart Items List - Improved Flex Containment */}
-                    <div className="flex-1 overflow-y-auto no-scrollbar p-3 md:p-4 space-y-3 min-h-0">
-                        {cart.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-stone-300">
-                                <ShoppingCart className="w-12 md:w-16 h-12 md:h-16 mb-3 opacity-30" />
-                                <p className="text-xs md:text-sm font-medium uppercase tracking-wider text-stone-400">Your cart is empty</p>
-                            </div>
-                        ) : (
-                            cart.map(item => (
-                                <div key={item.id} className="relative group bg-stone-50/50 hover:bg-white border border-stone-200 rounded-lg p-2 md:p-3 transition-all duration-300">
-                                    <div className="flex items-start justify-between gap-2 mb-2">
-                                        <div className="flex-1 min-w-0 pr-2">
-                                            <h4 className="font-semibold text-stone-800 text-sm md:text-base truncate">{item.name}</h4>
-                                            <p className="text-[10px] md:text-sm text-stone-500">KES {item.price.toLocaleString()} each</p>
-                                        </div>
-                                        <button onClick={() => removeFromCart(item.id)} className="text-stone-300 hover:text-red-500 transition-colors p-1">
-                                            <X className="w-3 md:w-4 h-3 md:h-4" />
-                                        </button>
-                                    </div>
-
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center bg-white border border-stone-200 rounded-lg p-0.5 shadow-sm">
-                                            <button onClick={() => updateQuantity(item.id, -1)} className="p-1 md:p-1.5 hover:bg-stone-100 text-stone-500 rounded-lg transition-colors">
-                                                <Minus className="w-2.5 md:w-3 h-2.5 md:h-3" />
-                                            </button>
-                                            <span className="w-6 md:w-8 text-center text-xs md:text-sm font-bold">{item.quantity}</span>
-                                            <button onClick={() => updateQuantity(item.id, 1)} className="p-1 md:p-1.5 hover:bg-stone-100 text-stone-500 rounded-lg transition-colors">
-                                                <Plus className="w-2.5 md:w-3 h-2.5 md:h-3" />
-                                            </button>
-                                        </div>
-                                        <span className="text-sm md:text-base font-bold text-blue-600">KES {(item.price * item.quantity).toLocaleString()}</span>
-                                    </div>
+                    {/* Cart Items Area - Bulletproof containment */}
+                    <div className="flex-1 relative min-h-0">
+                        <div className="absolute inset-0 overflow-y-auto no-scrollbar p-3 md:p-4 space-y-3">
+                            {cart.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-stone-300">
+                                    <ShoppingCart className="w-12 md:w-16 h-12 md:h-16 mb-3 opacity-30" />
+                                    <p className="text-xs md:text-sm font-medium uppercase tracking-wider text-stone-400">Your cart is empty</p>
                                 </div>
-                            ))
-                        )}
+                            ) : (
+                                cart.map(item => (
+                                    <div key={item.id} className="relative group bg-stone-50/50 hover:bg-white border border-stone-200 rounded-lg p-2 md:p-3 transition-all duration-300">
+                                        <div className="flex items-start justify-between gap-2 mb-2">
+                                            <div className="flex-1 min-w-0 pr-2">
+                                                <h4 className="font-semibold text-stone-800 text-sm md:text-base truncate">{item.name}</h4>
+                                                <p className="text-[10px] md:text-sm text-stone-500">KES {item.price.toLocaleString()} each</p>
+                                            </div>
+                                            <button onClick={() => removeFromCart(item.id)} className="text-stone-300 hover:text-red-500 transition-colors p-1">
+                                                <X className="w-3 md:w-4 h-3 md:h-4" />
+                                            </button>
+                                        </div>
+
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center bg-white border border-stone-200 rounded-lg p-0.5 shadow-sm">
+                                                <button onClick={() => updateQuantity(item.id, -1)} className="p-1 md:p-1.5 hover:bg-stone-100 text-stone-500 rounded-lg transition-colors">
+                                                    <Minus className="w-2.5 md:w-3 h-2.5 md:h-3" />
+                                                </button>
+                                                <span className="w-6 md:w-8 text-center text-xs md:text-sm font-bold">{item.quantity}</span>
+                                                <button onClick={() => updateQuantity(item.id, 1)} className="p-1 md:p-1.5 hover:bg-stone-100 text-stone-500 rounded-lg transition-colors">
+                                                    <Plus className="w-2.5 md:w-3 h-2.5 md:h-3" />
+                                                </button>
+                                            </div>
+                                            <span className="text-sm md:text-base font-bold text-blue-600">KES {(item.price * item.quantity).toLocaleString()}</span>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
                     </div>
 
-                    {/* Cart Footer / Summary - Fixed Positioning */}
+                    {/* Cart Footer / Summary - Fixed Bottom */}
                     {cart.length > 0 && (
-                        <div className="p-3 md:p-4 bg-white border-t border-stone-200 space-y-3 flex-none relative">
+                        <div className="p-3 md:p-4 bg-white border-t border-stone-200 space-y-3 flex-none">
                             <div className="space-y-1.5 text-xs md:text-sm">
                                 <div className="flex justify-between text-stone-500">
                                     <span>Subtotal</span>
