@@ -273,6 +273,18 @@ export function ConsolidatedNav() {
         active={pathname === '/dashboard/admin'}
       />
       <NavItem
+        href="/dashboard/admin/restaurant/menu"
+        icon={Utensils}
+        label="Restaurant Menu"
+        active={pathname === '/dashboard/admin/restaurant/menu'}
+      />
+      <NavItem
+        href="/dashboard/admin/bar/menu"
+        icon={Beer}
+        label="Bar Menu"
+        active={pathname === '/dashboard/admin/bar/menu'}
+      />
+      <NavItem
         href="/dashboard/admin/wastage"
         icon={Trash2}
         label="Wastage Analytics"
