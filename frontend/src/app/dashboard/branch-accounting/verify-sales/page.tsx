@@ -38,9 +38,14 @@ export default function VerifySalesPage() {
             } else {
                 toast.error('Failed to load sales data');
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error fetching sales:', error);
-            toast.error('Error loading sales data');
+            if (error?.message?.includes('403') || error?.message?.includes('authorized') || error?.message?.includes('permission')) {
+                toast.error('You do not have permission to view daily sales.', { duration: 5000 });
+                setVerificationStatus('discrepancy'); // Using discrepancy state to show red alert equivalent
+            } else {
+                toast.error('Error loading sales data');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -58,13 +63,13 @@ export default function VerifySalesPage() {
             // This endpoint might need to be created in backend or we mock it for now
             // Assuming financeAPI.verifyDailySales exists or we simulate it
             // const response = await financeAPI.verifyDailySales(currentBranchId, date);
-            
+
             // Simulating API call for now as verified in plan
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
+
             setVerificationStatus('verified');
             toast.success('Daily sales verified successfully');
-            
+
             // Refresh data
             fetchSalesData();
         } catch (error) {
@@ -121,11 +126,10 @@ export default function VerifySalesPage() {
                     </div>
 
                     {/* Verification Status Banner */}
-                    <div className={`p-4 rounded-xl border ${
-                        verificationStatus === 'verified' ? 'bg-emerald-50 border-emerald-100' :
-                        verificationStatus === 'discrepancy' ? 'bg-red-50 border-red-100' :
-                        'bg-amber-50 border-amber-100'
-                    }`}>
+                    <div className={`p-4 rounded-xl border ${verificationStatus === 'verified' ? 'bg-emerald-50 border-emerald-100' :
+                            verificationStatus === 'discrepancy' ? 'bg-red-50 border-red-100' :
+                                'bg-amber-50 border-amber-100'
+                        }`}>
                         <div className="flex items-center gap-3">
                             {verificationStatus === 'verified' ? (
                                 <CheckCircle className="h-6 w-6 text-emerald-600" />
@@ -135,23 +139,21 @@ export default function VerifySalesPage() {
                                 <AlertTriangle className="h-6 w-6 text-amber-600" />
                             )}
                             <div>
-                                <h3 className={`font-semibold ${
-                                    verificationStatus === 'verified' ? 'text-emerald-900' :
-                                    verificationStatus === 'discrepancy' ? 'text-red-900' :
-                                    'text-amber-900'
-                                }`}>
+                                <h3 className={`font-semibold ${verificationStatus === 'verified' ? 'text-emerald-900' :
+                                        verificationStatus === 'discrepancy' ? 'text-red-900' :
+                                            'text-amber-900'
+                                    }`}>
                                     {verificationStatus === 'verified' ? 'Sales Verified' :
-                                     verificationStatus === 'discrepancy' ? 'Discrepancy Detected' :
-                                     'Pending Verification'}
+                                        verificationStatus === 'discrepancy' ? 'Discrepancy Detected' :
+                                            'Pending Verification'}
                                 </h3>
-                                <p className={`text-sm ${
-                                    verificationStatus === 'verified' ? 'text-emerald-700' :
-                                    verificationStatus === 'discrepancy' ? 'text-red-700' :
-                                    'text-amber-700'
-                                }`}>
+                                <p className={`text-sm ${verificationStatus === 'verified' ? 'text-emerald-700' :
+                                        verificationStatus === 'discrepancy' ? 'text-red-700' :
+                                            'text-amber-700'
+                                    }`}>
                                     {verificationStatus === 'verified' ? 'This day has been verified and locked.' :
-                                     verificationStatus === 'discrepancy' ? 'Totals do not match reported values.' :
-                                     'Please review the sales summary below and verify.'}
+                                        verificationStatus === 'discrepancy' ? 'Totals do not match reported values.' :
+                                            'Please review the sales summary below and verify.'}
                                 </p>
                             </div>
                         </div>
@@ -198,7 +200,7 @@ export default function VerifySalesPage() {
                                     <CreditCard className="h-5 w-5 text-purple-600" />
                                 </div>
                             </div>
-                             <div className="space-y-1">
+                            <div className="space-y-1">
                                 <div className="flex justify-between text-sm">
                                     <span className="text-stone-600">M-Pesa:</span>
                                     <span className="font-semibold">{formatCurrency(salesData?.mpesa_total || 0)}</span>
@@ -231,7 +233,7 @@ export default function VerifySalesPage() {
                                     {salesData?.transactions?.map((tx: any, i: number) => (
                                         <tr key={i} className="hover:bg-stone-50 transition-colors">
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-stone-500">
-                                                {new Date(tx.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                                {new Date(tx.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-stone-900">
                                                 {tx.order_number || `#${tx.id.substring(0, 8)}`}
@@ -240,11 +242,10 @@ export default function VerifySalesPage() {
                                                 {tx.items?.map((item: any) => `${item.quantity}x ${item.name}`).join(', ')}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-stone-500">
-                                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                                    tx.payment_method === 'cash' ? 'bg-emerald-100 text-emerald-700' :
-                                                    tx.payment_method === 'mpesa' ? 'bg-green-100 text-green-700' :
-                                                    'bg-blue-100 text-blue-700'
-                                                }`}>
+                                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${tx.payment_method === 'cash' ? 'bg-emerald-100 text-emerald-700' :
+                                                        tx.payment_method === 'mpesa' ? 'bg-green-100 text-green-700' :
+                                                            'bg-blue-100 text-blue-700'
+                                                    }`}>
                                                     {tx.payment_method?.toUpperCase()}
                                                 </span>
                                             </td>
@@ -270,9 +271,8 @@ export default function VerifySalesPage() {
                         <button
                             onClick={handleVerify}
                             disabled={isVerifying || verificationStatus === 'verified' || !salesData}
-                            className={`btn-primary px-8 ${
-                                verificationStatus === 'verified' ? 'opacity-50 cursor-not-allowed' : ''
-                            }`}
+                            className={`btn-primary px-8 ${verificationStatus === 'verified' ? 'opacity-50 cursor-not-allowed' : ''
+                                }`}
                         >
                             {isVerifying ? (
                                 <>
