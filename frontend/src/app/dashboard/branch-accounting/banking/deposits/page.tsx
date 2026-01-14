@@ -6,6 +6,7 @@ import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { accountingAPI } from '@/lib/api';
+import { NewDepositModal } from '@/components/accounting/NewDepositModal';
 import {
     Landmark, Plus, Search, Filter,
     ArrowLeft, Calendar, FileText, CheckCircle2
@@ -20,6 +21,7 @@ export default function BankDepositsPage() {
     const [deposits, setDeposits] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [isNewDepositOpen, setIsNewDepositOpen] = useState(false);
 
     const currentBranchId = activeBranchId || user?.branch_id;
 
@@ -63,11 +65,21 @@ export default function BankDepositsPage() {
                                 <p className="text-stone-500 text-sm">Monitor and record bank transactions</p>
                             </div>
                         </div>
-                        <button className="btn-primary flex items-center gap-2">
+                        <button
+                            onClick={() => setIsNewDepositOpen(true)}
+                            className="btn-primary flex items-center gap-2"
+                        >
                             <Plus className="h-4 w-4" />
                             <span>New Deposit</span>
                         </button>
                     </div>
+
+                    <NewDepositModal
+                        isOpen={isNewDepositOpen}
+                        onClose={() => setIsNewDepositOpen(false)}
+                        onSuccess={fetchDeposits}
+                        branchId={Number(currentBranchId) || 0}
+                    />
 
                     {/* Filters */}
                     <div className="card-elevated p-4">

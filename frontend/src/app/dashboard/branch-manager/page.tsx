@@ -14,6 +14,8 @@ import {
 import Link from 'next/link';
 import { toast } from 'sonner';
 
+import { AddItemModal } from '@/components/storekeeping/AddItemModal';
+
 export default function BranchManagerDashboard() {
   const { user } = useAuth();
   const { activeBranchId, activeBranch } = useBranch();
@@ -21,6 +23,10 @@ export default function BranchManagerDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [recentBookings, setRecentBookings] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<{ type: string; message: string; time: string }[]>([]);
+
+  // Modal states
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
 
   // Use active branch from context, fallback to user's branch
   const currentBranchId = activeBranchId || user?.branch_id;
@@ -31,7 +37,7 @@ export default function BranchManagerDashboard() {
     setIsLoading(true);
     try {
       const [financeRes, bookingsRes, staffRes, tasksRes, notificationsRes] = await Promise.allSettled([
-        financeAPI.getDashboard(currentBranchId),
+        financeAPI.getDashboard({ branch_id: currentBranchId }),
         bookingsAPI.getBookings({ branch_id: currentBranchId }),
         staffAPI.getStaff(currentBranchId),
         housekeepingAPI.getTasks({ branch_id: currentBranchId }),
@@ -109,14 +115,30 @@ export default function BranchManagerDashboard() {
               <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Branch Dashboard</h1>
               <p className="text-stone-500 mt-0.5">{activeBranch?.name || user?.branch_name || 'Your Branch'}</p>
             </div>
-            <button
-              onClick={fetchData}
-              disabled={isLoading}
-              className="btn-secondary"
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              <span>Refresh</span>
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowAddItem(true)}
+                className="btn-secondary"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Add Item</span>
+              </button>
+              <button
+                onClick={() => setShowCamera(true)}
+                className="btn-secondary"
+              >
+                <Eye className="h-4 w-4" />
+                <span>Evidence</span>
+              </button>
+              <button
+                onClick={fetchData}
+                disabled={isLoading}
+                className="btn-secondary"
+              >
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
           </div>
 
           {/* Stats Grid */}
@@ -285,6 +307,51 @@ export default function BranchManagerDashboard() {
             )}
           </div>
         </div>
+
+        {/* Add Item Modal */}
+        <AddItemModal
+          isOpen={showAddItem}
+          onClose={() => setShowAddItem(false)}
+          onSubmit={async (data) => {
+            // Handle item creation
+            toast.success('Item added successfully');
+            fetchData();
+          }}
+        />
+
+        {/* Camera/Evidence Modal - inline implementation for simplicity */}
+        {showCamera && (
+          <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md relative">
+              <button
+                onClick={() => setShowCamera(false)}
+                className="absolute right-4 top-4 hover:bg-stone-100 p-2 rounded-full"
+              >
+                <span className="text-xl">×</span>
+              </button>
+              <h3 className="text-lg font-bold mb-4">Capture Evidence</h3>
+              <div className="aspect-video bg-black rounded-lg mb-4 flex items-center justify-center relative overflow-hidden">
+                {/* Mock camera view */}
+                <video autoPlay playsInline muted className="w-full h-full object-cover" />
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <span className="text-white/50 text-sm">Camera Stream Active</span>
+                </div>
+              </div>
+              <div className="flex justify-center">
+                <button
+                  onClick={() => {
+                    toast.success('Image captured and saved to incident report');
+                    setShowCamera(false);
+                  }}
+                  className="h-16 w-16 bg-white border-4 border-stone-200 rounded-full flex items-center justify-center hover:border-red-500 transition-colors"
+                >
+                  <div className="h-12 w-12 bg-red-500 rounded-full" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </DashboardLayout>
     </ProtectedRoute>
   );

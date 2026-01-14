@@ -2892,7 +2892,24 @@ export const accountingAPI = {
     if (filters?.period) params.append('period', filters.period);
 
     return fetchPythonAPI<any>(`/audit/workpapers?${params.toString()}`);
-  }
+  },
+
+  // Banking Extended
+  createDeposit: (data: any) => fetchAPI<any>('/accounting/deposits', { method: 'POST', body: JSON.stringify(data) }),
+
+  getBankDeposits: (branchId: number | string) => fetchAPI<any>(`/accounting/deposits?branch_id=${branchId}`),
+
+  getReconciliationData: (branchId: number | string, accountId?: string) => {
+    const query = new URLSearchParams({ branch_id: String(branchId) });
+    if (accountId) query.append('account_id', accountId);
+    return fetchAPI<any>(`/accounting/reconciliation/data?${query}`);
+  },
+
+  matchTransactions: (data: { transactionIds: string[]; matchType: string }) =>
+    fetchAPI<any>('/accounting/reconciliation/match', { method: 'POST', body: JSON.stringify(data) }),
+
+  saveReconciliationSession: (data: any) =>
+    fetchAPI<any>('/accounting/reconciliation/save', { method: 'POST', body: JSON.stringify(data) })
 };
 
 // ==================== ROOM SERVICE API (Python Microservice) ====================

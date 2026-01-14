@@ -125,6 +125,7 @@ export default function BranchAccountingDashboard() {
             title: 'Audit & Reports',
             icon: History,
             links: [
+                { label: 'Verify Daily Sales', href: '/dashboard/branch-accounting/verify-sales' },
                 { label: 'Financial Reports', href: '/dashboard/branch-accounting/reports' },
                 { label: 'Audit Trail', href: '/dashboard/branch-accounting/audit-trail' }
             ],
