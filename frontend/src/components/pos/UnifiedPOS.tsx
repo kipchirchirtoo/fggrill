@@ -455,8 +455,8 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                         </AnimatePresence>
                     </div>
 
-                    {/* Cart Header - Snippet Style */}
-                    <div className="p-3 md:p-4 border-b border-stone-200 flex items-center justify-between bg-white">
+                    {/* Cart Header - Fixed Size */}
+                    <div className="p-3 md:p-4 border-b border-stone-200 flex items-center justify-between bg-white flex-none">
                         <div className="flex items-center gap-2">
                             <ShoppingCart className="w-4 md:w-5 h-4 md:h-5 text-blue-600" />
                             <h2 className="text-lg md:text-xl font-bold text-gray-800">Cart</h2>
@@ -475,7 +475,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                         )}
                     </div>
 
-                    <div className="px-3 md:px-4 py-3 border-b border-stone-100 bg-stone-50/30">
+                    <div className="px-3 md:px-4 py-3 border-b border-stone-100 bg-stone-50/30 flex-none">
                         {/* System Context Selectors - Matching Snippet Style */}
                         <div className="space-y-3">
                             {isRestaurant ? (
@@ -557,8 +557,8 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                         </div>
                     </div>
 
-                    {/* Cart Items List - Snippet Style */}
-                    <div className="flex-1 overflow-y-auto no-scrollbar p-3 md:p-4 space-y-3">
+                    {/* Cart Items List - Improved Flex Containment */}
+                    <div className="flex-1 overflow-y-auto no-scrollbar p-3 md:p-4 space-y-3 min-h-0">
                         {cart.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-stone-300">
                                 <ShoppingCart className="w-12 md:w-16 h-12 md:h-16 mb-3 opacity-30" />
@@ -594,9 +594,9 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                         )}
                     </div>
 
-                    {/* Cart Footer / Summary - Snippet Style */}
+                    {/* Cart Footer / Summary - Fixed Positioning */}
                     {cart.length > 0 && (
-                        <div className="p-3 md:p-4 bg-white border-t border-stone-200 space-y-3 relative z-30">
+                        <div className="p-3 md:p-4 bg-white border-t border-stone-200 space-y-3 flex-none relative">
                             <div className="space-y-1.5 text-xs md:text-sm">
                                 <div className="flex justify-between text-stone-500">
                                     <span>Subtotal</span>
