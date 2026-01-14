@@ -15,7 +15,7 @@ import Link from 'next/link';
 import {
   Building2, DollarSign, Users, Bed, TrendingUp, Clock, ChevronRight,
   UserCheck, Utensils, Wrench, Package, ClipboardList, ArrowUpRight,
-  RefreshCw, Calendar, Boxes, Send
+  RefreshCw, Calendar, Boxes, Send, ChefHat
 } from 'lucide-react';
 
 function BranchOperationsDashboardContent() {
@@ -75,6 +75,7 @@ function BranchOperationsDashboardContent() {
 
   const quickLinks = [
     { href: '/dashboard/branch-operations/inventory', icon: Package, label: 'Inventory', color: 'bg-blue-50 text-blue-600' },
+    { href: '/dashboard/kitchen-operations', icon: ChefHat, label: 'Kitchen Ops', color: 'bg-orange-50 text-orange-600' },
     { href: '/dashboard/branch-operations/staff', icon: Users, label: 'Staff', color: 'bg-purple-50 text-purple-600' },
     { href: '/dashboard/branch-operations/operations/reservations', icon: Calendar, label: 'Reservations', color: 'bg-green-50 text-green-600' },
     { href: '/dashboard/branch-operations/operations/rooms', icon: Bed, label: 'Rooms', color: 'bg-indigo-50 text-indigo-600' },
