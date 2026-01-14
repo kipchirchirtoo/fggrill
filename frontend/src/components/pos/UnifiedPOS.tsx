@@ -82,6 +82,9 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
     const [paymentMethod, setPaymentMethod] = useState<'cash' | 'mpesa' | 'card'>('cash');
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [userMenuOpen, setUserMenuOpen] = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
+    const [recentOrders, setRecentOrders] = useState<any[]>([]);
+    const [isPrinting, setIsPrinting] = useState<string | null>(null);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -111,6 +114,15 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                     setCategories(filteredCats);
                 }
                 if (tabsRes.success) setOpenTabs(tabsRes.data || []);
+            }
+
+            // Fetch recent orders for history
+            const ordersRes = isRestaurant
+                ? await restaurantAPI.getOrders({ branchId: Number(currentBranchId) || undefined })
+                : await barAPI.getOrders({ branchId: Number(currentBranchId) || undefined });
+
+            if (ordersRes.success) {
+                setRecentOrders(ordersRes.data || []);
             }
         } catch (error) {
             console.error(`Error fetching ${mode} data:`, error);
@@ -165,6 +177,54 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
     const subtotal = Math.round(total / 1.16);
     const tax = total - subtotal;
 
+    const handlePrintReceipt = async (orderData: any) => {
+        setIsPrinting(orderData.id);
+        try {
+            const receiptData = {
+                receipt_type: 'sale' as const,
+                receipt_number: orderData.order_number || orderData.id?.substring(0, 8),
+                date: new Date().toISOString(),
+                table_number: orderData.table_number || '',
+                items: (orderData.items || []).map((item: any) => ({
+                    name: item.name,
+                    quantity: item.quantity,
+                    unit_price: item.unit_price || item.price,
+                    total: (item.unit_price || item.price) * item.quantity
+                })),
+                total_amount: orderData.total || orderData.total_amount,
+                payment_method: orderData.payment_method || paymentMethod,
+                cashier_name: `${user?.firstName} ${user?.lastName}`,
+                served_by: `${user?.firstName} ${user?.lastName}`
+            };
+            const receiptRes = await receiptsAPI.generateReceipt(receiptData);
+            if (receiptRes.success && receiptRes.data?.pdf_base64) {
+                const pdfWindow = window.open("");
+                if (pdfWindow) {
+                    pdfWindow.document.write(`
+                        <html>
+                            <body style="margin:0;padding:0;height:100vh;">
+                                <iframe width='100%' height='100%' src='data:application/pdf;base64,${receiptRes.data.pdf_base64}' frameborder='0'></iframe>
+                            </body>
+                            <script>
+                                setTimeout(() => {
+                                    window.frames[0].focus();
+                                    window.frames[0].print();
+                                }, 500);
+                            </script>
+                        </html>
+                    `);
+                }
+            } else {
+                toast.error('Failed to generate receipt PDF');
+            }
+        } catch (e) {
+            console.error('Receipt generation error', e);
+            toast.error('Printing failed');
+        } finally {
+            setIsPrinting(null);
+        }
+    };
+
     const handleCreateOrder = async () => {
         if (cart.length === 0) {
             toast.error('Cart is empty');
@@ -208,8 +268,22 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                     status: 'pending',
                 };
 
-                await restaurantAPI.createOrder(orderData);
-                toast.success(`Restaurant order created!`);
+                const res = await restaurantAPI.createOrder(orderData);
+                if (res.success) {
+                    toast.success(`Restaurant order created!`);
+                    try {
+                        // Instant Printing
+                        await handlePrintReceipt({
+                            ...res.data,
+                            items: cart,
+                            total: total
+                        });
+                    } catch (e) {
+                        console.error('Initial receipt failed', e);
+                    }
+                } else {
+                    throw new Error(res.message);
+                }
             } else {
                 if (selectedTabId) {
                     const res = await barAPI.addToTab(selectedTabId, cart.map(item => ({
@@ -218,8 +292,11 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                         price: item.price,
                         quantity: item.quantity
                     })));
-                    if (res.success) toast.success('Added to tab!');
-                    else throw new Error(res.message);
+                    if (res.success) {
+                        toast.success('Added to tab!');
+                    } else {
+                        throw new Error(res.message);
+                    }
                 } else {
                     const res = await barAPI.createOrder({
                         branch_id: currentBranchId,
@@ -237,39 +314,24 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                     if (res.success) {
                         toast.success('Bar order completed!');
                         try {
-                            const receiptData = {
-                                receipt_type: 'sale' as const,
-                                receipt_number: res.data.order_number || res.data.id.substring(0, 8),
-                                date: new Date().toISOString(),
-                                table_number: tableNumber,
-                                items: cart.map(item => ({
-                                    name: item.name,
-                                    quantity: item.quantity,
-                                    unit_price: item.price,
-                                    total: item.price * item.quantity
-                                })),
-                                total_amount: total,
-                                payment_method: paymentMethod,
-                                cashier_name: `${user?.firstName} ${user?.lastName}`,
-                                served_by: `${user?.firstName} ${user?.lastName}`
-                            };
-                            const receiptRes = await receiptsAPI.generateReceipt(receiptData);
-                            if (receiptRes.success && receiptRes.data?.pdf_base64) {
-                                const pdfWindow = window.open("");
-                                pdfWindow?.document.write(`<iframe width='100%' height='100%' src='data:application/pdf;base64,${receiptRes.data.pdf_base64}'></iframe>`);
-                            }
-                        } catch (e) { console.error('Receipt skipped', e); }
-                    } else throw new Error(res.message);
+                            // Instant Printing
+                            await handlePrintReceipt({
+                                ...res.data,
+                                items: cart,
+                                total: total
+                            });
+                        } catch (e) {
+                            console.error('Initial receipt failed', e);
+                        }
+                    } else {
+                        throw new Error(res.message);
+                    }
                 }
             }
 
             clearCart();
             onOrderCreated?.();
-
-            // Go back to login/PIN screen after order
-            setTimeout(() => {
-                logout('/login?mode=pos');
-            }, 1500);
+            fetchData(); // Refresh history
         } catch (error: any) {
             toast.error(error.message || 'Failed to process order');
         } finally {
@@ -420,8 +482,15 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
 
                         <div className="flex items-center gap-1">
                             <button
+                                onClick={() => setShowHistory(true)}
+                                className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm border border-transparent hover:border-stone-100 transition-all text-stone-400 hover:text-blue-600"
+                                title="Order History"
+                            >
+                                <History className="h-3.5 w-3.5" />
+                            </button>
+                            <button
                                 onClick={() => setUserMenuOpen(!userMenuOpen)}
-                                className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm border border-transparent hover:border-stone-200 transition-all text-stone-500"
+                                className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm border border-transparent hover:border-stone-100 transition-all text-stone-400 hover:text-stone-900"
                             >
                                 <UserIcon className="h-3.5 w-3.5" />
                             </button>
@@ -446,7 +515,13 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                         <p className="text-xs font-black text-stone-900 truncate">{user?.firstName} {user?.lastName}</p>
                                         <p className="text-[9px] font-bold text-stone-400 uppercase tracking-widest truncate">{user?.email}</p>
                                     </div>
-                                    <button className="flex items-center gap-2 w-full p-2 text-xs font-bold text-stone-600 hover:bg-stone-50 rounded-lg transition-all">
+                                    <button
+                                        onClick={() => {
+                                            setShowHistory(true);
+                                            setUserMenuOpen(false);
+                                        }}
+                                        className="flex items-center gap-2 w-full p-2 text-xs font-bold text-stone-600 hover:bg-stone-50 rounded-lg transition-all"
+                                    >
                                         <History className="w-3.5 h-3.5" />
                                         <span>Order History</span>
                                     </button>
