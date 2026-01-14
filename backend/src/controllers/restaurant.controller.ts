@@ -305,12 +305,22 @@ export const createOrder = async (
     }
 
     // Generate order number
-    const { data: orderNumber } = await supabase
+    console.log('Generating order number via RPC...');
+    const { data: orderNumber, error: rpcError } = await supabase
       .rpc('generate_order_number');
+
+    if (rpcError) {
+      console.error('RPC Error generating order number:', rpcError);
+      logger.error('RPC Error generating order number', { error: rpcError });
+    }
+
+    // Determine order number with fallback
+    const finalOrderNumber = orderNumber || `ORD${new Date().toISOString().replace(/[-:T]/g, '').slice(2, 12)}`;
+    console.log('Final order number being used:', finalOrderNumber);
 
     // Create order
     const orderData = {
-      order_number: orderNumber,
+      order_number: finalOrderNumber,
       order_type: orderType,
       table_number: tableNumber,
       room_number: roomNumber,
