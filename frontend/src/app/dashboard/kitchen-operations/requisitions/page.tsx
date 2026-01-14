@@ -43,9 +43,9 @@ export default function RequisitionsPage() {
     const fetchRequisitions = async () => {
         setIsLoading(true);
         try {
-            const response = await api.get(`/kitchen/requisitions?branch_id=${activeBranchId}`);
-            if (response.data.success) {
-                setRequisitions(response.data.data || []);
+            const response = await api.kitchen.getRequisitions({ branch_id: activeBranchId || undefined });
+            if (response.data?.success || response.success) {
+                setRequisitions(response.data?.data || response.data || []);
             }
         } catch (error) {
             console.error('Error fetching requisitions:', error);
@@ -62,13 +62,14 @@ export default function RequisitionsPage() {
         }
 
         try {
-            const response = await api.post('/kitchen/requisitions', {
+            const response = await api.kitchen.createRequisition({
                 items: selectedItems,
                 priority,
-                reason
+                reason,
+                branch_id: activeBranchId
             });
 
-            if (response.data.success) {
+            if (response.data?.success || response.success) {
                 toast.success('Requisition created successfully');
                 setIsModalOpen(false);
                 setSelectedItems([]);

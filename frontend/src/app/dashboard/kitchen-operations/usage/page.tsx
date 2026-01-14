@@ -39,9 +39,9 @@ export default function UsageTrackingPage() {
     const fetchUsage = async () => {
         setIsLoading(true);
         try {
-            const response = await api.get(`/kitchen/usage?branch_id=${activeBranchId}`);
-            if (response.data.success) {
-                setUsageEntries(response.data.data || []);
+            const response = await api.kitchen.getUsageEntries(activeBranchId || undefined);
+            if (response.data?.success || response.success) {
+                setUsageEntries(response.data?.data || response.data || []);
             }
         } catch (error) {
             console.error('Error fetching usage:', error);
@@ -53,8 +53,11 @@ export default function UsageTrackingPage() {
 
     const handleSubmit = async () => {
         try {
-            const response = await api.post('/kitchen/usage', formData);
-            if (response.data.success) {
+            const response = await api.kitchen.recordUsage({
+                ...formData,
+                branch_id: activeBranchId
+            });
+            if (response.data?.success || response.success) {
                 toast.success('Usage recorded successfully');
                 setIsModalOpen(false);
                 setFormData({

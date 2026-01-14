@@ -1028,6 +1028,57 @@ export function ConsolidatedNav() {
     </>
   );
 
+  // Kitchen Operations Navigation
+  const kitchenOperationsNav = (
+    <>
+      <NavItem
+        href="/dashboard/kitchen-operations"
+        icon={ChefHat}
+        label="Overview"
+        active={pathname === '/dashboard/kitchen-operations'}
+      />
+
+      <NavGroup label="Inventory" icon={Package} defaultOpen>
+        <NavItem
+          href="/dashboard/kitchen-operations/stock"
+          icon={BookOpen}
+          label="Stock Ledger"
+          active={pathname === '/dashboard/kitchen-operations/stock'}
+        />
+        <NavItem
+          href="/dashboard/kitchen-operations/requisitions"
+          icon={ShoppingCart}
+          label="Request Stock"
+          active={pathname === '/dashboard/kitchen-operations/requisitions'}
+        />
+      </NavGroup>
+
+      <NavGroup label="Production" icon={UtensilsCrossed} defaultOpen>
+        <NavItem
+          href="/dashboard/kitchen-operations/recipes"
+          icon={ChefHat}
+          label="Recipes & BOM"
+          active={pathname === '/dashboard/kitchen-operations/recipes'}
+        />
+      </NavGroup>
+
+      <NavGroup label="Tracking" icon={ClipboardList} defaultOpen>
+        <NavItem
+          href="/dashboard/kitchen-operations/usage"
+          icon={ClipboardList}
+          label="Usage Tracking"
+          active={pathname === '/dashboard/kitchen-operations/usage'}
+        />
+        <NavItem
+          href="/dashboard/kitchen-operations/wastage"
+          icon={Trash2}
+          label="Record Wastage"
+          active={pathname === '/dashboard/kitchen-operations/wastage'}
+        />
+      </NavGroup>
+    </>
+  );
+
   // Determine which navigation to render based on user role
   const renderNavigation = () => {
     if (user.role === UserRole.SUPER_ADMIN) {
@@ -1038,6 +1089,9 @@ export function ConsolidatedNav() {
           {branchOperationsNav}
           <hr className="my-4" />
           {facilitiesNav}
+          <hr className="my-4" />
+          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Kitchen Ops</p>
+          {kitchenOperationsNav}
         </>
       );
     }
@@ -1050,7 +1104,14 @@ export function ConsolidatedNav() {
 
     // General Manager Navigation (Legacy - has own dashboard)
     if (user.role === UserRole.GENERAL_MANAGER) {
-      return gmNav;
+      return (
+        <>
+          {gmNav}
+          <hr className="my-4 border-stone-100" />
+          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Kitchen Ops</p>
+          {kitchenOperationsNav}
+        </>
+      );
     }
 
     // Branch Operations Manager Navigation
@@ -1065,7 +1126,14 @@ export function ConsolidatedNav() {
 
     // Branch Manager Navigation (Legacy - has own dashboard)
     if (user.role === UserRole.BRANCH_MANAGER) {
-      return branchManagerNav;
+      return (
+        <>
+          {branchManagerNav}
+          <hr className="my-4 border-stone-100" />
+          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Kitchen Ops</p>
+          {kitchenOperationsNav}
+        </>
+      );
     }
 
     // Facilities Manager Navigation
@@ -1100,7 +1168,18 @@ export function ConsolidatedNav() {
 
     // Kitchen Navigation
     if (user.role === UserRole.KITCHEN) {
-      return kitchenNav;
+      return (
+        <>
+          {kitchenNav}
+          <hr className="my-4 border-stone-100" />
+          {kitchenOperationsNav}
+        </>
+      );
+    }
+
+    // Kitchen Operations Navigation
+    if (user.role === UserRole.KITCHEN_OPERATIONS) {
+      return kitchenOperationsNav;
     }
 
     // Bartender Navigation

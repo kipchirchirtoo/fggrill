@@ -3131,6 +3131,30 @@ export const kitchenAPI = {
     return fetchAPI<any>(`/kitchen/variance-logs?${query}`);
   },
   getStats: (branchId?: number) => fetchAPI<any>(`/kitchen/stats${branchId ? `?branch_id=${branchId}` : ''}`),
+  getDashboardStats: (branchId?: number) => fetchAPI<any>(`/kitchen/dashboard/stats${branchId ? `?branch_id=${branchId}` : ''}`),
+
+  // Requisitions
+  getRequisitions: (params?: { branch_id?: number; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.status) query.append('status', params.status);
+    return fetchAPI<any>(`/kitchen/requisitions?${query}`);
+  },
+  getRequisition: (id: string | number) => fetchAPI<any>(`/kitchen/requisitions/${id}`),
+  createRequisition: (data: any) => fetchAPI<any>('/kitchen/requisitions', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Recipes
+  getRecipes: () => fetchAPI<any>('/kitchen/recipes'),
+  getRecipe: (id: string | number) => fetchAPI<any>(`/kitchen/recipes/${id}`),
+  createRecipe: (data: any) => fetchAPI<any>('/kitchen/recipes', { method: 'POST', body: JSON.stringify(data) }),
+  updateRecipe: (id: string | number, data: any) => fetchAPI<any>(`/kitchen/recipes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRecipe: (id: string | number) => fetchAPI<any>(`/kitchen/recipes/${id}`, { method: 'DELETE' }),
+
+  // Usage & Wastage
+  recordUsage: (data: any) => fetchAPI<any>('/kitchen/usage', { method: 'POST', body: JSON.stringify(data) }),
+  getUsageEntries: (branchId?: number) => fetchAPI<any>(`/kitchen/usage${branchId ? `?branch_id=${branchId}` : ''}`),
+  recordWastage: (data: any) => fetchAPI<any>('/kitchen/wastage', { method: 'POST', body: JSON.stringify(data) }),
+  getWastageRecords: (branchId?: number) => fetchAPI<any>(`/kitchen/wastage${branchId ? `?branch_id=${branchId}` : ''}`),
 };
 
 // =====================================================

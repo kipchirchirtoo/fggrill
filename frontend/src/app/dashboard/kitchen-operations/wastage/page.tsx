@@ -40,9 +40,9 @@ export default function WastagePage() {
     const fetchWastage = async () => {
         setIsLoading(true);
         try {
-            const response = await api.get(`/kitchen/wastage?branch_id=${activeBranchId}`);
-            if (response.data.success) {
-                setWastageRecords(response.data.data || []);
+            const response = await api.kitchen.getWastageRecords(activeBranchId || undefined);
+            if (response.data?.success || response.success) {
+                setWastageRecords(response.data?.data || response.data || []);
             }
         } catch (error) {
             console.error('Error fetching wastage:', error);
@@ -54,8 +54,11 @@ export default function WastagePage() {
 
     const handleSubmit = async () => {
         try {
-            const response = await api.post('/kitchen/wastage', formData);
-            if (response.data.success) {
+            const response = await api.kitchen.recordWastage({
+                ...formData,
+                branch_id: activeBranchId
+            });
+            if (response.data?.success || response.success) {
                 toast.success('Wastage recorded successfully');
                 setIsModalOpen(false);
                 setFormData({

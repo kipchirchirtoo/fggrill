@@ -7,8 +7,10 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSBadge } from '@/components/ui/ios-badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import {
-    ChefHat, Plus, RefreshCw, ArrowLeft, DollarSign, Percent
+    ChefHat, Plus, RefreshCw, ArrowLeft, DollarSign, Percent, X, Save
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -28,6 +30,17 @@ interface Recipe {
 export default function RecipesPage() {
     const [recipes, setRecipes] = useState<Recipe[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Form state
+    const [formData, setFormData] = useState({
+        menu_item_name: '',
+        portion_size: '1 Portion',
+        portions_per_recipe: 1,
+        selling_price: 0,
+        ingredients: [{ item_sku: '', item_name: '', quantity_per_portion: 0, unit_of_measure: 'kg', unit_cost: 0 }]
+    });
 
     useEffect(() => {
         fetchRecipes();
@@ -36,9 +49,9 @@ export default function RecipesPage() {
     const fetchRecipes = async () => {
         setIsLoading(true);
         try {
-            const response = await api.get('/kitchen/recipes');
-            if (response.data.success) {
-                setRecipes(response.data.data || []);
+            const response = await api.kitchen.getRecipes();
+            if (response.data?.success || response.success) {
+                setRecipes(response.data?.data || response.data || []);
             }
         } catch (error) {
             console.error('Error fetching recipes:', error);
@@ -46,6 +59,52 @@ export default function RecipesPage() {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleCreateRecipe = async () => {
+        if (!formData.menu_item_name || formData.ingredients.length === 0) {
+            toast.error('Please fill in all required fields');
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            const response = await api.kitchen.createRecipe(formData);
+            if (response.data?.success || response.success) {
+                toast.success('Recipe created successfully');
+                setIsModalOpen(false);
+                setFormData({
+                    menu_item_name: '',
+                    portion_size: '1 Portion',
+                    portions_per_recipe: 1,
+                    selling_price: 0,
+                    ingredients: [{ item_sku: '', item_name: '', quantity_per_portion: 0, unit_of_measure: 'kg', unit_cost: 0 }]
+                });
+                fetchRecipes();
+            }
+        } catch (error: any) {
+            toast.error(error.response?.data?.message || 'Failed to create recipe');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const addIngredient = () => {
+        setFormData({
+            ...formData,
+            ingredients: [...formData.ingredients, { item_sku: '', item_name: '', quantity_per_portion: 0, unit_of_measure: 'kg', unit_cost: 0 }]
+        });
+    };
+
+    const removeIngredient = (index: number) => {
+        const updated = formData.ingredients.filter((_, i) => i !== index);
+        setFormData({ ...formData, ingredients: updated });
+    };
+
+    const updateIngredient = (index: number, field: string, value: any) => {
+        const updated = [...formData.ingredients];
+        updated[index] = { ...updated[index], [field]: value };
+        setFormData({ ...formData, ingredients: updated });
     };
 
     return (
@@ -80,7 +139,10 @@ export default function RecipesPage() {
                             >
                                 Refresh
                             </IOSButton>
-                            <IOSButton leftIcon={<Plus />}>
+                            <IOSButton
+                                onClick={() => setIsModalOpen(true)}
+                                leftIcon={<Plus />}
+                            >
                                 New Recipe
                             </IOSButton>
                         </div>
@@ -139,6 +201,134 @@ export default function RecipesPage() {
                             ))
                         )}
                     </div>
+
+                    {/* New Recipe Modal */}
+                    <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+                        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                            <DialogHeader>
+                                <DialogTitle>Create New Recipe</DialogTitle>
+                            </DialogHeader>
+
+                            <div className="space-y-4 pt-4">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="md:col-span-2">
+                                        <label className="block text-sm font-medium mb-1">Menu Item Name</label>
+                                        <Input
+                                            value={formData.menu_item_name}
+                                            onChange={(e) => setFormData({ ...formData, menu_item_name: e.target.value })}
+                                            placeholder="e.g. Grilled Chicken"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">Portion Size</label>
+                                        <Input
+                                            value={formData.portion_size}
+                                            onChange={(e) => setFormData({ ...formData, portion_size: e.target.value })}
+                                            placeholder="e.g. 1 Plate"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">Portions per Recipe</label>
+                                        <Input
+                                            type="number"
+                                            value={formData.portions_per_recipe}
+                                            onChange={(e) => setFormData({ ...formData, portions_per_recipe: Number(e.target.value) })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">Selling Price (KES)</label>
+                                        <Input
+                                            type="number"
+                                            value={formData.selling_price}
+                                            onChange={(e) => setFormData({ ...formData, selling_price: Number(e.target.value) })}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="border-t pt-4">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-sm font-medium">Ingredients (BOM)</h3>
+                                        <IOSButton size="sm" variant="secondary" onClick={addIngredient} leftIcon={<Plus />}>
+                                            Add Ingredient
+                                        </IOSButton>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        {formData.ingredients.map((ing, index) => (
+                                            <div key={index} className="grid grid-cols-12 gap-2 items-end bg-stone-50 p-3 rounded-lg">
+                                                <div className="col-span-2">
+                                                    <label className="block text-[10px] text-stone-500 uppercase font-bold mb-1">SKU</label>
+                                                    <Input
+                                                        value={ing.item_sku}
+                                                        onChange={(e) => updateIngredient(index, 'item_sku', e.target.value)}
+                                                        placeholder="SKU"
+                                                    />
+                                                </div>
+                                                <div className="col-span-3">
+                                                    <label className="block text-[10px] text-stone-500 uppercase font-bold mb-1">Name</label>
+                                                    <Input
+                                                        value={ing.item_name}
+                                                        onChange={(e) => updateIngredient(index, 'item_name', e.target.value)}
+                                                        placeholder="Item Name"
+                                                    />
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <label className="block text-[10px] text-stone-500 uppercase font-bold mb-1">Qty/Portion</label>
+                                                    <Input
+                                                        type="number"
+                                                        value={ing.quantity_per_portion}
+                                                        onChange={(e) => updateIngredient(index, 'quantity_per_portion', Number(e.target.value))}
+                                                    />
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <label className="block text-[10px] text-stone-500 uppercase font-bold mb-1">Unit Cost</label>
+                                                    <Input
+                                                        type="number"
+                                                        value={ing.unit_cost}
+                                                        onChange={(e) => updateIngredient(index, 'unit_cost', Number(e.target.value))}
+                                                    />
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <label className="block text-[10px] text-stone-500 uppercase font-bold mb-1">Unit</label>
+                                                    <Input
+                                                        value={ing.unit_of_measure}
+                                                        onChange={(e) => updateIngredient(index, 'unit_of_measure', e.target.value)}
+                                                        placeholder="kg"
+                                                    />
+                                                </div>
+                                                <div className="col-span-1">
+                                                    <IOSButton
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="text-red-500 hover:text-red-600"
+                                                        onClick={() => removeIngredient(index)}
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </IOSButton>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end gap-2 pt-6 border-t mt-6">
+                                    <IOSButton variant="secondary" onClick={() => setIsModalOpen(false)}>
+                                        Cancel
+                                    </IOSButton>
+                                    <IOSButton
+                                        onClick={handleCreateRecipe}
+                                        loading={isSubmitting}
+                                        leftIcon={<Save />}
+                                    >
+                                        Save Recipe
+                                    </IOSButton>
+                                </div>
+                            </div>
+                        </DialogContent>
+                    </Dialog>
 
                     {/* Info */}
                     <IOSCard className="p-4 bg-purple-50 border-purple-200">

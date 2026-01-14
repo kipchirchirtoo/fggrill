@@ -47,15 +47,14 @@ export default function StockLedgerPage() {
     const fetchLedger = async () => {
         setIsLoading(true);
         try {
-            const params = new URLSearchParams({
-                branch_id: activeBranchId?.toString() || '',
-                limit: '100'
-            });
-            if (transactionType) params.append('transaction_type', transactionType);
+            const params: { branch_id?: number; transaction_type?: string } = {
+                branch_id: activeBranchId || undefined
+            };
+            if (transactionType) params.transaction_type = transactionType;
 
-            const response = await api.get(`/kitchen/stock/ledger?${params}`);
-            if (response.data.success) {
-                setLedgerEntries(response.data.data || []);
+            const response = await api.kitchen.getLedger(params);
+            if (response.data?.success || response.success) {
+                setLedgerEntries(response.data?.data || response.data || []);
             }
         } catch (error) {
             console.error('Error fetching ledger:', error);

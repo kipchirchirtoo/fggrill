@@ -44,7 +44,7 @@ export default function KitchenOperationsPage() {
     const fetchStats = async () => {
         setIsLoading(true);
         try {
-            const response = await api.get(`/kitchen/dashboard/stats?branch_id=${activeBranchId}`);
+            const response = await api.kitchen.getDashboardStats(activeBranchId || undefined);
             if (response.data.success) {
                 setStats(response.data.data);
             }
@@ -91,13 +91,6 @@ export default function KitchenOperationsPage() {
             icon: ClipboardList,
             href: '/dashboard/kitchen-operations/usage',
             color: 'amber'
-        },
-        {
-            title: 'Reports',
-            description: 'Food cost & variance',
-            icon: BarChart3,
-            href: '/dashboard/kitchen-operations/reports',
-            color: 'indigo'
         }
     ];
 
@@ -270,9 +263,6 @@ export default function KitchenOperationsPage() {
                                     </IOSBadge>
                                     <IOSBadge className="bg-white text-blue-700 border-blue-200">
                                         ✓ Recipe-Based Costing
-                                    </IOSBadge>
-                                    <IOSBadge className="bg-white text-blue-700 border-blue-200">
-                                        ✓ Daily Variance Reports
                                     </IOSBadge>
                                 </div>
                             </div>
