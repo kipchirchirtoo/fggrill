@@ -136,16 +136,7 @@ export function DashboardLayout(props: DashboardLayoutProps) {
                         </button>
                       </div>
 
-                      {/* Hirall Branding */}
-                      <div className="pt-4 border-t border-stone-200/60">
-                        <p className="text-[9px] uppercase tracking-wider font-bold text-stone-400 mb-1">
-                          System managed by <span className="text-amber-600">Hirall</span>
-                        </p>
-                        <div className="flex flex-col gap-0.5 text-[9px] text-stone-500 font-medium">
-                          <p>+254 710 944 249</p>
-                          <p>admin@hirall.com</p>
-                        </div>
-                      </div>
+
                     </div>
                   </div>
                 </div>

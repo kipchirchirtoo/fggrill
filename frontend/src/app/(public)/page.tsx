@@ -987,16 +987,7 @@ export default function HomePage() {
                 <p className="text-stone-500 text-xs mb-1">
                   © 2024 Famous Gate Hotel. All rights reserved.
                 </p>
-                <div className="flex flex-col items-center md:items-end gap-1">
-                  <p className="text-stone-400 text-[10px] uppercase tracking-widest font-medium">
-                    System managed and made by <span className="text-amber-500">Hirall</span>
-                  </p>
-                  <div className="flex items-center gap-3 text-[10px] text-stone-500">
-                    <span>+254 710 944 249</span>
-                    <span className="w-1 h-1 bg-stone-700 rounded-full" />
-                    <span>admin@hirall.com</span>
-                  </div>
-                </div>
+
               </div>
             </div>
           </div>

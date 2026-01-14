@@ -306,10 +306,7 @@ export default function LoginPage() {
           <p className="text-xs text-stone-400">
             &copy; {new Date().getFullYear()} Famous Gate Hotel. All rights reserved.
           </p>
-          <div className="flex items-center justify-center gap-1.5 text-[10px] text-stone-400">
-            <span>System managed by</span>
-            <span className="font-semibold text-amber-600">Hirall</span>
-          </div>
+
         </div>
       </motion.div>
     </div>
