@@ -529,59 +529,73 @@ export default function POSKitchenDashboard() {
   return (
     <ProtectedRoute allowedRoles={[UserRole.POS_KITCHEN, UserRole.RESTAURANT, UserRole.BARTENDER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
-        <div className={`${['restaurant', 'bar'].includes(activeTab) ? 'flex flex-col h-[calc(100vh-140px)]' : 'space-y-6'}`}>
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 flex-shrink-0">
-            <div>
-              <h1 className="text-[22px] sm:text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">POS System</h1>
-              <p className="text-gray-500 text-sm mt-0.5">Unified Restaurant & Bar Point of Sale</p>
+        <div className={cn(
+          "flex flex-col h-full",
+          !['restaurant', 'bar'].includes(activeTab) && "space-y-6"
+        )}>
+          {/* Header - Only for Overview and Activity */}
+          {!['restaurant', 'bar'].includes(activeTab) && (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 flex-shrink-0">
+              <div>
+                <h1 className="text-[22px] sm:text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">POS System</h1>
+                <p className="text-gray-500 text-sm mt-0.5">Unified Restaurant & Bar Point of Sale</p>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {userBranches.length > 1 && (
-                <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1 flex-1 sm:flex-none">
-                  <Building2 className="h-3.5 w-3.5 text-stone-400" />
-                  <select
-                    value={activeBranchId || ''}
-                    onChange={(e) => setActiveBranch(Number(e.target.value))}
-                    className="bg-transparent border-none text-[12px] focus:ring-0 p-1"
-                  >
-                    {userBranches.map((branch) => (
-                      <option key={branch.id} value={branch.id}>{branch.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <button
-                onClick={fetchData}
-                className="btn-secondary h-[38px] px-3 flex-1 sm:flex-none"
-                disabled={isLoading}
-              >
-                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                <span className="hidden xs:inline ml-1">Refresh</span>
-              </button>
-            </div>
-          </div>
+          )}
 
           {/* Tab Navigation - Vibrant & Premium */}
-          <div className="flex gap-1 p-1.5 bg-stone-100/50 backdrop-blur-sm rounded-2xl w-full sm:w-fit overflow-x-auto no-scrollbar flex-shrink-0 border border-stone-200">
-            {[
-              { id: 'overview', label: 'Overview', icon: UtensilsCrossed, color: 'text-amber-600' },
-              { id: 'restaurant', label: 'Restaurant POS', icon: ChefHat, color: 'text-orange-600' },
-              { id: 'bar', label: 'Bar POS', icon: Wine, color: 'text-indigo-600' },
-              { id: 'recent', label: 'Activity', icon: Clock, color: 'text-emerald-600' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => handleTabChange(tab.id)}
-                className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl text-[13px] font-bold transition-all whitespace-nowrap flex-1 sm:flex-none justify-center ${activeTab === tab.id
-                  ? 'bg-white text-stone-900 shadow-sm border border-stone-100'
-                  : 'text-stone-500 hover:text-stone-700 hover:bg-stone-50/50'
-                  }`}
-              >
-                <tab.icon className={cn("h-4 w-4", activeTab === tab.id ? tab.color : "text-stone-400")} />
-                {tab.label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center justify-between gap-4 p-1 flex-shrink-0">
+            <div className="flex gap-1 p-1 bg-stone-100 rounded-xl overflow-x-auto no-scrollbar border border-stone-200">
+              {[
+                { id: 'overview', label: 'Overview', icon: UtensilsCrossed, color: 'text-amber-600' },
+                { id: 'restaurant', label: 'Restaurant POS', icon: ChefHat, color: 'text-orange-600' },
+                { id: 'bar', label: 'Bar POS', icon: Wine, color: 'text-indigo-600' },
+                { id: 'recent', label: 'Activity', icon: Clock, color: 'text-emerald-600' },
+              ].map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => handleTabChange(tab.id)}
+                    className={cn(
+                      "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap",
+                      isActive
+                        ? "bg-white text-stone-900 shadow-sm border border-stone-100"
+                        : "text-stone-500 hover:text-stone-700 hover:bg-stone-50/50"
+                    )}
+                  >
+                    <tab.icon className={cn("h-3.5 w-3.5", isActive ? tab.color : "text-stone-400")} />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {!['restaurant', 'bar'].includes(activeTab) && (
+              <div className="flex items-center gap-2">
+                {userBranches.length > 1 && (
+                  <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1">
+                    <Building2 className="h-3 w-3 text-stone-400" />
+                    <select
+                      value={activeBranchId || ''}
+                      onChange={(e) => setActiveBranch(Number(e.target.value))}
+                      className="bg-transparent border-none text-[11px] font-bold focus:ring-0 p-1"
+                    >
+                      {userBranches.map((branch) => (
+                        <option key={branch.id} value={branch.id}>{branch.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <button
+                  onClick={fetchData}
+                  className="p-2 text-stone-400 hover:text-stone-900 transition-colors bg-stone-50 border border-stone-200 rounded-lg"
+                  disabled={isLoading}
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Tab Content */}
