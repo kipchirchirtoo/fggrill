@@ -283,7 +283,10 @@ export function DashboardLayout(props: DashboardLayoutProps) {
           )}
 
           {/* Main content area */}
-          <main className="flex-1 overflow-y-auto bg-[#FAFAF8] scrollbar-thin">
+          <main className={cn(
+            "flex-1 bg-[#FAFAF8] scrollbar-thin",
+            hideSidebar && hideHeader ? "overflow-hidden" : "overflow-y-auto"
+          )}>
             <div className={cn(hideSidebar && hideHeader ? "p-0 h-full w-full" : "p-4 sm:p-5 lg:p-6")}>
               {children}
             </div>

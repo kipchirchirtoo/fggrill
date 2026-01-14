@@ -546,35 +546,35 @@ export default function POSKitchenDashboard() {
             </div>
           )}
 
-          {/* Tab Navigation - Vibrant & Premium */}
-          <div className="flex flex-wrap items-center justify-between gap-4 p-1 flex-shrink-0">
-            <div className="flex gap-1 p-1 bg-stone-100 rounded-xl overflow-x-auto no-scrollbar border border-stone-200">
-              {[
-                { id: 'overview', label: 'Overview', icon: UtensilsCrossed, color: 'text-amber-600' },
-                { id: 'restaurant', label: 'Restaurant POS', icon: ChefHat, color: 'text-orange-600' },
-                { id: 'bar', label: 'Bar POS', icon: Wine, color: 'text-indigo-600' },
-                { id: 'recent', label: 'Activity', icon: Clock, color: 'text-emerald-600' },
-              ].map((tab) => {
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => handleTabChange(tab.id)}
-                    className={cn(
-                      "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap",
-                      isActive
-                        ? "bg-white text-stone-900 shadow-sm border border-stone-100"
-                        : "text-stone-500 hover:text-stone-700 hover:bg-stone-50/50"
-                    )}
-                  >
-                    <tab.icon className={cn("h-3.5 w-3.5", isActive ? tab.color : "text-stone-400")} />
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
+          {/* Tab Navigation - Hidden for POS modes */}
+          {!['restaurant', 'bar'].includes(activeTab) && (
+            <div className="flex flex-wrap items-center justify-between gap-4 p-1 flex-shrink-0">
+              <div className="flex gap-1 p-1 bg-stone-100 rounded-xl overflow-x-auto no-scrollbar border border-stone-200">
+                {[
+                  { id: 'overview', label: 'Overview', icon: UtensilsCrossed, color: 'text-amber-600' },
+                  { id: 'restaurant', label: 'Restaurant POS', icon: ChefHat, color: 'text-orange-600' },
+                  { id: 'bar', label: 'Bar POS', icon: Wine, color: 'text-indigo-600' },
+                  { id: 'recent', label: 'Activity', icon: Clock, color: 'text-emerald-600' },
+                ].map((tab) => {
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => handleTabChange(tab.id)}
+                      className={cn(
+                        "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap",
+                        isActive
+                          ? "bg-white text-stone-900 shadow-sm border border-stone-100"
+                          : "text-stone-500 hover:text-stone-700 hover:bg-stone-50/50"
+                      )}
+                    >
+                      <tab.icon className={cn("h-3.5 w-3.5", isActive ? tab.color : "text-stone-400")} />
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
 
-            {!['restaurant', 'bar'].includes(activeTab) && (
               <div className="flex items-center gap-2">
                 {userBranches.length > 1 && (
                   <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1">
@@ -598,13 +598,13 @@ export default function POSKitchenDashboard() {
                   <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
                 </button>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Tab Content */}
           <div className={cn(
-            "flex-1 min-h-0 overflow-hidden mt-2",
-            !['restaurant', 'bar'].includes(activeTab) && "overflow-y-auto custom-scrollbar pb-6"
+            "flex-1 min-h-0 overflow-hidden",
+            !['restaurant', 'bar'].includes(activeTab) && "overflow-y-auto custom-scrollbar pb-6 mt-2"
           )}>
             {activeTab === 'overview' && <div className="max-w-[1200px] mx-auto">{renderOverview()}</div>}
             {activeTab === 'restaurant' && <UnifiedPOS mode="restaurant" onOrderCreated={fetchData} />}

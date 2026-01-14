@@ -281,10 +281,10 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
         <div className="h-full bg-stone-50 flex flex-col w-full text-stone-900 overflow-hidden">
             {/* Header Removed to maximize vertical space as per user request */}
 
-            {/* Main Content Area */}
-            <div className="flex-1 flex flex-row container mx-auto p-4 gap-4 overflow-hidden max-w-[1700px] min-h-0">
+            {/* Main Content Area - Full Bleed */}
+            <div className="flex-1 flex flex-row w-full overflow-hidden min-h-0 bg-stone-100/50">
                 {/* Left Side - Product Explorer */}
-                <div className="flex-1 flex flex-col min-w-0">
+                <div className="flex-1 flex flex-col min-w-0 p-3 md:p-4">
                     {/* Integrated Search & View Toggle in Column */}
                     <div className="flex items-center gap-2 mb-4">
                         <div className="flex-1 relative">
