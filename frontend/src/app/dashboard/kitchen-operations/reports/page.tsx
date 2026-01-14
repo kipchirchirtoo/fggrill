@@ -20,6 +20,7 @@ export default function ReportsPage() {
             UserRole.SUPER_ADMIN,
             UserRole.GENERAL_MANAGER,
             UserRole.BRANCH_MANAGER,
+            UserRole.KITCHEN_OPERATIONS,
             UserRole.RESTAURANT
         ]}>
             <DashboardLayout>

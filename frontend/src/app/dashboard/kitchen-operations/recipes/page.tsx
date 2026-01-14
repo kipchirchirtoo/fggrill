@@ -50,7 +50,7 @@ export default function RecipesPage() {
 
     return (
         <ProtectedRoute allowedRoles={[
-            UserRole.KITCHEN, UserRole.RESTAURANT,
+            UserRole.KITCHEN, UserRole.KITCHEN_OPERATIONS, UserRole.RESTAURANT,
             UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER
         ]}>
             <DashboardLayout>
@@ -124,8 +124,8 @@ export default function RecipesPage() {
                                                 <span>Food Cost</span>
                                             </div>
                                             <p className={`font-bold ${(recipe.food_cost_percentage || 0) > 35 ? 'text-red-600' :
-                                                    (recipe.food_cost_percentage || 0) > 30 ? 'text-amber-600' :
-                                                        'text-green-600'
+                                                (recipe.food_cost_percentage || 0) > 30 ? 'text-amber-600' :
+                                                    'text-green-600'
                                                 }`}>
                                                 {recipe.food_cost_percentage?.toFixed(1) || '0.0'}%
                                             </p>

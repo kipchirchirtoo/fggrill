@@ -84,7 +84,7 @@ export default function StockLedgerPage() {
 
     return (
         <ProtectedRoute allowedRoles={[
-            UserRole.KITCHEN, UserRole.POS_KITCHEN, UserRole.RESTAURANT,
+            UserRole.KITCHEN, UserRole.POS_KITCHEN, UserRole.KITCHEN_OPERATIONS, UserRole.RESTAURANT,
             UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER
         ]}>
             <DashboardLayout>

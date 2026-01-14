@@ -165,7 +165,7 @@ export default function KitchenDashboard() {
   };
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.KITCHEN, UserRole.POS_KITCHEN, UserRole.RESTAURANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
+    <ProtectedRoute allowedRoles={[UserRole.KITCHEN, UserRole.POS_KITCHEN, UserRole.KITCHEN_OPERATIONS, UserRole.RESTAURANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
           {/* Header */}
