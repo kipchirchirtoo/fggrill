@@ -136,8 +136,8 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
     >
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
-        <div className="flex items-center justify-between mb-6">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-5 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">Add New Item</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
@@ -507,8 +507,8 @@ export function TransferModal({ isOpen, onClose, onSuccess, items, fromBranchId,
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
     >
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
-        <div className="flex items-center justify-between mb-6">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-5 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">Create Stock Transfer</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
@@ -640,8 +640,8 @@ export function RequestModal({ isOpen, onClose, onSuccess, items, branchId }: Re
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
     >
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
-        <div className="flex items-center justify-between mb-6">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-5 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">Create Stock Request</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />

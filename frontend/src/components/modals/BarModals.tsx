@@ -61,7 +61,7 @@ export function BarStockRequestModal({ isOpen, onClose, onSuccess }: BarStockReq
 
         try {
             await api.barStockRequests.create({
-                bar_branch_id: activeBranchId || 0, // Fallback need handling
+                bar_branch_id: activeBranchId ?? 0, // Fallback need handling
                 items: selectedItems,
                 priority,
                 notes
@@ -117,7 +117,7 @@ export function BarStockRequestModal({ isOpen, onClose, onSuccess }: BarStockReq
             className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
         >
             <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-                <div className="flex items-center justify-between p-6 border-b border-gray-100">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
                     <div>
                         <h2 className="text-xl font-bold text-gray-900">Request Bar Stock</h2>
                         <p className="text-sm text-gray-500 mt-0.5">Create a requisition for the store</p>
@@ -127,7 +127,7 @@ export function BarStockRequestModal({ isOpen, onClose, onSuccess }: BarStockReq
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="flex-1 overflow-y-auto p-5 space-y-6">
                     {/* Meta Data */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>

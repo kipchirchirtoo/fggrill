@@ -85,10 +85,10 @@ export function RoomModal({ isOpen, onClose, room = null }: any) {
       <motion.div
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
-        className="bg-white rounded-xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl p-5 max-w-3xl w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">
             {room ? 'Edit Room' : 'Add New Room'}
           </h2>
@@ -308,10 +308,10 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
       <motion.div
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
-        className="bg-white rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl p-5 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Room {room.roomNumber}</h2>
             <p className="text-sm text-gray-500">{typeof room.type === 'string' ? room.type : room.type?.name || 'Standard'} • Floor {room.floor}</p>
@@ -386,7 +386,7 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
             </div>
 
             <div className="flex gap-3">
-              <button 
+              <button
                 onClick={() => {
                   if (setShowEditModal) {
                     setShowEditModal(true);
@@ -397,7 +397,7 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
                 <Edit className="inline h-4 w-4 mr-2" />
                 Edit Room
               </button>
-              <button 
+              <button
                 onClick={async () => {
                   try {
                     await roomsAPI.updateRoomStatus(room.id, 'maintenance');
@@ -411,7 +411,7 @@ export function RoomDetailsModal({ isOpen, onClose, room, setShowEditModal }: Ro
                 <AlertCircle className="inline h-4 w-4 mr-2" />
                 Change Status
               </button>
-              <button 
+              <button
                 onClick={async () => {
                   if (confirm('Are you sure you want to delete this room?')) {
                     try {

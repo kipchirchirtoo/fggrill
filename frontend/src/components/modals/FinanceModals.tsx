@@ -61,10 +61,10 @@ export function FolioModal({ isOpen, onClose, initialData }: FinanceModalProps) 
           initial={{ scale: 0.95 }}
           animate={{ scale: 1 }}
           exit={{ scale: 0.95 }}
-          className="bg-white rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+          className="bg-white rounded-xl p-5 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-xl font-bold text-gray-900">Folio Management</h2>
               <p className="text-sm text-gray-500">
@@ -247,8 +247,8 @@ export function AddChargeModal({ isOpen, onClose, initialData, onSuccess }: any)
     <motion.div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4"
     >
-      <div className="bg-white rounded-xl p-6 max-w-sm w-full">
-        <h3 className="text-lg font-bold mb-4">Add Charge</h3>
+      <div className="bg-white rounded-xl p-5 max-w-sm w-full max-h-[90vh] overflow-y-auto">
+        <h3 className="text-lg font-bold mb-3">Add Charge</h3>
         <div className="space-y-3">
           <select
             className="w-full p-2 border rounded"
@@ -333,10 +333,10 @@ export function PaymentModal({ isOpen, onClose, mode = 'create', initialData }: 
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
-        className="bg-white rounded-xl p-6 max-w-lg w-full"
+        className="bg-white rounded-xl p-5 max-w-lg w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">
             {mode === 'create' ? 'Process Payment' : 'Edit Payment'}
           </h2>
@@ -474,10 +474,10 @@ export function InvoiceModal({ isOpen, onClose, mode = 'create', initialData }: 
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
-        className="bg-white rounded-xl p-6 max-w-lg w-full"
+        className="bg-white rounded-xl p-5 max-w-lg w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">
             {mode === 'create' ? 'Generate Invoice' : 'Edit Invoice'}
           </h2>

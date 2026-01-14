@@ -58,7 +58,7 @@ export function MenuItemModal({ isOpen, onClose, mode = 'create', initialData }:
       }
       toast.success('Menu item ' + (mode === 'create' ? 'created' : 'updated') + ' successfully!');
       onClose();
-    } catch (error:any) {
+    } catch (error: any) {
       toast.error(error.message || 'Failed to save menu item');
     }
   };
@@ -77,10 +77,10 @@ export function MenuItemModal({ isOpen, onClose, mode = 'create', initialData }:
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
-        className="bg-white rounded-xl p-6 max-w-lg w-full"
+        className="bg-white rounded-xl p-5 max-w-lg w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">
             {mode === 'create' ? 'Add Menu Item' : 'Edit Menu Item'}
           </h2>
@@ -241,7 +241,7 @@ export function OrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =
       });
       toast.success('Order created successfully!');
       onClose();
-    } catch (error:any) {
+    } catch (error: any) {
       toast.error(error.message || 'Failed to create order');
     }
   };
@@ -260,10 +260,10 @@ export function OrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
-        className="bg-white rounded-xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl p-5 max-w-3xl w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">New Order</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />

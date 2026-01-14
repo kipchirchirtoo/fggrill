@@ -183,10 +183,10 @@ export function StaffModal({ isOpen, onClose, mode = 'create', initialData, onSu
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
-        className="bg-white rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl p-5 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-xl font-bold text-gray-900">
               {mode === 'create' ? 'Add Staff Member' : 'Edit Staff Member'}
@@ -423,10 +423,10 @@ export function ScheduleModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
-        className="bg-white rounded-xl p-6 max-w-lg w-full"
+        className="bg-white rounded-xl p-5 max-w-lg w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">Schedule Staff</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
@@ -556,10 +556,10 @@ export function PayrollModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
-        className="bg-white rounded-xl p-6 max-w-lg w-full"
+        className="bg-white rounded-xl p-5 max-w-lg w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">Process Payroll</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
@@ -704,10 +704,10 @@ export function PerformanceModal({ isOpen, onClose, staff }: { isOpen: boolean; 
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
-        className="bg-white rounded-xl p-6 max-w-lg w-full"
+        className="bg-white rounded-xl p-5 max-w-lg w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Performance Review</h2>
             {staff && (
@@ -719,7 +719,7 @@ export function PerformanceModal({ isOpen, onClose, staff }: { isOpen: boolean; 
           </button>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           {['Rating', 'Attendance', 'Punctuality', 'Teamwork', 'Customer Service'].map((category) => (
             <div key={category}>
               <label className="block text-sm font-medium text-gray-700 mb-2">

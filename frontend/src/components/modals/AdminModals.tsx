@@ -39,10 +39,10 @@ export function NewBookingModal({ isOpen, onClose }: { isOpen: boolean; onClose:
       <motion.div
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
-        className="bg-white rounded-xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl p-5 max-w-3xl w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-xl font-bold text-gray-900">New Booking</h2>
             <p className="text-sm text-gray-500">Step {step} of 3</p>
@@ -150,17 +150,17 @@ export function AddGuestModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
       <motion.div
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
-        className="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl p-5 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">Add New Guest</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-4">Personal Information</h3>
             <div className="grid grid-cols-2 gap-4">
@@ -204,10 +204,10 @@ export function CheckInModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
       <motion.div
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
-        className="bg-white rounded-xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl p-5 max-w-3xl w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">Guest Check-In</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
@@ -220,7 +220,7 @@ export function CheckInModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
             placeholder="Search by booking reference or guest name..."
             className="w-full px-4 py-3 border border-gray-300 rounded-ios-lg"
           />
-          
+
           <div className="border rounded-ios-lg p-4">
             <p className="font-medium">John Smith - BK001</p>
             <p className="text-sm text-gray-600">Deluxe Room • Check-in: Today</p>
@@ -261,10 +261,10 @@ export function ViewReportsModal({ isOpen, onClose }: { isOpen: boolean; onClose
       <motion.div
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
-        className="bg-white rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl p-5 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">Reports Dashboard</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />

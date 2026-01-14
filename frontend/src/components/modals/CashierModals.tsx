@@ -104,7 +104,7 @@ export const CreateDynamicBillModal = ({ isOpen, onClose, onSuccess }: ModalProp
                 className="relative w-full max-w-lg bg-white rounded-[32px] shadow-2xl overflow-hidden z-10"
             >
                 {/* Header */}
-                <div className="p-6 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
+                <div className="p-5 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
                     <div className="flex items-center gap-3">
                         <div className="p-2.5 bg-emerald-100 rounded-2xl">
                             <Receipt className="h-6 w-6 text-emerald-600" />
@@ -126,7 +126,7 @@ export const CreateDynamicBillModal = ({ isOpen, onClose, onSuccess }: ModalProp
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-7 space-y-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
+                <form onSubmit={handleSubmit} className="p-5 space-y-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
                     <div className="space-y-5">
                         {/* Service Type Selection */}
                         <div className="space-y-3">
@@ -304,7 +304,7 @@ export const BillDetailsModal = ({
                 >
                     {/* ... header ... */}
 
-                    <div className="p-6 space-y-6">
+                    <div className="p-5 space-y-6">
                         {/* ... details grid ... */}
                         <div className="grid grid-cols-2 gap-6">
                             {/* ... */}

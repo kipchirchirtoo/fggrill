@@ -192,37 +192,37 @@ export default function DocumentUploadModal({
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden"
+          className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              <h2 className="text-xl font-semibold text-gray-900">
                 Guest Documents
               </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-sm text-gray-500 mt-1">
                 {guestName}
               </p>
             </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <X className="w-5 h-5 text-gray-500" />
             </button>
           </div>
 
-          <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+          <div className="p-5 overflow-y-auto max-h-[calc(90vh-80px)]">
             {/* Alerts */}
             {error && (
-              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 text-red-700 dark:text-red-400">
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
                 <AlertCircle className="w-5 h-5 flex-shrink-0" />
                 <span className="text-sm">{error}</span>
               </div>
             )}
             {success && (
-              <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center gap-2 text-green-700 dark:text-green-400">
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
                 <CheckCircle className="w-5 h-5 flex-shrink-0" />
                 <span className="text-sm">{success}</span>
               </div>
@@ -230,19 +230,19 @@ export default function DocumentUploadModal({
 
             {/* Upload Section */}
             <div className="mb-6">
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">
                 Upload New Document
               </h3>
 
               {/* Document Type Select */}
               <div className="mb-4">
-                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                <label className="block text-sm text-gray-600 mb-1">
                   Document Type
                 </label>
                 <select
                   value={selectedType}
                   onChange={(e) => setSelectedType(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   {DOCUMENT_TYPES.map((type) => (
                     <option key={type.value} value={type.value}>
@@ -258,11 +258,10 @@ export default function DocumentUploadModal({
                 onDragLeave={handleDrag}
                 onDragOver={handleDrag}
                 onDrop={handleDrop}
-                className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-                  dragActive
-                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                    : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
-                }`}
+                className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${dragActive
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-300 hover:border-gray-400'
+                  }`}
               >
                 <input
                   ref={fileInputRef}
@@ -273,7 +272,7 @@ export default function DocumentUploadModal({
                   id="document-upload"
                 />
                 <Upload className="w-10 h-10 mx-auto mb-3 text-gray-400" />
-                <p className="text-gray-600 dark:text-gray-400 mb-2">
+                <p className="text-gray-600 mb-2">
                   Drag and drop a file here, or
                 </p>
                 <label
@@ -283,7 +282,7 @@ export default function DocumentUploadModal({
                   <Upload className="w-4 h-4" />
                   {uploading ? 'Uploading...' : 'Choose File'}
                 </label>
-                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                <p className="text-xs text-gray-500 mt-2">
                   Supported: JPEG, PNG, GIF, PDF (max 10MB)
                 </p>
               </div>
@@ -291,7 +290,7 @@ export default function DocumentUploadModal({
 
             {/* Existing Documents */}
             <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">
                 Uploaded Documents ({documents.length})
               </h3>
 
@@ -300,7 +299,7 @@ export default function DocumentUploadModal({
                   Loading documents...
                 </div>
               ) : documents.length === 0 ? (
-                <div className="text-center py-8 text-gray-500 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
+                <div className="text-center py-8 text-gray-500 border border-dashed border-gray-300 rounded-lg">
                   No documents uploaded yet
                 </div>
               ) : (
@@ -308,15 +307,15 @@ export default function DocumentUploadModal({
                   {documents.map((doc) => (
                     <div
                       key={doc.id}
-                      className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
+                      className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg"
                     >
                       {getFileIcon(doc.mime_type)}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                        <p className="text-sm font-medium text-gray-900 truncate">
                           {doc.file_name}
                         </p>
-                        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                          <span className="px-2 py-0.5 bg-gray-200 dark:bg-gray-600 rounded">
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <span className="px-2 py-0.5 bg-gray-200 rounded">
                             {getDocumentTypeLabel(doc.document_type)}
                           </span>
                           <span>{formatFileSize(doc.file_size)}</span>
@@ -328,24 +327,24 @@ export default function DocumentUploadModal({
                         {doc.mime_type.startsWith('image/') && (
                           <button
                             onClick={() => setPreviewUrl(`${API_URL}/${doc.file_path}`)}
-                            className="p-2 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                            className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
                             title="Preview"
                           >
-                            <Eye className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                            <Eye className="w-4 h-4 text-gray-600" />
                           </button>
                         )}
                         <a
                           href={`${API_URL}/${doc.file_path}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="p-2 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                          className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
                           title="Download"
                         >
-                          <Download className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                          <Download className="w-4 h-4 text-gray-600" />
                         </a>
                         <button
                           onClick={() => handleDeleteDocument(doc.id)}
-                          className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                          className="p-2 hover:bg-red-100 rounded-lg transition-colors"
                           title="Delete"
                         >
                           <Trash2 className="w-4 h-4 text-red-500" />
@@ -359,10 +358,10 @@ export default function DocumentUploadModal({
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-white rounded-lg transition-colors"
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors"
             >
               Close
             </button>

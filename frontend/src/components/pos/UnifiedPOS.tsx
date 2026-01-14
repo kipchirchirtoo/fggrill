@@ -397,20 +397,20 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                 </div>
             </div>
 
-            {/* Cart Section - Sleek Glassmorphism Side Panel */}
+            {/* Cart Section - Minimal Light Side Panel */}
             <div className="w-full lg:w-[26rem] flex flex-col shrink-0 gap-4 overflow-hidden">
-                <div className="bg-stone-900 border border-stone-800 rounded-[2.5rem] flex flex-col h-full overflow-hidden shadow-2xl relative">
+                <div className="bg-white border border-stone-200 rounded-[2.5rem] flex flex-col h-full overflow-hidden shadow-xl shadow-stone-200/50 relative">
                     {/* Cart Header */}
-                    <div className="p-8 border-b border-stone-800 shrink-0">
+                    <div className="p-8 border-b border-stone-100 shrink-0">
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-xl font-black text-white flex items-center gap-3">
-                                <div className={cn("p-2 rounded-xl", accentBg)}>
+                            <h2 className="text-xl font-black text-stone-900 flex items-center gap-3">
+                                <div className={cn("p-2 rounded-xl text-white", accentBg)}>
                                     <ShoppingCart className="h-5 w-5" />
                                 </div>
                                 YOUR CART
                             </h2>
                             {cart.length > 0 && (
-                                <button onClick={clearCart} className="text-[11px] font-black uppercase tracking-widest text-stone-500 hover:text-red-400 transition-colors">Clear</button>
+                                <button onClick={clearCart} className="text-[11px] font-black uppercase tracking-widest text-stone-400 hover:text-red-500 transition-colors">Clear</button>
                             )}
                         </div>
 
@@ -418,14 +418,14 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                         <div className="space-y-4">
                             {isRestaurant ? (
                                 <div className="space-y-3">
-                                    <div className="grid grid-cols-3 gap-1 bg-stone-800/50 p-1 rounded-2xl">
+                                    <div className="grid grid-cols-3 gap-1 bg-stone-100 p-1 rounded-2xl">
                                         {(['dine_in', 'takeaway', 'room_service'] as const).map(type => (
                                             <button
                                                 key={type}
                                                 onClick={() => setOrderType(type)}
                                                 className={cn(
                                                     "py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all",
-                                                    orderType === type ? "bg-stone-700 text-white shadow-lg" : "text-stone-500 hover:text-stone-300"
+                                                    orderType === type ? "bg-white text-stone-900 shadow-sm border border-stone-200" : "text-stone-500 hover:text-stone-700"
                                                 )}
                                             >
                                                 {type === 'dine_in' ? 'Dine In' : type === 'takeaway' ? 'Takeaway' : 'Room'}
@@ -434,23 +434,23 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
                                         {orderType === 'dine_in' && (
-                                            <input placeholder="TABLE #" value={tableNumber} onChange={e => setTableNumber(e.target.value)} className="bg-stone-800/50 border-none text-white rounded-xl h-12 px-4 focus:ring-2 focus:ring-amber-500/50 text-xs font-bold placeholder:text-stone-600" />
+                                            <input placeholder="TABLE #" value={tableNumber} onChange={e => setTableNumber(e.target.value)} className="bg-stone-50 border border-stone-200 text-stone-900 rounded-xl h-12 px-4 focus:ring-2 focus:ring-amber-500/20 text-xs font-bold placeholder:text-stone-400 focus:bg-white transition-all" />
                                         )}
                                         {orderType === 'room_service' && (
-                                            <input placeholder="ROOM #" value={roomNumber} onChange={e => setRoomNumber(e.target.value)} className="bg-stone-800/50 border-none text-white rounded-xl h-12 px-4 focus:ring-2 focus:ring-amber-500/50 text-xs font-bold placeholder:text-stone-600" />
+                                            <input placeholder="ROOM #" value={roomNumber} onChange={e => setRoomNumber(e.target.value)} className="bg-stone-50 border border-stone-200 text-stone-900 rounded-xl h-12 px-4 focus:ring-2 focus:ring-amber-500/20 text-xs font-bold placeholder:text-stone-400 focus:bg-white transition-all" />
                                         )}
                                         {(orderType === 'dine_in' || orderType === 'room_service') && (
                                             <select
                                                 value={selectedWaiterId}
                                                 onChange={e => setSelectedWaiterId(e.target.value)}
-                                                className="bg-stone-800/50 border-none text-white rounded-xl h-12 px-4 focus:ring-2 focus:ring-amber-500/50 text-xs font-bold appearance-none cursor-pointer"
+                                                className="bg-stone-50 border border-stone-200 text-stone-900 rounded-xl h-12 px-4 focus:ring-2 focus:ring-amber-500/20 text-xs font-bold appearance-none cursor-pointer focus:bg-white transition-all"
                                             >
-                                                <option value="" className="bg-stone-900">SELECT WAITER</option>
-                                                {waiters.map(w => <option key={w.id} value={w.id} className="bg-stone-900">{w.first_name.toUpperCase()}</option>)}
+                                                <option value="" className="bg-white">SELECT WAITER</option>
+                                                {waiters.map(w => <option key={w.id} value={w.id} className="bg-white">{w.first_name.toUpperCase()}</option>)}
                                             </select>
                                         )}
                                         {orderType === 'takeaway' && (
-                                            <input placeholder="CUSTOMER NAME" value={customerName} onChange={e => setCustomerName(e.target.value)} className="bg-stone-800/50 border-none text-white rounded-xl h-12 px-4 focus:ring-2 focus:ring-amber-500/50 text-xs font-bold col-span-2 placeholder:text-stone-600" />
+                                            <input placeholder="CUSTOMER NAME" value={customerName} onChange={e => setCustomerName(e.target.value)} className="bg-stone-50 border border-stone-200 text-stone-900 rounded-xl h-12 px-4 focus:ring-2 focus:ring-amber-500/20 text-xs font-bold col-span-2 placeholder:text-stone-400 focus:bg-white transition-all" />
                                         )}
                                     </div>
                                 </div>
@@ -460,17 +460,17 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                         <select
                                             value={selectedTabId}
                                             onChange={e => setSelectedTabId(e.target.value)}
-                                            className="w-full h-13 px-4 bg-stone-800/50 border-none text-white rounded-2xl text-[13px] font-bold appearance-none cursor-pointer focus:ring-2 focus:ring-indigo-500/50"
+                                            className="w-full h-13 px-4 bg-stone-50 border border-stone-200 text-stone-900 rounded-2xl text-[13px] font-bold appearance-none cursor-pointer focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all"
                                         >
-                                            <option value="" className="bg-stone-900">--- WALK-IN ORDER ---</option>
-                                            {openTabs.map(t => <option key={t.id} value={t.id} className="bg-stone-900">T#{t.tab_number.padStart(3, '0')} - {t.customer_name.toUpperCase()}</option>)}
+                                            <option value="" className="bg-white">--- WALK-IN ORDER ---</option>
+                                            {openTabs.map(t => <option key={t.id} value={t.id} className="bg-white">T#{t.tab_number.padStart(3, '0')} - {t.customer_name.toUpperCase()}</option>)}
                                         </select>
-                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-stone-500">
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-stone-400">
                                             <ChevronDown className="h-4 w-4" />
                                         </div>
                                     </div>
                                     {!selectedTabId && (
-                                        <input placeholder="SEAT / TABLE REFERENCE" value={tableNumber} onChange={e => setTableNumber(e.target.value)} className="w-full bg-stone-800/50 border-none text-white rounded-2xl h-13 px-4 focus:ring-2 focus:ring-indigo-500/50 text-xs font-bold placeholder:text-stone-600" />
+                                        <input placeholder="SEAT / TABLE REFERENCE" value={tableNumber} onChange={e => setTableNumber(e.target.value)} className="w-full bg-stone-50 border border-stone-200 text-stone-900 rounded-2xl h-13 px-4 focus:ring-2 focus:ring-indigo-500/20 text-xs font-bold placeholder:text-stone-400 focus:bg-white transition-all" />
                                     )}
                                 </div>
                             )}
@@ -480,11 +480,11 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                     {/* Cart Items List */}
                     <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-4">
                         {cart.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-stone-700 py-12">
-                                <div className="bg-stone-800/30 p-10 rounded-[3rem] mb-6">
-                                    <ShoppingCart className="h-16 w-16 opacity-10" />
+                            <div className="flex flex-col items-center justify-center h-full text-stone-400 py-12">
+                                <div className="bg-stone-50 p-10 rounded-[3rem] mb-6">
+                                    <ShoppingCart className="h-16 w-16 opacity-20" />
                                 </div>
-                                <p className="text-lg font-black tracking-widest opacity-20">EMPTY CART</p>
+                                <p className="text-lg font-black tracking-widest opacity-40">EMPTY CART</p>
                             </div>
                         ) : (
                             <div className="space-y-4">
@@ -492,24 +492,24 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                     <div
                                         key={item.id}
                                         className={cn(
-                                            "flex items-center gap-4 p-4 rounded-[1.5rem] border border-stone-800/50 transition-all duration-300",
-                                            lastAddedId === item.id ? "bg-stone-800/80 scale-[1.02] border-stone-700" : "bg-stone-800/30"
+                                            "flex items-center gap-4 p-4 rounded-[1.5rem] border border-stone-100 transition-all duration-300",
+                                            lastAddedId === item.id ? "bg-stone-100 scale-[1.02] border-stone-200" : "bg-white shadow-sm"
                                         )}
                                     >
                                         <div className="flex-1 min-w-0">
-                                            <p className="font-extrabold text-sm text-white truncate uppercase tracking-tight">{item.name}</p>
+                                            <p className="font-extrabold text-sm text-stone-900 truncate uppercase tracking-tight">{item.name}</p>
                                             <p className={cn("text-[13px] font-black mt-1", accentText)}>KES {(item.price * item.quantity).toLocaleString()}</p>
                                         </div>
-                                        <div className="flex items-center gap-1 bg-black/40 rounded-xl p-1 border border-stone-800">
-                                            <button onClick={() => updateQuantity(item.id, -1)} className="w-9 h-9 flex items-center justify-center text-stone-500 hover:text-white hover:bg-stone-800 rounded-lg transition-colors">
+                                        <div className="flex items-center gap-1 bg-stone-100 rounded-xl p-1 border border-stone-200">
+                                            <button onClick={() => updateQuantity(item.id, -1)} className="w-9 h-9 flex items-center justify-center text-stone-400 hover:text-stone-700 hover:bg-white rounded-lg transition-colors">
                                                 <Minus className="h-3 w-3" />
                                             </button>
-                                            <span className="w-8 text-center text-xs font-black text-white">{item.quantity}</span>
-                                            <button onClick={() => updateQuantity(item.id, 1)} className="w-9 h-9 flex items-center justify-center text-stone-500 hover:text-white hover:bg-stone-800 rounded-lg transition-colors">
+                                            <span className="w-8 text-center text-xs font-black text-stone-900">{item.quantity}</span>
+                                            <button onClick={() => updateQuantity(item.id, 1)} className="w-9 h-9 flex items-center justify-center text-stone-400 hover:text-stone-700 hover:bg-white rounded-lg transition-colors">
                                                 <Plus className="h-3 w-3" />
                                             </button>
                                         </div>
-                                        <button onClick={() => removeFromCart(item.id)} className="text-stone-700 hover:text-red-500 p-2 transition-colors">
+                                        <button onClick={() => removeFromCart(item.id)} className="text-stone-400 hover:text-red-500 p-2 transition-colors">
                                             <X className="h-4 w-4" />
                                         </button>
                                     </div>
@@ -519,7 +519,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                     </div>
 
                     {/* Footer / Summary / Payment */}
-                    <div className="p-8 border-t border-stone-800 bg-black/20 shrink-0 space-y-6">
+                    <div className="p-8 border-t border-stone-100 bg-stone-50/50 shrink-0 space-y-6">
                         <div className="space-y-2">
                             <div className="flex justify-between text-xs font-bold text-stone-500">
                                 <span>SUBTOTAL (NET)</span>
@@ -529,22 +529,22 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                 <span>TAXES (VAT 16.0%)</span>
                                 <span>KES {tax.toLocaleString()}</span>
                             </div>
-                            <div className="flex justify-between items-end pt-4 border-t border-stone-800/50 mt-4">
+                            <div className="flex justify-between items-end pt-4 border-t border-stone-200 mt-4">
                                 <span className="text-xs font-black text-stone-400">TOTAL AMOUNT</span>
-                                <span className="text-2xl font-black text-white tracking-tighter">KES {total.toLocaleString()}</span>
+                                <span className="text-2xl font-black text-stone-900 tracking-tighter">KES {total.toLocaleString()}</span>
                             </div>
                         </div>
 
                         <div className="space-y-4">
                             {/* Modern Payment Selector */}
-                            <div className="grid grid-cols-3 gap-2 bg-stone-800/30 p-1.5 rounded-2xl border border-stone-800/50">
+                            <div className="grid grid-cols-3 gap-2 bg-stone-100 p-1.5 rounded-2xl border border-stone-200">
                                 {(['cash', 'mpesa', 'card'] as const).map(method => (
                                     <button
                                         key={method}
                                         onClick={() => setPaymentMethod(method)}
                                         className={cn(
                                             "py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all",
-                                            paymentMethod === method ? "bg-white text-stone-900 shadow-xl" : "text-stone-600 hover:text-stone-400"
+                                            paymentMethod === method ? "bg-white text-stone-900 shadow-sm border border-stone-100" : "text-stone-500 hover:text-stone-700"
                                         )}
                                     >
                                         {method === 'mpesa' ? 'M-Pesa' : method}
@@ -556,8 +556,8 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                 onClick={handleCreateOrder}
                                 disabled={cart.length === 0 || isSubmitting}
                                 className={cn(
-                                    "w-full h-16 rounded-[1.5rem] font-black text-[15px] uppercase tracking-[0.1em] flex items-center justify-center gap-3 transition-all active:scale-[0.97] disabled:opacity-30 disabled:grayscale disabled:active:scale-100 shadow-2xl relative overflow-hidden group/btn",
-                                    accentBg, accentColor === 'amber' ? "shadow-amber-900/40" : "shadow-indigo-900/40",
+                                    "w-full h-16 rounded-[1.5rem] font-black text-[15px] uppercase tracking-[0.1em] flex items-center justify-center gap-3 transition-all active:scale-[0.97] disabled:opacity-30 disabled:grayscale disabled:active:scale-100 shadow-xl relative overflow-hidden group/btn",
+                                    accentBg, accentColor === 'amber' ? "shadow-amber-200" : "shadow-indigo-200",
                                     "text-white"
                                 )}
                             >
@@ -565,7 +565,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                     <RefreshCw className="h-6 w-6 animate-spin" />
                                 ) : (
                                     <div className="flex items-center gap-4">
-                                        <div className="bg-black/10 p-2 rounded-xl group-hover/btn:scale-110 transition-transform duration-300">
+                                        <div className="bg-white/20 p-2 rounded-xl group-hover/btn:scale-110 transition-transform duration-300">
                                             {isRestaurant ? <ChefHat className="h-6 w-6" /> : <ConciergeBell className="h-6 w-6" />}
                                         </div>
                                         <span>

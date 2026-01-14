@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  X, CreditCard, Smartphone, Banknote, DollarSign, 
-  CheckCircle, XCircle, Loader2, AlertCircle 
+import {
+  X, CreditCard, Smartphone, Banknote, DollarSign,
+  CheckCircle, XCircle, Loader2, AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { paymentsAPI, folioAPI } from '@/lib/api';
@@ -156,29 +156,29 @@ export default function PaymentModal({
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+          className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              <h2 className="text-xl font-semibold text-gray-900">
                 Process Payment
               </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-sm text-gray-500">
                 {guestName}
               </p>
             </div>
             <button
               onClick={onClose}
               disabled={status === 'processing'}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
             >
               <X className="w-5 h-5 text-gray-500" />
             </button>
           </div>
 
-          <div className="p-6">
+          <div className="p-5">
             {/* Status Display */}
             {status === 'success' && (
               <motion.div
@@ -187,10 +187,10 @@ export default function PaymentModal({
                 className="text-center py-8"
               >
                 <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
                   Payment Successful
                 </h3>
-                <p className="text-gray-500 dark:text-gray-400 mb-4">
+                <p className="text-gray-500 mb-4">
                   {formatCurrency(amount)} has been received
                 </p>
                 <button
@@ -209,10 +209,10 @@ export default function PaymentModal({
                 className="text-center py-8"
               >
                 <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
                   Payment Failed
                 </h3>
-                <p className="text-red-500 dark:text-red-400 mb-4">
+                <p className="text-red-500 mb-4">
                   {error || 'An error occurred processing payment'}
                 </p>
                 <button
@@ -231,12 +231,12 @@ export default function PaymentModal({
                 className="text-center py-8"
               >
                 <Loader2 className="w-16 h-16 text-blue-500 mx-auto mb-4 animate-spin" />
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
                   Processing Payment
                 </h3>
-                <p className="text-gray-500 dark:text-gray-400">
-                  {paymentMethod === 'mpesa' 
-                    ? 'Waiting for M-Pesa confirmation...' 
+                <p className="text-gray-500">
+                  {paymentMethod === 'mpesa'
+                    ? 'Waiting for M-Pesa confirmation...'
                     : 'Please wait...'}
                 </p>
               </motion.div>
@@ -246,17 +246,17 @@ export default function PaymentModal({
               <div className="space-y-6">
                 {/* Error Display */}
                 {error && (
-                  <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 text-red-700 dark:text-red-400">
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
                     <AlertCircle className="w-5 h-5 flex-shrink-0" />
                     <span className="text-sm">{error}</span>
                   </div>
                 )}
 
                 {/* Balance Info */}
-                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+                <div className="bg-gray-50 rounded-lg p-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600 dark:text-gray-400">Outstanding Balance</span>
-                    <span className="text-xl font-bold text-gray-900 dark:text-white">
+                    <span className="text-gray-600">Outstanding Balance</span>
+                    <span className="text-xl font-bold text-gray-900">
                       {formatCurrency(currentBalance)}
                     </span>
                   </div>
@@ -264,7 +264,7 @@ export default function PaymentModal({
 
                 {/* Amount Input */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Payment Amount
                   </label>
                   <div className="relative">
@@ -273,7 +273,7 @@ export default function PaymentModal({
                       type="number"
                       value={amount}
                       onChange={(e) => setAmount(Number(e.target.value))}
-                      className="w-full pl-9 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"
+                      className="w-full pl-9 pr-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"
                       placeholder="0"
                       min="0"
                     />
@@ -283,14 +283,14 @@ export default function PaymentModal({
                       <button
                         key={preset}
                         onClick={() => setAmount(preset)}
-                        className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                        className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
                       >
                         {formatCurrency(preset)}
                       </button>
                     ))}
                     <button
                       onClick={() => setAmount(currentBalance)}
-                      className="px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
+                      className="px-3 py-1 text-sm bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg transition-colors"
                     >
                       Full Balance
                     </button>
@@ -299,46 +299,43 @@ export default function PaymentModal({
 
                 {/* Payment Method Selection */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Payment Method
                   </label>
                   <div className="grid grid-cols-3 gap-3">
                     <button
                       onClick={() => setPaymentMethod('card')}
-                      className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${
-                        paymentMethod === 'card'
-                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                          : 'border-gray-200 dark:border-gray-600 hover:border-gray-300'
-                      }`}
+                      className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${paymentMethod === 'card'
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                        }`}
                     >
                       <CreditCard className={`w-6 h-6 ${paymentMethod === 'card' ? 'text-blue-600' : 'text-gray-500'}`} />
-                      <span className={`text-sm font-medium ${paymentMethod === 'card' ? 'text-blue-700 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                      <span className={`text-sm font-medium ${paymentMethod === 'card' ? 'text-blue-700' : 'text-gray-700'}`}>
                         Card
                       </span>
                     </button>
                     <button
                       onClick={() => setPaymentMethod('mpesa')}
-                      className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${
-                        paymentMethod === 'mpesa'
-                          ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                          : 'border-gray-200 dark:border-gray-600 hover:border-gray-300'
-                      }`}
+                      className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${paymentMethod === 'mpesa'
+                        ? 'border-green-500 bg-green-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                        }`}
                     >
                       <Smartphone className={`w-6 h-6 ${paymentMethod === 'mpesa' ? 'text-green-600' : 'text-gray-500'}`} />
-                      <span className={`text-sm font-medium ${paymentMethod === 'mpesa' ? 'text-green-700 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                      <span className={`text-sm font-medium ${paymentMethod === 'mpesa' ? 'text-green-700' : 'text-gray-700'}`}>
                         M-Pesa
                       </span>
                     </button>
                     <button
                       onClick={() => setPaymentMethod('cash')}
-                      className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${
-                        paymentMethod === 'cash'
-                          ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
-                          : 'border-gray-200 dark:border-gray-600 hover:border-gray-300'
-                      }`}
+                      className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${paymentMethod === 'cash'
+                        ? 'border-amber-500 bg-amber-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                        }`}
                     >
                       <Banknote className={`w-6 h-6 ${paymentMethod === 'cash' ? 'text-amber-600' : 'text-gray-500'}`} />
-                      <span className={`text-sm font-medium ${paymentMethod === 'cash' ? 'text-amber-700 dark:text-amber-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                      <span className={`text-sm font-medium ${paymentMethod === 'cash' ? 'text-amber-700' : 'text-gray-700'}`}>
                         Cash
                       </span>
                     </button>
@@ -348,7 +345,7 @@ export default function PaymentModal({
                 {/* M-Pesa Phone Number */}
                 {paymentMethod === 'mpesa' && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       M-Pesa Phone Number
                     </label>
                     <div className="relative">
@@ -357,7 +354,7 @@ export default function PaymentModal({
                         type="tel"
                         value={phoneNumber}
                         onChange={(e) => setPhoneNumber(e.target.value)}
-                        className="w-full pl-9 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        className="w-full pl-9 pr-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-green-500 focus:border-transparent"
                         placeholder="254712345678"
                       />
                     </div>

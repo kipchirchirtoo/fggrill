@@ -110,7 +110,7 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JS
         reservationData.adults
       );
       const rooms = res.data || [];
-      const filtered = rooms.filter((r: any) => 
+      const filtered = rooms.filter((r: any) =>
         (r.type?.id || r.type_id) === reservationData.roomTypeId
       );
       setAvailableRooms(filtered);
@@ -150,7 +150,7 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JS
         const nameParts = reservationData.guestName.split(' ');
         const firstName = nameParts[0];
         const lastName = nameParts.slice(1).join(' ') || 'Guest';
-        
+
         const newGuestRes = await guestAPI.createGuest({
           firstName,
           lastName,
@@ -175,7 +175,7 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JS
         specialRequests: reservationData.specialRequests,
         branchId: activeBranchId
       });
-      
+
       toast.success('Reservation created successfully!');
       onClose();
     } catch (error: any) {
@@ -200,10 +200,10 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JS
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
-        className="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl p-5 max-w-lg w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-xl font-bold text-gray-900">New Reservation</h2>
             <p className="text-sm text-gray-500">Step {step} of 3</p>
@@ -215,9 +215,9 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JS
 
         {/* Progress Bar */}
         <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
-          <div 
-            className="bg-indigo-600 h-2 rounded-full transition-all duration-300" 
-            style={{ width: `${(step / 3) * 100}%` }} 
+          <div
+            className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+            style={{ width: `${(step / 3) * 100}%` }}
           />
         </div>
 
@@ -435,7 +435,7 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JS
                 <Bed className="h-5 w-5" />
                 Select Room
               </h3>
-              
+
               {availableRooms.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-ios-lg">
                   <Bed className="h-12 w-12 mx-auto text-gray-400 mb-3" />
@@ -447,11 +447,10 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JS
                     <div
                       key={room.id}
                       onClick={() => setSelectedRoom(room)}
-                      className={`p-4 border-2 rounded-ios-lg cursor-pointer transition-all ${
-                        selectedRoom?.id === room.id
-                          ? 'border-indigo-600 bg-indigo-50'
-                          : 'border-gray-200 hover:border-indigo-300'
-                      }`}
+                      className={`p-4 border-2 rounded-ios-lg cursor-pointer transition-all ${selectedRoom?.id === room.id
+                        ? 'border-indigo-600 bg-indigo-50'
+                        : 'border-gray-200 hover:border-indigo-300'
+                        }`}
                     >
                       <div className="flex items-start justify-between">
                         <div>
