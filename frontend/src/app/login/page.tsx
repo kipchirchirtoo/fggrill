@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/lib/auth-context';
+import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import {
   Mail,
@@ -20,11 +21,18 @@ import {
 
 export default function LoginPage() {
   const { login, posLogin, isLoading } = useAuth();
+  const searchParams = useSearchParams();
   const [loginMode, setLoginMode] = useState<'standard' | 'pos'>('standard');
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({ email: '', password: '', pin: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [rememberMe, setRememberMe] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get('mode') === 'pos') {
+      setLoginMode('pos');
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,9 +64,9 @@ export default function LoginPage() {
         setErrors(prev => ({ ...prev, pin: 'PIN is required' }));
         return;
       }
-      const pinRegex = /^[RB]\d{3}$/;
+      const pinRegex = /^([RB]\d{3}|\d{4})$/;
       if (!pinRegex.test(formData.pin)) {
-        setErrors(prev => ({ ...prev, pin: 'Format: RXXX or BXXX' }));
+        setErrors(prev => ({ ...prev, pin: 'Enter 4-digit PIN' }));
         return;
       }
 

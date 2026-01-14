@@ -563,7 +563,7 @@ export default function POSKitchenDashboard() {
           </div>
 
           {/* Tab Navigation - Vibrant & Premium */}
-          <div className="flex gap-1 p-1.5 bg-stone-100 rounded-2xl w-full sm:w-fit overflow-x-auto no-scrollbar flex-shrink-0 border border-stone-200 shadow-inner">
+          <div className="flex gap-1 p-1.5 bg-stone-100/50 backdrop-blur-sm rounded-2xl w-full sm:w-fit overflow-x-auto no-scrollbar flex-shrink-0 border border-stone-200">
             {[
               { id: 'overview', label: 'Overview', icon: UtensilsCrossed, color: 'text-amber-600' },
               { id: 'restaurant', label: 'Restaurant POS', icon: ChefHat, color: 'text-orange-600' },
@@ -574,8 +574,8 @@ export default function POSKitchenDashboard() {
                 key={tab.id}
                 onClick={() => handleTabChange(tab.id)}
                 className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl text-[13px] font-bold transition-all whitespace-nowrap flex-1 sm:flex-none justify-center ${activeTab === tab.id
-                  ? 'bg-white text-stone-900 shadow-sm scale-100'
-                  : 'text-stone-500 hover:text-stone-700 hover:bg-stone-50'
+                  ? 'bg-white text-stone-900 shadow-sm border border-stone-100'
+                  : 'text-stone-500 hover:text-stone-700 hover:bg-stone-50/50'
                   }`}
               >
                 <tab.icon className={cn("h-4 w-4", activeTab === tab.id ? tab.color : "text-stone-400")} />
@@ -585,11 +585,14 @@ export default function POSKitchenDashboard() {
           </div>
 
           {/* Tab Content */}
-          <div className={['restaurant', 'bar'].includes(activeTab) ? 'flex-1 min-h-0 overflow-hidden' : ''}>
-            {activeTab === 'overview' && renderOverview()}
+          <div className={cn(
+            "flex-1 min-h-0 overflow-hidden mt-2",
+            !['restaurant', 'bar'].includes(activeTab) && "overflow-y-auto custom-scrollbar pb-6"
+          )}>
+            {activeTab === 'overview' && <div className="max-w-[1200px] mx-auto">{renderOverview()}</div>}
             {activeTab === 'restaurant' && <UnifiedPOS mode="restaurant" onOrderCreated={fetchData} />}
             {activeTab === 'bar' && <UnifiedPOS mode="bar" onOrderCreated={fetchData} />}
-            {activeTab === 'recent' && renderRecentOrders()}
+            {activeTab === 'recent' && <div className="max-w-[1200px] mx-auto">{renderRecentOrders()}</div>}
           </div>
         </div>
       </DashboardLayout>

@@ -60,7 +60,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   posLogin: (pin: string) => Promise<void>;
-  logout: () => void;
+  logout: (redirectTo?: string) => void;
   checkAuth: () => Promise<void>;
 }
 
@@ -255,7 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const logout = async () => {
+  const logout = async (redirectTo: string = '/login') => {
     try {
       await api.auth.logout();
     } catch (error) {
@@ -265,7 +265,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('token');
       setUser(null);
       toast.info('Logged out successfully');
-      router.push('/login');
+      router.push(redirectTo);
     }
   };
 
