@@ -279,98 +279,31 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
 
     return (
         <div className="h-full bg-stone-50 flex flex-col w-full text-stone-900 overflow-hidden">
-            {/* Redesigned Header - Premium & Minimal */}
-            <header className="bg-white border-b border-stone-200 sticky top-0 z-50 flex-shrink-0">
-                <div className="container mx-auto px-6 py-4 flex items-center justify-between gap-8 max-w-[1920px]">
-                    <div className="flex items-center gap-4">
-                        <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center text-white text-xl font-black shadow-lg", accentBg)}>
-                            {mode === 'restaurant' ? 'R' : 'B'}
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-black tracking-tight text-stone-900 leading-none">
-                                {mode === 'restaurant' ? 'Restro' : 'Bar'} POS
-                            </h1>
-                            <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mt-1">Management System</p>
-                        </div>
-                    </div>
-
-                    <div className="flex-1 max-w-2xl mx-8">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 w-5 h-5" />
-                            <input
-                                type="text"
-                                placeholder={`Search ${mode} menu...`}
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-bold placeholder:text-stone-400 text-stone-900"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                        <button
-                            onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-                            className="p-3.5 rounded-2xl border border-stone-200 hover:bg-stone-50 transition-all text-stone-500 hover:text-stone-900 shadow-sm"
-                        >
-                            {viewMode === 'grid' ? <List className="w-5 h-5" /> : <Grid className="w-5 h-5" />}
-                        </button>
-
-                        <div className="h-10 w-px bg-stone-200 mx-2" />
-
-                        {/* User Profile Section */}
-                        <div className="relative">
-                            <button
-                                onClick={() => setUserMenuOpen(!userMenuOpen)}
-                                className="flex items-center gap-3 p-1.5 pr-4 rounded-2xl hover:bg-stone-100 transition-all border border-transparent hover:border-stone-200"
-                            >
-                                <div className="h-10 w-10 rounded-xl bg-stone-900 flex items-center justify-center text-white shadow-md">
-                                    <UserIcon className="h-5 w-5" />
-                                </div>
-                                <div className="text-left hidden md:block">
-                                    <p className="text-xs font-black text-stone-900 uppercase tracking-tight">{user?.firstName}</p>
-                                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest leading-none mt-0.5">{user?.role.split('_')[0]}</p>
-                                </div>
-                                <ChevronDown className={cn("h-4 w-4 text-stone-400 transition-transform", userMenuOpen && "rotate-180")} />
-                            </button>
-
-                            <AnimatePresence>
-                                {userMenuOpen && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        className="absolute right-0 mt-3 w-64 bg-white rounded-[2rem] border border-stone-200 shadow-2xl p-4 z-[100]"
-                                    >
-                                        <div className="p-4 bg-stone-50 rounded-[1.5rem] mb-2 border border-stone-100">
-                                            <p className="text-sm font-black text-stone-900 mb-0.5">{user?.firstName} {user?.lastName}</p>
-                                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest truncate">{user?.email}</p>
-                                        </div>
-                                        <div className="space-y-1">
-                                            <button className="flex items-center gap-3 w-full p-3 text-xs font-black text-stone-600 hover:bg-stone-50 rounded-xl transition-all">
-                                                <UserIcon className="w-4 h-4" />
-                                                <span>Profile Settings</span>
-                                            </button>
-                                            <div className="h-px bg-stone-100 my-2" />
-                                            <button
-                                                onClick={() => logout()}
-                                                className="flex items-center gap-3 w-full p-3 text-xs font-black text-red-600 hover:bg-red-50 rounded-xl transition-all"
-                                            >
-                                                <LogOut className="w-4 h-4" />
-                                                <span>Sign Out</span>
-                                            </button>
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
-                    </div>
-                </div>
-            </header>
+            {/* Header Removed to maximize vertical space as per user request */}
 
             {/* Main Content Area */}
             <div className="flex-1 flex flex-row container mx-auto p-4 gap-4 overflow-hidden max-w-[1700px]">
                 {/* Left Side - Product Explorer */}
                 <div className="flex-1 flex flex-col min-w-0">
+                    {/* Integrated Search & View Toggle in Column */}
+                    <div className="flex items-center gap-2 mb-4">
+                        <div className="flex-1 relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 w-4 h-4" />
+                            <input
+                                type="text"
+                                placeholder={`Search ${mode} menu...`}
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full pl-9 pr-4 py-2.5 bg-white border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm font-bold placeholder:text-stone-400 text-stone-900 shadow-sm"
+                            />
+                        </div>
+                        <button
+                            onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+                            className="p-2.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 transition-all text-stone-500 hover:text-stone-900 shadow-sm"
+                        >
+                            {viewMode === 'grid' ? <List className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
+                        </button>
+                    </div>
                     {/* Horizontal Categories Tabs - Matching Snippet Style */}
                     <div className="bg-white rounded-lg shadow-sm p-3 mb-4 overflow-x-auto no-scrollbar border border-stone-100">
                         <div className="flex gap-2 min-w-max">
@@ -473,8 +406,57 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
 
                 {/* Right Side - Cart Section - Matching Snippet Style */}
                 <div className="w-64 sm:w-72 md:w-80 flex-shrink-0 flex flex-col bg-white rounded-lg shadow-lg overflow-hidden border border-stone-200 h-full">
+                    {/* Repositioned User Profile Icon in Cart Column */}
+                    <div className="p-3 md:p-3.5 border-b border-stone-200 flex items-center justify-between bg-stone-50/50 relative z-20">
+                        <div className="flex items-center gap-2">
+                            <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-black shadow-md", accentBg)}>
+                                {mode === 'restaurant' ? 'R' : 'B'}
+                            </div>
+                            <div className="text-left">
+                                <p className="text-[10px] font-black text-stone-900 uppercase tracking-tight leading-none">{user?.firstName}</p>
+                                <p className="text-[8px] font-bold text-stone-400 uppercase tracking-widest leading-none mt-0.5">{user?.role.split('_')[0]}</p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                                className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm border border-transparent hover:border-stone-200 transition-all text-stone-500"
+                            >
+                                <UserIcon className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                                onClick={() => logout()}
+                                className="p-1.5 rounded-lg hover:bg-red-50 hover:shadow-sm border border-transparent hover:border-red-100 transition-all text-stone-400 hover:text-red-500"
+                                title="Log Out"
+                            >
+                                <LogOut className="h-3.5 w-3.5" />
+                            </button>
+                        </div>
+
+                        <AnimatePresence>
+                            {userMenuOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 5, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                                    className="absolute right-2 top-full mt-2 w-48 bg-white rounded-xl border border-stone-200 shadow-xl p-3 z-[100]"
+                                >
+                                    <div className="p-2 bg-stone-50 rounded-lg mb-2">
+                                        <p className="text-xs font-black text-stone-900 truncate">{user?.firstName} {user?.lastName}</p>
+                                        <p className="text-[9px] font-bold text-stone-400 uppercase tracking-widest truncate">{user?.email}</p>
+                                    </div>
+                                    <button className="flex items-center gap-2 w-full p-2 text-xs font-bold text-stone-600 hover:bg-stone-50 rounded-lg transition-all">
+                                        <History className="w-3.5 h-3.5" />
+                                        <span>Order History</span>
+                                    </button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
                     {/* Cart Header - Snippet Style */}
-                    <div className="p-3 md:p-4 border-b border-stone-200 flex items-center justify-between bg-white relative z-20">
+                    <div className="p-3 md:p-4 border-b border-stone-200 flex items-center justify-between bg-white">
                         <div className="flex items-center gap-2">
                             <ShoppingCart className="w-4 md:w-5 h-4 md:h-5 text-blue-600" />
                             <h2 className="text-lg md:text-xl font-bold text-gray-800">Cart</h2>
