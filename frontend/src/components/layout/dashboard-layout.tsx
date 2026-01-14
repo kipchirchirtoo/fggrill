@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter, usePathname } from 'next/navigation';
 import { notificationsAPI } from '@/lib/api';
 import { ConsolidatedNav } from '@/components/layout/consolidated-nav';
+import { cn } from '@/lib/utils';
 import {
   Bell,
   LogOut,
@@ -20,33 +21,29 @@ import {
 interface DashboardLayoutProps {
   children: React.ReactNode;
   hideHeader?: boolean;
+  hideSidebar?: boolean;
 }
 
 export function DashboardLayout(props: DashboardLayoutProps) {
-  const { children } = props;
+  const { children, hideHeader, hideSidebar } = props;
   const { user, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  // Dark mode removed - light theme only
   const [notificationModalOpen, setNotificationModalOpen] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['Storekeeping']);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // Fetch unread notification count
   useEffect(() => {
     const fetchUnreadCount = async () => {
       if (!user) return;
-
       try {
         const response = await notificationsAPI.getUnreadCount();
         if (response.success && response.data) {
           setUnreadCount(response.data.count);
         } else {
-          // If API returns error, reset count to 0 and log it
-          console.warn('Failed to fetch unread count:', response.message);
           setUnreadCount(0);
         }
       } catch (error) {
@@ -56,12 +53,10 @@ export function DashboardLayout(props: DashboardLayoutProps) {
     };
 
     fetchUnreadCount();
-    // Poll for updates every 30 seconds
     const interval = setInterval(fetchUnreadCount, 30000);
     return () => clearInterval(interval);
   }, [user]);
 
-  // Update unread count when notification modal closes
   const handleNotificationModalClose = async () => {
     setNotificationModalOpen(false);
     try {
@@ -77,169 +72,166 @@ export function DashboardLayout(props: DashboardLayoutProps) {
     }
   };
 
-  const toggleMenu = (menuName: string) => {
-    setExpandedMenus(prev =>
-      prev.includes(menuName)
-        ? prev.filter(m => m !== menuName)
-        : [...prev, menuName]
-    );
-  };
-
-  // Use ConsolidatedNav for navigation
-
   return (
     <div className="min-h-screen bg-[#FAFAF8]">
       <div className="flex h-screen">
         {/* Sidebar - Desktop */}
-        <AnimatePresence>
-          {sidebarOpen && (
-            <motion.aside
-              initial={{ x: -260 }}
-              animate={{ x: 0 }}
-              exit={{ x: -260 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 35 }}
-              className="hidden lg:flex lg:flex-shrink-0"
-            >
-              <div className="flex w-[260px] flex-col">
-                <div className="flex min-h-0 flex-1 flex-col bg-white border-r border-stone-200/60">
-                  <div className="flex flex-1 flex-col overflow-y-auto scrollbar-thin">
-                    {/* Logo */}
-                    <div className="flex items-center gap-3 px-5 py-5 border-b border-stone-100">
-                      <div className="w-9 h-9 rounded-lg bg-stone-900 flex items-center justify-center overflow-hidden">
-                        <Image
-                          src="/fglogo.png"
-                          alt="Famous Gate"
-                          width={28}
-                          height={28}
-                          className="object-cover scale-150"
-                          style={{ objectPosition: 'center 30%', width: 'auto', height: 'auto' }}
-                        />
+        {!hideSidebar && (
+          <AnimatePresence>
+            {sidebarOpen && (
+              <motion.aside
+                initial={{ x: -260 }}
+                animate={{ x: 0 }}
+                exit={{ x: -260 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+                className="hidden lg:flex lg:flex-shrink-0"
+              >
+                <div className="flex w-[260px] flex-col">
+                  <div className="flex min-h-0 flex-1 flex-col bg-white border-r border-stone-200/60">
+                    <div className="flex flex-1 flex-col overflow-y-auto scrollbar-thin">
+                      {/* Logo */}
+                      <div className="flex items-center gap-3 px-5 py-5 border-b border-stone-100">
+                        <div className="w-9 h-9 rounded-lg bg-stone-900 flex items-center justify-center overflow-hidden">
+                          <Image
+                            src="/fglogo.png"
+                            alt="Famous Gate"
+                            width={28}
+                            height={28}
+                            className="object-cover scale-150"
+                            style={{ objectPosition: 'center 30%', width: 'auto', height: 'auto' }}
+                          />
+                        </div>
+                        <div>
+                          <h1 className="text-[15px] font-semibold text-stone-900">Famous Gate</h1>
+                          <p className="text-[11px] text-stone-500">Management System</p>
+                        </div>
                       </div>
-                      <div>
-                        <h1 className="text-[15px] font-semibold text-stone-900">Famous Gate</h1>
-                        <p className="text-[11px] text-stone-500">Management System</p>
-                      </div>
+
+                      {/* Navigation */}
+                      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+                        <ConsolidatedNav />
+                      </nav>
                     </div>
 
-                    {/* Navigation */}
-                    <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-                      <ConsolidatedNav />
-                    </nav>
-                  </div>
-
-                  {/* User section */}
-                  <div className="flex-shrink-0 border-t border-stone-100 p-4 bg-stone-50/50">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-9 h-9 rounded-full bg-white border border-stone-200 flex items-center justify-center">
-                        <User className="h-4 w-4 text-stone-600" />
+                    {/* User section */}
+                    <div className="flex-shrink-0 border-t border-stone-100 p-4 bg-stone-50/50">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-9 h-9 rounded-full bg-white border border-stone-200 flex items-center justify-center">
+                          <User className="h-4 w-4 text-stone-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-medium text-stone-900 truncate">
+                            {user?.firstName} {user?.lastName}
+                          </p>
+                          <p className="text-[11px] text-stone-500 truncate">
+                            {user?.role.replace(/_/g, ' ')}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => logout()}
+                          className="p-1.5 rounded-md text-stone-400 hover:text-stone-600 hover:bg-white border border-transparent hover:border-stone-200 transition-all"
+                          title="Sign out"
+                        >
+                          <LogOut className="h-4 w-4" />
+                        </button>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-medium text-stone-900 truncate">
-                          {user?.firstName} {user?.lastName}
+
+                      {/* Hirall Branding */}
+                      <div className="pt-4 border-t border-stone-200/60">
+                        <p className="text-[9px] uppercase tracking-wider font-bold text-stone-400 mb-1">
+                          System managed by <span className="text-amber-600">Hirall</span>
                         </p>
-                        <p className="text-[11px] text-stone-500 truncate">
-                          {user?.role.replace(/_/g, ' ')}
-                        </p>
+                        <div className="flex flex-col gap-0.5 text-[9px] text-stone-500 font-medium">
+                          <p>+254 710 944 249</p>
+                          <p>admin@hirall.com</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.aside>
+            )}
+          </AnimatePresence>
+        )}
+
+        {/* Mobile sidebar */}
+        {!hideSidebar && (
+          <AnimatePresence>
+            {mobileMenuOpen && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-40 bg-stone-900/20 backdrop-blur-sm lg:hidden"
+                  onClick={() => setMobileMenuOpen(false)}
+                />
+                <motion.aside
+                  initial={{ x: -280 }}
+                  animate={{ x: 0 }}
+                  exit={{ x: -280 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+                  className="fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col bg-white shadow-soft-lg lg:hidden"
+                >
+                  <div className="flex min-h-0 flex-1 flex-col">
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-stone-900 flex items-center justify-center overflow-hidden">
+                          <Image
+                            src="/fglogo.png"
+                            alt="Famous Gate"
+                            width={24}
+                            height={24}
+                            className="object-cover scale-150"
+                            style={{ objectPosition: 'center 30%', width: 'auto', height: 'auto' }}
+                          />
+                        </div>
+                        <span className="text-[15px] font-semibold text-stone-900">Famous Gate</span>
                       </div>
                       <button
-                        onClick={logout}
-                        className="p-1.5 rounded-md text-stone-400 hover:text-stone-600 hover:bg-white border border-transparent hover:border-stone-200 transition-all"
-                        title="Sign out"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="p-1.5 rounded-md text-stone-500 hover:bg-stone-100"
                       >
-                        <LogOut className="h-4 w-4" />
+                        <X className="h-5 w-5" />
                       </button>
                     </div>
 
-                    {/* Hirall Branding */}
-                    <div className="pt-4 border-t border-stone-200/60">
-                      <p className="text-[9px] uppercase tracking-wider font-bold text-stone-400 mb-1">
-                        System managed by <span className="text-amber-600">Hirall</span>
-                      </p>
-                      <div className="flex flex-col gap-0.5 text-[9px] text-stone-500 font-medium">
-                        <p>+254 710 944 249</p>
-                        <p>admin@hirall.com</p>
-                      </div>
-                    </div>
+                    <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto scrollbar-thin">
+                      <ConsolidatedNav />
+                    </nav>
                   </div>
-                </div>
-              </div>
-            </motion.aside>
-          )}
-        </AnimatePresence>
-
-        {/* Mobile sidebar */}
-        <AnimatePresence>
-          {mobileMenuOpen && (
-            <>
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-40 bg-stone-900/20 backdrop-blur-sm lg:hidden"
-                onClick={() => setMobileMenuOpen(false)}
-              />
-              <motion.aside
-                initial={{ x: -280 }}
-                animate={{ x: 0 }}
-                exit={{ x: -280 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 35 }}
-                className="fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col bg-white shadow-soft-lg lg:hidden"
-              >
-                <div className="flex min-h-0 flex-1 flex-col">
-                  <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-stone-900 flex items-center justify-center overflow-hidden">
-                        <Image
-                          src="/fglogo.png"
-                          alt="Famous Gate"
-                          width={24}
-                          height={24}
-                          className="object-cover scale-150"
-                          style={{ objectPosition: 'center 30%', width: 'auto', height: 'auto' }}
-                        />
-                      </div>
-                      <span className="text-[15px] font-semibold text-stone-900">Famous Gate</span>
-                    </div>
-                    <button
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="p-1.5 rounded-md text-stone-500 hover:bg-stone-100"
-                    >
-                      <X className="h-5 w-5" />
-                    </button>
-                  </div>
-
-                  <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto scrollbar-thin">
-                    <ConsolidatedNav />
-                  </nav>
-                </div>
-              </motion.aside>
-            </>
-          )}
-        </AnimatePresence>
+                </motion.aside>
+              </>
+            )}
+          </AnimatePresence>
+        )}
 
         {/* Main content */}
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex flex-1 flex-col overflow-hidden w-full">
           {/* Top bar */}
-          {!props.hideHeader && (
-            <header className="bg-white border-b border-stone-200/60">
+          {!hideHeader && (
+            <header className="bg-white border-b border-stone-200/60 flex-shrink-0">
               <div className="flex h-14 items-center justify-between px-4 lg:px-6">
                 <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setSidebarOpen(!sidebarOpen)}
-                    className="hidden lg:flex p-2 rounded-lg text-stone-500 hover:text-stone-700 hover:bg-stone-100 transition-colors"
-                  >
-                    <Menu className="h-5 w-5" />
-                  </button>
-                  <button
-                    onClick={() => setMobileMenuOpen(true)}
-                    className="lg:hidden p-2 rounded-lg text-stone-500 hover:text-stone-700 hover:bg-stone-100"
-                  >
-                    <Menu className="h-5 w-5" />
-                  </button>
+                  {!hideSidebar && (
+                    <>
+                      <button
+                        onClick={() => setSidebarOpen(!sidebarOpen)}
+                        className="hidden lg:flex p-2 rounded-lg text-stone-500 hover:text-stone-700 hover:bg-stone-100 transition-colors"
+                      >
+                        <Menu className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => setMobileMenuOpen(true)}
+                        className="lg:hidden p-2 rounded-lg text-stone-500 hover:text-stone-700 hover:bg-stone-100"
+                      >
+                        <Menu className="h-5 w-5" />
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {/* Notifications */}
                   <button
                     onClick={() => setNotificationModalOpen(true)}
                     className="relative p-2 rounded-lg text-stone-500 hover:text-stone-700 hover:bg-stone-100 transition-colors"
@@ -252,7 +244,6 @@ export function DashboardLayout(props: DashboardLayoutProps) {
                     )}
                   </button>
 
-                  {/* User menu */}
                   <div className="relative">
                     <button
                       onClick={() => setUserMenuOpen(!userMenuOpen)}
@@ -277,25 +268,10 @@ export function DashboardLayout(props: DashboardLayoutProps) {
                             <p className="text-[13px] font-medium text-stone-900">{user?.firstName} {user?.lastName}</p>
                             <p className="text-[11px] text-stone-500">{user?.email}</p>
                           </div>
-                          <a
-                            href="/dashboard/profile"
-                            className="block px-3 py-2 text-[13px] text-stone-700 hover:bg-stone-50"
-                          >
-                            Profile
-                          </a>
-                          <a
-                            href="/dashboard/settings"
-                            className="block px-3 py-2 text-[13px] text-stone-700 hover:bg-stone-50"
-                          >
-                            Settings
-                          </a>
+                          <a href="/dashboard/profile" className="block px-3 py-2 text-[13px] text-stone-700 hover:bg-stone-50">Profile</a>
+                          <a href="/dashboard/settings" className="block px-3 py-2 text-[13px] text-stone-700 hover:bg-stone-50">Settings</a>
                           <div className="border-t border-stone-100 mt-1.5 pt-1.5">
-                            <button
-                              onClick={logout}
-                              className="block w-full text-left px-3 py-2 text-[13px] text-red-600 hover:bg-red-50"
-                            >
-                              Sign out
-                            </button>
+                            <button onClick={() => logout()} className="block w-full text-left px-3 py-2 text-[13px] text-red-600 hover:bg-red-50">Sign out</button>
                           </div>
                         </motion.div>
                       )}
@@ -308,14 +284,13 @@ export function DashboardLayout(props: DashboardLayoutProps) {
 
           {/* Main content area */}
           <main className="flex-1 overflow-y-auto bg-[#FAFAF8] scrollbar-thin">
-            <div className="p-4 sm:p-5 lg:p-6">
+            <div className={cn(hideSidebar && hideHeader ? "p-0 h-full w-full" : "p-4 sm:p-5 lg:p-6")}>
               {children}
             </div>
           </main>
         </div>
       </div>
 
-      {/* Modals */}
       <NotificationModal
         isOpen={notificationModalOpen}
         onClose={handleNotificationModalClose}

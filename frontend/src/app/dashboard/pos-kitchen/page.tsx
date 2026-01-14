@@ -528,7 +528,10 @@ export default function POSKitchenDashboard() {
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.POS_KITCHEN, UserRole.RESTAURANT, UserRole.BARTENDER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
-      <DashboardLayout>
+      <DashboardLayout
+        hideHeader={['restaurant', 'bar'].includes(activeTab)}
+        hideSidebar={['restaurant', 'bar'].includes(activeTab)}
+      >
         <div className={cn(
           "flex flex-col h-full",
           !['restaurant', 'bar'].includes(activeTab) && "space-y-6"

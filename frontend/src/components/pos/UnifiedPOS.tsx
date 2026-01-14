@@ -10,12 +10,13 @@ import {
     UtensilsCrossed, Wine, FileText, RefreshCw,
     WineIcon, ConciergeBell, History, Layers, Check,
     AlertCircle, Info, Trash2, User as UserIcon,
-    Grid, List, ChevronDown, ArrowRight
+    Grid, List, ChevronDown, ArrowRight, LogOut, Bell
 } from 'lucide-react';
 import { IOSButton } from '@/components/ui/ios-button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface MenuItem {
     id: string;
@@ -80,6 +81,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
     const [selectedTabId, setSelectedTabId] = useState<string>('');
     const [paymentMethod, setPaymentMethod] = useState<'cash' | 'mpesa' | 'card'>('cash');
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+    const [userMenuOpen, setUserMenuOpen] = useState(false);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -276,40 +278,91 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
     };
 
     return (
-        <div className="h-full bg-stone-50 flex flex-col w-full text-stone-900 border-t border-stone-200">
-            {/* Redesigned Header */}
-            <header className="bg-white/80 backdrop-blur-md border-b border-stone-200 sticky top-0 z-50">
-                <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-4 max-w-[1700px]">
-                    <div className="flex items-center gap-3 shrink-0">
-                        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-stone-200", accentBg)}>
-                            {isRestaurant ? 'R' : 'B'}
+        <div className="h-full bg-stone-50 flex flex-col w-full text-stone-900 overflow-hidden">
+            {/* Redesigned Header - Premium & Minimal */}
+            <header className="bg-white border-b border-stone-200 sticky top-0 z-50 flex-shrink-0">
+                <div className="container mx-auto px-6 py-4 flex items-center justify-between gap-8 max-w-[1920px]">
+                    <div className="flex items-center gap-4">
+                        <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center text-white text-xl font-black shadow-lg", accentBg)}>
+                            {mode === 'restaurant' ? 'R' : 'B'}
                         </div>
                         <div>
-                            <h1 className="text-xl font-black tracking-tight leading-none">{isRestaurant ? 'Famous Gate' : 'Famous Bar'}</h1>
-                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">Point of Sale</p>
+                            <h1 className="text-2xl font-black tracking-tight text-stone-900 leading-none">
+                                {mode === 'restaurant' ? 'Restro' : 'Bar'} POS
+                            </h1>
+                            <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mt-1">Management System</p>
                         </div>
                     </div>
 
-                    <div className="flex-1 max-w-xl">
-                        <div className="relative group">
-                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 w-4 h-4 group-focus-within:text-stone-900 transition-colors" />
+                    <div className="flex-1 max-w-2xl mx-8">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 w-5 h-5" />
                             <input
                                 type="text"
-                                placeholder={`Search ${isRestaurant ? 'menu' : 'drinks'}...`}
+                                placeholder={`Search ${mode} menu...`}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 bg-stone-100/50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-stone-900/5 focus:bg-white transition-all font-medium text-sm"
+                                className="w-full pl-10 pr-4 py-2.5 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-bold placeholder:text-stone-400 text-stone-900"
                             />
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-4">
                         <button
                             onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-                            className="p-2.5 rounded-xl border border-stone-200 hover:bg-stone-50 transition-colors bg-white shadow-sm"
+                            className="p-3.5 rounded-2xl border border-stone-200 hover:bg-stone-50 transition-all text-stone-500 hover:text-stone-900 shadow-sm"
                         >
-                            {viewMode === 'grid' ? <List className="w-4 h-4 text-stone-600" /> : <Grid className="w-4 h-4 text-stone-600" />}
+                            {viewMode === 'grid' ? <List className="w-5 h-5" /> : <Grid className="w-5 h-5" />}
                         </button>
+
+                        <div className="h-10 w-px bg-stone-200 mx-2" />
+
+                        {/* User Profile Section */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                                className="flex items-center gap-3 p-1.5 pr-4 rounded-2xl hover:bg-stone-100 transition-all border border-transparent hover:border-stone-200"
+                            >
+                                <div className="h-10 w-10 rounded-xl bg-stone-900 flex items-center justify-center text-white shadow-md">
+                                    <UserIcon className="h-5 w-5" />
+                                </div>
+                                <div className="text-left hidden md:block">
+                                    <p className="text-xs font-black text-stone-900 uppercase tracking-tight">{user?.firstName}</p>
+                                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest leading-none mt-0.5">{user?.role.split('_')[0]}</p>
+                                </div>
+                                <ChevronDown className={cn("h-4 w-4 text-stone-400 transition-transform", userMenuOpen && "rotate-180")} />
+                            </button>
+
+                            <AnimatePresence>
+                                {userMenuOpen && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        className="absolute right-0 mt-3 w-64 bg-white rounded-[2rem] border border-stone-200 shadow-2xl p-4 z-[100]"
+                                    >
+                                        <div className="p-4 bg-stone-50 rounded-[1.5rem] mb-2 border border-stone-100">
+                                            <p className="text-sm font-black text-stone-900 mb-0.5">{user?.firstName} {user?.lastName}</p>
+                                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest truncate">{user?.email}</p>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <button className="flex items-center gap-3 w-full p-3 text-xs font-black text-stone-600 hover:bg-stone-50 rounded-xl transition-all">
+                                                <UserIcon className="w-4 h-4" />
+                                                <span>Profile Settings</span>
+                                            </button>
+                                            <div className="h-px bg-stone-100 my-2" />
+                                            <button
+                                                onClick={() => logout()}
+                                                className="flex items-center gap-3 w-full p-3 text-xs font-black text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                                            >
+                                                <LogOut className="w-4 h-4" />
+                                                <span>Sign Out</span>
+                                            </button>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -318,29 +371,29 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
             <div className="flex-1 flex flex-row container mx-auto p-4 gap-4 overflow-hidden max-w-[1700px]">
                 {/* Left Side - Product Explorer */}
                 <div className="flex-1 flex flex-col min-w-0">
-                    {/* Horizontal Categories Tabs */}
-                    <div className="bg-white rounded-2xl border border-stone-200 p-2 mb-4 shrink-0 shadow-sm overflow-x-auto no-scrollbar">
-                        <div className="flex gap-1 min-w-max">
+                    {/* Horizontal Categories Tabs - Matching Snippet Style */}
+                    <div className="bg-white rounded-lg shadow-sm p-3 mb-4 overflow-x-auto no-scrollbar border border-stone-100">
+                        <div className="flex gap-2 min-w-max">
                             <button
                                 onClick={() => setSelectedCategoryId('all')}
                                 className={cn(
-                                    "px-5 py-2 rounded-xl font-bold transition-all text-sm whitespace-nowrap",
+                                    "px-6 py-2.5 rounded-lg font-bold transition-all text-sm whitespace-nowrap",
                                     selectedCategoryId === 'all'
-                                        ? "bg-stone-900 text-white shadow-md shadow-stone-200"
-                                        : "hover:bg-stone-50 text-stone-500"
+                                        ? "bg-blue-600 text-white shadow-md shadow-blue-200"
+                                        : "bg-stone-50 text-stone-700 hover:bg-stone-100"
                                 )}
                             >
-                                ALL ITEMS
+                                All Items
                             </button>
                             {categories.map(cat => (
                                 <button
                                     key={cat.id}
                                     onClick={() => setSelectedCategoryId(cat.id)}
                                     className={cn(
-                                        "px-5 py-2 rounded-xl font-bold transition-all text-sm whitespace-nowrap uppercase",
+                                        "px-6 py-2.5 rounded-lg font-bold transition-all text-sm whitespace-nowrap",
                                         selectedCategoryId === cat.id
-                                            ? "bg-stone-900 text-white shadow-md shadow-stone-200"
-                                            : "hover:bg-stone-50 text-stone-500"
+                                            ? "bg-blue-600 text-white shadow-md shadow-blue-200"
+                                            : "bg-stone-50 text-stone-700 hover:bg-stone-100"
                                     )}
                                 >
                                     {cat.name}
@@ -349,8 +402,8 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                         </div>
                     </div>
 
-                    {/* Dynamic Products Grid/List */}
-                    <div className="flex-1 bg-white rounded-[2rem] border border-stone-200 p-4 md:p-6 overflow-y-auto no-scrollbar shadow-sm">
+                    {/* Dynamic Products Grid/List - Matching Snippet Style */}
+                    <div className="flex-1 bg-white rounded-lg shadow-sm p-3 md:p-4 overflow-y-auto no-scrollbar border border-stone-100">
                         {isLoading ? (
                             <div className="h-full flex flex-col items-center justify-center space-y-4">
                                 <RefreshCw className="h-8 w-8 animate-spin text-stone-200" />
@@ -363,7 +416,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                             </div>
                         ) : (
                             <div className={cn(
-                                "grid gap-4",
+                                "grid gap-3 md:gap-4",
                                 viewMode === 'grid'
                                     ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 3xl:grid-cols-6"
                                     : "grid-cols-1"
@@ -373,19 +426,19 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                         key={item.id}
                                         onClick={() => addToCart(item)}
                                         className={cn(
-                                            "group cursor-pointer bg-white border border-stone-100 rounded-3xl hover:border-stone-900 hover:shadow-2xl hover:shadow-stone-200 transition-all duration-300 relative",
-                                            viewMode === 'grid' ? "p-4 flex flex-col" : "p-3 flex flex-row items-center gap-4"
+                                            "group cursor-pointer bg-white border border-stone-200 rounded-xl hover:shadow-lg transition-all duration-200 hover:-translate-y-1 relative overflow-hidden",
+                                            viewMode === 'grid' ? "p-3 md:p-4 flex flex-col" : "p-3 flex flex-row items-center gap-3"
                                         )}
                                     >
                                         <div className={cn(
-                                            "rounded-2xl transition-all overflow-hidden bg-stone-50 flex items-center justify-center shrink-0",
-                                            viewMode === 'grid' ? "aspect-square w-full mb-4" : "w-16 h-16"
+                                            "rounded-lg transition-all overflow-hidden bg-gradient-to-br from-stone-50 to-stone-100 flex items-center justify-center shrink-0",
+                                            viewMode === 'grid' ? "aspect-square w-full mb-3" : "w-14 h-14"
                                         )}>
                                             {item.image_url ? (
-                                                <Image src={item.image_url} alt={item.name} width={200} height={200} className="w-full h-full object-cover" />
+                                                <Image src={item.image_url} alt={item.name} width={200} height={200} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
                                             ) : (
-                                                <div className={cn("h-full w-full flex items-center justify-center text-4xl group-hover:scale-110 transition-transform duration-500 opacity-60", accentText)}>
-                                                    {isRestaurant ? <UtensilsCrossed className="w-10 h-10 opacity-10" /> : <WineIcon className="w-10 h-10 opacity-10" />}
+                                                <div className={cn("h-full w-full flex items-center justify-center text-3xl group-hover:scale-110 transition-transform duration-500 opacity-60", accentText)}>
+                                                    {isRestaurant ? <UtensilsCrossed className="w-8 h-8 opacity-20" /> : <WineIcon className="w-8 h-8 opacity-20" />}
                                                 </div>
                                             )}
                                         </div>
@@ -418,8 +471,8 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                     </div>
                 </div>
 
-                {/* Right Side - Cart Section (Elastic Panel) */}
-                <div className="w-80 lg:w-96 flex-shrink-0 flex flex-col bg-white rounded-[2.5rem] border border-stone-200 shadow-2xl shadow-stone-200/50 overflow-hidden relative">
+                {/* Right Side - Cart Section (Elastic Panel) - Matching Snippet Style */}
+                <div className="w-64 sm:w-72 md:w-80 flex-shrink-0 flex flex-col bg-white rounded-lg shadow-lg overflow-hidden border border-stone-200">
                     {/* Cart Header with System Data */}
                     <div className="p-6 border-b border-stone-100 bg-white/50 backdrop-blur-sm sticky top-0 z-20">
                         <div className="flex items-center justify-between mb-6">
@@ -511,28 +564,28 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                             </div>
                         ) : (
                             cart.map(item => (
-                                <div key={item.id} className="relative group bg-stone-50 hover:bg-white border border-stone-100 hover:border-stone-900 rounded-2xl p-4 transition-all duration-300">
-                                    <div className="flex items-start justify-between gap-4">
-                                        <div className="flex-1 min-w-0">
-                                            <h4 className="font-bold text-stone-900 text-sm truncate">{item.name}</h4>
-                                            <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mt-1">KES {item.price.toLocaleString()}</p>
+                                <div key={item.id} className="relative group bg-stone-50 hover:bg-white border border-stone-200 rounded-lg p-2 md:p-3 transition-all duration-300">
+                                    <div className="flex items-start justify-between gap-2 mb-2">
+                                        <div className="flex-1 min-w-0 pr-2">
+                                            <h4 className="font-semibold text-stone-800 text-sm md:text-base truncate">{item.name}</h4>
+                                            <p className="text-[10px] md:text-sm text-stone-500">KES {item.price.toLocaleString()} each</p>
                                         </div>
-                                        <button onClick={() => removeFromCart(item.id)} className="text-stone-300 hover:text-red-500 transition-colors">
-                                            <X className="w-4 h-4" />
+                                        <button onClick={() => removeFromCart(item.id)} className="text-stone-300 hover:text-red-500 transition-colors p-1">
+                                            <X className="w-3 md:w-4 h-3 md:h-4" />
                                         </button>
                                     </div>
 
-                                    <div className="flex items-center justify-between mt-4">
-                                        <div className="flex items-center bg-white border border-stone-200 rounded-xl p-0.5 shadow-sm">
-                                            <button onClick={() => updateQuantity(item.id, -1)} className="p-1.5 hover:bg-stone-50 text-stone-500 rounded-lg transition-colors">
-                                                <Minus className="w-3 h-3" />
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center bg-white border border-stone-200 rounded-lg p-0.5 shadow-sm">
+                                            <button onClick={() => updateQuantity(item.id, -1)} className="p-1 md:p-1.5 hover:bg-stone-50 text-stone-500 rounded-lg transition-colors">
+                                                <Minus className="w-2.5 md:w-3 h-2.5 md:h-3" />
                                             </button>
-                                            <span className="w-10 text-center text-xs font-black">{item.quantity}</span>
-                                            <button onClick={() => updateQuantity(item.id, 1)} className="p-1.5 hover:bg-stone-50 text-stone-500 rounded-lg transition-colors">
-                                                <Plus className="w-3 h-3" />
+                                            <span className="w-6 md:w-8 text-center text-xs md:text-sm font-bold">{item.quantity}</span>
+                                            <button onClick={() => updateQuantity(item.id, 1)} className="p-1 md:p-1.5 hover:bg-stone-50 text-stone-500 rounded-lg transition-colors">
+                                                <Plus className="w-2.5 md:w-3 h-2.5 md:h-3" />
                                             </button>
                                         </div>
-                                        <span className="text-sm font-black text-stone-900">KES {(item.price * item.quantity).toLocaleString()}</span>
+                                        <span className="text-sm font-black text-blue-600">KES {(item.price * item.quantity).toLocaleString()}</span>
                                     </div>
                                 </div>
                             ))
@@ -581,9 +634,8 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                     onClick={handleCreateOrder}
                                     disabled={isSubmitting}
                                     className={cn(
-                                        "w-full py-4 rounded-2xl text-white font-black uppercase tracking-[0.2em] text-xs transition-all shadow-xl flex items-center justify-center gap-3",
-                                        accentBg,
-                                        isSubmitting ? "opacity-50 cursor-not-allowed scale-95" : "hover:brightness-110 active:scale-95 shadow-amber-500/20"
+                                        "w-full py-2.5 md:py-3.5 rounded-lg text-white font-bold transition-all shadow-lg text-sm md:text-base flex items-center justify-center gap-3",
+                                        isSubmitting ? "bg-stone-400 cursor-not-allowed scale-95" : "bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-blue-200"
                                     )}
                                 >
                                     {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin text-white/50" /> : 'Confirm Order'}
