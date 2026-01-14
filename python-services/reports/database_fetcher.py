@@ -64,6 +64,7 @@ class DatabaseFetcher:
                 'branch_performance': self._fetch_branch_performance,
                 'stock_usage': self._fetch_stock_usage,
                 'employee_credit': self._fetch_employee_credit,
+                'conference_summary': self._fetch_conference_reports,
             }
             
             fetcher = fetchers.get(report_type)
@@ -1731,5 +1732,70 @@ class DatabaseFetcher:
                     
         except Exception as e:
             logger.error(f"Error fetching employee credit: {e}")
+            
+        return data
+
+    def _fetch_conference_reports(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch conference revenue and usage reports"""
+        start_date, end_date = self._parse_dates(filters)
+        branch_id = filters.get('branch_id')
+        
+        data = {
+            'total_revenue': 0,
+            'total_bookings': 0,
+            'total_pax': 0,
+            'hall_revenue': 0,
+            'meal_revenue': 0,
+            'amenity_revenue': 0,
+            'by_hall': [],
+            'recent_bookings': []
+        }
+        
+        if not self.client:
+            return data
+            
+        try:
+            query = self.client.table('conference_hall_bookings').select('*, hall:conference_halls(*)')
+            query = query.gte('start_date', f'{start_date}T00:00:00')
+            query = query.lte('start_date', f'{end_date}T23:59:59')
+            if branch_id:
+                query = query.eq('branch_id', branch_id)
+            
+            bookings = query.execute()
+            
+            hall_stats = {}
+            for b in (bookings.data or []):
+                data['total_bookings'] += 1
+                data['total_revenue'] += b.get('total_amount', 0) or 0
+                data['total_pax'] += b.get('num_participants', 0) or 0
+                
+                hall = b.get('hall') or {}
+                hall_name = hall.get('name', 'Unknown')
+                if hall_name not in hall_stats:
+                    hall_stats[hall_name] = {'bookings': 0, 'revenue': 0, 'pax': 0}
+                
+                hall_stats[hall_name]['bookings'] += 1
+                hall_stats[hall_name]['revenue'] += b.get('total_amount', 0) or 0
+                hall_stats[hall_name]['pax'] += b.get('num_participants', 0) or 0
+                
+                data['recent_bookings'].append({
+                    'id': b.get('id'),
+                    'client': b.get('company_name') or b.get('customer_name'),
+                    'date': b.get('start_date', '')[:10],
+                    'hall': hall_name,
+                    'pax': b.get('num_participants', 0),
+                    'total': b.get('total_amount', 0),
+                    'status': b.get('booking_status', 'N/A')
+                })
+            
+            data['by_hall'] = [
+                {'name': name, 'bookings': stats['bookings'], 'revenue': stats['revenue'], 'pax': stats['pax']}
+                for name, stats in hall_stats.items()
+            ]
+            
+            data['recent_bookings'] = sorted(data['recent_bookings'], key=lambda x: x['date'], reverse=True)[:10]
+            
+        except Exception as e:
+            logger.error(f"Error fetching conference reports: {e}")
             
         return data

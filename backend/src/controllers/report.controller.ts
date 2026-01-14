@@ -375,6 +375,29 @@ export const getDashboardReport = async (
   }
 };
 
+// @desc    Get conference report data
+// @route   GET /api/reports/conference
+// @access  Private (Admin/Manager only)
+export const getConferenceReport = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const filters = req.query;
+    const response = await axios.post(`${PYTHON_SERVICE_URL}/api/reports/data?type=conference_summary`, filters);
+
+    res.status(200).json({
+      success: true,
+      data: response.data
+    });
+
+    logger.info('Conference report generated');
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Helper function to calculate current occupancy
 const calculateCurrentOccupancy = async (): Promise<number> => {
   const today = new Date();

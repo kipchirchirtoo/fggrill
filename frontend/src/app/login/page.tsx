@@ -253,7 +253,7 @@ export default function LoginPage() {
                           ? 'border-red-300 focus:ring-red-100 text-red-600'
                           : 'border-stone-200 focus:border-stone-400 focus:ring-stone-100 text-stone-900'
                           }`}
-                        placeholder="R000"
+                        placeholder="0000"
                       />
                     </div>
                     {errors.pin && <p className="mt-2 text-xs text-red-500 text-center">{errors.pin}</p>}

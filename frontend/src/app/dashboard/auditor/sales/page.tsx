@@ -164,19 +164,19 @@ export default function SalesAuditPage() {
                             <p className="stat-value text-[22px] text-stone-900">KES {stats.reported.toLocaleString()}</p>
                         </div>
 
-                        <div className={`stat-card ${stats.variance < 0 ? 'bg-rose-50/30' : ''}`}>
+                        <div className={`stat-card transition-colors ${stats.variance < 0 ? 'bg-rose-600 text-white border-none shadow-lg shadow-rose-900/20' : stats.variance > 0 ? 'bg-emerald-50/30' : ''}`}>
                             <div className="flex items-center justify-between mb-2">
-                                <div className={`stat-icon ${stats.variance < 0 ? 'bg-rose-100' : 'bg-emerald-100'}`}>
-                                    <AlertTriangle className={`h-5 w-5 ${stats.variance < 0 ? 'text-rose-600' : 'text-emerald-600'}`} />
+                                <div className={`stat-icon ${stats.variance < 0 ? 'bg-rose-500 text-white' : 'bg-emerald-100'}`}>
+                                    <AlertTriangle className={`h-5 w-5 ${stats.variance < 0 ? 'text-white' : 'text-emerald-600'}`} />
                                 </div>
                                 {stats.variance !== 0 && (
-                                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${stats.variance < 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${stats.variance < 0 ? 'bg-rose-500 text-white' : 'bg-emerald-100 text-emerald-700'}`}>
                                         {stats.variance > 0 ? '+' : ''}{((stats.variance / stats.expected) * 100).toFixed(1)}%
                                     </span>
                                 )}
                             </div>
-                            <p className="stat-label">Variance</p>
-                            <p className={`stat-value text-[22px] ${stats.variance < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            <p className={`stat-label ${stats.variance < 0 ? 'text-rose-100' : ''}`}>Variance</p>
+                            <p className={`stat-value text-[22px] ${stats.variance < 0 ? 'text-white' : 'text-emerald-600'}`}>
                                 KES {stats.variance.toLocaleString()}
                             </p>
                         </div>

@@ -284,6 +284,8 @@ class BrandedPDFGenerator:
             'reconciliation_audit': self._generate_reconciliation_audit_report,
             'stock_usage': self._generate_stock_usage_report,
             'employee_credit': self._generate_employee_credit_report,
+            'conference_invoice': self._generate_conference_invoice,
+            'conference_summary': self._generate_conference_summary_report,
         }
         
         generator = generators.get(report_type, self._generate_generic_report)
@@ -2341,6 +2343,237 @@ class BrandedPDFGenerator:
             ParagraphStyle('FooterThanks', parent=self.styles['Normal'], alignment=TA_CENTER, fontName='Helvetica-Oblique')))
             
         return self._create_pdf(elements, filename=f"/tmp/Bill_{guest_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf")
+
+    def _generate_conference_invoice(self, data: Dict, filters: Dict) -> str:
+        """Generate Professional Conference Invoice"""
+        elements = []
+        
+        # Header
+        elements.extend(self._create_header("CONFERENCE BOOKING & INVOICE", None))
+        
+        # Client & Event Info
+        elements.append(Paragraph("<b>CLIENT & EVENT INFORMATION</b>", self.styles['SectionHeader']))
+        
+        client_data = [
+            ['Company/Group:', data.get('company_name', 'N/A'), 'Invoice #:', data.get('invoice_number', 'N/A')],
+            ['Contact Person:', data.get('contact_person', 'N/A'), 'Date:', datetime.now().strftime('%d/%m/%Y')],
+            ['Event Type:', data.get('activity_type', 'N/A'), 'PAX Count:', str(data.get('num_participants', 0))],
+            ['Start Date:', data.get('start_date', 'N/A'), 'End Date:', data.get('end_date', 'N/A')],
+        ]
+        
+        client_table = Table(client_data, colWidths=[1.5*inch, 2.25*inch, 1.5*inch, 2.25*inch])
+        client_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('BACKGROUND', (0, 0), (0, -1), ROW_ALT),
+            ('BACKGROUND', (2, 0), (2, -1), ROW_ALT),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(client_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Cost Breakdown Table
+        elements.append(Paragraph("<b>COST BREAKDOWN</b>", self.styles['SectionHeader']))
+        
+        headers = ['Description', 'Details', 'Qty/Pax', 'Unit Cost', 'Total']
+        breakdown_data = [headers]
+        
+        # 1. Hall Rental
+        hall = data.get('hall') or {}
+        hall_name = hall.get('name', 'Conference Hall')
+        # Simplified display of hall rental logic from controller
+        breakdown_data.append([f'Hall Rental: {hall_name}', '-', '1', '-', '-']) # Specifics can be added if needed
+        
+        # 2. Per Pax Charge
+        if data.get('amount_per_pax'):
+            breakdown_data.append(['Per Participant Charge', 'Hall access & basic amenities', 
+                                  str(data.get('num_participants', 0)), 
+                                  self._format_currency(data.get('amount_per_pax')),
+                                  self._format_currency(data.get('num_participants', 0) * data.get('amount_per_pax', 0))])
+            
+        # 3. Meals
+        meals = data.get('meal_plan_details', [])
+        if meals:
+            for m in meals:
+                breakdown_data.append([f"Meal: {m.get('name')}", "Configured meal plan",
+                                      str(m.get('pax', data.get('num_participants', 0))),
+                                      self._format_currency(m.get('price', 0)),
+                                      self._format_currency(m.get('total', (m.get('pax', data.get('num_participants', 0)) * m.get('price', 0))))])
+        
+        # 4. Amenities
+        amenities = data.get('amenities_details', [])
+        if amenities:
+            for a in amenities:
+                breakdown_data.append([f"Extra: {a.get('name')}", "Optional amenity",
+                                      str(a.get('quantity', 0)),
+                                      self._format_currency(a.get('unit_cost', 0)),
+                                      self._format_currency(a.get('total', (a.get('quantity', 0) * a.get('unit_cost', 0))))])
+        
+        # Total Row
+        breakdown_data.append(['', '', '', '<b>GRAND TOTAL</b>', f"<b>{self._format_currency(data.get('total_amount', 0))}</b>"])
+        
+        breakdown_table = Table(breakdown_data, colWidths=[2*inch, 2*inch, 1*inch, 1.25*inch, 1.25*inch])
+        breakdown_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (2, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (4, 1), (4, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -2), [FG_WHITE, ROW_ALT]),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('BACKGROUND', (3, -1), (4, -1), FG_LIGHT),
+        ]))
+        elements.append(breakdown_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Program Schedule
+        schedule = data.get('program_schedule', [])
+        if schedule:
+            elements.append(Paragraph("<b>PROGRAM SCHEDULE</b>", self.styles['SectionHeader']))
+            sched_headers = ['Time', 'Activity / Description', 'PAX']
+            sched_data = [sched_headers]
+            for s in schedule:
+                sched_data.append([s.get('time', ''), s.get('activity', ''), str(s.get('pax', ''))])
+            
+            sched_table = Table(sched_data, colWidths=[1.5*inch, 5*inch, 1*inch])
+            sched_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), HEADER_GRAY),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ]))
+            elements.append(sched_table)
+            
+        # Barcode for ease of reference
+        elements.append(Spacer(1, 0.5*inch))
+        try:
+            from barcode_generator.routes import barcode_service
+            scan_code = data.get('invoice_number', f"CNF-{data.get('id')}")
+            barcode_bytes = barcode_service.generate_barcode(scan_code, include_text=True)
+            barcode_img = Image(io.BytesIO(barcode_bytes), width=2.5*inch, height=0.8*inch)
+            elements.append(barcode_img)
+            elements.append(Paragraph("Scan at Cashier for Payment", self.styles['SmallText']))
+        except: pass
+        
+        # Authorization
+        elements.append(Spacer(1, 0.5*inch))
+        auth_data = [
+            [f"Booked By: {data.get('booked_by_name', 'Staff')}", "", "Client Signature:"],
+            ["Date: ____________________", "", "Date: ____________________"],
+        ]
+        auth_table = Table(auth_data, colWidths=[3*inch, 1.5*inch, 3*inch])
+        auth_table.setStyle(TableStyle([
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 20),
+        ]))
+        elements.append(auth_table)
+        
+        return self._create_pdf(elements, filename=f"/tmp/CNF_Invoice_{data.get('invoice_number', 'EXT')}.pdf")
+
+    def _generate_conference_summary_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Conference / Hall Booking Summary Report"""
+        elements = []
+        
+        date_range = f"{filters.get('start_date', 'N/A')} to {filters.get('end_date', 'N/A')}"
+        elements.extend(self._create_header("CONFERENCE REVENUE & PERFORMANCE REPORT", date_range))
+        
+        # Executive Summary
+        summary_data = [
+            ['EXECUTIVE SUMMARY', '', '', ''],
+            ['Total Booking Revenue:', self._format_currency(data.get('total_revenue') or 0),
+             'Total Bookings:', self._format_number(data.get('total_bookings') or 0)],
+            ['Total Participants:', self._format_number(data.get('total_pax') or 0),
+             'Avg Revenue / Booking:', self._format_currency((data.get('total_revenue') or 0) / (data.get('total_bookings') or 1) if data.get('total_bookings', 0) > 0 else 0)],
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
+        summary_table.setStyle(TableStyle([
+            ('SPAN', (0, 0), (-1, 0)),
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 1), (2, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Performance by Hall
+        elements.append(Paragraph("<b>PERFORMANCE BY HALL</b>", self.styles['SectionHeader']))
+        
+        headers = ['Hall Name', 'Bookings', 'Total PAX', 'Revenue', '% of Total']
+        hall_data = [headers]
+        
+        total_rev = data.get('total_revenue') or 1
+        for h in data.get('by_hall', []):
+            rev = h.get('revenue') or 0
+            hall_data.append([
+                h.get('name', 'Unknown'),
+                str(h.get('bookings', 0)),
+                str(h.get('pax', 0)),
+                self._format_currency(rev),
+                f"{(rev / total_rev * 100):.1f}%"
+            ])
+            
+        if len(hall_data) == 1:
+            hall_data.append(['No data available', '-', '-', '-', '-'])
+            
+        hall_table = Table(hall_data, colWidths=[2.2*inch, 1*inch, 1.2*inch, 1.8*inch, 1.3*inch])
+        hall_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GREEN),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (3, 1), (3, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(hall_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Recent Bookings
+        elements.append(Paragraph("<b>RECENT BOOKINGS</b>", self.styles['SectionHeader']))
+        
+        headers = ['Date', 'Client', 'Hall', 'PAX', 'Total Amount', 'Status']
+        recent_data = [headers]
+        
+        for b in data.get('recent_bookings', []):
+            recent_data.append([
+                b.get('date', ''),
+                (b.get('client') or 'N/A')[:20],
+                (b.get('hall') or 'N/A')[:15],
+                str(b.get('pax', 0)),
+                self._format_currency(b.get('total', 0)),
+                (b.get('status') or 'Confirmed').title()
+            ])
+            
+        if len(recent_data) == 1:
+            recent_data.append(['No recent bookings', '-', '-', '-', '-', '-'])
+            
+        recent_table = Table(recent_data, colWidths=[1.1*inch, 1.8*inch, 1.5*inch, 0.8*inch, 1.3*inch, 1*inch])
+        recent_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_YELLOW),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('ALIGN', (3, 0), (4, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(recent_table)
+        
+        return self._create_pdf(elements)
 
     def _generate_generic_report(self, data: Dict, filters: Dict) -> str:
         """Generate a generic report for unknown types"""

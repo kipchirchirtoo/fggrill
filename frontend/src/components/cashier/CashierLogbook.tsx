@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { fetchAPI } from '@/lib/api';
 import { toast } from 'sonner';
-import { Plus, Trash2, Save, Calculator, AlertCircle, FileText } from 'lucide-react';
+import { Plus, Trash2, Save, Calculator, AlertCircle, FileText, Check, TrendingUp } from 'lucide-react';
 import { IOSCard } from '@/components/ui/ios-card';
 import { Input } from '@/components/ui/input';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -37,7 +38,8 @@ interface CashierLogbookProps {
 }
 
 export function CashierLogbook({ type }: CashierLogbookProps) {
-    const { user, branch } = useAuth();
+    const { user } = useAuth();
+    const { activeBranch } = useBranch();
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -54,9 +56,13 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
     });
 
     // Configuration based on type
+    const isCentral = activeBranch?.is_main_branch || activeBranch?.name?.toLowerCase().includes('central');
+
     const salesColumns = type === 'reception'
         ? ['Restaurant', 'Accommodation', 'Swimming Pool', 'Conference', 'Events']
-        : ['Main Bar', 'Pool Bar', 'Restaurant Drinks', 'Cocktails'];
+        : isCentral
+            ? ['Executive Bar', 'Main Bar', 'Pool Tables', 'Pool Bar', 'Restaurant Drinks', 'Cocktails']
+            : ['Main Bar', 'Pool Bar', 'Restaurant Drinks', 'Cocktails'];
 
     useEffect(() => {
         loadLogbook();
@@ -158,12 +164,18 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
         <div className="space-y-6 animate-in slide-in-from-bottom-4">
             {/* Top Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <IOSCard className="p-4 bg-stone-900 text-white border-none">
-                    <p className="text-stone-400 text-xs uppercase font-bold">Total Sales</p>
+                <IOSCard className="p-4 bg-blue-600 text-white border-none shadow-lg shadow-blue-900/20">
+                    <div className="flex justify-between items-start">
+                        <p className="text-blue-100 text-xs uppercase font-bold">Total Sales</p>
+                        <TrendingUp size={16} className="text-blue-200" />
+                    </div>
                     <p className="text-2xl font-bold mt-1">KES {totalSales.toLocaleString()}</p>
                 </IOSCard>
-                <IOSCard className={`p-4 border-none ${variance < 0 ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
-                    <p className="text-white/80 text-xs uppercase font-bold">Variance</p>
+                <IOSCard className={`p-4 border-none shadow-lg ${variance < 0 ? 'bg-rose-600 text-white shadow-rose-900/20' : variance > 0 ? 'bg-emerald-600 text-white shadow-emerald-900/20' : 'bg-stone-800 text-white shadow-stone-900/20'}`}>
+                    <div className="flex justify-between items-start">
+                        <p className="text-white/80 text-xs uppercase font-bold">Variance</p>
+                        {variance < 0 ? <AlertCircle size={16} className="text-rose-200" /> : <Check size={16} className="text-emerald-200" />}
+                    </div>
                     <p className="text-2xl font-bold mt-1">KES {variance.toLocaleString()}</p>
                     <p className="text-[10px] mt-1 opacity-80">Expected: {expectedCash.toLocaleString()}</p>
                 </IOSCard>
@@ -201,9 +213,9 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                     />
                                 </div>
                             ))}
-                            <div className="pt-3 border-t border-stone-100 flex justify-between font-bold">
+                            <div className="pt-3 mt-2 border-t border-stone-100 flex justify-between font-bold text-stone-900 bg-stone-50/50 p-2 rounded-lg">
                                 <span>Total Sales</span>
-                                <span>{totalSales.toLocaleString()}</span>
+                                <span>KES {totalSales.toLocaleString()}</span>
                             </div>
                         </div>
                     </IOSCard>

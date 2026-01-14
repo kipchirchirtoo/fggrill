@@ -20,6 +20,7 @@ import {
   getMaintenanceReport,
   getInventoryReport,
   getDashboardReport,
+  getConferenceReport,
   exportReport
 } from '../controllers/report.controller';
 import { protect, authorize } from '../middleware/auth';
@@ -43,6 +44,7 @@ router.get('/occupancy', getOccupancyReport);
 router.get('/inventory', getInventoryReport);
 router.get('/housekeeping', getHousekeepingReport);
 router.get('/maintenance', getMaintenanceReport);
+router.get('/conference', getConferenceReport);
 
 router.route('/')
   .get(getReports)

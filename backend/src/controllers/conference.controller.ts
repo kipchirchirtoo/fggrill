@@ -2,6 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import axios from 'axios';
+
+const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
 
 // @desc    Get all conference halls for a branch
 // @route   GET /api/conference/halls
@@ -125,21 +128,36 @@ export const createConferenceBooking = async (
     try {
         const {
             conference_hall_id,
+            company_name,
+            contact_person,
             customer_name,
             customer_phone,
             customer_email,
             start_date,
             end_date,
-            total_amount,
+            activity_type,
+            num_participants,
+            amount_per_pax,
+            meal_plan_details,
+            program_schedule,
+            amenities_details,
+            payment_mode,
             notes
         } = req.body;
 
         const branch_id = req.body.branch_id || req.user?.branch_id;
         const created_by = req.user?.id;
+        const booked_by_name = req.user?.name || 'Staff';
 
         if (!conference_hall_id || !start_date || !end_date || !customer_name) {
             throw new AppError('Missing required booking fields', 400);
         }
+
+        // Generate Invoice Number: CNF-YYYYMMDD-XXXX
+        const today = new Date();
+        const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
+        const randomStr = Math.floor(1000 + Math.random() * 9000).toString();
+        const invoice_number = `CNF-${dateStr}-${randomStr}`;
 
         // Check for existing bookings in that time range
         const { data: existing, error: checkError } = await supabase
@@ -151,7 +169,7 @@ export const createConferenceBooking = async (
 
         if (checkError) throw checkError;
 
-        // More precise overlap check: (StartA < EndB) and (EndA > StartB)
+        // More precise overlap check
         const hasOverlap = existing && existing.some(b => {
             const bStart = new Date(b.start_date);
             const bEnd = new Date(b.end_date);
@@ -164,27 +182,122 @@ export const createConferenceBooking = async (
             throw new AppError('The hall is already booked for the selected time range', 400);
         }
 
+        // Calculate Total Amount if not provided or to verify
+        let calculatedTotal = 0;
+
+        // 1. Hall Rental (simplified: assumes daily rate for now if >= 8h)
+        const start = new Date(start_date);
+        const end = new Date(end_date);
+        const diffHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+
+        const { data: hall } = await supabase.from('conference_halls').select('*').eq('id', conference_hall_id).single();
+        if (hall) {
+            if (diffHours >= 8) {
+                calculatedTotal += Math.ceil(diffHours / 24) * (hall.base_price_per_day || 0);
+            } else {
+                calculatedTotal += Math.ceil(diffHours) * (hall.base_price_per_hour || 0);
+            }
+        }
+
+        // 2. Per Pax amount
+        if (num_participants && amount_per_pax) {
+            calculatedTotal += (num_participants * amount_per_pax);
+        }
+
+        // 3. Meal plans
+        if (meal_plan_details && Array.isArray(meal_plan_details)) {
+            meal_plan_details.forEach(meal => {
+                calculatedTotal += (meal.price || 0) * (meal.pax || num_participants || 0);
+            });
+        }
+
+        // 4. Amenities
+        if (amenities_details && Array.isArray(amenities_details)) {
+            amenities_details.forEach(item => {
+                calculatedTotal += (item.unit_cost || 0) * (item.quantity || 0);
+            });
+        }
+
         const { data: booking, error } = await supabase
             .from('conference_hall_bookings')
             .insert([{
                 conference_hall_id,
                 branch_id,
+                company_name,
+                contact_person,
                 customer_name,
                 customer_phone,
                 customer_email,
                 start_date,
                 end_date,
-                total_amount,
+                activity_type,
+                num_participants,
+                amount_per_pax,
+                meal_plan_details,
+                program_schedule,
+                amenities_details,
+                payment_mode,
+                invoice_number,
+                total_amount: calculatedTotal || req.body.total_amount || 0,
                 amount_paid: 0,
                 payment_status: 'pending',
                 booking_status: 'confirmed',
                 notes,
-                created_by
+                created_by,
+                booked_by_name
             }])
             .select()
             .single();
 
         if (error) throw error;
+
+        // =====================================================
+        // PHASE 2: KITCHEN INTEGRATION
+        // =====================================================
+        if (meal_plan_details && Array.isArray(meal_plan_details) && meal_plan_details.length > 0) {
+            try {
+                // Generate order number for kitchen
+                const { data: orderNumber } = await supabase.rpc('generate_order_number');
+
+                // Create a generic restaurant order for the conference
+                const orderData = {
+                    order_number: orderNumber || `CNF-ORD-${booking.id.slice(0, 4)}`,
+                    order_type: 'room_service', // Mapping to room_service for kitchen visibility
+                    guest_name: company_name || customer_name,
+                    special_instructions: `CONFERENCE MEAL: ${activity_type || 'Event'} (PAX: ${num_participants}). Booking Ref: ${invoice_number}`,
+                    total_amount: 0,
+                    payment_method: payment_mode || 'Invoice',
+                    payment_status: 'pending',
+                    status: 'pending',
+                    created_by,
+                    branch_id
+                };
+
+                const { data: order, error: orderError } = await supabase
+                    .from('restaurant_orders')
+                    .insert([orderData])
+                    .select()
+                    .single();
+
+                if (!orderError && order) {
+                    // Create order items for each meal plan selected
+                    const orderItems = meal_plan_details.map(meal => ({
+                        order_id: order.id,
+                        menu_item_id: meal.menu_item_id || null,
+                        quantity: meal.pax || num_participants || 1,
+                        unit_price: meal.price || 0,
+                        total_price: (meal.pax || num_participants || 1) * (meal.price || 0),
+                        special_instructions: `Meal Type: ${meal.name}`
+                    }));
+
+                    await supabase.from('restaurant_order_items').insert(orderItems);
+                } else {
+                    logger.error(`Failed to trigger kitchen order for conference: ${orderError?.message}`);
+                }
+            } catch (kError: any) {
+                logger.error(`Kitchen integration error: ${kError.message}`);
+            }
+        }
 
         res.status(201).json({
             success: true,
@@ -223,14 +336,165 @@ export const updateConferenceBookingStatus = async (
             .select()
             .single();
 
-        if (error) throw error;
-
         res.status(200).json({
             success: true,
             data: booking
         });
 
         logger.info(`Conference booking ${id} status updated to ${status}`);
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Get conference booking for invoice
+// @route   GET /api/conference/bookings/:id/invoice
+// @access  Private
+export const getBookingInvoice = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+
+        const { data: booking, error } = await supabase
+            .from('conference_hall_bookings')
+            .select('*, hall:conference_halls(*), branch:branches(*)')
+            .eq('id', id)
+            .single();
+
+        if (error) throw error;
+        if (!booking) throw new AppError('Booking not found', 404);
+
+        // Fetch the PDF from Python service
+        try {
+            const pdfResponse = await axios.post(`${PYTHON_SERVICE_URL}/api/reports/generate/branded-pdf`, {
+                reportType: 'conference_invoice',
+                filters: { id: booking.id },
+                data: booking, // Pass the full booking data
+                useRealData: false
+            }, {
+                responseType: 'arraybuffer'
+            });
+
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename=Invoice_${booking.invoice_number}.pdf`);
+            res.send(Buffer.from(pdfResponse.data));
+        } catch (pdfError: any) {
+            logger.error(`Error generating conference PDF: ${pdfError.message}`);
+            // Fallback to JSON if PDF generation fails
+            res.status(200).json({
+                success: true,
+                data: booking
+            });
+        }
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * @desc    Record a payment for a conference booking
+ * @route   POST /api/conference/bookings/:id/payments
+ * @access  Private (Cashier/Reception)
+ */
+export const addConferencePayment = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { amount, payment_method, reference, remarks } = req.body;
+
+        if (!amount || amount <= 0 || !payment_method) {
+            throw new AppError('Amount and payment method are required', 400);
+        }
+
+        // 1. Fetch booking to calculate new balance
+        const { data: booking, error: fetchError } = await supabase
+            .from('conference_hall_bookings')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !booking) {
+            throw new AppError('Booking not found', 404);
+        }
+
+        const newPaidAmount = (booking.amount_paid || 0) + amount;
+        const totalAmount = booking.total_amount;
+
+        let paymentStatus = 'partial';
+        if (newPaidAmount >= totalAmount) {
+            paymentStatus = 'paid';
+        }
+
+        // 2. Update booking
+        const { error: updateError } = await supabase
+            .from('conference_hall_bookings')
+            .update({
+                amount_paid: newPaidAmount,
+                payment_status: paymentStatus,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id);
+
+        if (updateError) throw updateError;
+
+        // 3. Record in payments table
+        const { data: payment, error: paymentError } = await supabase
+            .from('payments')
+            .insert({
+                conference_booking_id: id,
+                amount: amount,
+                currency: 'KES',
+                payment_method: payment_method,
+                status: 'completed', // Manual payments are usually completed immediately
+                reference: reference || `CNF-PAY-${Date.now()}`,
+                metadata: {
+                    remarks,
+                    processed_by: req.user?.id,
+                    invoice_number: booking.invoice_number
+                }
+            })
+            .select()
+            .single();
+
+        if (paymentError) {
+            logger.error(`Error recording conference payment: ${paymentError.message}`);
+        }
+
+        // 4. Record in cashier_transactions for logbook visibility
+        try {
+            await supabase.from('cashier_transactions').insert({
+                transaction_number: reference || `CNF-PAY-${Date.now()}`,
+                branch_id: req.user?.branch_id || booking.branch_id,
+                cashier_id: req.user?.id,
+                transaction_type: 'payment',
+                revenue_type: 'CONFERENCE',
+                reference_type: 'conference_booking',
+                reference_id: id,
+                payment_method: payment_method,
+                amount: amount,
+                payment_reference: reference || 'CASH',
+                customer_name: booking.company_name || booking.customer_name
+            });
+        } catch (txnError: any) {
+            logger.error(`Error recording cashier transaction: ${txnError.message}`);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Payment recorded successfully',
+            data: {
+                new_paid_amount: newPaidAmount,
+                payment_status: paymentStatus,
+                payment
+            }
+        });
+
     } catch (error) {
         next(error);
     }

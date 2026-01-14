@@ -30,7 +30,8 @@ import {
   ConferenceBookingModal,
   OutsideCateringBookingModal,
   AttendanceModal,
-  PettyCashModal
+  PettyCashModal,
+  AddConferencePaymentModal
 } from '@/components/modals';
 import Link from 'next/link';
 import { subscribeToReceptionRealtime } from '@/lib/realtime';
@@ -100,6 +101,8 @@ export default function ReceptionDashboard(): JSX.Element {
   const [showDynamicBillModal, setShowDynamicBillModal] = useState(false);
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [showPettyCashModal, setShowPettyCashModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedConferenceBooking, setSelectedConferenceBooking] = useState<any>(null);
   const [selectedBill, setSelectedBill] = useState<any>(null);
 
   // State
@@ -513,25 +516,34 @@ export default function ReceptionDashboard(): JSX.Element {
                       <table className="w-full text-left">
                         <thead className="bg-stone-50 border-b border-stone-100">
                           <tr>
-                            <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">Customer</th>
-                            <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">Hall</th>
+                            <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">Client / Company</th>
+                            <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">Hall & Event</th>
+                            <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">PAX</th>
                             <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">Dates</th>
                             <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">Status</th>
-                            <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">Amount</th>
+                            <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">Financials</th>
+                            <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">Action</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-stone-50">
                           {conferenceBookings.length === 0 ? (
                             <tr>
-                              <td colSpan={5} className="px-4 py-8 text-center text-stone-500 italic">No conference bookings found</td>
+                              <td colSpan={8} className="px-4 py-8 text-center text-stone-500 italic">No conference bookings found</td>
                             </tr>
                           ) : conferenceBookings.map((b: any) => (
                             <tr key={b.id} className="hover:bg-stone-50 transition-colors">
-                              <td className="px-4 py-3 font-medium text-stone-900">
-                                {b.customer_name}
-                                <div className="text-[10px] text-stone-500">{b.customer_phone || b.customer_email}</div>
+                              <td className="px-4 py-3">
+                                <p className="font-bold text-stone-900">{b.company_name || b.customer_name}</p>
+                                <p className="text-[10px] text-stone-500">{b.contact_person || b.customer_phone}</p>
+                                <p className="text-[10px] font-medium text-blue-600 mt-0.5">{b.invoice_number}</p>
                               </td>
-                              <td className="px-4 py-3 text-sm text-stone-600">{b.hall?.name || 'Hall'}</td>
+                              <td className="px-4 py-3">
+                                <p className="text-sm font-medium text-stone-800">{b.hall?.name || 'Hall'}</p>
+                                <p className="text-[10px] text-stone-500">{b.activity_type || 'Convention'}</p>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-stone-600 font-medium">
+                                {b.num_participants || '-'}
+                              </td>
                               <td className="px-4 py-3 text-sm text-stone-600">
                                 {new Date(b.start_date).toLocaleDateString()}
                                 <div className="text-[10px] text-stone-500">
@@ -539,11 +551,40 @@ export default function ReceptionDashboard(): JSX.Element {
                                 </div>
                               </td>
                               <td className="px-4 py-3">
-                                <IOSBadge color={b.payment_status === 'paid' ? 'success' : 'warning'}>
-                                  {b.booking_status}
+                                <IOSBadge color={b.payment_status === 'paid' ? 'success' : b.payment_status === 'partial' ? 'info' : 'warning'}>
+                                  {b.payment_status?.toUpperCase() || 'UNPAID'}
                                 </IOSBadge>
+                                <div className="text-[10px] text-stone-500 mt-0.5">{b.booking_status}</div>
                               </td>
-                              <td className="px-4 py-3 font-bold text-indigo-600">KES {b.total_amount.toLocaleString()}</td>
+                              <td className="px-4 py-3">
+                                <div className="font-bold text-stone-900 text-sm">KES {b.total_amount.toLocaleString()}</div>
+                                <div className="text-[10px] text-green-600 font-medium">Paid: KES {(b.amount_paid || 0).toLocaleString()}</div>
+                                {b.total_amount - (b.amount_paid || 0) > 0 && (
+                                  <div className="text-[10px] text-red-600 font-bold italic">Bal: KES {(b.total_amount - (b.amount_paid || 0)).toLocaleString()}</div>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 flex gap-2">
+                                <IOSButton
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() => window.open(`/api/conference/bookings/${b.id}/invoice`, '_blank')}
+                                  className="h-8 px-3 text-xs"
+                                >
+                                  Invoice
+                                </IOSButton>
+                                {b.payment_status !== 'paid' && (
+                                  <IOSButton
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedConferenceBooking(b);
+                                      setShowPaymentModal(true);
+                                    }}
+                                    className="h-8 px-3 text-xs bg-indigo-600 hover:bg-indigo-700 text-white border-none"
+                                  >
+                                    Pay
+                                  </IOSButton>
+                                )}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -829,6 +870,23 @@ export default function ReceptionDashboard(): JSX.Element {
           isOpen={showPettyCashModal}
           onClose={() => setShowPettyCashModal(false)}
           onSuccess={() => { }}
+        />
+
+        <AddConferencePaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => {
+            setShowPaymentModal(false);
+            setSelectedConferenceBooking(null);
+          }}
+          booking={selectedConferenceBooking}
+          onSuccess={() => {
+            // Refresh dashboard to show updated payment status
+            if (typeof (fetchDashboardData as any) === 'function') {
+              (fetchDashboardData as any)();
+            } else {
+              window.location.reload();
+            }
+          }}
         />
       </DashboardLayout>
     </ProtectedRoute>

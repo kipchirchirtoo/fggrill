@@ -2224,6 +2224,13 @@ export const reportsAPI = {
     if (params?.to_date) query.append('to_date', params.to_date);
     return fetchAPI<any>(`/reports/revenue?${query}`);
   },
+  getConferenceReport: (params?: { branch_id?: number; from_date?: string; to_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.from_date) query.append('from_date', params.from_date);
+    if (params?.to_date) query.append('to_date', params.to_date);
+    return fetchAPI<any>(`/reports/conference?${query}`);
+  },
   getStockReport: (params?: { branch_id?: number }) => {
     const query = params?.branch_id ? `?branch_id=${params.branch_id}` : '';
     return fetchAPI<any>(`/reports/stock${query}`);
@@ -2370,6 +2377,12 @@ export const conferenceAPI = {
     fetchAPI<any>(`/conference/bookings/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status })
+    }),
+  getInvoice: (id: string) => `/api/conference/bookings/${id}/invoice`,
+  addPayment: (id: string, data: { amount: number; payment_method: string; reference?: string; remarks?: string }) =>
+    fetchAPI<any>(`/conference/bookings/${id}/payments`, {
+      method: 'POST',
+      body: JSON.stringify(data)
     }),
 };
 

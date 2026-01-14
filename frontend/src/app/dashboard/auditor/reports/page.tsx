@@ -127,6 +127,14 @@ export default function AuditorReportsPage() {
                             icon={CreditCard}
                             path="/dashboard/auditor/reports/employee-credit"
                         />
+                        <ReportCard
+                            title="Conference & Events"
+                            description="Revenue, PAX, and venue utilization metrics."
+                            icon={Calendar}
+                            path="/dashboard/auditor/reports/conference"
+                            reportType="conference_summary"
+                            isDownloadable={true}
+                        />
                     </div>
 
                     <div className="card-elevated p-8 bg-stone-900 text-white relative overflow-hidden group">
