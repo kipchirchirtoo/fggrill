@@ -3099,6 +3099,13 @@ export const kitchenAPI = {
     if (params?.end_date) query.append('end_date', params.end_date);
     return fetchAPI<any>(`/kitchen/ledger?${query}`);
   },
+  getStockLedger: (params?: { branch_id?: number; item_sku?: string; transaction_type?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.item_sku) query.append('item_sku', params.item_sku);
+    if (params?.transaction_type) query.append('transaction_type', params.transaction_type);
+    return fetchAPI<any>(`/kitchen/stock/ledger?${query}`);
+  },
   createLedgerEntry: (data: any) => fetchAPI<any>('/kitchen/ledger', { method: 'POST', body: JSON.stringify(data) }),
 
   // Receipts (from store)

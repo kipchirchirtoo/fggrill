@@ -66,6 +66,8 @@ export const createLedgerEntry = async (req: Request, res: Response) => {
       received_quantity,
       used_quantity,
       wastage_quantity,
+      expected_sales,
+      system_sales,
       unit_of_measure,
       remarks
     } = req.body;
@@ -95,6 +97,8 @@ export const createLedgerEntry = async (req: Request, res: Response) => {
         received_quantity: received_quantity || 0,
         used_quantity: used_quantity || 0,
         wastage_quantity: wastage_quantity || 0,
+        expected_sales: expected_sales || 0,
+        system_sales: system_sales || 0,
         closing_balance,
         unit_of_measure,
         remarks,
