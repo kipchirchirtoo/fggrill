@@ -38,7 +38,7 @@ export default function BarDashboard() {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const ordersRes = await barAPI.getOrders(activeBranchId || undefined);
+      const ordersRes = await barAPI.getOrders({ branchId: activeBranchId || undefined });
       if (ordersRes.success) {
         const allOrders = ordersRes.data || [];
         setOrders(allOrders.slice(0, 8));
@@ -168,6 +168,58 @@ export default function BarDashboard() {
                     </div>
                   </Link>
                 ))}
+              </div>
+
+              {/* Special Bar Features */}
+              <div className="mt-6 pt-6 border-t border-stone-100 space-y-4">
+                <h3 className="text-[14px] font-bold text-stone-900 uppercase tracking-wider">Additional Tracking</h3>
+
+                {/* Pool Table Widget */}
+                <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 bg-indigo-500 rounded-xl flex items-center justify-center text-white">
+                      <Plus className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <p className="text-[13px] font-bold text-indigo-900">Pool Table Tokens</p>
+                      <p className="text-[11px] text-indigo-600 font-medium">Record token sales</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const count = prompt('How many tokens sold?');
+                      if (count) {
+                        barAPI.recordPoolTokens({
+                          tokens_sold: parseInt(count),
+                          amount: parseInt(count) * 100, // Assuming 100 per token
+                          branch_id: activeBranchId || undefined
+                        }).then(() => toast.success('Tokens recorded successfully'))
+                          .catch(() => toast.error('Failed to record tokens'));
+                      }
+                    }}
+                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-[12px] font-bold shadow-sm active:scale-95 transition-all"
+                  >
+                    + Add Sold
+                  </button>
+                </div>
+
+                {/* Morning Stock Widget */}
+                <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white">
+                      <Clock className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <p className="text-[13px] font-bold text-emerald-900">Morning Stock Count</p>
+                      <p className="text-[11px] text-emerald-600 font-medium">Daily opening records</p>
+                    </div>
+                  </div>
+                  <Link href="/dashboard/bar/inventory/morning-count">
+                    <button className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-[12px] font-bold shadow-sm active:scale-95 transition-all">
+                      Start Count
+                    </button>
+                  </Link>
+                </div>
               </div>
             </div>
           </div>

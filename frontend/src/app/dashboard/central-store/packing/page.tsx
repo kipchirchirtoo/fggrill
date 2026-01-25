@@ -152,25 +152,40 @@ export default function PackingPage() {
                                 <div
                                     key={item.id}
                                     onClick={() => togglePacked(item.id)}
-                                    className={`group flex items-center justify-between p-4 border rounded-lg cursor-pointer transition-all ${packedItems[item.id]
-                                            ? 'bg-stone-50 border-stone-200'
-                                            : 'bg-white border-stone-100 hover:border-stone-200'
+                                    className={`group flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-all duration-300 ${packedItems[item.id]
+                                        ? 'bg-emerald-50 border-emerald-200 shadow-sm'
+                                        : 'bg-white border-stone-100 hover:border-stone-300 hover:shadow-md'
                                         }`}
                                 >
                                     <div className="flex items-center gap-4">
-                                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${packedItems[item.id] ? 'bg-stone-900 border-stone-900' : 'border-stone-200 group-hover:border-stone-400'
+                                        <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${packedItems[item.id]
+                                            ? 'bg-emerald-500 border-emerald-500 scale-110'
+                                            : 'border-stone-200 group-hover:border-stone-900 group-hover:scale-105'
                                             }`}>
-                                            {packedItems[item.id] && <Check className="h-3 w-3 text-white" />}
+                                            {packedItems[item.id] && <Check className="h-4 w-4 text-white stroke-[3px]" />}
                                         </div>
                                         <div>
-                                            <p className={`text-[14px] font-medium ${packedItems[item.id] ? 'text-stone-400 line-through' : 'text-stone-900'}`}>
+                                            <p className={`text-[15px] font-bold ${packedItems[item.id] ? 'text-emerald-900' : 'text-stone-900'}`}>
                                                 {item.item_name}
                                             </p>
-                                            <p className="text-[10px] text-stone-400 font-mono mt-0.5">{item.item_sku}</p>
+                                            <div className="flex items-center gap-2 mt-0.5">
+                                                <p className="text-[10px] text-stone-400 font-mono uppercase tracking-tighter">{item.item_sku}</p>
+                                                {item.requested_quantity !== item.approved_quantity && (
+                                                    <span className="text-[9px] bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded-full font-bold border border-rose-100 italic">Adjusted by Audit</span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-[14px] font-bold text-stone-800">{item.approved_quantity} {item.unit}</p>
+                                    <div className="text-right flex flex-col items-end">
+                                        <div className="flex flex-col items-end">
+                                            <span className="text-[9px] font-bold text-stone-400 uppercase tracking-widest">To Pack</span>
+                                            <p className={`text-lg font-black ${packedItems[item.id] ? 'text-emerald-600' : 'text-stone-900'}`}>
+                                                {item.approved_quantity} <span className="text-[10px] font-bold">{item.unit}</span>
+                                            </p>
+                                        </div>
+                                        {item.requested_quantity !== item.approved_quantity && (
+                                            <p className="text-[10px] text-stone-400 line-through">Requested: {item.requested_quantity} {item.unit}</p>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -182,8 +197,8 @@ export default function PackingPage() {
                                 onClick={handleConfirmPacked}
                                 disabled={!allPacked || isProcessing}
                                 className={`h-10 px-5 rounded-lg text-sm font-medium transition-colors ${allPacked
-                                        ? 'bg-stone-900 text-white hover:bg-stone-800'
-                                        : 'bg-stone-200 text-stone-400 cursor-not-allowed'
+                                    ? 'bg-stone-900 text-white hover:bg-stone-800'
+                                    : 'bg-stone-200 text-stone-400 cursor-not-allowed'
                                     }`}
                             >
                                 {isProcessing ? 'Processing...' : 'Mark as Ready for Dispatch'}

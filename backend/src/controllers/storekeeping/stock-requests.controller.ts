@@ -317,9 +317,10 @@ export const approveStockRequest = async (
 ): Promise<void> => {
     try {
         const { id } = req.params;
-        const { approved_quantity_notes } = req.body;
+        const { approved_quantity_notes, item_approvals } = req.body;
         const userId = req.user?.id;
 
+        // 1. Update the main request status
         const { data: request, error } = await supabase
             .from('stock_requests')
             .update({
@@ -335,9 +336,41 @@ export const approveStockRequest = async (
 
         if (error) throw error;
 
+        // 2. Update individual items if approvals provided
+        if (item_approvals && Array.isArray(item_approvals)) {
+            for (const item of item_approvals) {
+                await supabase
+                    .from('stock_request_items')
+                    .update({
+                        approved_quantity: item.approved_quantity,
+                        status: 'APPROVED'
+                    })
+                    .eq('request_id', id)
+                    .eq('id', item.id);
+            }
+        } else {
+            // Default: Set approved_quantity to requested_quantity for all items
+            const { data: items } = await supabase
+                .from('stock_request_items')
+                .select('id, requested_quantity')
+                .eq('request_id', id);
+
+            if (items) {
+                for (const item of items) {
+                    await supabase
+                        .from('stock_request_items')
+                        .update({
+                            approved_quantity: item.requested_quantity,
+                            status: 'APPROVED'
+                        })
+                        .eq('id', item.id);
+                }
+            }
+        }
+
         res.status(200).json({
             success: true,
-            message: 'Stock request approved',
+            message: 'Stock request approved successfully',
             data: request
         });
     } catch (error) {
@@ -373,6 +406,12 @@ export const rejectStockRequest = async (
             .single();
 
         if (error) throw error;
+
+        // Also update item statuses
+        await supabase
+            .from('stock_request_items')
+            .update({ status: 'REJECTED' })
+            .eq('request_id', id);
 
         res.status(200).json({
             success: true,

@@ -3,17 +3,21 @@
 import React from 'react';
 import { BranchAwareDashboardLayout } from '@/components/layout/branch-aware-dashboard-layout';
 import { ProtectedRoute } from '@/components/auth/protected-route';
-import { UserRole } from '@/lib/auth-context';
+import { UserRole, useAuth } from '@/lib/auth-context';
 import { SoldItemsAnalytics } from '@/components/analytics/sold-items-analytics';
 
-export default function SoldItemsAnalyticsPage() {
+export default function BranchManagerSoldItemsPage() {
+    const { branch } = useAuth();
+
     return (
-        <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN]}>
+        <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.SUPER_ADMIN]}>
             <BranchAwareDashboardLayout
                 title="Sold Items Analytics"
-                subtitle="Global view of item performance across all branches"
+                subtitle={`Performance analysis for ${branch?.name || 'Current Branch'}`}
             >
-                <SoldItemsAnalytics />
+                <SoldItemsAnalytics
+                    branchId={branch?.id}
+                />
             </BranchAwareDashboardLayout>
         </ProtectedRoute>
     );

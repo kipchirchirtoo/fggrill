@@ -272,14 +272,35 @@ export default function BarTabsPage() {
             <DialogHeader><DialogTitle>Close Tab</DialogTitle></DialogHeader>
             {selectedTab && (
               <div className="space-y-4 mt-4">
-                <div className="p-4 bg-gray-50 rounded-ios-lg">
-                  <p className="font-bold">Tab #{selectedTab.tab_number}</p>
-                  <p className="text-gray-500">{selectedTab.customer_name}</p>
-                  <p className="text-2xl font-bold mt-2">KES {(selectedTab.total_amount || 0).toLocaleString()}</p>
+                <div className="p-4 bg-gray-50 rounded-ios-lg border border-stone-100">
+                  <p className="font-bold text-stone-900 text-lg">Tab #{selectedTab.tab_number}</p>
+                  <p className="text-stone-500 font-medium">{selectedTab.customer_name}</p>
+
+                  {/* Detailed Items View */}
+                  <div className="mt-4 pt-4 border-t border-stone-200">
+                    <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-2">Order Items</p>
+                    <div className="space-y-2 max-h-40 overflow-y-auto no-scrollbar">
+                      {selectedTab.items && selectedTab.items.length > 0 ? (
+                        selectedTab.items.map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-center text-sm">
+                            <span className="text-stone-600">{item.quantity}x {item.drink_name || 'Drink'}</span>
+                            <span className="font-semibold text-stone-800">KES {(item.price * item.quantity).toLocaleString()}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-stone-400 italic">No items recorded yet</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-4 border-t border-stone-200 flex justify-between items-center">
+                    <span className="text-stone-500 font-bold">Total Payable</span>
+                    <span className="text-2xl font-black text-stone-900">KES {(selectedTab.total_amount || 0).toLocaleString()}</span>
+                  </div>
                 </div>
                 <div className="flex gap-3">
                   <IOSButton variant="secondary" onClick={() => setCloseTabModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                  <IOSButton onClick={handleCloseTab} className="flex-1" leftIcon={<Check />}>Close & Pay</IOSButton>
+                  <IOSButton onClick={handleCloseTab} className="flex-1" leftIcon={<Check />}>Confirm Payment</IOSButton>
                 </div>
               </div>
             )}

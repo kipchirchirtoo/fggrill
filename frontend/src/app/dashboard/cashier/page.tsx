@@ -465,7 +465,16 @@ export default function CashierPage() {
                         body: JSON.stringify({ method: 'CASH' })
                     });
                     toast.success('Cash payment confirmed');
-                    setSelectedTransaction(response.data);
+
+                    // Manually construct receipt data to ensure it persists after cart clear
+                    setSelectedTransaction({
+                        ...response.data,
+                        created_at: new Date().toISOString(),
+                        cashier_name: 'Current Cashier',
+                        payment_method: 'CASH',
+                        items: [...cart],
+                        total_amount: response.data.total_amount
+                    });
                     setShowReceipt(true);
                     setCart([]);
                 }

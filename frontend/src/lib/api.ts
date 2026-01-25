@@ -195,6 +195,13 @@ export const storeAPI = {
   getCentralDashboard: () => fetchAPI<any>('/store/dashboard/central'),
   getBranchDashboard: () => fetchAPI<any>('/store/dashboard/branch'),
 
+  approveStockRequest: (id: string, data?: { approved_quantity_notes?: string; item_approvals?: Array<{ id: string; approved_quantity: number }> }) =>
+    fetchAPI<any>(`/store/stock-requests/${id}/approve`, { method: 'PUT', body: JSON.stringify(data || {}) }),
+  rejectStockRequest: (id: string, data?: { review_notes?: string }) =>
+    fetchAPI<any>(`/store/stock-requests/${id}/reject`, { method: 'PUT', body: JSON.stringify(data || {}) }),
+  getBranchPerformance: (branchId: number, days: number = 1) =>
+    fetchAPI<any>(`/store/stock-requests/branch-performance/${branchId}?days=${days}`),
+
   // Items/Inventory
   getItems: (params?: { search?: string; category?: string; branch_id?: number }) => {
     const query = new URLSearchParams();
@@ -1319,13 +1326,13 @@ export const housekeepingAPI = {
   submitInspection: (data: any) => fetchAPI<any>('/housekeeping/inspections', { method: 'POST', body: JSON.stringify(data) }),
 
   // Staff
-  getStaff: (params?: { available?: boolean; designation?: string; floor?: number }) => {
-    const query = new URLSearchParams();
-    if (params?.available !== undefined) query.append('available', String(params.available));
-    if (params?.designation) query.append('designation', params.designation);
-    if (params?.floor) query.append('floor', String(params.floor));
+  getStaff: (params?: any) => {
+    const query = new URLSearchParams(params).toString();
     return fetchAPI<any>(`/housekeeping/staff?${query}`);
   },
+  createStaff: (data: any) => fetchAPI<any>('/housekeeping/staff', { method: 'POST', body: JSON.stringify(data) }),
+  updateStaff: (id: string, data: any) => fetchAPI<any>(`/housekeeping/staff/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteStaff: (id: string) => fetchAPI<any>(`/housekeeping/staff/${id}`, { method: 'DELETE' }),
   getStaffWorkload: () => fetchAPI<any>('/housekeeping/staff/workload'),
   getStaffMember: (id: string) => fetchAPI<any>(`/housekeeping/staff/${id}`),
   getStaffPerformance: (id: string, period?: number) => {
@@ -1451,6 +1458,7 @@ export const housekeepingAPI = {
   createShiftSwap: (data: any) => fetchAPI<any>('/housekeeping/scheduling/shift-swaps', { method: 'POST', body: JSON.stringify(data) }),
   respondToShiftSwap: (id: string, accepted: boolean) => fetchAPI<any>(`/housekeeping/scheduling/shift-swaps/${id}/respond`, { method: 'PUT', body: JSON.stringify({ accepted }) }),
   approveShiftSwap: (id: string, approved: boolean) => fetchAPI<any>(`/housekeeping/scheduling/shift-swaps/${id}/approve`, { method: 'PUT', body: JSON.stringify({ approved }) }),
+
 
   // Reports
   getDailyReport: (date?: string) => {
@@ -2040,6 +2048,21 @@ export const barAPI = {
     const query = branchId ? `?branch_id=${branchId}` : '';
     return fetchAPI<any>(`/bar/stock-requests/low-stock${query}`);
   },
+
+  // Morning Stock Count
+  recordMorningStockCount: (data: any) => fetchAPI<any>('/bar/stock/morning-count', { method: 'POST', body: JSON.stringify(data) }),
+  getMorningStockCounts: (branchId?: number) => fetchAPI<any>(`/bar/stock/morning-count${branchId ? `?branch_id=${branchId}` : ''}`),
+
+  // Pool Table Token Tracking
+  recordPoolTokens: (data: { tokens_sold: number; amount: number; branch_id?: number }) =>
+    fetchAPI<any>('/bar/pool-table/tokens', { method: 'POST', body: JSON.stringify(data) }),
+  getPoolTableEarnings: (params?: { branch_id?: number; start_date?: string; end_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/bar/pool-table/earnings?${query}`);
+  },
 };
 
 // =====================================================
@@ -2257,9 +2280,119 @@ export const reportsAPI = {
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
       return { success: true };
     });
-  }
+  },
+
+  // Python Service Endpoints
+  healthCheck: async () => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/health`);
+    return response.json();
+  },
+  getReportData: async (reportType: string, filters: Record<string, any> = {}) => {
+    const query = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        query.append(key, String(value));
+      }
+    });
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/data?type=${reportType}&${query}`);
+    return response.json();
+  },
+  exportBrandedPdf: async (reportType: string, filters: Record<string, any> = {}, useRealData: boolean = true) => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/generate/branded-pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reportType, filters, useRealData }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to generate branded PDF');
+    }
+
+    return response.blob();
+  },
+  downloadBrandedPdf: async (type: string, data: any) => {
+    const blob = await reportsAPI.exportBrandedPdf(type, data);
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${type}_${data.id || Date.now()}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    return { success: true };
+  },
+  exportPdf: async (reportType: string, filters: Record<string, any> = {}) => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/generate/pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reportType, filters }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to generate PDF report' }));
+      throw new Error(error.error || 'Failed to generate PDF report');
+    }
+
+    return response.blob();
+  },
+  exportExcel: async (reportType: string, filters: Record<string, any> = {}) => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/generate/excel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reportType, filters }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to generate Excel report' }));
+      throw new Error(error.error || 'Failed to generate Excel report');
+    }
+
+    return response.blob();
+  },
+  downloadReport: async (reportType: string, filters: Record<string, any> = {}, format: 'pdf' | 'excel' = 'pdf') => {
+    try {
+      let blob: Blob;
+      let filename: string;
+
+      if (format === 'pdf') {
+        blob = await reportsAPI.exportPdf(reportType, filters);
+        filename = `FG_${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
+      } else {
+        blob = await reportsAPI.exportExcel(reportType, filters);
+        filename = `FG_${reportType}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      }
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      return { success: true, filename };
+    } catch (error) {
+      throw error;
+    }
+  },
+  getKPIDashboard: async (branchId?: number, period?: string) => {
+    const params = new URLSearchParams();
+    if (branchId) params.append('branch_id', String(branchId));
+    if (period) params.append('period', period);
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/kpi/dashboard?${params}`);
+    return response.json();
+  },
+  getKPISummary: async (branchId?: number) => {
+    const params = new URLSearchParams();
+    if (branchId) params.append('branch_id', String(branchId));
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/kpi/summary?${params}`);
+    return response.json();
+  },
 };
 
 
@@ -2321,9 +2454,9 @@ export const auditAPI = {
 
   // Advanced Intelligence Reports
   getReconciliationAudit: (params: { branch_id?: number; from_date?: string; to_date?: string }) =>
-    reportsService.getReportData('reconciliation_audit', params),
+    reportsAPI.getReportData('reconciliation_audit', params),
   getSoldItemsAnalytics: (params: { branch_id?: number; from_date?: string; to_date?: string }) =>
-    reportsService.getReportData('sold_items_analytics', params),
+    reportsAPI.getReportData('sold_items_analytics', params),
 
   getAuditTrail: async (filters?: any) => {
     const params = new URLSearchParams();
@@ -2537,190 +2670,6 @@ export const notificationsAPI = {
 };
 
 // =====================================================
-// REPORTS SERVICE (Python Microservice)
-// =====================================================
-
-
-export const reportsService = {
-  // Health check
-  healthCheck: async () => {
-    const response = await fetch(`${REPORTS_SERVICE_URL}/health`);
-    return response.json();
-  },
-
-  // Get raw report data
-  getReportData: async (reportType: string, filters: Record<string, any> = {}) => {
-    const query = new URLSearchParams();
-    Object.entries(filters).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        query.append(key, String(value));
-      }
-    });
-    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/data?type=${reportType}&${query}`);
-    return response.json();
-  },
-
-  // Generate branded PDF report (with FG styling)
-  exportBrandedPdf: async (reportType: string, filters: Record<string, any> = {}, useRealData: boolean = true) => {
-    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/generate/branded-pdf`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reportType, filters, useRealData }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Failed to generate PDF report' }));
-      throw new Error(error.error || 'Failed to generate PDF report');
-    }
-
-    return response.blob();
-  },
-
-  // Generate standard PDF report
-  exportPdf: async (reportType: string, filters: Record<string, any> = {}) => {
-    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/generate/pdf`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reportType, filters }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Failed to generate PDF report' }));
-      throw new Error(error.error || 'Failed to generate PDF report');
-    }
-
-    return response.blob();
-  },
-
-  // Generate Excel report
-  exportExcel: async (reportType: string, filters: Record<string, any> = {}) => {
-    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/generate/excel`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reportType, filters }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Failed to generate Excel report' }));
-      throw new Error(error.error || 'Failed to generate Excel report');
-    }
-
-    return response.blob();
-  },
-
-  // Get available report types
-  getReportTypes: async () => {
-    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/types`);
-    return response.json();
-  },
-
-  // Schedule a report
-  scheduleReport: async (data: {
-    name?: string;
-    reportType: string;
-    frequency: 'daily' | 'weekly' | 'monthly';
-    scheduleTime?: string;
-    scheduleDay?: number;
-    recipients?: string[];
-    parameters?: Record<string, any>;
-    branchId?: number;
-  }) => {
-    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/schedule`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    return response.json();
-  },
-
-  // Get scheduled reports
-  getScheduledReports: async () => {
-    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/schedules`);
-    return response.json();
-  },
-
-  // Delete scheduled report
-  deleteScheduledReport: async (scheduleId: string) => {
-    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/schedules/${scheduleId}`, {
-      method: 'DELETE',
-    });
-    return response.json();
-  },
-
-  // Toggle scheduled report active/inactive
-  toggleScheduledReport: async (scheduleId: string) => {
-    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/schedules/${scheduleId}/toggle`, {
-      method: 'PUT',
-    });
-    return response.json();
-  },
-
-  // Run a scheduled report immediately
-  runReportNow: async (scheduleId: string) => {
-    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/run-now`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scheduleId }),
-    });
-    return response.json();
-  },
-
-  // Get report history
-  getReportHistory: async (limit?: number, reportType?: string) => {
-    const params = new URLSearchParams();
-    if (limit) params.append('limit', String(limit));
-    if (reportType) params.append('type', reportType);
-    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/history?${params}`);
-    return response.json();
-  },
-
-  // Download helper - triggers browser download
-  downloadReport: async (reportType: string, filters: Record<string, any> = {}, format: 'pdf' | 'excel' = 'pdf') => {
-    try {
-      let blob: Blob;
-      let filename: string;
-
-      if (format === 'pdf') {
-        blob = await reportsService.exportBrandedPdf(reportType, filters);
-        filename = `FG_${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
-      } else {
-        blob = await reportsService.exportExcel(reportType, filters);
-        filename = `FG_${reportType}_${new Date().toISOString().split('T')[0]}.xlsx`;
-      }
-
-      // Create download link
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      return { success: true, filename };
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  // Get KPI dashboard data
-  getKPIDashboard: async (branchId?: number, period?: string) => {
-    const params = new URLSearchParams();
-    if (branchId) params.append('branch_id', String(branchId));
-    if (period) params.append('period', period);
-    const response = await fetch(`${REPORTS_SERVICE_URL}/api/kpi/dashboard?${params}`);
-    return response.json();
-  },
-
-  // Get KPI summary cards
-  getKPISummary: async (branchId?: number) => {
-    const params = new URLSearchParams();
-    if (branchId) params.append('branch_id', String(branchId));
-    const response = await fetch(`${REPORTS_SERVICE_URL}/api/kpi/summary?${params}`);
-    return response.json();
-  },
-};
 
 // Export all APIs as a single object
 
@@ -2861,6 +2810,26 @@ export const accountingAPI = {
     return response.json();
   },
 
+  getFiscalPeriods: async (branchId?: number) => {
+    const params = new URLSearchParams();
+    if (branchId) params.append('branch_id', String(branchId));
+    return fetchPythonAPI<any>(`/accounting/fiscal-periods?${params.toString()}`);
+  },
+
+  updatePeriodStatus: async (periodId: string, status: string) => {
+    return fetchPythonAPI<any>(`/accounting/fiscal-periods/${periodId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status })
+    });
+  },
+
+  closePeriod: async (periodId: string, data: any) => {
+    return fetchPythonAPI<any>(`/accounting/fiscal-periods/${periodId}/close`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
   getTrialBalance: async (filters?: any) => {
     const params = new URLSearchParams();
     if (filters?.start_date) params.append('start_date', filters.start_date);
@@ -2877,6 +2846,14 @@ export const accountingAPI = {
     if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
 
     return fetchPythonAPI<any>(`/accounting/reports/p-and-l?${params.toString()}`);
+  },
+
+  getAgingAnalysis: async (filters?: any) => {
+    const params = new URLSearchParams();
+    if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
+    if (filters?.as_of_date) params.append('as_of_date', filters.as_of_date);
+
+    return fetchPythonAPI<any>(`/accounting/reports/aging-analysis?${params.toString()}`);
   },
 
   getFinancialStatements: async (type: string, filters?: any) => {
@@ -3227,12 +3204,6 @@ export const api = {
   payroll: payrollAPI,
   notifications: notificationsAPI,
   cashier: cashierAPI,
-  approveStockRequest: (id: string, data?: { approved_quantity_notes?: string }) =>
-    fetchAPI<any>(`/store/stock-requests/${id}/approve`, { method: 'PUT', body: JSON.stringify(data || {}) }),
-  rejectStockRequest: (id: string, data?: { review_notes?: string }) =>
-    fetchAPI<any>(`/store/stock-requests/${id}/reject`, { method: 'PUT', body: JSON.stringify(data || {}) }),
-  getBranchPerformance: (branchId: number, days: number = 1) =>
-    fetchAPI<any>(`/store/stock-requests/branch-performance/${branchId}?days=${days}`),
 };
 
 export default api;

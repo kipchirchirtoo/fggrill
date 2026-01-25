@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
@@ -9,10 +10,11 @@ import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
 import { housekeepingAPI } from '@/lib/api';
-import { 
+import {
   Users, RefreshCw, Search, User, Phone, Mail, CheckCircle, Clock,
-  XCircle, Bed, ClipboardList, Star, Calendar, BarChart3
+  XCircle, Bed, ClipboardList, Star, Calendar, BarChart3, Plus
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -41,15 +43,24 @@ const statusConfig: Record<string, { label: string; color: string; bgColor: stri
 
 export default function HousekeepingStaffPage() {
   const { user } = useAuth();
+  const { activeBranchId } = useBranch();
   const [staff, setStaff] = useState<Staff[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [newStaff, setNewStaff] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    designation: 'Room Attendant'
+  });
 
   const fetchStaff = useCallback(async () => {
     setIsLoading(true);
     try {
-      const params: any = {};
+      const params: any = { branch_id: activeBranchId || user?.branch_id };
       if (statusFilter === 'available') params.available = true;
 
       const response = await housekeepingAPI.getStaff(params);
@@ -61,14 +72,36 @@ export default function HousekeepingStaffPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, activeBranchId, user?.branch_id]);
+
+  const handleCreateStaff = async () => {
+    if (!newStaff.first_name || !newStaff.last_name) {
+      toast.error('First and last name are required');
+      return;
+    }
+    try {
+      const response = await housekeepingAPI.createStaff({
+        ...newStaff,
+        branch_id: activeBranchId || user?.branch_id,
+        status: 'available'
+      });
+      if (response.success) {
+        toast.success('Staff member added successfully');
+        setAddModalOpen(false);
+        setNewStaff({ first_name: '', last_name: '', email: '', phone: '', designation: 'Room Attendant' });
+        fetchStaff();
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to add staff member');
+    }
+  };
 
   useEffect(() => {
     fetchStaff();
   }, [fetchStaff]);
 
   const filteredStaff = staff.filter((member) => {
-    const matchesSearch = 
+    const matchesSearch =
       `${member.first_name} ${member.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
       member.phone?.includes(searchQuery);
     const matchesStatus = statusFilter === 'all' || member.status === statusFilter;
@@ -93,8 +126,10 @@ export default function HousekeepingStaffPage() {
               <h1 className="text-2xl font-bold text-gray-900">Housekeeping Staff</h1>
               <p className="text-gray-500">Manage housekeeping team and assignments</p>
             </div>
-            <IOSButton variant="secondary" onClick={fetchStaff} leftIcon={<RefreshCw />}>Refresh
-            </IOSButton>
+            <div className="flex gap-2">
+              <IOSButton variant="secondary" onClick={fetchStaff} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>Add Staff</IOSButton>
+            </div>
           </div>
 
           {/* Stats */}
@@ -203,7 +238,7 @@ export default function HousekeepingStaffPage() {
                           </IOSBadge>
                         </div>
                         <p className="text-sm text-gray-500">{member.designation || 'Room Attendant'}</p>
-                        
+
                         {member.phone && (
                           <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
                             <Phone className="h-3 w-3" /> {member.phone}
@@ -252,6 +287,51 @@ export default function HousekeepingStaffPage() {
           )}
         </div>
       </DashboardLayout>
+
+      <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add New Staff Member</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">First Name *</label>
+                <Input value={newStaff.first_name} onChange={(e) => setNewStaff({ ...newStaff, first_name: e.target.value })} placeholder="John" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Last Name *</label>
+                <Input value={newStaff.last_name} onChange={(e) => setNewStaff({ ...newStaff, last_name: e.target.value })} placeholder="Doe" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email</label>
+              <Input type="email" value={newStaff.email} onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })} placeholder="john@example.com" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Phone</label>
+              <Input value={newStaff.phone} onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })} placeholder="+254..." />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Designation</label>
+              <select
+                value={newStaff.designation}
+                onChange={(e) => setNewStaff({ ...newStaff, designation: e.target.value })}
+                className="w-full h-11 px-3 border rounded-ios-lg bg-white"
+              >
+                <option value="Room Attendant">Room Attendant</option>
+                <option value="Supervisor">Supervisor</option>
+                <option value="Linen Attendant">Linen Attendant</option>
+                <option value="Public Area Attendant">Public Area Attendant</option>
+              </select>
+            </div>
+            <div className="flex gap-3 pt-4 border-t mt-4">
+              <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
+              <IOSButton onClick={handleCreateStaff} className="flex-1">Add Staff</IOSButton>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </ProtectedRoute>
   );
 }

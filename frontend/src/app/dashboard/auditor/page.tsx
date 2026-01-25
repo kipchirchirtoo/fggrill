@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     ClipboardList, Clock, CheckCircle, AlertTriangle,
     RefreshCw, BarChart3, ShoppingBag, Package,
-    ChevronRight
+    ChevronRight, Calendar as CalendarIcon
 } from 'lucide-react';
 import { auditAPI, storeAPI, restaurantAPI } from '@/lib/api';
 import { DashboardLayout } from '@/components/layout/dashboard-layout'; // Changed from BranchAware...
@@ -27,6 +27,11 @@ export default function AuditorDashboard() {
     });
 
     const [recentLogs, setRecentLogs] = useState<any[]>([]);
+    const [analytics, setAnalytics] = useState<any>(null);
+    const [dateRange, setDateRange] = useState({
+        startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        endDate: new Date().toISOString().split('T')[0]
+    });
     const router = useRouter();
 
     const fetchData = useCallback(async () => {
@@ -35,11 +40,16 @@ export default function AuditorDashboard() {
             // Use undefined for branchId if activeBranchId is 0 or null to fetch all
             const effectiveBranchId = activeBranchId === 0 ? undefined : (activeBranchId || undefined);
 
-            const [logsRes, requestsRes, ordersRes, reconRes] = await Promise.all([
+            const [logsRes, requestsRes, ordersRes, reconRes, analyticsRes] = await Promise.all([
                 auditAPI.getAuditLogs({ branchId: effectiveBranchId }),
                 storeAPI.getBranchRequests('PENDING', effectiveBranchId),
                 restaurantAPI.getOrders({ status: 'cancelled', branchId: effectiveBranchId }),
-                auditAPI.getReconciliationAudit({ branch_id: effectiveBranchId })
+                auditAPI.getReconciliationAudit({ branch_id: effectiveBranchId }),
+                auditAPI.getSoldItemsAnalytics({
+                    branch_id: effectiveBranchId,
+                    from_date: dateRange.startDate,
+                    to_date: dateRange.endDate
+                })
             ]);
 
             if (logsRes.success) {
@@ -65,12 +75,16 @@ export default function AuditorDashboard() {
 
                 setRecentLogs(logs.slice(0, 5));
             }
+
+            if (analyticsRes.success) {
+                setAnalytics(analyticsRes.data);
+            }
         } catch (e) {
             console.error("Auditor fetch failed:", e);
         } finally {
             setIsLoading(false);
         }
-    }, [activeBranchId]);
+    }, [activeBranchId, dateRange]);
 
     useEffect(() => {
         fetchData();
@@ -101,14 +115,30 @@ export default function AuditorDashboard() {
                             <p className="text-stone-500 mt-0.5">{activeBranchId === 0 ? "Viewing all branches" : `Monitoring ${activeBranch?.name || 'Loading...'}`}</p>
                         </div>
                         <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-lg px-3 py-1.5 h-[42px]">
+                                <CalendarIcon className="h-4 w-4 text-stone-400" />
+                                <input
+                                    type="date"
+                                    value={dateRange.startDate}
+                                    onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                                    className="text-xs font-medium text-stone-600 outline-none"
+                                />
+                                <span className="text-stone-300">to</span>
+                                <input
+                                    type="date"
+                                    value={dateRange.endDate}
+                                    onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                                    className="text-xs font-medium text-stone-600 outline-none"
+                                />
+                            </div>
                             <BranchSelector />
                             <button
                                 onClick={fetchData}
                                 disabled={isLoading}
-                                className="btn-secondary"
+                                className="btn-secondary h-[42px]"
                             >
                                 <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                                <span>Refresh Data</span>
+                                <span className="hidden sm:inline">Refresh</span>
                             </button>
                         </div>
                     </div>
@@ -125,6 +155,75 @@ export default function AuditorDashboard() {
                             </div>
                         ))}
                     </div>
+
+                    {/* Custom Analytics Section */}
+                    {analytics && (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                            <div className="lg:col-span-2 card-elevated p-6 bg-white overflow-hidden relative">
+                                <div className="flex items-center justify-between mb-6">
+                                    <div>
+                                        <h3 className="text-[17px] font-bold text-stone-900 flex items-center gap-2">
+                                            <BarChart3 className="h-5 w-5 text-amber-500" />
+                                            Sold Items Analytics
+                                        </h3>
+                                        <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest mt-1">Volume Performance by Category</p>
+                                    </div>
+                                    <button className="text-[11px] font-bold text-stone-400 hover:text-stone-900 uppercase tracking-widest transition-colors">
+                                        View Full Report
+                                    </button>
+                                </div>
+
+                                <div className="space-y-4">
+                                    {(analytics.category_performance || []).slice(0, 5).map((cat: any, i: number) => (
+                                        <div key={i} className="space-y-1.5">
+                                            <div className="flex justify-between text-[13px] font-medium">
+                                                <span className="text-stone-700">{cat.category || 'Uncategorized'}</span>
+                                                <span className="text-stone-900">{cat.total_sold} items</span>
+                                            </div>
+                                            <div className="h-2 bg-stone-50 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-stone-900 rounded-full transition-all duration-1000"
+                                                    style={{ width: `${Math.min(100, (cat.total_sold / (analytics.total_sold || 1)) * 100 * 2)}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {(!analytics.category_performance || analytics.category_performance.length === 0) && (
+                                        <div className="py-20 text-center text-stone-400 text-sm italic">
+                                            No sales data captured for this period/branch.
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="card-elevated p-6 bg-stone-50 border-none">
+                                <h3 className="text-[15px] font-bold text-stone-900 mb-6 flex items-center gap-2">
+                                    <ShoppingBag className="h-5 w-5 text-stone-400" />
+                                    Top Revenue Drivers
+                                </h3>
+                                <div className="space-y-4">
+                                    {(analytics.top_items || []).slice(0, 3).map((item: any, i: number) => (
+                                        <div key={i} className="p-4 bg-white rounded-xl shadow-sm border border-stone-100">
+                                            <p className="text-[13px] font-bold text-stone-900">{item.item_name}</p>
+                                            <div className="flex justify-between items-end mt-2">
+                                                <div>
+                                                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-tight">Units Sold</p>
+                                                    <p className="text-[15px] font-black text-stone-700">{item.total_quantity}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-tight">Revenue</p>
+                                                    <p className="text-[15px] font-black text-stone-900">KES {item.total_revenue?.toLocaleString()}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {(!analytics.top_items || analytics.top_items.length === 0) && (
+                                        <p className="text-center py-10 text-stone-300 text-xs italic">No items recorded</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Quick Access */}
                     <div className="card-elevated p-6">

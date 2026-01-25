@@ -1,41 +1,52 @@
 'use client';
 
-import { useState } from 'react';
-import { Calendar, User, Clock, AlertTriangle, ChevronRight, FileSpreadsheet, Send, Search } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Calendar, User, Clock, AlertTriangle, ChevronRight, FileSpreadsheet, Send, Search, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
+import { api } from '@/lib/api';
+import { useBranch } from '@/lib/branch-context';
+import { toast } from 'sonner';
 
 interface Invoice {
     id: string;
-    invoiceNumber: string;
-    customerName: string;
-    date: Date;
-    dueDate: Date;
+    invoice_number: string;
+    customer_name: string;
+    date: string;
+    due_date: string;
     amount: number;
-    paidAmount: number;
     balance: number;
-    agingDays: number;
+    aging_days: number;
 }
 
 export default function AgingAnalysisDashboard() {
+    const { activeBranchId } = useBranch();
     const [searchTerm, setSearchTerm] = useState('');
+    const [invoices, setInvoices] = useState<Invoice[]>([]);
+    const [buckets, setBuckets] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    // Mock data
-    const invoices: Invoice[] = [
-        { id: '1', invoiceNumber: 'INV-2024-001', customerName: 'John Doe Ltd', date: new Date('2023-11-15'), dueDate: new Date('2023-12-15'), amount: 150000, paidAmount: 50000, balance: 100000, agingDays: 23 },
-        { id: '2', invoiceNumber: 'INV-2024-002', customerName: 'Smart Hotel Group', date: new Date('2023-10-10'), dueDate: new Date('2023-11-10'), amount: 250000, paidAmount: 0, balance: 250000, agingDays: 58 },
-        { id: '3', invoiceNumber: 'INV-2024-003', customerName: 'Apex Tours', date: new Date('2023-09-05'), dueDate: new Date('2023-10-05'), amount: 80000, paidAmount: 20000, balance: 60000, agingDays: 94 },
-        { id: '4', invoiceNumber: 'INV-2024-004', customerName: 'Individual Guest', date: new Date('2023-12-28'), dueDate: new Date('2024-01-05'), amount: 12500, paidAmount: 0, balance: 12500, agingDays: 2 },
-    ];
+    const fetchData = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const response = await api.accounting.getAgingAnalysis({
+                branch_id: activeBranchId || undefined
+            });
+            if (response.success) {
+                setInvoices(response.data.invoices || []);
+                setBuckets(response.data.buckets || []);
+            }
+        } catch (error: any) {
+            toast.error('Failed to load aging analysis data');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [activeBranchId]);
 
-    const agingBuckets = [
-        { label: 'Current', days: '0 days', amount: 12500, count: 1, color: 'bg-emerald-500' },
-        { label: '1 - 30 Days', days: '1-30 days', amount: 100000, count: 1, color: 'bg-amber-400' },
-        { label: '31 - 60 Days', days: '31-60 days', amount: 250000, count: 1, color: 'bg-orange-500' },
-        { label: '61 - 90 Days', days: '61-90 days', amount: 0, count: 0, color: 'bg-rose-500' },
-        { label: 'Over 90 Days', days: '90+ days', amount: 60000, count: 1, color: 'bg-rose-700' },
-    ];
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
 
-    const totalOutstanding = agingBuckets.reduce((acc, b) => acc + b.amount, 0);
+    const totalOutstanding = buckets.reduce((acc, b) => acc + (b.amount || 0), 0);
 
     return (
         <div className="space-y-6">
@@ -45,6 +56,13 @@ export default function AgingAnalysisDashboard() {
                     <p className="text-[12px] text-stone-500">Breakdown of outstanding receivables by time period</p>
                 </div>
                 <div className="flex items-center gap-2">
+                    <button
+                        onClick={fetchData}
+                        disabled={isLoading}
+                        className="btn-secondary h-9 w-9 p-0 flex items-center justify-center"
+                    >
+                        <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                    </button>
                     <button className="btn-secondary">
                         <FileSpreadsheet className="h-4 w-4" />
                         <span>Export Excel</span>
@@ -58,18 +76,18 @@ export default function AgingAnalysisDashboard() {
 
             {/* Aging Buckets Visualization */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-                {agingBuckets.map((bucket) => (
+                {buckets.map((bucket) => (
                     <div key={bucket.label} className="card-elevated p-4 border-b-2 border-b-stone-200 hover:border-b-stone-900 transition-all">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">{bucket.label}</span>
-                            <div className={`h-2 w-2 rounded-full ${bucket.color}`} />
+                            <div className={`h-2 w-2 rounded-full ${bucket.color || 'bg-stone-300'}`} />
                         </div>
-                        <p className="text-[18px] font-bold text-stone-900">KES {bucket.amount.toLocaleString()}</p>
-                        <p className="text-[11px] text-stone-500 mt-1">{bucket.count} Invoices</p>
+                        <p className="text-[18px] font-bold text-stone-900">KES {(bucket.amount || 0).toLocaleString()}</p>
+                        <p className="text-[11px] text-stone-500 mt-1">{bucket.count || 0} Invoices</p>
                         <div className="mt-3 w-full bg-stone-100 h-1 rounded-full overflow-hidden">
                             <div
-                                className={`h-full ${bucket.color}`}
-                                style={{ width: `${(bucket.amount / totalOutstanding) * 100}%` }}
+                                className={`h-full ${bucket.color || 'bg-stone-400'}`}
+                                style={{ width: `${totalOutstanding > 0 ? ((bucket.amount || 0) / totalOutstanding) * 100 : 0}%` }}
                             />
                         </div>
                     </div>
@@ -103,44 +121,59 @@ export default function AgingAnalysisDashboard() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-100">
-                        {invoices.map((invoice) => (
-                            <tr key={invoice.id} className="hover:bg-stone-50/50">
-                                <td className="px-5 py-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="h-8 w-8 rounded-full bg-stone-100 flex items-center justify-center">
-                                            <User className="h-4 w-4 text-stone-500" />
-                                        </div>
-                                        <span className="text-[13px] font-bold text-stone-900">{invoice.customerName}</span>
-                                    </div>
-                                </td>
-                                <td className="px-5 py-4">
-                                    <p className="text-[12px] font-medium text-stone-600">{invoice.invoiceNumber}</p>
-                                    <p className="text-[10px] text-stone-400">{format(invoice.date, 'MMM dd, yyyy')}</p>
-                                </td>
-                                <td className="px-5 py-4">
-                                    <div className="flex items-center gap-1.5 text-[12px] text-stone-600 font-medium">
-                                        <Calendar className="h-3.5 w-3.5 text-stone-400" />
-                                        {format(invoice.dueDate, 'MMM dd, yyyy')}
-                                    </div>
-                                </td>
-                                <td className="px-5 py-4 text-center">
-                                    <span className={`text-[12px] font-bold px-2 py-0.5 rounded-full ${invoice.agingDays < 30 ? 'bg-emerald-50 text-emerald-600' :
-                                            invoice.agingDays < 60 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'
-                                        }`}>
-                                        {invoice.agingDays} d
-                                    </span>
-                                </td>
-                                <td className="px-5 py-4 text-right">
-                                    <p className="text-[14px] font-bold text-stone-900">KES {invoice.balance.toLocaleString()}</p>
-                                    <p className="text-[10px] text-stone-400">Total: KES {invoice.amount.toLocaleString()}</p>
-                                </td>
-                                <td className="px-5 py-4">
-                                    <button className="p-2 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-900 transition-colors" title="Send Reminder">
-                                        <Send className="h-4 w-4" />
-                                    </button>
-                                </td>
+                        {isLoading ? (
+                            <tr>
+                                <td colSpan={6} className="px-5 py-20 text-center text-stone-400 text-sm">Loading data...</td>
                             </tr>
-                        ))}
+                        ) : invoices.length === 0 ? (
+                            <tr>
+                                <td colSpan={6} className="px-5 py-20 text-center text-stone-400 text-sm italic">No outstanding invoices found</td>
+                            </tr>
+                        ) : (
+                            invoices
+                                .filter(i =>
+                                    i.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                    i.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase())
+                                )
+                                .map((invoice) => (
+                                    <tr key={invoice.id} className="hover:bg-stone-50/50">
+                                        <td className="px-5 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-8 w-8 rounded-full bg-stone-100 flex items-center justify-center">
+                                                    <User className="h-4 w-4 text-stone-500" />
+                                                </div>
+                                                <span className="text-[13px] font-bold text-stone-900">{invoice.customer_name}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-5 py-4">
+                                            <p className="text-[12px] font-medium text-stone-600">{invoice.invoice_number}</p>
+                                            <p className="text-[10px] text-stone-400">{format(new Date(invoice.date), 'MMM dd, yyyy')}</p>
+                                        </td>
+                                        <td className="px-5 py-4">
+                                            <div className="flex items-center gap-1.5 text-[12px] text-stone-600 font-medium">
+                                                <Calendar className="h-3.5 w-3.5 text-stone-400" />
+                                                {format(new Date(invoice.due_date), 'MMM dd, yyyy')}
+                                            </div>
+                                        </td>
+                                        <td className="px-5 py-4 text-center">
+                                            <span className={`text-[12px] font-bold px-2 py-0.5 rounded-full ${invoice.aging_days < 30 ? 'bg-emerald-50 text-emerald-600' :
+                                                invoice.aging_days < 60 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'
+                                                }`}>
+                                                {invoice.aging_days} d
+                                            </span>
+                                        </td>
+                                        <td className="px-5 py-4 text-right">
+                                            <p className="text-[14px] font-bold text-stone-900">KES {(invoice.balance || 0).toLocaleString()}</p>
+                                            <p className="text-[10px] text-stone-400">Total: KES {(invoice.amount || 0).toLocaleString()}</p>
+                                        </td>
+                                        <td className="px-5 py-4">
+                                            <button className="p-2 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-900 transition-colors" title="Send Reminder">
+                                                <Send className="h-4 w-4" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
+                        )}
                     </tbody>
                 </table>
             </div>

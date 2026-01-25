@@ -36,6 +36,8 @@ export default function AuditorApprovalPanel() {
     const [performance, setPerformance] = useState<Record<number, PerformanceData>>({});
     const [isActionLoading, setIsActionLoading] = useState(false);
     const [reviewModalOpen, setReviewModalOpen] = useState(false);
+    const [approvedQuantities, setApprovedQuantities] = useState<Record<string, number>>({});
+    const [reviewNotes, setReviewNotes] = useState('');
 
     const fetchRequests = useCallback(async () => {
         setIsLoading(true);
@@ -62,16 +64,42 @@ export default function AuditorApprovalPanel() {
 
     const handleOpenReview = (request: StockRequest) => {
         setSelectedRequest(request);
+        // Initialize approved quantities with requested quantities
+        const initialQuantities: Record<string, number> = {};
+        request.items.forEach(item => {
+            initialQuantities[item.id] = item.requested_quantity;
+        });
+        setApprovedQuantities(initialQuantities);
+        setReviewNotes('');
         setReviewModalOpen(true);
+    };
+
+    const handleQuantityChange = (itemId: string, value: string) => {
+        const numValue = parseFloat(value);
+        if (!isNaN(numValue) && numValue >= 0) {
+            setApprovedQuantities(prev => ({ ...prev, [itemId]: numValue }));
+        } else if (value === '') {
+            setApprovedQuantities(prev => ({ ...prev, [itemId]: 0 }));
+        }
     };
 
     const handleDecision = async (action: 'APPROVE' | 'REJECT') => {
         if (!selectedRequest) return;
         setIsActionLoading(true);
         try {
+            const item_approvals = Object.entries(approvedQuantities).map(([id, approved_quantity]) => ({
+                id,
+                approved_quantity
+            }));
+
             const response = action === 'APPROVE'
-                ? await storeAPI.approveStockRequest(selectedRequest.id)
-                : await storeAPI.rejectStockRequest(selectedRequest.id);
+                ? await storeAPI.approveStockRequest(selectedRequest.id, {
+                    item_approvals,
+                    approved_quantity_notes: reviewNotes
+                })
+                : await storeAPI.rejectStockRequest(selectedRequest.id, {
+                    review_notes: reviewNotes
+                });
 
             if (response.success) {
                 toast.success(`Request ${action.toLowerCase()}d successfully`);
@@ -160,7 +188,7 @@ export default function AuditorApprovalPanel() {
             )}
 
             <Dialog open={reviewModalOpen} onOpenChange={setReviewModalOpen}>
-                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2 text-xl">
                             <Shield className="h-6 w-6 text-stone-900" />
@@ -197,6 +225,7 @@ export default function AuditorApprovalPanel() {
                                             <th className="text-left p-4 font-semibold text-stone-600">Item Name</th>
                                             <th className="text-left p-4 font-semibold text-stone-600">SKU</th>
                                             <th className="text-center p-4 font-semibold text-stone-600">Branch Request</th>
+                                            <th className="text-right p-4 font-semibold text-stone-600 w-48">Approved Amount</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-stone-100">
@@ -209,10 +238,33 @@ export default function AuditorApprovalPanel() {
                                                         {item.requested_quantity} {item.unit}
                                                     </span>
                                                 </td>
+                                                <td className="p-4 text-right">
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <input
+                                                            type="number"
+                                                            value={approvedQuantities[item.id] ?? item.requested_quantity}
+                                                            onChange={(e) => handleQuantityChange(item.id, e.target.value)}
+                                                            className="w-24 px-3 py-1.5 bg-white border border-stone-200 rounded-lg text-right font-bold text-stone-900 focus:ring-2 focus:ring-stone-900 focus:outline-none transition-all"
+                                                            min="0"
+                                                            step="0.01"
+                                                        />
+                                                        <span className="text-[10px] font-bold text-stone-400 uppercase">{item.unit}</span>
+                                                    </div>
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
                                 </table>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[11px] font-bold text-stone-400 uppercase tracking-widest px-1">Decision Notes (Optional)</label>
+                                <textarea
+                                    value={reviewNotes}
+                                    onChange={(e) => setReviewNotes(e.target.value)}
+                                    placeholder="Add any remarks or reasons for quantity adjustments..."
+                                    className="w-full px-4 py-3 bg-stone-50 border border-stone-100 rounded-ios-xl text-[13px] font-medium text-stone-900 focus:ring-2 focus:ring-stone-900 focus:outline-none transition-all min-h-[80px] resize-none"
+                                />
                             </div>
 
                             <div className="bg-amber-50 rounded-ios-xl p-4 border border-amber-100 flex items-start gap-4">
@@ -221,7 +273,7 @@ export default function AuditorApprovalPanel() {
                                     <p className="text-sm font-bold text-amber-900 mb-1">Decision Rationale</p>
                                     <p className="text-xs text-amber-800 leading-relaxed font-medium">
                                         Your decision should be based on the branch's previous day sales data above.
-                                        High stock levels requested by branches with low sales might indicate inefficiency or over-stocking.
+                                        You can adjust the quantities individual items based on their sales performance.
                                     </p>
                                 </div>
                             </div>
@@ -234,7 +286,7 @@ export default function AuditorApprovalPanel() {
                             onClick={() => handleDecision('REJECT')}
                             disabled={isActionLoading}
                             leftIcon={<XCircle className="h-4 w-4" />}
-                            className="bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100"
+                            className="bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100 font-bold"
                         >
                             Decline Request
                         </IOSButton>
@@ -242,7 +294,7 @@ export default function AuditorApprovalPanel() {
                             onClick={() => handleDecision('APPROVE')}
                             disabled={isActionLoading}
                             leftIcon={<CheckCircle className="h-4 w-4" />}
-                            className="bg-stone-900 text-white flex-1"
+                            className="bg-stone-900 text-white flex-1 font-bold"
                         >
                             {isActionLoading ? 'Processing...' : 'Approve for Packing'}
                         </IOSButton>

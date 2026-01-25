@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { User, Package, Calculator, CheckCircle2, ChevronRight, ChevronLeft, Plus, Trash2, Printer, Send, Bed, Building2 } from 'lucide-react';
+import { User, Package, Calculator, CheckCircle2, ChevronRight, ChevronLeft, Plus, Trash2, Printer, Send, Bed, Building2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '@/lib/api';
 
 interface LineItem {
     id: string;
@@ -74,12 +75,62 @@ export default function InvoiceWizard() {
     const nextStep = () => setStep(step + 1);
     const prevStep = () => setStep(step - 1);
 
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
     const handleCreate = async () => {
-        toast.promise(new Promise(resolve => setTimeout(resolve, 1500)), {
-            loading: 'Creating invoice...',
-            success: 'Invoice created and sent to customer',
-            error: 'Failed to create invoice'
-        });
+        if (!customer) {
+            toast.error('Please select a customer first');
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            const invoiceData = {
+                ...invoiceDetails,
+                customer_id: customer.id,
+                customer_name: customer.name,
+                customer_type: customer.type,
+                items: items.map(item => ({
+                    description: item.description,
+                    quantity: item.quantity,
+                    unit_price: item.unitPrice,
+                    tax_rate: item.taxRate,
+                    is_accommodation: item.isAccommodation,
+                    has_service_charge: item.hasServiceCharge
+                })),
+                subtotal,
+                levy_total: levyTotal,
+                service_charge_total: serviceChargeTotal,
+                vat_total: vatTotal,
+                grand_total: grandTotal
+            };
+
+            const response = await api.accounting.createInvoice(invoiceData);
+
+            if (response.success) {
+                toast.success('Invoice generated successfully');
+                // Open wait for PDF or offer download
+                await handlePrint(response.data.id);
+            } else {
+                toast.error(response.message || 'Failed to generate invoice');
+            }
+        } catch (error: any) {
+            console.error('Invoice generation error:', error);
+            toast.error(error.message || 'Error occurred while generating invoice');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handlePrint = async (invoiceId?: string) => {
+        try {
+            const id = invoiceId || invoiceDetails.invoiceNumber;
+            toast.info('Generating branded PDF...');
+            await api.reports.downloadBrandedPdf('invoice', { id, template: 'hotel-custom' });
+        } catch (error) {
+            console.error('PDF Generation Error:', error);
+            toast.error('Failed to generate printable PDF');
+        }
     };
 
     return (
@@ -327,16 +378,24 @@ export default function InvoiceWizard() {
                     <div className="flex gap-3">
                         {step === 3 ? (
                             <>
-                                <button className="btn-secondary py-2.5">
+                                <button
+                                    onClick={() => handlePrint()}
+                                    className="btn-secondary py-2.5"
+                                >
                                     <Printer className="h-4 w-4" />
                                     Print
                                 </button>
                                 <button
                                     onClick={handleCreate}
-                                    className="btn-primary bg-stone-900 text-white py-2.5 px-8 flex items-center gap-2 group"
+                                    disabled={isSubmitting}
+                                    className="btn-primary bg-stone-900 text-white py-2.5 px-8 flex items-center gap-2 group disabled:opacity-50"
                                 >
-                                    <Send className="h-4 w-4 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-                                    Generate & Send
+                                    {isSubmitting ? (
+                                        <RefreshCw className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Send className="h-4 w-4 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                                    )}
+                                    {isSubmitting ? 'Generating...' : 'Generate & Send'}
                                 </button>
                             </>
                         ) : (
