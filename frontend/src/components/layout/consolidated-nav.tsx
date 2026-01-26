@@ -80,12 +80,12 @@ export function ConsolidatedNav() {
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  if (!user) return null;
-
   // Close mobile menu when route changes
   React.useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [pathname]);
+
+  if (!user) return null;
 
   // Define navigation items based on user role
 

@@ -12,17 +12,18 @@ from reportlab.graphics.barcode import qr, code128
 from reportlab.graphics import renderPDF
 
 class IDCardGenerator:
-    """Generates Employee ID Cards (CR80 Standard Size) following the uploaded template"""
+    """Generates Employee ID Cards (CR80 Standard Size) following the RED WAVY template"""
     
     def __init__(self):
         # CR80 Dimensions: 85.60 x 53.98 mm (Vertical)
         self.width = 53.98 * mm
         self.height = 85.60 * mm
         self.logo_path = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'public', 'fglogo.png')
-        self.dark_blue = colors.HexColor("#002147")
-        self.light_blue = colors.HexColor("#007AFF")
-        self.accent_blue = colors.HexColor("#5AC8FA")
-        self.text_color = colors.HexColor("#333333")
+        self.primary_red = colors.HexColor("#B71C1C")
+        self.dark_bg = colors.HexColor("#1A1A1A")
+        self.accent_red = colors.HexColor("#D32F2F")
+        self.text_dark = colors.HexColor("#212121")
+        self.text_light = colors.white
         
     def generate(self, employee_data):
         """
@@ -55,44 +56,38 @@ class IDCardGenerator:
         return buffer.getvalue()
 
     def _draw_front(self, c, data):
-        # 1. Background Shapes
-        # Dark Blue Header Block
-        c.setFillColor(self.dark_blue)
-        c.rect(0, self.height - 20*mm, self.width, 20*mm, fill=1, stroke=0)
+        # 1. Top Section - Dark Header with Wavy Bottom
+        c.setFillColor(self.dark_bg)
+        c.rect(0, self.height - 25*mm, self.width, 25*mm, fill=1, stroke=0)
         
-        # Curved blue accents (matching the template's arcs)
-        c.setFillColor(self.light_blue)
+        # Red Wave Header
+        c.setFillColor(self.primary_red)
         p = c.beginPath()
         p.moveTo(0, self.height - 20*mm)
         p.curveTo(self.width*0.3, self.height - 15*mm, self.width*0.7, self.height - 35*mm, self.width, self.height - 25*mm)
-        p.lineTo(self.width, self.height - 20*mm)
+        p.lineTo(self.width, self.height)
+        p.lineTo(0, self.height)
         p.close()
         c.drawPath(p, fill=1, stroke=0)
-        
-        c.setFillColor(self.accent_blue)
-        p2 = c.beginPath()
-        p2.moveTo(0, self.height - 25*mm)
-        p2.curveTo(self.width*0.3, self.height - 20*mm, self.width*0.7, self.height - 40*mm, self.width, self.height - 30*mm)
-        p2.lineTo(self.width, self.height - 25*mm)
-        p2.close()
-        c.drawPath(p2, fill=1, stroke=0)
 
         # 2. Company Info (White in header)
         c.setFillColor(colors.white)
-        c.setFont("Helvetica-Bold", 10)
+        c.setFont("Helvetica-Bold", 11)
         c.drawCentredString(self.width/2, self.height - 10*mm, "FAMOUS GATE HOTEL")
         c.setFont("Helvetica", 6)
         c.drawCentredString(self.width/2, self.height - 13*mm, "QUALITY HOSPITALITY SERVICES")
 
-        # 3. Photo (Circular)
+        # 3. Photo (Circular with RED BORDER)
         c.saveState()
         center_x = self.width/2
-        center_y = self.height - 40*mm
-        radius = 15*mm
+        center_y = self.height - 38*mm
+        radius = 16*mm
         
-        # White border for circle
+        # Red border for circle
+        c.setFillColor(self.primary_red)
+        c.circle(center_x, center_y, radius + 1.2*mm, fill=1, stroke=0)
         c.setFillColor(colors.white)
-        c.circle(center_x, center_y, radius + 1*mm, fill=1, stroke=0)
+        c.circle(center_x, center_y, radius + 0.2*mm, fill=1, stroke=0)
         
         # Clipping path for photo
         clip_path = c.beginPath()
@@ -111,113 +106,114 @@ class IDCardGenerator:
         c.restoreState()
 
         # 4. Employee Info
-        c.setFillColor(self.text_color)
-        c.setFont("Helvetica-Bold", 12)
-        c.drawCentredString(self.width/2, self.height - 62*mm, data.get('name', 'NAME').upper())
+        c.setFillColor(self.primary_red)
+        c.setFont("Helvetica-Bold", 13)
+        c.drawCentredString(self.width/2, self.height - 60*mm, data.get('name', 'NAME').upper())
         
-        c.setFillColor(self.light_blue)
-        c.setFont("Helvetica-Bold", 7)
-        c.drawCentredString(self.width/2, self.height - 66*mm, data.get('role', 'POSITION'))
+        c.setFillColor(self.text_dark)
+        c.setFont("Helvetica-Bold", 8)
+        c.drawCentredString(self.width/2, self.height - 65*mm, data.get('role', 'POSITION'))
         
-        # Details Table
-        c.setFillColor(self.text_color)
+        # Info Block (Red background with white text)
+        info_y = self.height - 78*mm
+        c.setFillColor(self.primary_red)
+        # Draw a small pill or line? Template shows a block
+        # c.rect(5*mm, info_y - 2*mm, self.width - 10*mm, 15*mm, fill=1, stroke=0)
+        
+        # Let's use clean text with small icons or labels
+        c.setFillColor(self.text_dark)
         c.setFont("Helvetica-Bold", 6)
-        left_margin = 8*mm
-        start_y = self.height - 72*mm
-        line_height = 3.5*mm
-        
         details = [
-            ("ID NO", data.get('id_no', 'N/A')),
-            ("EMAIL", data.get('email', 'N/A')),
-            ("PHONE", data.get('phone', 'N/A'))
+            ("ID NO:", data.get('id_no', 'N/A')),
+            ("EMAIL:", data.get('email', 'N/A')),
+            ("JOIN:", data.get('join_date', 'N/A'))
         ]
         
+        inner_y = info_y
         for label, val in details:
             c.setFont("Helvetica-Bold", 6)
-            c.drawString(left_margin, start_y, label)
+            c.drawString(8*mm, inner_y, label)
             c.setFont("Helvetica", 6)
-            c.drawString(left_margin + 12*mm, start_y, val)
-            start_y -= line_height
+            c.drawString(22*mm, inner_y, val)
+            inner_y -= 3.5*mm
 
-        # 5. Footer Strip
-        c.setFillColor(self.dark_blue)
-        c.rect(0, 0, self.width, 5*mm, fill=1, stroke=0)
+        # 5. Barcode for Check-in (FRONT BOTTOM as requested)
+        barcode_value = data.get('id_no', 'TEMP-001')
+        barcode = code128.Code128(barcode_value, barHeight=6*mm, barWidth=0.22*mm)
+        barcode.drawOn(c, (self.width - barcode.width) / 2, 8*mm)
+        c.setFont("Helvetica", 5)
+        c.drawCentredString(self.width/2, 6*mm, f"CHECK-IN ID: {barcode_value}")
+
+        # 6. Wavy Footer
+        c.setFillColor(self.dark_bg)
+        p_footer = c.beginPath()
+        p_footer.moveTo(0, 0)
+        p_footer.lineTo(self.width, 0)
+        p_footer.lineTo(self.width, 4*mm)
+        p_footer.curveTo(self.width*0.7, 8*mm, self.width*0.3, 2*mm, 0, 4*mm)
+        p_footer.close()
+        c.drawPath(p_footer, fill=1, stroke=0)
 
     def _draw_back(self, c, data):
-        # 1. Header Strip
-        c.setFillColor(self.dark_blue)
-        c.rect(0, self.height - 8*mm, self.width, 8*mm, fill=1, stroke=0)
+        # 1. Wavy Header
+        c.setFillColor(self.primary_red)
+        p_header = c.beginPath()
+        p_header.moveTo(0, self.height)
+        p_header.lineTo(self.width, self.height)
+        p_header.lineTo(self.width, self.height - 8*mm)
+        p_header.curveTo(self.width*0.7, self.height - 12*mm, self.width*0.3, self.height - 4*mm, 0, self.height - 8*mm)
+        p_header.close()
+        c.drawPath(p_header, fill=1, stroke=0)
         
         # 2. Terms & Conditions
-        c.setFillColor(self.text_color)
-        c.setFont("Helvetica-Bold", 7)
-        c.drawCentredString(self.width/2, self.height - 15*mm, "Terms & Conditions")
+        c.setFillColor(self.text_dark)
+        c.setFont("Helvetica-Bold", 8)
+        c.drawCentredString(self.width/2, self.height - 18*mm, "Terms & Conditions")
         
-        c.setFont("Helvetica", 5)
+        c.setFont("Helvetica", 6)
         terms = [
             "• This card is the property of Famous Gate Hotel.",
             "• It must be worn at all times while on duty.",
             "• If found, please return to the HR office.",
-            "• Misuse of this card is a disciplinary offense."
+            "• Misuse is a disciplinary offense."
         ]
-        y_pos = self.height - 20*mm
+        y_pos = self.height - 25*mm
         for term in terms:
             c.drawString(6*mm, y_pos, term)
-            y_pos -= 3*mm
+            y_pos -= 4*mm
 
-        # 3. Dates
-        c.setFont("Helvetica-Bold", 6)
-        c.drawString(6*mm, y_pos - 5*mm, "JOIN DATE:")
-        c.setFont("Helvetica", 6)
-        c.drawString(25*mm, y_pos - 5*mm, data.get('join_date', 'N/A'))
-        
-        c.setFont("Helvetica-Bold", 6)
-        c.drawString(6*mm, y_pos - 9*mm, "EXPIRE DATE:")
-        c.setFont("Helvetica", 6)
-        c.drawString(25*mm, y_pos - 9*mm, data.get('expire_date', 'N/A'))
-
-        # 4. QR Code
-        qr_data = data.get('qr_data', data.get('id_no', 'VERIFY'))
+        # 3. QR Code (Central)
+        qr_data = data.get('qr_data', f"VERIFY:{data.get('id_no', 'N/A')}")
         qr_code = qr.QrCodeWidget(qr_data)
         bounds = qr_code.getBounds()
-        width = bounds[2] - bounds[0]
-        height = bounds[3] - bounds[1]
+        w = bounds[2] - bounds[0]
+        h = bounds[3] - bounds[1]
         
-        d = Drawing(20*mm, 20*mm, transform=[20*mm/width, 0, 0, 20*mm/height, 0, 0])
+        d = Drawing(25*mm, 25*mm, transform=[25*mm/w, 0, 0, 25*mm/h, 0, 0])
         d.add(qr_code)
-        renderPDF.draw(d, c, (self.width - 20*mm)/2, 22*mm)
+        renderPDF.draw(d, c, (self.width - 25*mm)/2, 25*mm)
         
-        c.setFont("Helvetica", 5)
-        c.drawCentredString(self.width/2, 20*mm, "Scan to verify employee status")
+        c.setFont("Helvetica-Bold", 6)
+        c.drawCentredString(self.width/2, 22*mm, "SCAN TO VERIFY")
 
-        # 4.5. Barcode for Checking In
-        barcode_value = data.get('id_no', 'N/A')
-        if barcode_value != 'N/A':
-            # Code 128
-            barcode = code128.Code128(barcode_value, barHeight=8*mm, barWidth=0.25*mm)
-            barcode.drawOn(c, (self.width - barcode.width) / 2, 45*mm)
-            c.setFont("Helvetica", 5)
-            c.drawCentredString(self.width/2, 43*mm, f"CHECK-IN ID: {barcode_value}")
-
-        # 5. Bottom Geometric Pattern (matching template)
-        c.setFillColor(self.dark_blue)
-        path = c.beginPath()
-        path.moveTo(0, 0)
-        path.lineTo(self.width, 0)
-        path.lineTo(self.width, 15*mm)
-        path.lineTo(self.width/2, 5*mm)
-        path.lineTo(0, 15*mm)
-        path.close()
-        c.drawPath(path, fill=1, stroke=0)
+        # 4. Wavy Footer (Dark)
+        c.setFillColor(self.dark_bg)
+        p_footer = c.beginPath()
+        p_footer.moveTo(0, 0)
+        p_footer.lineTo(self.width, 0)
+        p_footer.lineTo(self.width, 15*mm)
+        p_footer.curveTo(self.width*0.6, 5*mm, self.width*0.4, 20*mm, 0, 10*mm)
+        p_footer.close()
+        c.drawPath(p_footer, fill=1, stroke=0)
         
         c.setFillColor(colors.white)
-        c.setFont("Helvetica-Bold", 8)
-        c.drawCentredString(self.width/2, 3*mm, "FAMOUS GATE HOTEL")
+        c.setFont("Helvetica-Bold", 9)
+        c.drawCentredString(self.width/2, 4*mm, "FAMOUS GATE HOTEL")
 
     def _draw_placeholder_photo(self, c, x, y, r):
         c.setFillColor(colors.lightgrey)
         c.circle(x, y, r, fill=1, stroke=0)
         c.setFillColor(colors.white)
         c.setFont("Helvetica-Bold", 15)
-        c.drawCentredString(x, y - 5, "?")
+        c.drawCentredString(x, y - 5*mm, "?")
 

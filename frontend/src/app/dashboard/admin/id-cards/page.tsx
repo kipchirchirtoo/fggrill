@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import {
     User as UserIcon, Loader2, Download, Eye,
     Upload, Search, Filter, Printer, RefreshCw,
-    UserCircle, ShieldCheck, Mail, Phone, Calendar
+    UserCircle, ShieldCheck, Mail, Phone, Calendar, Edit
 } from 'lucide-react';
 import { IOSButton } from '@/components/ui/ios-button';
 import { Input } from '@/components/ui/input';
@@ -38,10 +38,50 @@ export default function IDCardsManagementPage() {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
 
+    // Editing Details
+    const [isEditOpen, setIsEditOpen] = useState(false);
+    const [editEmployee, setEditEmployee] = useState<any>(null);
+    const [editData, setEditData] = useState({
+        first_name: '',
+        last_name: '',
+        employee_id: '',
+        join_date: ''
+    });
+    const [isSaving, setIsSaving] = useState(false);
+
     useEffect(() => {
         fetchEmployees();
     }, []);
 
+    const handleEditClick = (emp: any) => {
+        setEditEmployee(emp);
+        setEditData({
+            first_name: emp.first_name || '',
+            last_name: emp.last_name || '',
+            employee_id: emp.employee_id || '',
+            join_date: emp.join_date || ''
+        });
+        setIsEditOpen(true);
+    };
+
+    const handleSaveDetails = async () => {
+        if (!editEmployee) return;
+        setIsSaving(true);
+        try {
+            const res = await userAPI.updateUser(editEmployee.id, editData);
+            if (res.success) {
+                toast.success('Employee details updated');
+                setIsEditOpen(false);
+                fetchEmployees();
+            } else {
+                throw new Error(res.message);
+            }
+        } catch (error: any) {
+            toast.error(error.message || 'Update failed');
+        } finally {
+            setIsSaving(false);
+        }
+    };
     const fetchEmployees = async () => {
         setIsLoading(true);
         try {
@@ -55,7 +95,6 @@ export default function IDCardsManagementPage() {
         } catch (error) {
             toast.error('Failed to load employees');
         } finally {
-            setIsLoading(true); // wait, should be false
             setIsLoading(false);
         }
     };
@@ -126,13 +165,7 @@ export default function IDCardsManagementPage() {
             const formData = new FormData();
             formData.append('photo', selectedFile);
 
-            // Note: need to ensure userAPI.uploadProfilePhoto supports ID param if not 'me'
-            // I'll update the API call to support passing ID
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/users/${uploadEmployee.id}/photo`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-                body: formData
-            }).then(r => r.json());
+            const res = await userAPI.updateUser(uploadEmployee.id, formData);
 
             if (res.success) {
                 toast.success('Photo updated!');
@@ -233,6 +266,12 @@ export default function IDCardsManagementPage() {
                                             </div>
                                         )}
                                     </div>
+                                    <button
+                                        onClick={() => handleEditClick(emp)}
+                                        className="absolute top-0 right-0 p-2 bg-white text-stone-600 rounded-full shadow-md hover:scale-110 transition-all opacity-0 group-hover:opacity-100"
+                                    >
+                                        <Edit className="w-3.5 h-3.5" />
+                                    </button>
                                     <button
                                         onClick={() => { setUploadEmployee(emp); setIsUploadOpen(true); }}
                                         className="absolute bottom-0 right-0 p-2 bg-blue-600 text-white rounded-full shadow-lg hover:scale-110 transition-all opacity-0 group-hover:opacity-100"
@@ -370,7 +409,62 @@ export default function IDCardsManagementPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Edit Details Modal */}
+            <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Employee Details</DialogTitle>
+                        <DialogDescription>Update ID card information for {editEmployee?.first_name}.</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid grid-cols-2 gap-4 py-4">
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-stone-500 uppercase">First Name</label>
+                            <Input
+                                value={editData.first_name}
+                                onChange={(e) => setEditData({ ...editData, first_name: e.target.value })}
+                                className="bg-stone-50 border-none h-11 rounded-xl"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-stone-500 uppercase">Last Name</label>
+                            <Input
+                                value={editData.last_name}
+                                onChange={(e) => setEditData({ ...editData, last_name: e.target.value })}
+                                className="bg-stone-50 border-none h-11 rounded-xl"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-stone-500 uppercase">Employee ID</label>
+                            <Input
+                                value={editData.employee_id}
+                                onChange={(e) => setEditData({ ...editData, employee_id: e.target.value })}
+                                className="bg-stone-50 border-none h-11 rounded-xl"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-stone-500 uppercase">Join Date</label>
+                            <Input
+                                type="date"
+                                value={editData.join_date ? editData.join_date.split('T')[0] : ''}
+                                onChange={(e) => setEditData({ ...editData, join_date: e.target.value })}
+                                className="bg-stone-50 border-none h-11 rounded-xl"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <IOSButton onClick={() => setIsEditOpen(false)} variant="secondary">Cancel</IOSButton>
+                        <IOSButton
+                            className="bg-blue-600 text-white"
+                            onClick={handleSaveDetails}
+                            disabled={isSaving}
+                        >
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                            Save Changes
+                        </IOSButton>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
-

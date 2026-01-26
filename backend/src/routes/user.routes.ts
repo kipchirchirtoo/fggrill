@@ -29,6 +29,11 @@ router.post(
   uploadService.uploadSingle('photo'),
   uploadProfilePhoto
 );
+router.post(
+  '/:id/photo',
+  uploadService.uploadSingle('photo'),
+  uploadProfilePhoto
+);
 
 // Admin only routes
 router.use(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]));

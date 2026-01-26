@@ -12,6 +12,7 @@ import { CalendarWidget } from '@/components/employee/portal/CalendarWidget';
 import { ReviewWidget } from '@/components/employee/portal/ReviewWidget';
 import { AssetWidget } from '@/components/employee/portal/AssetWidget';
 import { JobPortalWidget } from '@/components/employee/portal/JobPortalWidget';
+import { IDCardWidget } from '@/components/employee/portal/IDCardWidget';
 
 export default function EmployeePortal() {
   const { user } = useAuth();
@@ -67,17 +68,7 @@ export default function EmployeePortal() {
 
           {/* Column 2: Reporting & Reviews */}
           <div className="space-y-6">
-            {/* Manager Widget */}
-            <IOSCard className="border-none shadow-sm bg-white p-4 flex items-center gap-4">
-              <div className="h-12 w-12 rounded-full overflow-hidden">
-                <img src="https://i.pravatar.cc/150?u=troy" alt="Manager" />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-stone-500 uppercase">You Report To</p>
-                <p className="font-bold text-stone-900">Troy Crandon</p>
-                <p className="text-xs text-stone-400">Chief Flying Officer</p>
-              </div>
-            </IOSCard>
+            <IDCardWidget user={user} />
 
             <ReviewWidget />
             <AssetWidget />
