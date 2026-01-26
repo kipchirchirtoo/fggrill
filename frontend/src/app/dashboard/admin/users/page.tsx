@@ -77,6 +77,21 @@ const CENTRAL_ROLES = [
   UserRole.AUDITOR,
 ];
 
+// Department options (what employees do, separate from system roles)
+const DEPARTMENT_OPTIONS = [
+  'Housekeeping',
+  'Front Desk / Reception',
+  'Restaurant & Dining',
+  'Kitchen Operations',
+  'Bar Services',
+  'Maintenance & Facilities',
+  'Accounting & Finance',
+  'Management',
+  'Store & Inventory',
+  'Security',
+  'Other'
+];
+
 export default function AdminUsersPage() {
   const { user } = useAuth();
   const [users, setUsers] = useState<UserData[]>([]);
@@ -131,6 +146,29 @@ export default function AdminUsersPage() {
   }, []);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+  // Auto-generate Employee ID when Add Modal opens
+  useEffect(() => {
+    if (addModalOpen && !formData.id) {
+      const generateEmployeeId = () => {
+        // Filter users with employee IDs
+        const employeeIds = users
+          .map(u => (u as any).employee_id)
+          .filter(id => id && id.startsWith('EMP-'))
+          .map(id => parseInt(id.replace('EMP-', '')))
+          .filter(num => !isNaN(num));
+
+        // Find max and increment
+        const maxId = employeeIds.length > 0 ? Math.max(...employeeIds) : 0;
+        const nextId = maxId + 1;
+
+        return `EMP-${String(nextId).padStart(3, '0')}`;
+      };
+
+      const newEmployeeId = generateEmployeeId();
+      setFormData(prev => ({ ...prev, employeeId: newEmployeeId }));
+    }
+  }, [addModalOpen, users, formData.id]);
 
   const filteredUsers = users.filter((u) => {
     const matchesSearch =
