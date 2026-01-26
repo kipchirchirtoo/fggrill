@@ -82,7 +82,10 @@ export const createUser = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { email, password, firstName, lastName, role, branchId, phoneNumber, pos_pin } = req.body;
+    const {
+      email, password, firstName, lastName, role, branchId, phoneNumber, pos_pin,
+      employeeId, department, shift, startDate, emergencyContact, address, status
+    } = req.body;
 
     // Validate required fields
     if (!firstName || !lastName || !role) {
@@ -179,9 +182,30 @@ export const createUser = async (
             role = $3,
             branch_id = $4,
             phone_number = $5,
+            employee_id = $7,
+            department = $8,
+            shift = $9,
+            start_date = $10,
+            emergency_contact = $11,
+            address = $12,
+            status = $13,
             updated_at = NOW()
           WHERE id = $6
-        `, [firstName.trim(), lastName.trim(), role, branchId || null, phoneNumber || null, userId]);
+        `, [
+          firstName.trim(),
+          lastName.trim(),
+          role,
+          branchId || null,
+          phoneNumber || null,
+          userId,
+          employeeId || null,
+          department || null,
+          shift || null,
+          startDate || null,
+          emergencyContact ? JSON.stringify(emergencyContact) : null,
+          address || null,
+          status || 'active'
+        ]);
 
         await client.query('COMMIT');
 

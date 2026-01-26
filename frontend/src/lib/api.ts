@@ -2595,6 +2595,33 @@ export const userAPI = {
 };
 
 // =====================================================
+// ID CARDS API (Python Service)
+// =====================================================
+
+export const idCardsAPI = {
+  generate: async (data: any, photo?: File) => {
+    const formData = new FormData();
+    formData.append('data', JSON.stringify(data));
+    if (photo) formData.append('photo', photo);
+
+    const response = await fetch(`${PYTHON_API_URL}/api/id-cards/generate`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: formData
+    });
+
+    if (!response.ok) throw new Error('ID generation failed');
+    return response.blob();
+  },
+  preview: async (data: any, photo?: File) => {
+    // Same implementation as generate for now
+    return idCardsAPI.generate(data, photo);
+  }
+};
+
+// =====================================================
 // AUTH API
 // =====================================================
 
@@ -3204,6 +3231,7 @@ export const api = {
   payroll: payrollAPI,
   notifications: notificationsAPI,
   cashier: cashierAPI,
+  idCards: idCardsAPI,
 };
 
 export default api;

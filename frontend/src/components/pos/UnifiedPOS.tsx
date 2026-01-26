@@ -201,15 +201,15 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                     <head>
                         <title>Receipt #${receiptNumber}</title>
                         <style>
-                            @page { size: 58mm auto; margin: 0; }
+                            @page { size: 80mm auto; margin: 0; }
                             body { 
-                                width: 50mm; 
+                                width: 72mm; 
                                 font-family: 'Helvetica', 'Arial', sans-serif; 
-                                font-size: 10px; 
+                                font-size: 11px; 
                                 line-height: 1.2; 
                                 color: #000;
                                 margin: 0 auto;
-                                padding: 2mm 1mm;
+                                padding: 4mm 2mm;
                             }
                             .center { text-align: center; }
                             .bold { font-weight: bold; }
@@ -230,7 +230,9 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                             .footer-small { font-size: 9px; margin-top: 2px; }
                             .hirall-branding { font-size: 8px; font-weight: bold; margin-top: 15px; border-top: 1px dashed #000; padding-top: 8px; }
                             .hirall-contact { font-size: 7px; font-weight: normal; }
+                            #barcode { margin-bottom: 5px; max-width: 100%; }
                         </style>
+                        <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
                     </head>
                     <body>
                         <div class="center">
@@ -299,10 +301,11 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
 
                         <div class="dashed-line"></div>
 
-                        <div class="center">
-                            <div class="bold footer-thanks">THANK YOU!</div>
-                            <div class="footer-small">Please come again</div>
                             <div class="footer-small">${companyEmail}</div>
+                        </div>
+
+                        <div class="center" style="margin: 10px 0;">
+                            <svg id="barcode"></svg>
                         </div>
 
                         <div class="center hirall-branding">
@@ -312,9 +315,22 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
 
                         <script>
                             window.onload = function() {
+                                try {
+                                    JsBarcode("#barcode", "${receiptNumber}", {
+                                        format: "CODE128",
+                                        width: 1.5,
+                                        height: 35,
+                                        displayValue: true,
+                                        fontSize: 10,
+                                        margin: 5
+                                    });
+                                } catch(e) { console.error("Barcode error:", e); }
+
                                 window.focus();
-                                window.print();
-                                setTimeout(() => { window.close(); }, 300);
+                                setTimeout(() => { 
+                                    window.print();
+                                    setTimeout(() => { window.close(); }, 500);
+                                }, 800);
                             };
                         </script>
                     </body>

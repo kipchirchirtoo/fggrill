@@ -86,7 +86,12 @@ export default function AdminUsersPage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [branches, setBranches] = useState<{ id: number, name: string, code: string, status?: string }[]>([]);
-  const [formData, setFormData] = useState({ id: '', email: '', first_name: '', last_name: '', role: '', branch_id: '', password: '', phone_number: '', pos_pin: '', status: 'active' });
+  const [formData, setFormData] = useState({
+    id: '', email: '', first_name: '', last_name: '', role: '', branch_id: '', password: '',
+    phone_number: '', pos_pin: '', status: 'active',
+    employeeId: '', department: '', shift: '', startDate: '', address: '',
+    ec_name: '', ec_relationship: '', ec_phone: ''
+  });
 
   // Get all available roles from the UserRole enum
   const availableRoles = useMemo(() => {
@@ -173,7 +178,12 @@ export default function AdminUsersPage() {
   };
 
   const resetForm = () => {
-    setFormData({ id: '', email: '', first_name: '', last_name: '', role: '', branch_id: '', password: '', phone_number: '', pos_pin: '', status: 'active' });
+    setFormData({
+      id: '', email: '', first_name: '', last_name: '', role: '', branch_id: '', password: '',
+      phone_number: '', pos_pin: '', status: 'active',
+      employeeId: '', department: '', shift: '', startDate: '', address: '',
+      ec_name: '', ec_relationship: '', ec_phone: ''
+    });
     setFormErrors({});
   };
 
@@ -188,7 +198,15 @@ export default function AdminUsersPage() {
       password: '',
       phone_number: user.phone_number || '',
       pos_pin: user.pos_pin || '',
-      status: user.status
+      status: user.status,
+      employeeId: (user as any).employee_id || '',
+      department: (user as any).department || '',
+      shift: (user as any).shift || '',
+      startDate: (user as any).start_date ? new Date((user as any).start_date).toISOString().split('T')[0] : '',
+      address: (user as any).address || '',
+      ec_name: (user as any).emergency_contact?.name || '',
+      ec_relationship: (user as any).emergency_contact?.relationship || '',
+      ec_phone: (user as any).emergency_contact?.phone || ''
     });
     setEditModalOpen(true);
   };
@@ -214,6 +232,16 @@ export default function AdminUsersPage() {
         phoneNumber: formData.phone_number || null,
         pos_pin: formData.pos_pin || null,
         status: formData.status,
+        employeeId: formData.employeeId,
+        department: formData.department,
+        shift: formData.shift,
+        startDate: formData.startDate,
+        address: formData.address,
+        emergencyContact: {
+          name: formData.ec_name,
+          relationship: formData.ec_relationship,
+          phone: formData.ec_phone
+        }
       };
 
       const response = await userAPI.createUser(payload);
@@ -247,6 +275,16 @@ export default function AdminUsersPage() {
         phone_number: formData.phone_number || null,
         pos_pin: formData.pos_pin || null,
         status: formData.status,
+        employeeId: formData.employeeId,
+        department: formData.department,
+        shift: formData.shift,
+        startDate: formData.startDate,
+        address: formData.address,
+        emergencyContact: {
+          name: formData.ec_name,
+          relationship: formData.ec_relationship,
+          phone: formData.ec_phone
+        }
       };
 
       // Don't send password if it's empty (no change)
@@ -559,6 +597,61 @@ export default function AdminUsersPage() {
                   <option value="inactive">Inactive</option>
                 </select>
               </div>
+
+              {/* Extended Profile Fields for Employee Role */}
+              {formData.role === UserRole.EMPLOYEE && (
+                <>
+                  <div className="border-t pt-4 mt-4">
+                    <h3 className="font-semibold text-gray-900 mb-3 block">Employment Details</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium">Employee ID</label>
+                        <Input value={formData.employeeId} onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })} placeholder="EMP-001" />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Department</label>
+                        <Input value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} placeholder="e.g. Housekeeping" />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Shift</label>
+                        <select
+                          value={formData.shift}
+                          onChange={(e) => setFormData({ ...formData, shift: e.target.value })}
+                          className="w-full p-2 border rounded-ios-lg"
+                        >
+                          <option value="">Select Shift</option>
+                          <option value="Morning">Morning</option>
+                          <option value="Afternoon">Afternoon</option>
+                          <option value="Night">Night</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Start Date</label>
+                        <Input type="date" value={formData.startDate} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4 mt-4">
+                    <h3 className="font-semibold text-gray-900 mb-3 block">Contact Information</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-sm font-medium block text-gray-700">Address</label>
+                        <Input value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} placeholder="Full Home Address" />
+                      </div>
+                      <div className="bg-gray-50 p-3 rounded-lg space-y-3">
+                        <label className="text-sm font-medium block text-slate-700">Emergency Contact</label>
+                        <Input value={formData.ec_name} onChange={(e) => setFormData({ ...formData, ec_name: e.target.value })} placeholder="Contact Name" />
+                        <div className="grid grid-cols-2 gap-3">
+                          <Input value={formData.ec_relationship} onChange={(e) => setFormData({ ...formData, ec_relationship: e.target.value })} placeholder="Relationship" />
+                          <Input value={formData.ec_phone} onChange={(e) => setFormData({ ...formData, ec_phone: e.target.value })} placeholder="Phone Number" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
               <div className="flex gap-3 pt-2">
                 <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1" disabled={isSubmitting}>Cancel</IOSButton>
                 <IOSButton onClick={handleCreateUser} className="flex-1" disabled={isSubmitting}>
@@ -685,6 +778,61 @@ export default function AdminUsersPage() {
                   <option value="inactive">Inactive</option>
                 </select>
               </div>
+
+              {/* Extended Profile Fields for Employee Role */}
+              {formData.role === UserRole.EMPLOYEE && (
+                <>
+                  <div className="border-t pt-4 mt-4">
+                    <h3 className="font-semibold text-gray-900 mb-3 block">Employment Details</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium">Employee ID</label>
+                        <Input value={formData.employeeId} onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })} placeholder="EMP-001" />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Department</label>
+                        <Input value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} placeholder="e.g. Housekeeping" />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Shift</label>
+                        <select
+                          value={formData.shift}
+                          onChange={(e) => setFormData({ ...formData, shift: e.target.value })}
+                          className="w-full p-2 border rounded-ios-lg"
+                        >
+                          <option value="">Select Shift</option>
+                          <option value="Morning">Morning</option>
+                          <option value="Afternoon">Afternoon</option>
+                          <option value="Night">Night</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Start Date</label>
+                        <Input type="date" value={formData.startDate} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4 mt-4">
+                    <h3 className="font-semibold text-gray-900 mb-3 block">Contact Information</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-sm font-medium block text-gray-700">Address</label>
+                        <Input value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} placeholder="Full Home Address" />
+                      </div>
+                      <div className="bg-gray-50 p-3 rounded-lg space-y-3">
+                        <label className="text-sm font-medium block text-slate-700">Emergency Contact</label>
+                        <Input value={formData.ec_name} onChange={(e) => setFormData({ ...formData, ec_name: e.target.value })} placeholder="Contact Name" />
+                        <div className="grid grid-cols-2 gap-3">
+                          <Input value={formData.ec_relationship} onChange={(e) => setFormData({ ...formData, ec_relationship: e.target.value })} placeholder="Relationship" />
+                          <Input value={formData.ec_phone} onChange={(e) => setFormData({ ...formData, ec_phone: e.target.value })} placeholder="Phone Number" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
               <div className="flex gap-3 pt-2">
                 <IOSButton variant="secondary" onClick={() => setEditModalOpen(false)} className="flex-1" disabled={isSubmitting}>Cancel</IOSButton>
                 <IOSButton onClick={handleUpdateUser} className="flex-1" disabled={isSubmitting}>

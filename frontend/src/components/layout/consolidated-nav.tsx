@@ -297,6 +297,12 @@ export function ConsolidatedNav() {
         active={pathname === '/dashboard/admin/system/roles/migration'}
       />
       <NavItem
+        href="/dashboard/admin/id-cards"
+        icon={ShieldCheck}
+        label="ID Cards"
+        active={pathname === '/dashboard/admin/id-cards'}
+      />
+      <NavItem
         href="/dashboard/cashier"
         icon={CreditCard}
         label="Cashier Station"
