@@ -26,10 +26,13 @@ import {
   X,
   ChevronDown,
   Download,
-  MoreHorizontal
+  MoreHorizontal,
+  Contact as IDCardIcon,
+  ShieldCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth-context';
+import { IDCardWidget } from '@/components/employee/portal/IDCardWidget';
 
 interface DashboardData {
   profile: any;
@@ -38,6 +41,7 @@ interface DashboardData {
   announcements: any[];
   leaveBalance: { total: number; used: number; remaining: number };
   clockStatus: any;
+  payslips?: any[];
 }
 
 export default function EmployeePortal() {
@@ -133,28 +137,35 @@ export default function EmployeePortal() {
     { id: 'leave', label: 'Time Off', icon: Briefcase },
     { id: 'payslips', label: 'Pay', icon: DollarSign },
     { id: 'training', label: 'Training', icon: GraduationCap },
+    { id: 'id_card', label: 'ID Card', icon: IDCardIcon },
     { id: 'profile', label: 'Profile', icon: User },
   ];
 
+  const payslipsCount = data?.payslips?.length || 0;
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-neutral-50/30">
       {/* Header */}
-      <header className="border-b border-neutral-100 sticky top-0 z-50 bg-white">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="flex items-center justify-between h-14">
-            <div className="flex items-center gap-8">
-              <div className="flex items-center gap-2">
-                <Image src="/fglogo.png" alt="FG" width={28} height={28} className="object-contain" style={{ width: 'auto', height: 'auto' }} />
-                <span className="font-semibold text-neutral-900">Employee</span>
+      <header className="border-b border-neutral-100 sticky top-0 z-50 bg-white/80 backdrop-blur-md shadow-sm">
+        <div className="max-w-6xl mx-auto px-4 md:px-6">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-3">
+                <div className="flex-shrink-0 w-10 h-10 relative">
+                  <Image src="/fglogo.png" alt="FG" fill className="object-contain" priority />
+                </div>
+                <div className="hidden sm:block">
+                  <span className="font-black text-neutral-900 leading-tight block">FAMOUS GATE</span>
+                  <span className="text-[10px] uppercase tracking-tighter text-neutral-500 font-bold -mt-1 block">Staff Portal</span>
+                </div>
               </div>
-              <nav className="hidden md:flex items-center gap-1">
-                {navItems.slice(0, 5).map((item) => (
+              <nav className="hidden lg:flex items-center gap-1 ml-4 border-l border-neutral-100 pl-4">
+                {navItems.slice(0, 7).map((item) => (
                   <button
                     key={item.id}
                     onClick={() => setActiveTab(item.id)}
-                    className={`px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === item.id
-                        ? 'bg-neutral-100 text-neutral-900 font-medium'
-                        : 'text-neutral-500 hover:text-neutral-900'
+                    className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wide rounded-lg transition-all ${activeTab === item.id
+                      ? 'bg-neutral-900 text-white shadow-lg shadow-neutral-200'
+                      : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50'
                       }`}
                   >
                     {item.label}
@@ -174,20 +185,24 @@ export default function EmployeePortal() {
                 onClick={() => setActiveTab('profile')}
                 className="flex items-center gap-2 hover:bg-neutral-50 rounded-lg px-2 py-1.5 transition-colors"
               >
-                <div className="w-7 h-7 rounded-full bg-neutral-200 flex items-center justify-center">
-                  <span className="text-xs font-medium text-neutral-600">
-                    {user?.firstName?.[0]}{user?.lastName?.[0]}
-                  </span>
+                <div className="w-7 h-7 rounded-full bg-neutral-200 flex items-center justify-center overflow-hidden">
+                  {user?.profilePhoto ? (
+                    <Image src={user.profilePhoto} alt="Avatar" width={28} height={28} className="object-cover" />
+                  ) : (
+                    <span className="text-xs font-medium text-neutral-600">
+                      {user?.firstName?.[0]}{user?.lastName?.[0]}
+                    </span>
+                  )}
                 </div>
-                <span className="text-sm text-neutral-700 hidden sm:block">{user?.firstName}</span>
+                <span className="text-sm text-neutral-700 hidden sm:block font-medium">{user?.firstName}</span>
                 <ChevronDown className="w-3.5 h-3.5 text-neutral-400" />
               </button>
               <button
                 onClick={handleLogout}
-                className="p-2 hover:bg-neutral-50 rounded-lg transition-colors"
+                className="p-2 hover:bg-neutral-50 rounded-lg transition-colors text-neutral-400 hover:text-red-600"
                 title="Sign out"
               >
-                <LogOut className="w-[18px] h-[18px] text-neutral-500" />
+                <LogOut className="w-[18px] h-[18px]" />
               </button>
             </div>
           </div>
@@ -195,15 +210,15 @@ export default function EmployeePortal() {
       </header>
 
       {/* Mobile Nav */}
-      <div className="md:hidden border-b border-neutral-100 bg-white overflow-x-auto">
-        <div className="flex px-4 py-2 gap-1">
+      <div className="md:hidden border-b border-neutral-100 bg-white overflow-x-auto sticky top-16 z-40">
+        <div className="flex px-4 py-3 gap-1">
           {navItems.map((item) => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`px-3 py-1.5 text-sm rounded-md whitespace-nowrap transition-colors ${activeTab === item.id
-                  ? 'bg-neutral-100 text-neutral-900 font-medium'
-                  : 'text-neutral-500'
+              className={`px-3 py-1.5 text-[10px] font-black uppercase whitespace-nowrap rounded-lg transition-all ${activeTab === item.id
+                ? 'bg-neutral-900 text-white shadow-md'
+                : 'text-neutral-500 bg-neutral-50'
                 }`}
             >
               {item.label}
@@ -212,49 +227,60 @@ export default function EmployeePortal() {
         </div>
       </div>
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className="max-w-6xl mx-auto px-4 md:px-6 py-8">
+        {/* Welcome Section */}
+        <div className="mb-10">
+          <h1 className="text-3xl font-black text-neutral-900 tracking-tight">
+            Welcome back, {user?.firstName}!
+          </h1>
+          <p className="text-neutral-500 font-medium mt-1 uppercase text-[10px] tracking-[0.2em] flex items-center gap-2">
+            Your Workspace
+            <span className="w-1 h-1 rounded-full bg-neutral-300" />
+            Manage your professional information
+          </p>
+        </div>
 
         {activeTab === 'dashboard' && (
           <div className="space-y-8">
             {/* Time Clock Section */}
-            <section className="border border-neutral-200 rounded-lg overflow-hidden">
-              <div className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div>
-                  <p className="text-sm text-neutral-500 mb-1">
-                    {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-                  </p>
-                  <div className="flex items-baseline gap-3">
-                    <span className="text-4xl font-light text-neutral-900 tabular-nums">
-                      {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                    </span>
-                    {isClockedIn && (
-                      <span className="text-sm text-neutral-500">
-                        Started at {formatTime(data.clockStatus.clock_in)}
+            <section className="bg-white border border-neutral-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+              <div className="p-8 flex flex-col md:flex-row md:items-center justify-between gap-8">
+                <div className="flex items-center gap-6">
+                  <div className="w-16 h-16 bg-neutral-100 rounded-2xl flex items-center justify-center">
+                    <Clock className="w-8 h-8 text-neutral-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-1">
+                      {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                    </p>
+                    <div className="flex items-baseline gap-4">
+                      <span className="text-5xl font-black text-neutral-900 tabular-nums tracking-tighter">
+                        {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                       </span>
-                    )}
+                      {isClockedIn && (
+                        <div className="flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100">
+                          <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                          <span className="text-[10px] font-bold uppercase">Started {formatTime(data.clockStatus.clock_in)}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   {isClockedIn ? (
-                    <>
-                      <span className="flex items-center gap-2 text-sm text-neutral-600">
-                        <span className="w-2 h-2 bg-neutral-900 rounded-full animate-pulse" />
-                        Working
-                      </span>
-                      <button
-                        onClick={() => handleClock('clock_out')}
-                        disabled={clockingIn}
-                        className="px-5 py-2.5 border border-neutral-300 text-neutral-700 rounded-lg text-sm font-medium hover:bg-neutral-50 transition-colors disabled:opacity-50 flex items-center gap-2"
-                      >
-                        {clockingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4" />}
-                        Clock Out
-                      </button>
-                    </>
+                    <button
+                      onClick={() => handleClock('clock_out')}
+                      disabled={clockingIn}
+                      className="px-8 py-4 bg-white border border-neutral-200 text-neutral-900 rounded-xl text-sm font-bold uppercase tracking-widest hover:bg-neutral-50 transition-all disabled:opacity-50 flex items-center gap-3 shadow-sm active:scale-95"
+                    >
+                      {clockingIn ? <Loader2 className="w-4 h-4 animate-spin text-neutral-400" /> : <Square className="w-4 h-4" />}
+                      Clock Out
+                    </button>
                   ) : (
                     <button
                       onClick={() => handleClock('clock_in')}
                       disabled={clockingIn}
-                      className="px-5 py-2.5 bg-neutral-900 text-white rounded-lg text-sm font-medium hover:bg-neutral-800 transition-colors disabled:opacity-50 flex items-center gap-2"
+                      className="px-8 py-4 bg-neutral-900 text-white rounded-xl text-sm font-bold uppercase tracking-widest hover:bg-neutral-800 transition-all disabled:opacity-50 flex items-center gap-3 shadow-xl shadow-neutral-200 active:scale-95"
                     >
                       {clockingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                       Clock In
@@ -265,32 +291,37 @@ export default function EmployeePortal() {
             </section>
 
             {/* Stats Row */}
-            <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <button onClick={() => setActiveTab('tasks')} className="text-left p-4 border border-neutral-200 rounded-lg hover:border-neutral-300 transition-colors">
-                <p className="text-2xl font-semibold text-neutral-900">{data?.tasks?.length || 0}</p>
-                <p className="text-sm text-neutral-500">Open tasks</p>
-              </button>
-              <button onClick={() => setActiveTab('schedule')} className="text-left p-4 border border-neutral-200 rounded-lg hover:border-neutral-300 transition-colors">
-                <p className="text-2xl font-semibold text-neutral-900">{data?.schedules?.length || 0}</p>
-                <p className="text-sm text-neutral-500">Upcoming shifts</p>
-              </button>
-              <button onClick={() => setActiveTab('leave')} className="text-left p-4 border border-neutral-200 rounded-lg hover:border-neutral-300 transition-colors">
-                <p className="text-2xl font-semibold text-neutral-900">{data?.leaveBalance?.remaining || 21}</p>
-                <p className="text-sm text-neutral-500">Days off remaining</p>
-              </button>
-              <button onClick={() => setActiveTab('payslips')} className="text-left p-4 border border-neutral-200 rounded-lg hover:border-neutral-300 transition-colors">
-                <p className="text-2xl font-semibold text-neutral-900">{data?.leaveBalance?.used || 0}</p>
-                <p className="text-sm text-neutral-500">Days taken</p>
-              </button>
+            <section className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              {[
+                { label: 'Open Tasks', val: data?.tasks?.length || 0, tab: 'tasks', icon: ClipboardList, color: 'text-blue-600' },
+                { label: 'Upcoming Shifts', val: data?.schedules?.length || 0, tab: 'schedule', icon: Calendar, color: 'text-emerald-600' },
+                { label: 'Leave Balance', val: data?.leaveBalance?.remaining || 21, tab: 'leave', icon: Briefcase, color: 'text-orange-600' },
+                { label: 'Payslips', val: payslipsCount || 0, tab: 'payslips', icon: DollarSign, color: 'text-purple-600' }
+              ].map((stat, i) => (
+                <button
+                  key={i}
+                  onClick={() => setActiveTab(stat.tab)}
+                  className="bg-white p-6 border border-neutral-200 rounded-2xl text-left hover:border-neutral-300 transition-all group"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className={`p-2 rounded-lg bg-neutral-50 ${stat.color} group-hover:scale-110 transition-transform`}>
+                      <stat.icon className="w-5 h-5" />
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-neutral-300 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                  <p className="text-3xl font-black text-neutral-900 tracking-tight">{stat.val}</p>
+                  <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mt-1">{stat.label}</p>
+                </button>
+              ))}
             </section>
 
             {/* Two Column Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Tasks */}
-              <section>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-medium text-neutral-900">Tasks</h2>
-                  <button onClick={() => setActiveTab('tasks')} className="text-sm text-neutral-500 hover:text-neutral-700">
+              <section className="bg-white border border-neutral-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="px-6 py-4 bg-neutral-50/50 border-b border-neutral-100 flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-neutral-900 uppercase tracking-widest">Active Tasks</h2>
+                  <button onClick={() => setActiveTab('tasks')} className="text-xs font-bold text-blue-600 hover:text-blue-700 uppercase tracking-widest">
                     View all
                   </button>
                 </div>
@@ -389,6 +420,17 @@ export default function EmployeePortal() {
         {activeTab === 'leave' && <LeaveTab API_URL={API_URL} leaveBalance={data?.leaveBalance} />}
         {activeTab === 'payslips' && <PayslipsTab API_URL={API_URL} />}
         {activeTab === 'training' && <TrainingTab API_URL={API_URL} />}
+        {
+          activeTab === 'id_card' && (
+            <div className="max-w-2xl mx-auto">
+              <div className="mb-8">
+                <h1 className="text-2xl font-bold text-neutral-900">Digital Identity</h1>
+                <p className="text-neutral-500">View and management your official Famous Gate Hotel staff ID card.</p>
+              </div>
+              <IDCardWidget user={user} />
+            </div>
+          )
+        }
         {activeTab === 'profile' && <ProfileTab API_URL={API_URL} user={user} profile={data?.profile} />}
       </main>
     </div>
@@ -586,8 +628,8 @@ function TasksTab({ API_URL, onRefresh }: { API_URL: string; onRefresh: () => vo
             key={f}
             onClick={() => setFilter(f)}
             className={`px-4 py-2 text-sm border-b-2 transition-colors ${filter === f
-                ? 'border-neutral-900 text-neutral-900 font-medium'
-                : 'border-transparent text-neutral-500 hover:text-neutral-700'
+              ? 'border-neutral-900 text-neutral-900 font-medium'
+              : 'border-transparent text-neutral-500 hover:text-neutral-700'
               }`}
           >
             {f === 'all' ? 'All' : f === 'in_progress' ? 'In Progress' : f.charAt(0).toUpperCase() + f.slice(1)}
@@ -607,8 +649,8 @@ function TasksTab({ API_URL, onRefresh }: { API_URL: string; onRefresh: () => vo
                     onClick={() => task.status !== 'completed' && updateTaskStatus(task.id, 'completed')}
                     disabled={updating === task.id || task.status === 'completed'}
                     className={`mt-0.5 w-5 h-5 rounded border flex items-center justify-center transition-colors flex-shrink-0 ${task.status === 'completed'
-                        ? 'bg-neutral-900 border-neutral-900'
-                        : 'border-neutral-300 hover:border-neutral-400'
+                      ? 'bg-neutral-900 border-neutral-900'
+                      : 'border-neutral-300 hover:border-neutral-400'
                       }`}
                   >
                     {task.status === 'completed' && <Check className="w-3 h-3 text-white" />}
@@ -863,9 +905,9 @@ function LeaveTab({ API_URL, leaveBalance }: { API_URL: string; leaveBalance: an
                     </p>
                   </div>
                   <span className={`text-xs px-2 py-1 rounded capitalize ${leave.status === 'approved' ? 'bg-neutral-900 text-white' :
-                      leave.status === 'rejected' ? 'bg-neutral-200 text-neutral-600' :
-                        leave.status === 'cancelled' ? 'bg-neutral-100 text-neutral-500' :
-                          'bg-neutral-100 text-neutral-700'
+                    leave.status === 'rejected' ? 'bg-neutral-200 text-neutral-600' :
+                      leave.status === 'cancelled' ? 'bg-neutral-100 text-neutral-500' :
+                        'bg-neutral-100 text-neutral-700'
                     }`}>
                     {leave.status}
                   </span>
@@ -1075,8 +1117,8 @@ function TrainingTab({ API_URL }: { API_URL: string }) {
             key={f}
             onClick={() => setFilter(f)}
             className={`px-4 py-2 text-sm border-b-2 transition-colors ${filter === f
-                ? 'border-neutral-900 text-neutral-900 font-medium'
-                : 'border-transparent text-neutral-500 hover:text-neutral-700'
+              ? 'border-neutral-900 text-neutral-900 font-medium'
+              : 'border-transparent text-neutral-500 hover:text-neutral-700'
               }`}
           >
             {f === 'all' ? 'All' : f === 'in_progress' ? 'In Progress' : f.charAt(0).toUpperCase() + f.slice(1)}
@@ -1105,9 +1147,9 @@ function TrainingTab({ API_URL }: { API_URL: string }) {
                     </div>
                   </div>
                   <span className={`text-xs px-2 py-1 rounded capitalize ${item.status === 'completed' ? 'bg-neutral-900 text-white' :
-                      item.status === 'in_progress' ? 'bg-neutral-200 text-neutral-700' :
-                        item.status === 'expired' ? 'bg-neutral-100 text-neutral-500' :
-                          'bg-neutral-100 text-neutral-700'
+                    item.status === 'in_progress' ? 'bg-neutral-200 text-neutral-700' :
+                      item.status === 'expired' ? 'bg-neutral-100 text-neutral-500' :
+                        'bg-neutral-100 text-neutral-700'
                     }`}>
                     {item.status?.replace('_', ' ')}
                   </span>

@@ -25,11 +25,22 @@ export const getUsers = async (
     if (error) throw error;
 
     // Transform the data to include branch_name for frontend compatibility
-    const transformedData = data?.map(user => ({
-      ...user,
-      branch_name: user.branch?.name || null,
-      branch_code: user.branch?.code || null
-    }));
+    const transformedData = data?.map(user => {
+      let profile_photo_url = null;
+      if (user.profile_photo) {
+        const { data: { publicUrl } } = supabase.storage
+          .from('profile-photos')
+          .getPublicUrl(user.profile_photo);
+        profile_photo_url = publicUrl;
+      }
+
+      return {
+        ...user,
+        branch_name: user.branch?.name || null,
+        branch_code: user.branch?.code || null,
+        profile_photo_url
+      };
+    });
 
     res.status(200).json({
       success: true,

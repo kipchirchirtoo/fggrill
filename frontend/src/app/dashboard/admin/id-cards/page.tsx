@@ -45,7 +45,10 @@ export default function IDCardsManagementPage() {
         first_name: '',
         last_name: '',
         employee_id: '',
-        join_date: ''
+        start_date: '',
+        role: '',
+        email: '',
+        phone_number: ''
     });
     const [isSaving, setIsSaving] = useState(false);
 
@@ -59,7 +62,10 @@ export default function IDCardsManagementPage() {
             first_name: emp.first_name || '',
             last_name: emp.last_name || '',
             employee_id: emp.employee_id || '',
-            join_date: emp.join_date || ''
+            start_date: emp.start_date || '',
+            role: emp.role || '',
+            email: emp.email || '',
+            phone_number: emp.phone_number || ''
         });
         setIsEditOpen(true);
     };
@@ -112,9 +118,9 @@ export default function IDCardsManagementPage() {
                 id_no: emp.employee_id || emp.id.substring(0, 8).toUpperCase(),
                 email: emp.email,
                 phone: emp.phone_number || 'N/A',
-                join_date: emp.join_date ? new Date(emp.join_date).toLocaleDateString() : 'N/A',
+                join_date: emp.start_date ? new Date(emp.start_date).toLocaleDateString() : 'N/A',
                 expire_date: '31/12/2026', // Placeholder expiry
-                photo_url: emp.profile_photo // Assuming backend serves this
+                photo_url: emp.profile_photo_url // Assuming backend serves this
             };
 
             const blob = await idCardsAPI.preview(data);
@@ -137,9 +143,9 @@ export default function IDCardsManagementPage() {
                 id_no: emp.employee_id || emp.id.substring(0, 8).toUpperCase(),
                 email: emp.email,
                 phone: emp.phone_number || 'N/A',
-                join_date: emp.join_date ? new Date(emp.join_date).toLocaleDateString() : 'N/A',
+                join_date: emp.start_date ? new Date(emp.start_date).toLocaleDateString() : 'N/A',
                 expire_date: '31/12/2026',
-                photo_url: emp.profile_photo
+                photo_url: emp.profile_photo_url
             };
 
             const blob = await idCardsAPI.generate(data);
@@ -300,7 +306,7 @@ export default function IDCardsManagementPage() {
                                     </div>
                                     <div className="flex items-center gap-2 text-[10px] font-bold text-stone-500 uppercase">
                                         <Calendar className="w-3 h-3 text-stone-300" />
-                                        Joined: {emp.join_date ? new Date(emp.join_date).toLocaleDateString() : 'N/A'}
+                                        Joined: {emp.start_date ? new Date(emp.start_date).toLocaleDateString() : 'N/A'}
                                     </div>
                                 </div>
                             </div>
@@ -443,11 +449,35 @@ export default function IDCardsManagementPage() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <label className="text-xs font-bold text-stone-500 uppercase">Join Date</label>
+                            <label className="text-xs font-bold text-stone-500 uppercase">Start Date</label>
                             <Input
                                 type="date"
-                                value={editData.join_date ? editData.join_date.split('T')[0] : ''}
-                                onChange={(e) => setEditData({ ...editData, join_date: e.target.value })}
+                                value={editData.start_date ? editData.start_date.split('T')[0] : ''}
+                                onChange={(e) => setEditData({ ...editData, start_date: e.target.value })}
+                                className="bg-stone-50 border-none h-11 rounded-xl"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-stone-500 uppercase">Role</label>
+                            <Input
+                                value={editData.role}
+                                onChange={(e) => setEditData({ ...editData, role: e.target.value })}
+                                className="bg-stone-50 border-none h-11 rounded-xl"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-stone-500 uppercase">Email</label>
+                            <Input
+                                value={editData.email}
+                                onChange={(e) => setEditData({ ...editData, email: e.target.value })}
+                                className="bg-stone-50 border-none h-11 rounded-xl"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-stone-500 uppercase">Phone</label>
+                            <Input
+                                value={editData.phone_number}
+                                onChange={(e) => setEditData({ ...editData, phone_number: e.target.value })}
                                 className="bg-stone-50 border-none h-11 rounded-xl"
                             />
                         </div>

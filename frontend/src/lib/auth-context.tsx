@@ -53,6 +53,9 @@ export interface User {
   is_central?: boolean;
   isPosLogin?: boolean;
   lastLoginAt?: string;
+  employeeId?: string;
+  startDate?: string;
+  profilePhoto?: string;
 }
 
 // Auth context interface
@@ -122,7 +125,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               branch_name: apiUser.branch_name || 'Unknown Branch',
               is_central: apiUser.is_central,
               department: apiUser.department,
-              permissions: apiUser.permissions
+              permissions: apiUser.permissions,
+              employeeId: apiUser.employee_id,
+              startDate: apiUser.start_date,
+              profilePhoto: apiUser.profile_photo
             };
             setUser(userData);
             // Update cached user with fresh data
@@ -176,7 +182,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           branch_id: apiUser.branch_id,
           branch_name: apiUser.branch_name || (apiUser.branch_id ? 'Branch' : 'HQ'),
           is_central: apiUser.is_central || false,
-          department: apiUser.department || 'Staff'
+          department: apiUser.department || 'Staff',
+          employeeId: apiUser.employee_id,
+          startDate: apiUser.start_date,
+          profilePhoto: apiUser.profile_photo
         };
 
         // Store user and token
