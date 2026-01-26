@@ -135,7 +135,8 @@ class IDCardGenerator:
         c.setStrokeColor(self.primary_red)
         c.setLineWidth(0.3*mm)
         c.line(10*mm, self.height - 63*mm, self.width - 10*mm, self.height - 63*mm)
-       # Info Section
+        
+        # Info Section
         details_y = self.height - 66*mm
         c.setFillColor(self.text_dark)
         details = [
@@ -181,7 +182,6 @@ class IDCardGenerator:
         c.restoreState()
 
         # 1. Wavy Header
- pieces
         c.setFillColor(self.primary_red)
         p_header = c.beginPath()
         p_header.moveTo(0, self.height)
