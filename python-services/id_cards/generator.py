@@ -62,41 +62,41 @@ class IDCardGenerator:
             c.line(0, i*mm, self.width, (i+5)*mm)
         c.restoreState()
 
-        # 1. Top Section - Dark Header with Red Wavy Overlay
+        # 1. Top Section - Dark Header with Red Wavy Overlay (Compact)
         c.setFillColor(self.dark_bg)
-        c.rect(0, self.height - 30*mm, self.width, 30*mm, fill=1, stroke=0)
+        c.rect(0, self.height - 28*mm, self.width, 28*mm, fill=1, stroke=0)
         
         c.setFillColor(self.primary_red)
         p = c.beginPath()
-        p.moveTo(0, self.height - 22*mm)
-        p.curveTo(self.width*0.3, self.height - 18*mm, self.width*0.7, self.height - 38*mm, self.width, self.height - 28*mm)
+        p.moveTo(0, self.height - 20*mm)
+        p.curveTo(self.width*0.3, self.height - 16*mm, self.width*0.7, self.height - 35*mm, self.width, self.height - 26*mm)
         p.lineTo(self.width, self.height)
         p.lineTo(0, self.height)
         p.close()
         c.drawPath(p, fill=1, stroke=0)
 
-        # 2. Company Info & Logo
+        # 2. Company Info & Logo (Compact)
         if os.path.exists(self.logo_path):
             try:
                 logo = ImageReader(self.logo_path)
-                c.drawImage(logo, (self.width - 10*mm)/2, self.height - 12*mm, width=10*mm, height=10*mm, mask='auto', preserveAspectRatio=True)
+                c.drawImage(logo, (self.width - 9*mm)/2, self.height - 11*mm, width=9*mm, height=9*mm, mask='auto', preserveAspectRatio=True)
             except:
                 pass
 
         c.setFillColor(colors.white)
-        c.setFont("Helvetica-Bold", 9)
-        c.drawCentredString(self.width/2, self.height - 16*mm, "FAMOUS GATE HOTEL")
-        c.setFont("Helvetica", 5)
-        c.drawCentredString(self.width/2, self.height - 18.5*mm, "QUALITY HOSPITALITY SERVICES")
-        # 3. Photo (Circular with RED BORDER)
+        c.setFont("Helvetica-Bold", 8)
+        c.drawCentredString(self.width/2, self.height - 15*mm, "FAMOUS GATE HOTEL")
+        c.setFont("Helvetica", 4.5)
+        c.drawCentredString(self.width/2, self.height - 17.5*mm, "QUALITY HOSPITALITY SERVICES")
+        # 3. Photo (Circular with RED BORDER) - Smaller for space
         c.saveState()
         center_x = self.width/2
-        center_y = self.height - 36*mm
-        radius = 15*mm
+        center_y = self.height - 34*mm
+        radius = 13*mm
         
         # Red border for circle
         c.setFillColor(self.primary_red)
-        c.circle(center_x, center_y, radius + 1*mm, fill=1, stroke=0)
+        c.circle(center_x, center_y, radius + 0.8*mm, fill=1, stroke=0)
         c.setFillColor(colors.white)
         c.circle(center_x, center_y, radius + 0.1*mm, fill=1, stroke=0)
         
@@ -116,60 +116,71 @@ class IDCardGenerator:
             self._draw_placeholder_photo(c, center_x, center_y, radius)
         c.restoreState()
 
-        # 4. Employee Info (Arranged well, fit inside)
+        # 4. Employee Info (Compact)
         c.setFillColor(self.primary_red)
         name = data.get('name', 'NAME').upper()
         
         # Adaptive font size for name
-        font_size = 12
-        if len(name) > 15: font_size = 10
-        if len(name) > 22: font_size = 8
+        font_size = 11
+        if len(name) > 15: font_size = 9
+        if len(name) > 22: font_size = 7.5
         c.setFont("Helvetica-Bold", font_size)
-        c.drawCentredString(self.width/2, self.height - 56*mm, name)
+        c.drawCentredString(self.width/2, self.height - 52*mm, name)
         
         c.setFillColor(self.text_dark)
-        c.setFont("Helvetica-Bold", 7.5)
-        c.drawCentredString(self.width/2, self.height - 61*mm, data.get('role', 'POSITION'))
+        c.setFont("Helvetica-Bold", 6.5)
+        c.drawCentredString(self.width/2, self.height - 56.5*mm, data.get('role', 'POSITION'))
         
         # Divider line
         c.setStrokeColor(self.primary_red)
-        c.setLineWidth(0.3*mm)
-        c.line(10*mm, self.height - 63*mm, self.width - 10*mm, self.height - 63*mm)
+        c.setLineWidth(0.2*mm)
+        c.line(8*mm, self.height - 58.5*mm, self.width - 8*mm, self.height - 58.5*mm)
         
-        # Info Section (Compact layout)
-        details_y = self.height - 68*mm
+        # Info Section (Ultra Compact)
         c.setFillColor(self.text_dark)
-        details = [
-            ("ID NUMBER", data.get('id_no', 'N/A')),
-            ("EMAIL ADDR", data.get('email', 'N/A')),
-            ("JOIN DATE", data.get('join_date', 'N/A'))
-        ]
+        info_y = self.height - 63*mm
         
-        for label, val in details:
-            c.setFont("Helvetica-Bold", 5)
-            c.drawCentredString(self.width/2, details_y + 1*mm, label)
-            c.setFont("Helvetica", 7)
-            if len(str(val)) > 25: c.setFont("Helvetica", 5.5)
-            c.drawCentredString(self.width/2, details_y - 1.5*mm, str(val))
-            details_y -= 5*mm
+        # ID Number
+        c.setFont("Helvetica-Bold", 4.5)
+        c.drawCentredString(self.width/2, info_y, "ID NUMBER")
+        c.setFont("Helvetica", 6.5)
+        id_val = str(data.get('id_no', 'N/A'))
+        if len(id_val) > 12: c.setFont("Helvetica", 5.5)
+        c.drawCentredString(self.width/2, info_y - 3*mm, id_val)
+        
+        # Email
+        info_y -= 7*mm
+        c.setFont("Helvetica-Bold", 4.5)
+        c.drawCentredString(self.width/2, info_y, "EMAIL ADDRESS")
+        c.setFont("Helvetica", 5.5)
+        email_val = str(data.get('email', 'N/A'))
+        if len(email_val) > 25: c.setFont("Helvetica", 4.5)
+        c.drawCentredString(self.width/2, info_y - 3*mm, email_val)
+        
+        # Join Date
+        info_y -= 7*mm
+        c.setFont("Helvetica-Bold", 4.5)
+        c.drawCentredString(self.width/2, info_y, "JOIN DATE")
+        c.setFont("Helvetica", 6.5)
+        c.drawCentredString(self.width/2, info_y - 3*mm, str(data.get('join_date', 'N/A')))
 
-        # 5. Barcode (Well positioned above footer)
+        # 5. Barcode (Properly positioned with clear spacing)
         barcode_value = data.get('id_no', 'TEMP-001')
         try:
-            barcode = code128.Code128(barcode_value, barHeight=4*mm, barWidth=0.18*mm)
-            barcode.drawOn(c, (self.width - barcode.width) / 2, 7*mm)
-            c.setFont("Helvetica-Bold", 4.5)
-            c.drawCentredString(self.width/2, 5.5*mm, f"CHECK-IN: {barcode_value}")
+            barcode = code128.Code128(barcode_value, barHeight=3.5*mm, barWidth=0.16*mm)
+            barcode.drawOn(c, (self.width - barcode.width) / 2, 5.5*mm)
+            c.setFont("Helvetica-Bold", 4)
+            c.drawCentredString(self.width/2, 4*mm, f"CHECK-IN: {barcode_value}")
         except:
             pass
 
-        # 6. Wavy Footer
+        # 6. Wavy Footer (Minimal)
         c.setFillColor(self.dark_bg)
         p_footer = c.beginPath()
         p_footer.moveTo(0, 0)
         p_footer.lineTo(self.width, 0)
-        p_footer.lineTo(self.width, 4*mm)
-        p_footer.curveTo(self.width*0.7, 8*mm, self.width*0.3, 2*mm, 0, 4*mm)
+        p_footer.lineTo(self.width, 3*mm)
+        p_footer.curveTo(self.width*0.7, 6*mm, self.width*0.3, 1.5*mm, 0, 3*mm)
         p_footer.close()
         c.drawPath(p_footer, fill=1, stroke=0)
 
