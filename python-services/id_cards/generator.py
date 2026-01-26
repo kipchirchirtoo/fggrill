@@ -136,29 +136,30 @@ class IDCardGenerator:
         c.setLineWidth(0.3*mm)
         c.line(10*mm, self.height - 63*mm, self.width - 10*mm, self.height - 63*mm)
         
-        # Info Section
-        details_y = self.height - 66*mm
+        # Info Section (Compact layout)
+        details_y = self.height - 68*mm
         c.setFillColor(self.text_dark)
         details = [
-            ("ID NO:", data.get('id_no', 'N/A')),
-            ("EMAIL:", data.get('email', 'N/A')),
-            ("JOINED:", data.get('join_date', 'N/A'))
+            ("ID NUMBER", data.get('id_no', 'N/A')),
+            ("EMAIL ADDR", data.get('email', 'N/A')),
+            ("JOIN DATE", data.get('join_date', 'N/A'))
         ]
         
         for label, val in details:
-            c.setFont("Helvetica-Bold", 6)
-            c.drawRightString(20*mm, details_y, label)
-            c.setFont("Helvetica", 6)
-            c.drawString(22*mm, details_y, val)
-            details_y -= 3*mm
+            c.setFont("Helvetica-Bold", 5)
+            c.drawCentredString(self.width/2, details_y + 1*mm, label)
+            c.setFont("Helvetica", 7)
+            if len(str(val)) > 25: c.setFont("Helvetica", 5.5)
+            c.drawCentredString(self.width/2, details_y - 1.5*mm, str(val))
+            details_y -= 5*mm
 
-        # 5. Barcode (Positioned well above footer)
+        # 5. Barcode (Well positioned above footer)
         barcode_value = data.get('id_no', 'TEMP-001')
         try:
-            barcode = code128.Code128(barcode_value, barHeight=5*mm, barWidth=0.2*mm)
-            barcode.drawOn(c, (self.width - barcode.width) / 2, 10*mm)
-            c.setFont("Helvetica-Bold", 5)
-            c.drawCentredString(self.width/2, 8.5*mm, f"CHECK-IN ID: {barcode_value}")
+            barcode = code128.Code128(barcode_value, barHeight=4*mm, barWidth=0.18*mm)
+            barcode.drawOn(c, (self.width - barcode.width) / 2, 7*mm)
+            c.setFont("Helvetica-Bold", 4.5)
+            c.drawCentredString(self.width/2, 5.5*mm, f"CHECK-IN: {barcode_value}")
         except:
             pass
 
