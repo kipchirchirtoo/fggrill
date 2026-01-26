@@ -644,11 +644,15 @@ export default function AdminUsersPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-sm font-medium">Employee ID</label>
-                        <Input value={formData.employeeId} onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })} placeholder="EMP-001" />
+                        <Input value={formData.employeeId} readOnly disabled className="bg-gray-50 cursor-not-allowed" placeholder="Auto-generated" />
+                        <p className="text-xs text-gray-500 mt-1">? Auto-generated</p>
                       </div>
                       <div>
                         <label className="text-sm font-medium">Department</label>
-                        <Input value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} placeholder="e.g. Housekeeping" />
+                        <select value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} className="w-full p-2 border rounded-ios-lg">
+                          <option value="">Select Department</option>
+                          {DEPARTMENT_OPTIONS.map((dept) => (<option key={dept} value={dept}>{dept}</option>))}
+                        </select>
                       </div>
                       <div>
                         <label className="text-sm font-medium">Shift</label>
@@ -825,11 +829,15 @@ export default function AdminUsersPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-sm font-medium">Employee ID</label>
-                        <Input value={formData.employeeId} onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })} placeholder="EMP-001" />
+                        <Input value={formData.employeeId} readOnly disabled className="bg-gray-50 cursor-not-allowed" placeholder="Auto-generated" />
+                        <p className="text-xs text-gray-500 mt-1">? Auto-generated</p>
                       </div>
                       <div>
                         <label className="text-sm font-medium">Department</label>
-                        <Input value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} placeholder="e.g. Housekeeping" />
+                        <select value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} className="w-full p-2 border rounded-ios-lg">
+                          <option value="">Select Department</option>
+                          {DEPARTMENT_OPTIONS.map((dept) => (<option key={dept} value={dept}>{dept}</option>))}
+                        </select>
                       </div>
                       <div>
                         <label className="text-sm font-medium">Shift</label>
@@ -900,3 +908,4 @@ export default function AdminUsersPage() {
     </ProtectedRoute>
   );
 }
+
