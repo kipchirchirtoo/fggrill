@@ -172,34 +172,43 @@ class IDCardGenerator:
         c.setFont("Helvetica", 6.5)
         c.drawString(45*mm, details_y, str(data.get('join_date', 'N/A')))
 
-        # RIGHT SECTION: Barcode & QR (68-88mm)
-        # Barcode (vertical orientation on right)
+
+        # RIGHT SECTION: QR Code (68-88mm)
+        # QR Code on right side
+        qr_data = data.get('qr_data', f"VERIFY:{data.get('id_no', 'N/A')}")
+        try:
+            qr_code = qr.QrCodeWidget(qr_data)
+            bounds = qr_code.getBounds()
+            w = bounds[2] - bounds[0]
+            h = bounds[3] - bounds[1]
+            
+            d = Drawing(16*mm, 16*mm, transform=[16*mm/w, 0, 0, 16*mm/h, 0, 0])
+            d.add(qr_code)
+            renderPDF.draw(d, c, 70*mm, self.height/2 - 8*mm)
+            
+            c.setFont("Helvetica-Bold", 4)
+            c.setFillColor(self.text_dark)
+            c.drawCentredString(78*mm, self.height/2 - 10*mm, "SCAN ID")
+        except:
+            pass
+        
+        # BARCODE: Bottom center (horizontal)
         barcode_value = data.get('id_no', 'TEMP-001')
         try:
-            barcode = code128.Code128(barcode_value, barHeight=8*mm, barWidth=0.15*mm)
-            # Rotate and position barcode vertically
-            c.saveState()
-            c.translate(78*mm, self.height/2 - 15*mm)
-            c.rotate(90)
-            barcode.drawOn(c, 0, 0)
-            c.restoreState()
-            
-            # Barcode label
-            c.setFont("Helvetica-Bold", 4)
-            c.saveState()
-            c.translate(75*mm, self.height/2 + 18*mm)
-            c.rotate(90)
-            c.drawString(0, 0, f"ID: {barcode_value}")
-            c.restoreState()
+            barcode = code128.Code128(barcode_value, barHeight=4*mm, barWidth=0.18*mm)
+            barcode.drawOn(c, (self.width - barcode.width) / 2, 4*mm)
+            c.setFont("Helvetica-Bold", 3.5)
+            c.setFillColor(self.text_dark)
+            c.drawCentredString(self.width/2, 2*mm, f"CHECK-IN: {barcode_value}")
         except:
             pass
         
         # Bottom footer strip
         c.setFillColor(self.dark_bg)
-        c.rect(30*mm, 0, 58*mm, 3*mm, fill=1, stroke=0)
+        c.rect(30*mm, 0, 58*mm, 1.5*mm, fill=1, stroke=0)
         c.setFillColor(colors.white)
-        c.setFont("Helvetica-Bold", 4.5)
-        c.drawCentredString(59*mm, 0.8*mm, "www.famousgate.com")
+        c.setFont("Helvetica-Bold", 3.5)
+        c.drawCentredString(59*mm, 0.3*mm, "www.famousgate.com")
 
     def _draw_back(self, c, data):
         # Background Pattern
