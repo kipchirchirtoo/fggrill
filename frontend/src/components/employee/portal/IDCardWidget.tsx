@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';
-import { idCardsAPI } from '@/lib/api';
+import { idCardsAPI, authAPI } from '@/lib/api';
 import { ShieldCheck, Download, Eye, Loader2, Camera, User } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -22,7 +22,7 @@ export function IDCardWidget({ user }: IDCardWidgetProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
-    const [profilePhoto, setProfilePhoto] = useState<string | null>(user.profilePhoto || null);
+    const [profilePhoto, setProfilePhoto] = useState<string | null>(user?.profilePhoto || null);
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -58,7 +58,14 @@ export function IDCardWidget({ user }: IDCardWidgetProps) {
                 .from('profile')
                 .getPublicUrl(filePath);
 
+            // Update local state
             setProfilePhoto(publicUrl);
+
+            // Persist to database
+            await authAPI.updateDetails({
+                profilePhoto: publicUrl
+            });
+
             toast.success('Profile photo updated', { id: toastId });
         } catch (error) {
             console.error('Upload error:', error);

@@ -407,7 +407,7 @@ export const updateDetails = async (
       return;
     }
 
-    const fieldsToUpdate = {
+    const fieldsToUpdate: any = {
       first_name: req.body.firstName,
       last_name: req.body.lastName,
       email: req.body.email,
@@ -415,6 +415,10 @@ export const updateDetails = async (
       address: req.body.address,
       updated_at: new Date().toISOString()
     };
+
+    if (req.body.profilePhoto) {
+      fieldsToUpdate.profile_photo = req.body.profilePhoto;
+    }
 
     const { data: updatedUser, error: updateError } = await supabase
       .from('users')

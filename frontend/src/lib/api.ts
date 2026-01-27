@@ -2678,6 +2678,26 @@ export const payrollAPI = {
 };
 
 // =====================================================
+// REPORTS SERVICE (Python Service for Branded PDFs)
+// =====================================================
+
+export const reportsService = {
+  exportBrandedPdf: async (reportType: string, params: any) => {
+    const response = await fetch(`${PYTHON_API_URL}/api/reports/branded-pdf`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ reportType, ...params })
+    });
+
+    if (!response.ok) throw new Error('Export failed');
+    return response.blob();
+  }
+};
+
+// =====================================================
 // NOTIFICATIONS API
 // =====================================================
 
