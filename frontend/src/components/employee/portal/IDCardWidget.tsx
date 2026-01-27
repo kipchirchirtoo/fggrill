@@ -24,6 +24,11 @@ export function IDCardWidget({ user }: IDCardWidgetProps) {
     const [isUploading, setIsUploading] = useState(false);
     const [profilePhoto, setProfilePhoto] = useState<string | null>(user?.profilePhoto || null);
 
+    // Guard clause for SSR - don't render if user is not available
+    if (!user) {
+        return null;
+    }
+
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
