@@ -95,9 +95,30 @@ class IDCardGenerator:
         
         # Draw Photo
         photo_path = data.get('photo_path')
-        if photo_path and os.path.exists(photo_path):
+        img_obj = None
+        
+        if photo_path:
             try:
-                img = ImageReader(photo_path)
+                if photo_path.startswith(('http://', 'https://')):
+                    import urllib.request
+                    # Add User-Agent to avoid 403 Forbidden on some servers
+                    req = urllib.request.Request(
+                        photo_path, 
+                        data=None, 
+                        headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+                    )
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        img_data = response.read()
+                        img_obj = io.BytesIO(img_data)
+                elif os.path.exists(photo_path):
+                    img_obj = photo_path
+            except Exception as e:
+                print(f"Error loading image: {e}")
+                pass
+
+        if img_obj:
+            try:
+                img = ImageReader(img_obj)
                 c.drawImage(img, photo_cnt_x - radius, photo_cnt_y - radius, 
                           width=2*radius, height=2*radius, preserveAspectRatio=True, anchor='c')
             except:
