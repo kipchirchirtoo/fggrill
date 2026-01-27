@@ -19,13 +19,12 @@ class IDCardGenerator:
         self.width = 88 * mm
         self.height = 52 * mm
         self.logo_path = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'public', 'fglogo.png')
-        # Modern Digital Palette
-        self.primary_red = colors.HexColor("#D32F2F")  # Brighter Red
-        self.dark_bg = colors.HexColor("#121212")      # Deep Black
-        self.card_bg = colors.HexColor("#1E1E1E")      # Dark Grey
-        self.accent_cyan = colors.HexColor("#00E5FF")  # Digital Cyan
-        self.text_dark = colors.HexColor("#FAFAFA")    # White Text
-        self.text_gray = colors.HexColor("#B0BEC5")    # Light Gray Text
+        # Professional Palette (Reverted)
+        self.primary_red = colors.HexColor("#B71C1C")
+        self.dark_bg = colors.HexColor("#1A1A1A")
+        self.text_dark = colors.HexColor("#212121")
+        self.text_light = colors.white
+        self.gold_accent = colors.HexColor("#FFD700")
 
     def generate(self, employee_data):
         """
@@ -58,47 +57,37 @@ class IDCardGenerator:
         return buffer.getvalue()
 
     def _draw_front(self, c, data):
-        # 1. Background (Digital Dark Theme)
-        c.setFillColor(self.card_bg)
+        # 1. Background (Standard Professional)
+        c.setFillColor(colors.white)
         c.rect(0, 0, self.width, self.height, fill=1, stroke=0)
         
-        # Tech Pattern - Grid Lines
+        # Subtle Pattern
         c.saveState()
-        c.setStrokeColor(colors.HexColor("#333333"))
-        c.setLineWidth(0.1*mm)
-        for i in range(0, int(self.width), 4):
-            c.line(i*mm, 0, (i+2)*mm, self.height)
-            c.line(0, i*mm, self.width, (i+2)*mm)
+        c.setStrokeColor(colors.lightgrey)
+        c.setLineWidth(0.05*mm)
+        for i in range(0, int(self.width), 5):
+            c.line(i*mm, 0, (i+5)*mm, self.height)
         c.restoreState()
 
-        # 2. Left Sidebar (Photo Area) - 30mm width
-        # Gradient simulation (Darker sidebar)
+        # 2. Left Sidebar (Photo Area) - 28mm width
         c.setFillColor(self.dark_bg)
-        c.rect(0, 0, 32*mm, self.height, fill=1, stroke=0)
+        c.rect(0, 0, 28*mm, self.height, fill=1, stroke=0)
         
-        # Digital Accent Line (Vertical)
-        c.setStrokeColor(self.primary_red)
-        c.setLineWidth(0.8*mm)
-        c.line(32*mm, 0, 32*mm, self.height)
+        # Gold accent line
+        c.setFillColor(self.gold_accent)
+        c.rect(28*mm, 0, 1*mm, self.height, fill=1, stroke=0)
 
-        # Photo Container (Hexagonal or Circular with Tech Ring)
+        # Photo Container (Elegant Circle)
         c.saveState()
-        photo_cnt_x = 16*mm
+        photo_cnt_x = 14*mm
         photo_cnt_y = self.height/2 + 2*mm
-        radius = 11*mm
+        radius = 10*mm
         
-        # Tech Ring (Outer)
-        c.setStrokeColor(self.primary_red)
-        c.setLineWidth(0.3*mm)
-        c.circle(photo_cnt_x, photo_cnt_y, radius + 2*mm, fill=0, stroke=1)
-        
-        # Tech Ring (Inner dashed)
-        c.setStrokeColor(self.accent_cyan)
-        c.setLineWidth(0.2*mm)
-        c.setDash([1, 2], 0)
+        # Gold Border
+        c.setStrokeColor(self.gold_accent)
+        c.setLineWidth(0.5*mm)
         c.circle(photo_cnt_x, photo_cnt_y, radius + 1*mm, fill=0, stroke=1)
-        c.setDash([], 0) # Reset dash
-
+        
         # Photo Clipping
         path = c.beginPath()
         path.circle(photo_cnt_x, photo_cnt_y, radius)
@@ -118,92 +107,132 @@ class IDCardGenerator:
         c.restoreState()
 
         # 3. Top Header Bar (Full Width beyond sidebar)
-        # Fixes cut-off issue by extending to self.width
         header_height = 12*mm
         header_y = self.height - header_height
         
-        # Header Background
+        # Header Background (Red)
         c.setFillColor(self.primary_red)
-        # Using a polygon for a dynamic angle
         p = c.beginPath()
-        p.moveTo(32*mm, self.height)      # Top left after sidebar
-        p.lineTo(self.width, self.height) # Top right
-        p.lineTo(self.width, header_y)    # Bottom right of header
-        p.lineTo(32*mm, header_y)    # Bottom left of header
+        p.moveTo(29*mm, self.height)
+        p.lineTo(self.width, self.height)
+        p.lineTo(self.width, header_y)
+        p.lineTo(29*mm, header_y)
         p.close()
         c.drawPath(p, fill=1, stroke=0)
 
         # Hotel Name
         c.setFillColor(colors.white)
-        c.setFont("Helvetica-Bold", 11)
-        # Adjust text position to ensure it fits
-        c.drawString(36*mm, self.height - 7*mm, "FAMOUS GATE HOTEL")
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(32*mm, self.height - 7*mm, "FAMOUS GATE HOTEL")
         
         c.setFont("Helvetica", 6)
-        c.setFillColor(colors.HexColor("#FFEBEE")) # Light red/white
-        c.drawString(36*mm, self.height - 10*mm, "DIGITAL ACCESS PASS")
+        c.drawString(32*mm, self.height - 10*mm, "Quality Hospitality Services")
 
         # Logo Overlay
         if os.path.exists(self.logo_path):
             try:
                 logo = ImageReader(self.logo_path)
                 logo_size = 9*mm
-                c.drawImage(logo, self.width - 12*mm, self.height - 11*mm,
+                c.drawImage(logo, self.width - 11*mm, self.height - 10.5*mm,
                           width=logo_size, height=logo_size, mask='auto', preserveAspectRatio=True)
             except:
                 pass
 
-        # 4. Employee Info (Main Body)
-        info_x = 36*mm
+        # 4. Employee Info
+        info_x = 32*mm
         
-        # Name (Big and bold)
-        c.setFillColor(colors.white)
+        # Name
+        c.setFillColor(self.primary_red)
         name = data.get('name', 'NAME').upper()
-        font_size = 14
-        if len(name) > 18: font_size = 12
-        if len(name) > 25: font_size = 10
+        font_size = 13
+        if len(name) > 18: font_size = 11
+        if len(name) > 25: font_size = 9
         c.setFont("Helvetica-Bold", font_size)
-        c.drawString(info_x, self.height - 19*mm, name)
+        c.drawString(info_x, self.height - 18*mm, name)
         
-        # Role (highlighted)
+        # Role
         role = data.get('role', 'POSITION').upper()
-        c.setFillColor(self.accent_cyan)
+        c.setFillColor(self.text_dark)
         c.setFont("Helvetica-Bold", 8)
-        c.drawString(info_x, self.height - 23*mm, role)
+        c.drawString(info_x, self.height - 22*mm, role)
 
-        # 5. Data Grid (Details)
-        # Draw a small tech container for details
-        details_y_start = self.height - 28*mm
+        # Divider
+        c.setStrokeColor(colors.lightgrey)
+        c.setLineWidth(0.2*mm)
+        c.line(info_x, self.height - 24*mm, self.width - 5*mm, self.height - 24*mm)
+
+        # 5. Details
+        details_y = self.height - 28*mm
+        c.setFillColor(self.text_dark)
         
-        # Labels
-        c.setFillColor(self.text_gray)
-        c.setFont("Helvetica", 5)
-        c.drawString(info_x, details_y_start, "ID CARD NO")
-        c.drawString(info_x, details_y_start - 6*mm, "DATE JOINED")
-        c.drawString(info_x, details_y_start - 12*mm, "VALID UNTIL")
+        def draw_label_val(label, val, x, y):
+            c.setFont("Helvetica-Bold", 5)
+            c.drawString(x, y, label)
+            c.setFont("Helvetica", 5.5)
+            c.drawString(x + 14*mm, y, val)
 
-        # Values
-        c.setFillColor(colors.white)
-        c.setFont("Helvetica-Bold", 7)
-        c.drawString(info_x, details_y_start - 2.5*mm, str(data.get('id_no', 'N/A')))
-        c.drawString(info_x, details_y_start - 8.5*mm, str(data.get('join_date', 'N/A')))
-        c.drawString(info_x, details_y_start - 14.5*mm, "31/12/2026")
+        draw_label_val("ID NUMBER:", str(data.get('id_no', 'N/A')), info_x, details_y)
+        draw_label_val("JOINED:", str(data.get('join_date', 'N/A')), info_x, details_y - 4*mm)
+        draw_label_val("EXPIRES:", "31/12/2026", info_x, details_y - 8*mm)
 
-        # 6. QR Code (Right Side Bottom)
-        # Tech box for QR
-        qr_size = 18*mm
-        qr_x = self.width - qr_size - 4*mm
-        qr_y = 4*mm
-        
-        # QR Background glow
-        c.saveState()
-        c.setFillColor(colors.white) 
-        c.rect(qr_x - 1*mm, qr_y - 1*mm, qr_size + 2*mm, qr_size + 2*mm, fill=1, stroke=0)
-        c.restoreState()
-
-        qr_data = data.get('qr_data', f"VERIFY:{data.get('id_no', 'N/A')}")
+        # 6. Barcode (Bottom - For Check-in)
+        barcode_value = data.get('id_no', 'TEMP-001')
         try:
-            qr_code = qr.QrCodeWidget(qr_data)
+            # Draw barcode at bottom center of the white area
+            # Available width approx: 29mm to 88mm = 59mm
+            # Center of available area: 29 + 59/2 = 58.5mm
+            barcode = code128.Code128(barcode_value, barHeight=6*mm, barWidth=0.2*mm)
+            b_width = barcode.width
+            b_x = 29*mm + (59*mm - b_width)/2
+            barcode.drawOn(c, b_x, 3*mm)
+            
+            c.setFont("Helvetica", 4)
+            c.drawCentredString(29*mm + 59*mm/2, 1.5*mm, f"CHECK-IN: {barcode_value}")
+        except:
+            pass
+            
+        # QR Code removed from front to make space for clean look and barcode focus
+
+
+    def _draw_back(self, c, data):
+        # 1. Background (White Clean)
+        c.setFillColor(colors.white)
+        c.rect(0, 0, self.width, self.height, fill=1, stroke=0)
+        
+        # 2. Header
+        c.setFillColor(self.primary_red)
+        c.rect(0, self.height - 8*mm, self.width, 8*mm, fill=1, stroke=0)
+        c.setFillColor(colors.white)
+        c.setFont("Helvetica-Bold", 8)
+        c.drawCentredString(self.width/2, self.height - 5*mm, "TERMS AND CONDITIONS")
+        
+        # 3. Content
+        c.setFillColor(self.text_dark)
+        c.setFont("Helvetica", 6)
+        
+        # Terms Text
+        terms_y = self.height - 14*mm
+        c.drawString(5*mm, terms_y, "1. This card is the property of Famous Gate Hotel.")
+        c.drawString(5*mm, terms_y - 4*mm, "2. Must be visible at all times while on duty.")
+        c.drawString(5*mm, terms_y - 8*mm, "3. Report loss/theft immediately to HR/Security.")
+        
+        # Emergency Info (Bold)
+        c.setFont("Helvetica-Bold", 6)
+        c.setFillColor(self.primary_red)
+        c.drawString(5*mm, terms_y - 14*mm, "IF LOST, RETURN TO NEAREST POLICE STATION")
+        c.drawString(5*mm, terms_y - 18*mm, "OR CALL EMERGENCY: +254 700 000 000")
+
+        # 4. QR Code (Left Side Bottom)
+        # QR Data points to verification URL
+        id_no = data.get('id_no', 'N/A')
+        verify_url = f"https://famousgate.hirall.com/verify?id={id_no}"
+        
+        qr_size = 18*mm
+        qr_x = self.width - qr_size - 5*mm
+        qr_y = 5*mm
+        
+        try:
+            qr_code = qr.QrCodeWidget(verify_url)
             bounds = qr_code.getBounds()
             w = bounds[2] - bounds[0]
             h = bounds[3] - bounds[1]
@@ -212,95 +241,20 @@ class IDCardGenerator:
             renderPDF.draw(d, c, qr_x, qr_y)
         except:
             pass
-        
-        # footer text
-        c.setFillColor(self.text_gray)
-        c.setFont("Helvetica", 4)
+            
+        c.setFillColor(self.text_dark)
+        c.setFont("Helvetica-Bold", 4)
         c.drawCentredString(qr_x + qr_size/2, qr_y - 2*mm, "SCAN TO VERIFY")
 
-    def _draw_back(self, c, data):
-        # 1. Background (Digital Dark)
-        c.setFillColor(self.card_bg)
-        c.rect(0, 0, self.width, self.height, fill=1, stroke=0)
-        
-        # Grid lines
-        c.saveState()
-        c.setStrokeColor(colors.HexColor("#333333"))
-        c.setLineWidth(0.1*mm)
-        for i in range(0, int(self.width), 4):
-            c.line(i*mm, 0, (i+2)*mm, self.height)
-        c.restoreState()
-
-        # 2. Wavy Header (Inverted/Digital style)
-        c.setFillColor(self.primary_red)
-        p_header = c.beginPath()
-        p_header.moveTo(0, self.height)
-        p_header.lineTo(self.width, self.height)
-        p_header.lineTo(self.width, self.height - 8*mm)
-        # Tech cut
-        p_header.lineTo(self.width * 0.8, self.height - 4*mm)
-        p_header.lineTo(0, self.height - 4*mm)
-        p_header.close()
-        c.drawPath(p_header, fill=1, stroke=0)
-        
-        # 3. Terms & Conditions
-        c.setFillColor(self.text_dark)
-        c.setFont("Helvetica-Bold", 10)
-        c.drawCentredString(self.width/2, self.height - 15*mm, "TERMS & CONDITIONS")
-        
-        c.setFont("Helvetica", 6)
-        c.setFillColor(self.text_gray)
-        terms = [
-            "• This card remains the property of Famous Gate Hotel.",
-            "• Must be typically worn and visible while on duty.",
-            "• Report loss or theft immediately to Security/HR.",
-            "• Unauthorized use is a serious offense."
-        ]
-        y_pos = self.height - 22*mm
-        for term in terms:
-            c.drawString(10*mm, y_pos, term)
-            y_pos -= 5*mm
-
-        # 4. QR Code (Right side)
-        # Small verify QR
-        qr_size = 14*mm
-        qr_x = self.width - qr_size - 6*mm
-        qr_y = 10*mm
-        
-        # QR BG
-        c.setFillColor(colors.white)
-        c.rect(qr_x - 1*mm, qr_y - 1*mm, qr_size + 2*mm, qr_size + 2*mm, fill=1, stroke=0)
-        
-        qr_data = data.get('qr_data', f"VERIFY:{data.get('id_no', 'N/A')}")
-        qr_code = qr.QrCodeWidget(qr_data)
-        bounds = qr_code.getBounds()
-        w = bounds[2] - bounds[0]
-        h = bounds[3] - bounds[1]
-        
-        d = Drawing(qr_size, qr_size, transform=[qr_size/w, 0, 0, qr_size/h, 0, 0])
-        d.add(qr_code)
-        renderPDF.draw(d, c, qr_x, qr_y)
-        
-        c.setFillColor(self.accent_cyan)
-        c.setFont("Helvetica-Bold", 4)
-        c.drawCentredString(qr_x + qr_size/2, qr_y - 2.5*mm, "SECURITY CHECK")
-
-        # 5. Footer
+        # 5. Footer Line
         c.setFillColor(self.dark_bg)
-        c.rect(0, 0, self.width, 6*mm, fill=1, stroke=0)
-        
-        c.setFillColor(self.text_dark)
-        c.setFont("Helvetica-Bold", 7)
-        c.drawCentredString(self.width/2, 2*mm, "FAMOUS GATE HOTEL")
+        c.rect(0, 0, self.width, 2*mm, fill=1, stroke=0)
+
 
     def _draw_placeholder_photo(self, c, x, y, r):
-        c.setFillColor(self.card_bg)
+        c.setFillColor(colors.lightgrey)
         c.circle(x, y, r, fill=1, stroke=0)
-        c.setStrokeColor(self.text_gray)
-        c.setLineWidth(0.3*mm)
-        c.circle(x, y, r, fill=0, stroke=1)
-        
-        c.setFillColor(self.text_dark)
+        c.setFillColor(colors.white)
         c.setFont("Helvetica-Bold", 15)
         c.drawCentredString(x, y - 5*mm, "?")
 
