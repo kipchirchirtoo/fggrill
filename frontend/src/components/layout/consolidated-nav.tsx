@@ -30,14 +30,14 @@ function NavItem({ href, icon: Icon, label, active, onClick }: NavItemProps) {
       href={href}
       onClick={onClick}
       className={cn(
-        "flex items-center gap-3 py-2 px-3 rounded-lg text-[13px] font-medium transition-colors",
+        "flex items-center gap-3 py-2 px-3 rounded-lg text-[13px] font-medium transition-colors min-w-0",
         active
           ? "bg-amber-50 text-amber-700"
           : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
       )}
     >
       <Icon className="h-4 w-4 flex-shrink-0" />
-      <span>{label}</span>
+      <span className="truncate">{label}</span>
     </Link>
   );
 }
@@ -56,11 +56,11 @@ function NavGroup({ label, icon: Icon, children, defaultOpen = false }: NavGroup
     <div className="space-y-0.5">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between py-2 px-3 text-[13px] font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900 rounded-lg transition-colors"
+        className="flex w-full items-center justify-between py-2 px-3 text-[13px] font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900 rounded-lg transition-colors min-w-0"
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0 pr-2">
           <Icon className="h-4 w-4 flex-shrink-0" />
-          <span>{label}</span>
+          <span className="truncate">{label}</span>
         </div>
         <ChevronDown className={`h-3.5 w-3.5 text-stone-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </button>

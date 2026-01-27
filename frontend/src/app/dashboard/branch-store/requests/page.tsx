@@ -127,14 +127,23 @@ export default function BranchRequestsPage() {
                             <div><label className="text-sm font-medium">Add Item</label>
                                 <select onChange={(e) => addItem(e.target.value)} className="w-full p-2 border rounded-ios-lg mt-1" value="">
                                     <option value="">Select item...</option>
-                                    {items.map((item) => <option key={item.sku} value={item.sku}>{item.name}</option>)}
+                                    {items.map((item) => (
+                                        <option key={item.item_sku || item.sku} value={item.item_sku || item.sku}>
+                                            {item.item?.item_name || item.item_name || item.item_sku || item.sku}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
 
                             <div className="space-y-2">
                                 {requestItems.map((item, idx) => (
                                     <div key={item.item_sku} className="flex items-center justify-between p-2 bg-stone-50 rounded-lg">
-                                        <span className="text-sm font-medium truncate flex-1">{items.find(i => i.sku === item.item_sku)?.name || item.item_sku}</span>
+                                        <span className="text-sm font-medium truncate flex-1">
+                                            {(() => {
+                                                const found = items.find(i => (i.item_sku || i.sku) === item.item_sku);
+                                                return found?.item?.item_name || found?.item_name || item.item_sku;
+                                            })()}
+                                        </span>
                                         <Input type="number" className="w-20 ml-2" value={item.requested_quantity} onChange={(e) => {
                                             const newItems = [...requestItems];
                                             newItems[idx].requested_quantity = parseInt(e.target.value) || 0;

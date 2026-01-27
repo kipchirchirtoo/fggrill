@@ -394,7 +394,7 @@ def get_report_data():
         logger.info(f"Fetching raw data for report type: {report_type}, filters: {filters}")
         
         # Fetch data using DatabaseFetcher
-        data = db_fetcher.fetch_report_data(report_type, filters)
+        data = database_fetcher.fetch_report_data(report_type, filters)
         
         return jsonify({
             'success': True,

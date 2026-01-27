@@ -88,7 +88,7 @@ export function DashboardLayout(props: DashboardLayoutProps) {
               >
                 <div className="flex w-[260px] flex-col">
                   <div className="flex min-h-0 flex-1 flex-col bg-white border-r border-stone-200/60">
-                    <div className="flex flex-1 flex-col overflow-y-auto scrollbar-thin">
+                    <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden scrollbar-thin">
                       {/* Logo */}
                       <div className="flex items-center gap-3 px-5 py-5 border-b border-stone-100">
                         <div className="w-9 h-9 rounded-lg bg-stone-900 flex items-center justify-center overflow-hidden">
@@ -108,7 +108,7 @@ export function DashboardLayout(props: DashboardLayoutProps) {
                       </div>
 
                       {/* Navigation */}
-                      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+                      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto overflow-x-hidden">
                         <ConsolidatedNav />
                       </nav>
                     </div>
@@ -187,7 +187,7 @@ export function DashboardLayout(props: DashboardLayoutProps) {
                       </button>
                     </div>
 
-                    <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto scrollbar-thin">
+                    <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto overflow-x-hidden scrollbar-thin">
                       <ConsolidatedNav />
                     </nav>
                   </div>

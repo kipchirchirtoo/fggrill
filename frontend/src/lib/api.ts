@@ -283,7 +283,7 @@ export const storeAPI = {
     return fetchAPI<any>(`/store/stock-requests${qs ? `?${qs}` : ''}`);
   },
   getPendingRequests: () => fetchAPI<any>('/store/stock-requests/pending'),
-  reviewStockRequest: (id: string, data: { action: 'APPROVE' | 'REJECT'; notes?: string }) =>
+  reviewStockRequest: (id: string, data: { action: 'APPROVE' | 'REJECT'; review_notes?: string; approved_items: any[] }) =>
     fetchAPI<any>(`/store/stock-requests/${id}/review`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // Dispatch

@@ -591,7 +591,7 @@ export default function CentralWarehousePage() {
     try {
       const response = await storeAPI.reviewStockRequest(selectedRequest.id, {
         action: 'APPROVE',
-        notes: '',
+        review_notes: '',
         approved_items: reviewItems.map(item => ({
           id: item.id,
           approved_quantity: item.approved_quantity,

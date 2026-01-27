@@ -260,7 +260,7 @@ export async function createStockRequest(
 export async function getBranchRequests(branchId: number | null, status?: string) {
   let query = supabase
     .from('stock_requests')
-    .select('*')
+    .select('*, requesting_branch:branches!requesting_branch_id(name)')
     .order('created_at', { ascending: false });
 
   if (branchId) {
@@ -300,27 +300,21 @@ export async function getBranchRequests(branchId: number | null, status?: string
     reviewers = r || [];
   }
 
-  // Get branch details if fetching for all branches
-  let branches: any[] = [];
-  if (!branchId) {
-    const branchIds = [...new Set(requests.map(r => r.requesting_branch_id))];
-    const { data: b } = await supabase
-      .from('branches')
-      .select('id, name, code')
-      .in('id', branchIds);
-    branches = b || [];
-  }
-
-  return requests.map(req => ({
-    ...req,
-    branch_name: branchId ? undefined : branches.find(b => b.id === req.requesting_branch_id)?.name,
-    items: (items || [])
-      .filter(i => i.request_id === req.id)
-      .map(i => ({
+  // Map items and reviewers back to requests
+  return requests.map(request => ({
+    ...request,
+    branch: request.requesting_branch || { name: 'Unknown' },
+    branch_name: request.requesting_branch?.name || 'Unknown',
+    items: (items || []).filter(i => i.request_id === request.id).map(i => {
+      const details = itemDetails?.find(id => id.sku === i.item_sku);
+      return {
         ...i,
-        item: itemDetails?.find(d => d.sku === i.item_sku)
-      })),
-    reviewer: reviewers.find(r => r.id === req.reviewed_by)
+        item: details,
+        item_name: details?.item_name || i.item_sku,
+        unit: details?.unit_of_measure || ''
+      };
+    }),
+    reviewed_by_user: reviewers.find(r => r.id === request.reviewed_by)
   }));
 }
 
@@ -339,7 +333,7 @@ export async function getPendingRequests() {
   if (!requests || requests.length === 0) return [];
 
   // Get branches for these requests
-  const branchIds = [...new Set(requests.map(r => r.branch_id))];
+  const branchIds = [...new Set(requests.map(r => r.requesting_branch_id))];
   const { data: branches } = await supabase
     .from('branches')
     .select('id, name, code, location')
@@ -362,13 +356,19 @@ export async function getPendingRequests() {
   // Combine data
   return requests.map(request => ({
     ...request,
-    branch: branches?.find(b => b.id === request.branch_id) || { id: request.branch_id, name: 'Unknown', code: 'UNK', location: '' },
+    branch: branches?.find(b => b.id === request.requesting_branch_id) || { id: request.requesting_branch_id, name: 'Unknown', code: 'UNK', location: '' },
+    branch_name: branches?.find(b => b.id === request.requesting_branch_id)?.name || 'Unknown',
     items: (items || [])
       .filter(i => i.request_id === request.id)
-      .map(item => ({
-        ...item,
-        item: itemDetails?.find(d => d.sku === item.item_sku)
-      }))
+      .map(item => {
+        const details = itemDetails?.find(d => d.sku === item.item_sku);
+        return {
+          ...item,
+          item: details,
+          item_name: details?.item_name || item.item_sku,
+          unit: details?.unit_of_measure || ''
+        };
+      })
   }));
 }
 
