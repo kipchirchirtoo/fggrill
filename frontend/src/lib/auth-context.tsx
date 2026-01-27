@@ -57,6 +57,8 @@ export interface User {
   employeeId?: string;
   startDate?: string;
   profilePhoto?: string;
+  idNumber?: string;
+  phoneNumber?: string;
 }
 
 // Auth context interface
@@ -129,7 +131,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               permissions: apiUser.permissions,
               employeeId: apiUser.employee_id,
               startDate: apiUser.start_date,
-              profilePhoto: apiUser.profile_photo
+              profilePhoto: apiUser.profile_photo,
+              idNumber: apiUser.id_number,
+              phoneNumber: apiUser.phone_number
             };
             setUser(userData);
             // Update cached user with fresh data
@@ -186,7 +190,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           department: apiUser.department || 'Staff',
           employeeId: apiUser.employee_id,
           startDate: apiUser.start_date,
-          profilePhoto: apiUser.profile_photo
+          profilePhoto: apiUser.profile_photo,
+          idNumber: apiUser.id_number,
+          phoneNumber: apiUser.phone_number
         };
 
         // Store user and token

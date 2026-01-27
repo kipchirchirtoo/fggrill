@@ -77,9 +77,10 @@ export function IDCardWidget({ user }: IDCardWidgetProps) {
             await checkAuth();
 
             toast.success('Profile photo updated', { id: toastId });
-        } catch (error) {
+        } catch (error: any) {
             console.error('Upload error:', error);
-            toast.error('Failed to upload photo', { id: toastId });
+            const errorMessage = error?.message || error?.error?.message || 'Failed to upload photo';
+            toast.error(errorMessage, { id: toastId });
         } finally {
             setIsUploading(false);
         }
@@ -94,7 +95,7 @@ export function IDCardWidget({ user }: IDCardWidgetProps) {
             const data = {
                 name: `${user.firstName} ${user.lastName}`,
                 role: user.role?.replace('_', ' ').toUpperCase() || 'EMPLOYEE',
-                id_no: user.employeeId || user.id.substring(0, 8).toUpperCase(),
+                id_no: user.idNumber || 'N/A',
                 email: user.email,
                 phone: user.phoneNumber || 'N/A',
                 join_date: user.startDate ? new Date(user.startDate).toLocaleDateString() : 'N/A',
@@ -119,7 +120,7 @@ export function IDCardWidget({ user }: IDCardWidgetProps) {
             const data = {
                 name: `${user.firstName} ${user.lastName}`,
                 role: user.role?.replace('_', ' ').toUpperCase() || 'EMPLOYEE',
-                id_no: user.employeeId || user.id.substring(0, 8).toUpperCase(),
+                id_no: user.idNumber || 'N/A',
                 email: user.email,
                 phone: user.phoneNumber || 'N/A',
                 join_date: user.startDate ? new Date(user.startDate).toLocaleDateString() : 'N/A',

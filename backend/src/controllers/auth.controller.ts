@@ -364,10 +364,13 @@ export const getMe = async (
       return;
     }
 
-    // Get full user profile from database
+    // Get full user profile from database with staff profile data
     const { data: profile, error: profileError } = await supabase
       .from('users')
-      .select('*')
+      .select(`
+        *,
+        staff_profile:staff_profiles(id_number)
+      `)
       .eq('id', req.user.id)
       .single();
 
@@ -379,9 +382,16 @@ export const getMe = async (
       return;
     }
 
+    // Flatten staff_profile data
+    const responseData = {
+      ...profile,
+      id_number: profile.staff_profile?.[0]?.id_number || profile.staff_profile?.id_number || null,
+      staff_profile: undefined // Remove nested object
+    };
+
     res.status(200).json({
       success: true,
-      data: profile
+      data: responseData
     });
   } catch (error) {
     next(error);
