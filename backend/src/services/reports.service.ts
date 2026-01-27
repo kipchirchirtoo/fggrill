@@ -29,7 +29,7 @@ class ReportsService {
 
   constructor() {
     this.db = pool;
-    this.pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+    this.pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
 
     // Define scheduled reports
     this.scheduledReports = [

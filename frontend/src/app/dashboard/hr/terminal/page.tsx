@@ -102,13 +102,13 @@ export default function ClockInTerminal() {
                         <div className="space-y-6 animate-in slide-in-from-bottom-4">
                             <div className="space-y-2">
                                 <h2 className="text-xl font-bold text-white">Identify Yourself</h2>
-                                <p className="text-stone-400 text-sm">Please enter your Staff ID or Scan Card</p>
+                                <p className="text-stone-400 text-sm">Please enter your National ID, Staff ID or Scan Card</p>
                             </div>
 
                             <div className="space-y-4">
                                 <Input
                                     className="h-14 bg-white/5 border-white/10 text-white text-xl font-bold text-center tracking-widest focus:ring-blue-500/50"
-                                    placeholder="STAFF-ID"
+                                    placeholder="ID NUMBER"
                                     value={staffId}
                                     onChange={e => setStaffId(e.target.value)}
                                     autoFocus
@@ -116,7 +116,7 @@ export default function ClockInTerminal() {
                                 <IOSButton
                                     className="w-full h-14 text-lg font-bold bg-blue-600 hover:bg-blue-500"
                                     onClick={handleIdentify}
-                                    isLoading={isLoading}
+                                    loading={isLoading}
                                     rightIcon={<ArrowRight />}
                                 >
                                     Proceed

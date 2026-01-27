@@ -28,11 +28,11 @@ export const protect = async (
     let token;
 
     // Get token from Authorization header
-    if (
-      req.headers.authorization &&
-      req.headers.authorization.startsWith('Bearer')
-    ) {
-      token = req.headers.authorization.split(' ')[1];
+    if (req.headers.authorization) {
+      const authHeader = req.headers.authorization;
+      if (authHeader.toLowerCase().startsWith('bearer ')) {
+        token = authHeader.split(' ')[1];
+      }
     }
 
     // Token is mandatory - no dev fallbacks

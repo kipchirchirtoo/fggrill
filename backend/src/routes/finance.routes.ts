@@ -145,7 +145,7 @@ router.get('/balance-sheet',
     try {
       // Proxy to Python service or implement locally
       const axios = require('axios');
-      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
       const response = await axios.get(`${pythonUrl}/api/finance/balance-sheet`, { params: req.query });
       res.json(response.data);
     } catch (error: any) {
@@ -161,7 +161,7 @@ router.get('/trial-balance',
   async (req, res) => {
     try {
       const axios = require('axios');
-      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
       const response = await axios.get(`${pythonUrl}/api/finance/trial-balance`, { params: req.query });
       res.json(response.data);
     } catch (error: any) {
@@ -177,7 +177,7 @@ router.get('/journal-entries',
   async (req, res) => {
     try {
       const axios = require('axios');
-      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
       const response = await axios.get(`${pythonUrl}/api/finance/journal-entries`, { params: req.query });
       res.json(response.data);
     } catch (error: any) {
@@ -192,7 +192,7 @@ router.post('/journal-entries',
   async (req, res) => {
     try {
       const axios = require('axios');
-      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
       const response = await axios.post(`${pythonUrl}/api/finance/journal-entries`, req.body);
       res.json(response.data);
     } catch (error: any) {
@@ -208,7 +208,7 @@ router.get('/financial-ratios',
   async (req, res) => {
     try {
       const axios = require('axios');
-      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
       const response = await axios.get(`${pythonUrl}/api/finance/financial-ratios`, { params: req.query });
       res.json(response.data);
     } catch (error: any) {
@@ -224,7 +224,7 @@ router.get('/aging-report',
   async (req, res) => {
     try {
       const axios = require('axios');
-      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
       const response = await axios.get(`${pythonUrl}/api/finance/aging-report`, { params: req.query });
       res.json(response.data);
     } catch (error: any) {
@@ -240,7 +240,7 @@ router.get('/expense-breakdown',
   async (req, res) => {
     try {
       const axios = require('axios');
-      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
       const response = await axios.get(`${pythonUrl}/api/finance/expense-breakdown`, { params: req.query });
       res.json(response.data);
     } catch (error: any) {
@@ -256,7 +256,7 @@ router.get('/revenue-analysis',
   async (req, res) => {
     try {
       const axios = require('axios');
-      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
       const response = await axios.get(`${pythonUrl}/api/finance/revenue-analysis`, { params: req.query });
       res.json(response.data);
     } catch (error: any) {
@@ -272,7 +272,7 @@ router.get('/comparative-analysis',
   async (req, res) => {
     try {
       const axios = require('axios');
-      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
       const response = await axios.get(`${pythonUrl}/api/finance/comparative-analysis`, { params: req.query });
       res.json(response.data);
     } catch (error: any) {
@@ -288,7 +288,7 @@ router.post('/reports/generate',
   async (req, res) => {
     try {
       const axios = require('axios');
-      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+      const pythonUrl = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
       const response = await axios.post(`${pythonUrl}/api/finance/reports/generate`, req.body);
       res.json(response.data);
     } catch (error: any) {

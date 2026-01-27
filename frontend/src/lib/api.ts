@@ -3241,6 +3241,34 @@ export const cashierAPI = {
   getStats: (branch_id?: number) => fetchAPI<any>(`/cashier/stats${branch_id ? `?branch_id=${branch_id}` : ''}`),
 };
 
+// =====================================================
+// EMPLOYEE PORTAL API
+// =====================================================
+
+export const employeePortalAPI = {
+  getDashboard: () => fetchAPI<any>('/employee-portal/dashboard'),
+  getProfile: () => fetchAPI<any>('/employee-portal/profile'),
+  updateProfile: (data: any) => fetchAPI<any>('/employee-portal/profile', { method: 'PUT', body: JSON.stringify(data) }),
+  getSchedules: (params: { start_date?: string; end_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params.start_date) query.append('start_date', params.start_date);
+    if (params.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/employee-portal/schedules?${query}`);
+  },
+  clock: (action: 'clock_in' | 'clock_out', notes?: string) =>
+    fetchAPI<any>('/employee-portal/clock', { method: 'POST', body: JSON.stringify({ action, notes }) }),
+  getLeaveRequests: () => fetchAPI<any>('/employee-portal/leave'),
+  requestLeave: (data: any) => fetchAPI<any>('/employee-portal/leave', { method: 'POST', body: JSON.stringify(data) }),
+  cancelLeave: (id: string) => fetchAPI<any>(`/employee-portal/leave/${id}`, { method: 'DELETE' }),
+  getTasks: (status?: string) => fetchAPI<any>(`/employee-portal/tasks${status ? `?status=${status}` : ''}`),
+  updateTask: (id: string, data: any) => fetchAPI<any>(`/employee-portal/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getPayslips: () => fetchAPI<any>('/employee-portal/payslips'),
+  getDocuments: (type?: string) => fetchAPI<any>(`/employee-portal/documents${type ? `?type=${type}` : ''}`),
+  getAnnouncements: () => fetchAPI<any>('/employee-portal/announcements'),
+  getTraining: () => fetchAPI<any>('/employee-portal/training'),
+  getPerformance: () => fetchAPI<any>('/employee-portal/performance'),
+};
+
 
 
 // =====================================================
@@ -3257,6 +3285,7 @@ export const api = {
   bar: barAPI,
   barInventory: barInventoryAPI,
   barStockRequests: barStockRequestsAPI,
+  restaurant: restaurantAPI,
   store: storeAPI,
   kitchen: kitchenAPI,
   finance: financeAPI,
@@ -3272,6 +3301,7 @@ export const api = {
   payroll: payrollAPI,
   notifications: notificationsAPI,
   cashier: cashierAPI,
+  employeePortal: employeePortalAPI,
   idCards: idCardsAPI,
 };
 

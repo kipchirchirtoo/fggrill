@@ -20,7 +20,7 @@ class BarcodeGeneratorService {
   private pythonServiceUrl: string;
 
   constructor() {
-    this.pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+    this.pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
   }
 
   /**
@@ -117,7 +117,7 @@ class BarcodeGeneratorService {
       format,
       include_text: includeText.toString()
     });
-    
+
     return `${this.pythonServiceUrl}/api/barcode/barcode-image/${bookingId}?${params.toString()}`;
   }
 

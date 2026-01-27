@@ -8,7 +8,7 @@ import { InventoryItem } from '../models/Inventory';
 import { logger } from '../utils/logger';
 import axios from 'axios';
 
-const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
 
 // @desc    Get occupancy report
 // @route   GET /api/reports/occupancy

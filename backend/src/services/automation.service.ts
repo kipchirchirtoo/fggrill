@@ -165,7 +165,7 @@ class AutomationService {
 
       for (const reportType of reportTypes) {
         try {
-          await axios.post(`${process.env.PYTHON_SERVICE_URL || 'http://localhost:5001'}/api/reports/generate/pdf`, {
+          await axios.post(`${process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com'}/api/reports/generate/pdf`, {
             reportType,
             filters: {
               startDate: today,
@@ -374,7 +374,7 @@ class AutomationService {
       const startDate = new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000);
 
       // Call Python service to generate report
-      await axios.post(`${process.env.PYTHON_SERVICE_URL || 'http://localhost:5001'}/api/reports/generate/pdf`, {
+      await axios.post(`${process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com'}/api/reports/generate/pdf`, {
         reportType: 'revenue_analysis',
         filters: {
           startDate: startDate.toISOString().split('T')[0],

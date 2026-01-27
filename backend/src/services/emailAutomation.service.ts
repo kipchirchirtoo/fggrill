@@ -20,7 +20,7 @@ class EmailAutomationService {
   private pythonServiceUrl: string;
 
   constructor() {
-    this.pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+    this.pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
   }
 
   /**
@@ -59,7 +59,7 @@ class EmailAutomationService {
 
     } catch (error) {
       logger.error('Error scheduling booking emails:', error);
-      
+
       // Fallback: Send immediate confirmation email
       try {
         await this.sendImmediateConfirmation(bookingData);
@@ -67,7 +67,7 @@ class EmailAutomationService {
       } catch (fallbackError) {
         logger.error('Fallback email also failed:', fallbackError);
       }
-      
+
       return false;
     }
   }
@@ -110,8 +110,8 @@ class EmailAutomationService {
    * Send specific email type immediately
    */
   async sendImmediateEmail(
-    emailType: string, 
-    recipientEmail: string, 
+    emailType: string,
+    recipientEmail: string,
     bookingData: any
   ): Promise<boolean> {
     try {
@@ -149,7 +149,7 @@ class EmailAutomationService {
   async getEmailStatus(bookingId: string): Promise<any[]> {
     try {
       const response = await fetch(`${this.pythonServiceUrl}/email-status/${bookingId}`);
-      
+
       if (!response.ok) {
         throw new Error(`Python service error: ${response.statusText}`);
       }

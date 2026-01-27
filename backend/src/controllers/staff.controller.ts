@@ -156,7 +156,7 @@ export const getStaffMember = async (
     if (isUUID) {
       query = query.eq('id', id);
     } else {
-      query = query.or(`id_number.eq.${id},rfid_tag.eq.${id}`);
+      query = query.or(`id_number.eq.${id},rfid_tag.eq.${id},national_id.eq.${id}`);
     }
 
     const { data: staff, error } = await query.maybeSingle();
@@ -202,7 +202,8 @@ export const createStaffMember = async (
       salary,
       startDate,
       idNumber,
-      employeeId, // Added to handle frontend field name
+      employeeId,
+      nationalId,
       emergencyContact,
       address,
       branchId
@@ -451,7 +452,8 @@ export const createStaffMember = async (
       shift: shift || 'morning',
       salary: salary ? parseFloat(salary) : 0,
       start_date: startDate || new Date().toISOString().split('T')[0], // Changed from hire_date to start_date
-      id_number: actualIdNumber, // Changed from phone to actualIdNumber
+      id_number: actualIdNumber,
+      national_id: nationalId || 'pending',
       status: 'active',
       updated_at: new Date().toISOString()
     };
@@ -522,6 +524,7 @@ export const updateStaffMember = async (
       shift,
       salary,
       startDate,
+      nationalId,
       status
     } = req.body;
 
@@ -579,7 +582,8 @@ export const updateStaffMember = async (
       updated_at: new Date().toISOString()
     };
 
-    if (startDate) staffUpdateData.start_date = startDate; // Changed from hire_date
+    if (startDate) staffUpdateData.start_date = startDate;
+    if (nationalId) staffUpdateData.national_id = nationalId;
     if (phone) staffUpdateData.phone = phone;
     if (department) staffUpdateData.department = department;
     if (role) {

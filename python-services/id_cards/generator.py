@@ -192,9 +192,10 @@ class IDCardGenerator:
             c.setFont("Helvetica", 5.5)
             c.drawString(x + 14*mm, y, val)
 
-        draw_label_val("ID NUMBER:", str(data.get('id_no', 'N/A')), info_x, details_y)
-        draw_label_val("JOINED:", str(data.get('join_date', 'N/A')), info_x, details_y - 4*mm)
-        draw_label_val("EXPIRES:", "31/12/2026", info_x, details_y - 8*mm)
+        draw_label_val("STAFF ID:", str(data.get('id_no', 'N/A')), info_x, details_y)
+        draw_label_val("NATIONAL ID:", str(data.get('national_id', 'N/A')), info_x, details_y - 4*mm)
+        draw_label_val("JOINED:", str(data.get('join_date', 'N/A')), info_x, details_y - 8*mm)
+        draw_label_val("EXPIRES:", "31/12/2026", info_x, details_y - 12*mm)
 
         # 6. Barcode (Bottom - For Check-in)
         barcode_value = data.get('id_no', 'TEMP-001')

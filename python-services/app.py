@@ -1353,7 +1353,7 @@ def export_analytics():
 
 
 if __name__ == '__main__':
-    port = int(os.getenv('PYTHON_SERVICE_PORT', 5001))
+    port = int(os.getenv('PYTHON_SERVICE_PORT', 8002))
     
     # Start scheduler daemon in background
     if os.getenv('ENABLE_SCHEDULER', 'true').lower() == 'true':

@@ -15,6 +15,8 @@ app.add_middleware(
         "http://localhost:3000",
         "http://localhost:3001",
         "https://famousgate.hirall.com",
+        "https://services.hirall.com",
+        "https://api.hirall.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],

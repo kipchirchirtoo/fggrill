@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth-context';
+import { api } from '@/lib/api';
 import { IDCardWidget } from '@/components/employee/portal/IDCardWidget';
 
 interface DashboardData {
@@ -53,8 +54,6 @@ export default function EmployeePortal() {
   const [clockingIn, setClockingIn] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
@@ -62,20 +61,16 @@ export default function EmployeePortal() {
 
   const fetchDashboard = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/employee-portal/dashboard`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const result = await response.json();
-      if (result.success) {
-        setData(result.data);
+      const response = await api.employeePortal.getDashboard();
+      if (response.success) {
+        setData(response.data);
       }
     } catch (error) {
       console.error('Error fetching dashboard:', error);
     } finally {
       setLoading(false);
     }
-  }, [API_URL]);
+  }, []);
 
   useEffect(() => {
     fetchDashboard();
@@ -84,16 +79,7 @@ export default function EmployeePortal() {
   const handleClock = async (action: 'clock_in' | 'clock_out') => {
     setClockingIn(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/employee-portal/clock`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ action })
-      });
-      const result = await response.json();
+      const result = await api.employeePortal.clock(action);
       if (result.success) {
         toast.success(result.message);
         fetchDashboard();
@@ -415,11 +401,11 @@ export default function EmployeePortal() {
           </div>
         )}
 
-        {activeTab === 'schedule' && <ScheduleTab API_URL={API_URL} />}
-        {activeTab === 'tasks' && <TasksTab API_URL={API_URL} onRefresh={fetchDashboard} />}
-        {activeTab === 'leave' && <LeaveTab API_URL={API_URL} leaveBalance={data?.leaveBalance} />}
-        {activeTab === 'payslips' && <PayslipsTab API_URL={API_URL} />}
-        {activeTab === 'training' && <TrainingTab API_URL={API_URL} />}
+        {activeTab === 'schedule' && <ScheduleTab />}
+        {activeTab === 'tasks' && <TasksTab onRefresh={fetchDashboard} />}
+        {activeTab === 'leave' && <LeaveTab leaveBalance={data?.leaveBalance} />}
+        {activeTab === 'payslips' && <PayslipsTab />}
+        {activeTab === 'training' && <TrainingTab />}
         {
           activeTab === 'id_card' && (
             <div className="max-w-2xl mx-auto">
@@ -431,14 +417,14 @@ export default function EmployeePortal() {
             </div>
           )
         }
-        {activeTab === 'profile' && <ProfileTab API_URL={API_URL} user={user} profile={data?.profile} />}
+        {activeTab === 'profile' && <ProfileTab user={user} profile={data?.profile} />}
       </main>
     </div>
   );
 }
 
 // Schedule Tab Component
-function ScheduleTab({ API_URL }: { API_URL: string }) {
+function ScheduleTab() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
@@ -446,17 +432,12 @@ function ScheduleTab({ API_URL }: { API_URL: string }) {
   useEffect(() => {
     const fetchSchedules = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const startDate = new Date().toISOString().split('T')[0];
-        const endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-        const response = await fetch(
-          `${API_URL}/api/employee-portal/schedules?start_date=${startDate}&end_date=${endDate}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        const result = await response.json();
-        if (result.success) {
-          setSchedules(result.data || []);
+        const response = await api.employeePortal.getSchedules({
+          start_date: new Date().toISOString().split('T')[0],
+          end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        });
+        if (response.success) {
+          setSchedules(response.data || []);
         }
       } catch (error) {
         console.error('Error fetching schedules:', error);
@@ -465,7 +446,7 @@ function ScheduleTab({ API_URL }: { API_URL: string }) {
       }
     };
     fetchSchedules();
-  }, [API_URL]);
+  }, []);
 
   if (loading) {
     return (
@@ -537,7 +518,7 @@ function ScheduleTab({ API_URL }: { API_URL: string }) {
 }
 
 // Tasks Tab Component
-function TasksTab({ API_URL, onRefresh }: { API_URL: string; onRefresh: () => void }) {
+function TasksTab({ onRefresh }: { onRefresh: () => void }) {
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
@@ -545,20 +526,16 @@ function TasksTab({ API_URL, onRefresh }: { API_URL: string; onRefresh: () => vo
 
   const fetchTasks = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/employee-portal/tasks`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const result = await response.json();
-      if (result.success) {
-        setTasks(result.data || []);
+      const response = await api.employeePortal.getTasks();
+      if (response.success) {
+        setTasks(response.data || []);
       }
     } catch (error) {
       console.error('Error fetching tasks:', error);
     } finally {
       setLoading(false);
     }
-  }, [API_URL]);
+  }, []);
 
   useEffect(() => {
     fetchTasks();
@@ -567,17 +544,8 @@ function TasksTab({ API_URL, onRefresh }: { API_URL: string; onRefresh: () => vo
   const updateTaskStatus = async (taskId: string, status: string) => {
     setUpdating(taskId);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/employee-portal/tasks/${taskId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ status })
-      });
-      const result = await response.json();
-      if (result.success) {
+      const response = await api.employeePortal.updateTask(taskId, { status });
+      if (response.success) {
         toast.success('Task updated');
         fetchTasks();
         onRefresh();
@@ -704,7 +672,7 @@ function TasksTab({ API_URL, onRefresh }: { API_URL: string; onRefresh: () => vo
 }
 
 // Leave Tab Component
-function LeaveTab({ API_URL, leaveBalance }: { API_URL: string; leaveBalance: any }) {
+function LeaveTab({ leaveBalance }: { leaveBalance: any }) {
   const [leaves, setLeaves] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -719,13 +687,9 @@ function LeaveTab({ API_URL, leaveBalance }: { API_URL: string; leaveBalance: an
   useEffect(() => {
     const fetchLeaves = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/api/employee-portal/leave`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const result = await response.json();
-        if (result.success) {
-          setLeaves(result.data || []);
+        const response = await api.employeePortal.getLeaveRequests();
+        if (response.success) {
+          setLeaves(response.data || []);
         }
       } catch (error) {
         console.error('Error fetching leaves:', error);
@@ -734,29 +698,20 @@ function LeaveTab({ API_URL, leaveBalance }: { API_URL: string; leaveBalance: an
       }
     };
     fetchLeaves();
-  }, [API_URL]);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/employee-portal/leave`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(formData)
-      });
-      const result = await response.json();
-      if (result.success) {
+      const response = await api.employeePortal.requestLeave(formData);
+      if (response.success) {
         toast.success('Leave request submitted');
         setShowForm(false);
-        setLeaves([result.data, ...leaves]);
+        setLeaves([response.data, ...leaves]);
         setFormData({ leave_type: 'annual', start_date: '', end_date: '', reason: '' });
       } else {
-        toast.error(result.message);
+        toast.error(response.message);
       }
     } catch (error) {
       toast.error('Failed to submit leave request');
@@ -927,7 +882,7 @@ function LeaveTab({ API_URL, leaveBalance }: { API_URL: string; leaveBalance: an
 }
 
 // Payslips Tab Component
-function PayslipsTab({ API_URL }: { API_URL: string }) {
+function PayslipsTab() {
   const [payslips, setPayslips] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPayslip, setSelectedPayslip] = useState<any>(null);
@@ -935,13 +890,9 @@ function PayslipsTab({ API_URL }: { API_URL: string }) {
   useEffect(() => {
     const fetchPayslips = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/api/employee-portal/payslips`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const result = await response.json();
-        if (result.success) {
-          setPayslips(result.data || []);
+        const response = await api.employeePortal.getPayslips();
+        if (response.success) {
+          setPayslips(response.data || []);
         }
       } catch (error) {
         console.error('Error fetching payslips:', error);
@@ -950,7 +901,7 @@ function PayslipsTab({ API_URL }: { API_URL: string }) {
       }
     };
     fetchPayslips();
-  }, [API_URL]);
+  }, []);
 
   const getMonthName = (month: number) => {
     return new Date(2000, month - 1).toLocaleString('default', { month: 'long' });
@@ -1050,7 +1001,7 @@ function PayslipsTab({ API_URL }: { API_URL: string }) {
 }
 
 // Training Tab Component
-function TrainingTab({ API_URL }: { API_URL: string }) {
+function TrainingTab() {
   const [training, setTraining] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'in_progress' | 'completed'>('all');
@@ -1058,13 +1009,9 @@ function TrainingTab({ API_URL }: { API_URL: string }) {
   useEffect(() => {
     const fetchTraining = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/api/employee-portal/training`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const result = await response.json();
-        if (result.success) {
-          setTraining(result.data || []);
+        const response = await api.employeePortal.getTraining();
+        if (response.success) {
+          setTraining(response.data || []);
         }
       } catch (error) {
         console.error('Error fetching training:', error);
@@ -1073,7 +1020,7 @@ function TrainingTab({ API_URL }: { API_URL: string }) {
       }
     };
     fetchTraining();
-  }, [API_URL]);
+  }, []);
 
   const filteredTraining = filter === 'all' ? training : training.filter(t => t.status === filter);
   const completedCount = training.filter(t => t.status === 'completed').length;
@@ -1176,7 +1123,7 @@ function TrainingTab({ API_URL }: { API_URL: string }) {
 }
 
 // Profile Tab Component
-function ProfileTab({ API_URL, user, profile }: { API_URL: string; user: any; profile: any }) {
+function ProfileTab({ user, profile }: { user: any; profile: any }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -1188,21 +1135,12 @@ function ProfileTab({ API_URL, user, profile }: { API_URL: string; user: any; pr
   const handleSave = async () => {
     setSaving(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/employee-portal/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(formData)
-      });
-      const result = await response.json();
-      if (result.success) {
+      const response = await api.employeePortal.updateProfile(formData);
+      if (response.success) {
         toast.success('Profile updated');
         setEditing(false);
       } else {
-        toast.error(result.message);
+        toast.error(response.message);
       }
     } catch (error) {
       toast.error('Failed to update profile');

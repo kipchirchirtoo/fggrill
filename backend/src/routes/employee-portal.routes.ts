@@ -1,7 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../config/supabase';
+import { protect } from '../middleware/auth';
 
 const router = Router();
+
+// =====================================================
+// PROTECT ALL PORTAL ROUTES
+// =====================================================
+router.use(protect);
 
 // =====================================================
 // EMPLOYEE PORTAL API ROUTES
@@ -25,7 +31,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
     // Get upcoming schedule
     const today = new Date().toISOString().split('T')[0];
     const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    
+
     const { data: schedules } = await supabase
       .from('staff_schedules')
       .select('*')

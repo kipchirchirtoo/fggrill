@@ -23,6 +23,7 @@ interface Staff {
     branch_name?: string;
     department?: string;
     phone?: string;
+    national_id?: string;
     status: 'active' | 'inactive';
 }
 
@@ -46,6 +47,7 @@ export default function HREmployeesPage() {
         branch_id: '',
         department: '',
         phone: '',
+        national_id: '',
         status: 'active'
     });
     const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
@@ -102,6 +104,7 @@ export default function HREmployeesPage() {
             branch_id: '',
             department: '',
             phone: '',
+            national_id: '',
             status: 'active'
         });
         setFormErrors({});
@@ -146,6 +149,7 @@ export default function HREmployeesPage() {
             branch_id: member.branch_id?.toString() || '',
             department: member.department || '',
             phone: member.phone || '',
+            national_id: member.national_id || '',
             status: member.status
         });
         setEditModalOpen(true);
@@ -255,7 +259,7 @@ export default function HREmployeesPage() {
                                         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-stone-100 to-stone-200 flex items-center justify-center text-stone-600 font-bold text-lg border border-stone-100">
                                             {member.first_name?.[0]}{member.last_name?.[0]}
                                         </div>
-                                        <IOSBadge variant={member.status === 'active' ? 'success' : 'secondary'}>
+                                        <IOSBadge variant={member.status === 'active' ? 'pill' : 'outline'}>
                                             {member.status}
                                         </IOSBadge>
                                     </div>
@@ -358,6 +362,16 @@ export default function HREmployeesPage() {
                                     <Input
                                         value={formData.phone}
                                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                        className="h-11 bg-stone-50 border-stone-100"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-[12px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5 block">National ID (Official)</label>
+                                    <Input
+                                        value={formData.national_id}
+                                        onChange={(e) => setFormData({ ...formData, national_id: e.target.value })}
+                                        placeholder="e.g. 12345678"
                                         className="h-11 bg-stone-50 border-stone-100"
                                     />
                                 </div>
