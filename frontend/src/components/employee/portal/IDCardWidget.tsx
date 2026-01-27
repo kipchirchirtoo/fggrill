@@ -113,16 +113,17 @@ export function IDCardWidget({ user }: IDCardWidgetProps) {
                     </div>
                 </div>
 
-                {/* Abstract Background Design */}
-                <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-blue-600/10 rounded-full blur-3xl" />
-                <div className="absolute -left-10 -top-10 w-32 h-32 bg-red-600/5 rounded-full blur-2xl" />
+                {/* Abstract Background Design - Digital Theme */}
+                <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-cyan-500/10 rounded-full blur-3xl animate-pulse" />
+                <div className="absolute -left-10 -top-10 w-32 h-32 bg-red-600/10 rounded-full blur-2xl" />
+                <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:20px_20px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_70%)]" />
             </IOSCard>
 
             <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
                 <DialogContent className="sm:max-w-xl">
                     <DialogHeader>
-                        <DialogTitle>Digital ID Preview</DialogTitle>
-                        <DialogDescription>Your official Famous Gate Hotel identification.</DialogDescription>
+                        <DialogTitle>Digital Access Pass Preview</DialogTitle>
+                        <DialogDescription>Your enhanced digital ID with secure QR verification.</DialogDescription>
                     </DialogHeader>
                     <div className="flex items-center justify-center p-4 bg-stone-100 rounded-2xl min-h-[400px]">
                         {isLoading ? (
