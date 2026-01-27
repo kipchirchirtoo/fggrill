@@ -15,31 +15,27 @@ const router = Router();
 // All routes require authentication
 router.use(authenticate);
 
-// Get payroll summary
 router.get(
   '/summary',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER]),
   getPayrollSummary
 );
 
-// Calculate payroll for an employee
 router.post(
   '/calculate',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER]),
   calculatePayroll
 );
 
-// Process single payroll payment
 router.post(
   '/pay',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER]),
   processPayrollPayment
 );
 
-// Process bulk payroll payments
 router.post(
   '/bulk-pay',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER]),
   processBulkPayroll
 );
 

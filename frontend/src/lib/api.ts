@@ -519,9 +519,23 @@ export const staffAPI = {
     if (params?.date) query.append('date', params.date);
     return fetchAPI<any>(`/staff/attendance?${query}`);
   },
+  getAttendanceReports: (params?: { staffId?: string; startDate?: string; endDate?: string; branchId?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.staffId) query.append('staffId', params.staffId);
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    if (params?.branchId) query.append('branchId', params.branchId);
+    return fetchAPI<any>(`/staff/attendance/reports?${query}`);
+  },
+  approveAttendance: (id: string, data: { approved: boolean; rejection_reason?: string }) =>
+    fetchAPI<any>(`/staff/attendance/${id}/approve`, { method: 'PUT', body: JSON.stringify(data) }),
+  updateAttendance: (id: string, data: any) =>
+    fetchAPI<any>(`/staff/attendance/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   recordAttendance: (data: any) => fetchAPI<any>('/staff/attendance', { method: 'POST', body: JSON.stringify(data) }),
-  clockIn: (staffId: string, notes?: string) => fetchAPI<any>('/staff/attendance/clock-in', { method: 'POST', body: JSON.stringify({ staff_id: staffId, notes }) }),
-  clockOut: (staffId: string, notes?: string) => fetchAPI<any>('/staff/attendance/clock-out', { method: 'POST', body: JSON.stringify({ staff_id: staffId, notes }) }),
+  clockIn: (data: { staff_id: string; in_method?: string; device_id?: string; notes?: string }) =>
+    fetchAPI<any>('/staff/attendance/clock-in', { method: 'POST', body: JSON.stringify(data) }),
+  clockOut: (data: { staff_id: string; out_method?: string; device_id?: string; notes?: string }) =>
+    fetchAPI<any>('/staff/attendance/clock-out', { method: 'POST', body: JSON.stringify(data) }),
   getAttendanceSummary: (staffId?: string) => {
     const query = staffId ? `?staff_id=${staffId}` : '';
     return fetchAPI<any>(`/staff/attendance/summary${query}`);
@@ -3166,6 +3180,13 @@ export const kitchenAPI = {
   getUsageEntries: (branchId?: number) => fetchAPI<any>(`/kitchen/usage${branchId ? `?branch_id=${branchId}` : ''}`),
   recordWastage: (data: any) => fetchAPI<any>('/kitchen/wastage', { method: 'POST', body: JSON.stringify(data) }),
   getWastageRecords: (branchId?: number) => fetchAPI<any>(`/kitchen/wastage${branchId ? `?branch_id=${branchId}` : ''}`),
+
+  // Food Controls (Yield)
+  getFoodControls: (branchId?: number) => fetchAPI<any>(`/kitchen/food-controls${branchId ? `?branch_id=${branchId}` : ''}`),
+  createFoodControl: (data: any) => fetchAPI<any>('/kitchen/food-controls', { method: 'POST', body: JSON.stringify(data) }),
+  updateFoodControl: (id: string | number, data: any) => fetchAPI<any>(`/kitchen/food-controls/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteFoodControl: (id: string | number) => fetchAPI<any>(`/kitchen/food-controls/${id}`, { method: 'DELETE' }),
+  calculateYield: (data: { rule_id: number; raw_input_quantity: number }) => fetchAPI<any>('/kitchen/food-controls/calculate', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 // =====================================================

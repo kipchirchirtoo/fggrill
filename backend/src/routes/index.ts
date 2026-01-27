@@ -54,6 +54,7 @@ import attendanceRoutes from './attendance.routes';
 import pettyCashRoutes from './petty-cash.routes';
 import creditRoutes from './credit.routes';
 import kitchenRoutes from './kitchen.routes';
+import payrollRoutes from './payroll.routes';
 
 console.log('Index routes: importing staffRoutes', staffRoutes);
 
@@ -110,6 +111,7 @@ router.use('/communications', communicationRoutes);
 router.use('/channel-manager', channelManagerRoutes);
 router.use('/employee-portal', employeePortalRoutes);
 router.use('/guest-portal', guestPortalRoutes);
+router.use('/payroll', payrollRoutes);
 // router.use('/staff', staffRoutes); // Removed duplicate
 router.use('/email', emailRoutes);
 router.use('/barcode', barcodeRoutes);
@@ -138,3 +140,4 @@ router.post('/mpesa/initiate', protect, initiateMpesaPayment);
 router.post('/mpesa/callback', mpesaCallback);
 
 export default router;
+

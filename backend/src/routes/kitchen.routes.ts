@@ -37,6 +37,14 @@ import {
     deleteWastage
 } from '../controllers/kitchen/usage-wastage.controller';
 
+import {
+    getFoodControls,
+    createFoodControl,
+    updateFoodControl,
+    deleteFoodControl,
+    calculateYield
+} from '../controllers/kitchen/food-control.controller';
+
 const router = express.Router();
 
 // Apply authentication to all routes
@@ -114,5 +122,14 @@ router.post('/wastage', authorize(kitchenStaff), recordWastage);
 router.get('/wastage', authorize([...kitchenStaff, ...kitchenManagers]), getWastageRecords);
 router.put('/wastage/:id', authorize(kitchenStaff), updateWastage);
 router.delete('/wastage/:id', authorize(kitchenManagers), deleteWastage);
+
+// =====================================================
+// FOOD CONTROL (YIELD) ROUTES
+// =====================================================
+router.get('/food-controls', authorize(kitchenStaff), getFoodControls);
+router.post('/food-controls', authorize(kitchenManagers), createFoodControl);
+router.put('/food-controls/:id', authorize(kitchenManagers), updateFoodControl);
+router.delete('/food-controls/:id', authorize(kitchenManagers), deleteFoodControl);
+router.post('/food-controls/calculate', authorize(kitchenStaff), calculateYield);
 
 export default router;

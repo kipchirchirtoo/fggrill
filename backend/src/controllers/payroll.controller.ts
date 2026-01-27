@@ -103,8 +103,36 @@ export const calculatePayroll = async (
       advances = 0
     } = req.body;
 
+    let finalOvertime = parseFloat(overtime);
+
+    // AUTO-INTEGRATION: If overtime is not provided, fetch from approved attendance
+    if (finalOvertime === 0 && employeeId && payPeriodStart && payPeriodEnd) {
+      const { data: attendance } = await supabase
+        .from('staff_attendance')
+        .select(`
+          hours_ot_weekday, 
+          hours_ot_rest, 
+          hours_ot_holiday, 
+          staff:staff_profiles(hourly_base_rate)
+        `)
+        .eq('staff_id', employeeId)
+        .gte('attendance_date', payPeriodStart)
+        .lte('attendance_date', payPeriodEnd)
+        .eq('is_approved', true);
+
+      if (attendance && attendance.length > 0) {
+        const baseRate = Number(attendance[0].staff?.hourly_base_rate || 0);
+        finalOvertime = attendance.reduce((sum, rec) => {
+          const weekdayVal = Number(rec.hours_ot_weekday || 0) * baseRate * 1.5;
+          const restVal = Number(rec.hours_ot_rest || 0) * baseRate * 2.0;
+          const holidayVal = Number(rec.hours_ot_holiday || 0) * baseRate * 2.0;
+          return sum + weekdayVal + restVal + holidayVal;
+        }, 0);
+      }
+    }
+
     // Calculate gross pay
-    const grossPay = parseFloat(basicSalary) + parseFloat(allowances) + parseFloat(overtime) + parseFloat(bonuses);
+    const grossPay = parseFloat(basicSalary) + parseFloat(allowances) + finalOvertime + parseFloat(bonuses);
 
     // Calculate tax (simplified PAYE calculation for Kenya)
     const taxDeductions = calculatePAYE(grossPay);
@@ -210,7 +238,7 @@ export const processPayrollPayment = async (
         };
 
         const recipient = await paystackService.createTransferRecipient(recipientData);
-        
+
         // Initiate transfer
         paymentResult = await paystackService.initiateTransfer(
           parseFloat(payrollRecord.net_pay),
@@ -257,7 +285,7 @@ export const processPayrollPayment = async (
 
     } catch (paymentError: any) {
       logger.error('Payment processing error:', paymentError);
-      
+
       // Update status to failed
       await supabase
         .from('payroll_records')
@@ -374,7 +402,7 @@ export const processBulkPayroll = async (
         try {
           // Assume recipient codes are stored in employee profiles
           const recipientCode = record.employee.paystack_recipient_code;
-          
+
           if (!recipientCode) {
             results.failed.push({
               recordId: record.id,
@@ -444,7 +472,7 @@ function calculatePAYE(grossPay: number): number {
   // Simplified PAYE calculation for Kenya
   // Actual calculation is more complex with tax bands
   let tax = 0;
-  
+
   if (grossPay <= 24000) {
     tax = grossPay * 0.10;
   } else if (grossPay <= 32333) {
@@ -456,7 +484,7 @@ function calculatePAYE(grossPay: number): number {
   } else {
     tax = 242283.35 + (grossPay - 800000) * 0.35;
   }
-  
+
   return Math.round(tax);
 }
 
@@ -497,7 +525,7 @@ export const getBanks = async (
 ): Promise<void> => {
   try {
     const banks = await paystackService.getBanks('kenya');
-    
+
     res.status(200).json({
       success: true,
       data: banks.data
@@ -517,9 +545,9 @@ export const verifyBankAccount = async (
 ): Promise<void> => {
   try {
     const { accountNumber, bankCode } = req.body;
-    
+
     const verification = await paystackService.verifyBankAccount(accountNumber, bankCode);
-    
+
     res.status(200).json({
       success: true,
       data: verification.data

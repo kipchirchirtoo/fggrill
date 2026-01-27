@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { AttendanceService } from '../services/attendance.service';
 
 // Password generation utility
 const generateStrongPassword = (): string => {
@@ -134,7 +135,10 @@ export const getStaffMember = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { data: staff, error } = await supabase
+    const { id } = req.params;
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+    let query = supabase
       .from('staff_profiles')
       .select(`
         *,
@@ -147,9 +151,15 @@ export const getStaffMember = async (
           role
         ),
         schedules:staff_schedules(*)
-      `)
-      .eq('id', req.params.id)
-      .single();
+      `);
+
+    if (isUUID) {
+      query = query.eq('id', id);
+    } else {
+      query = query.or(`id_number.eq.${id},rfid_tag.eq.${id}`);
+    }
+
+    const { data: staff, error } = await query.maybeSingle();
 
     if (error) {
       throw error;
@@ -289,8 +299,8 @@ export const createStaffMember = async (
         // Finance & Admin
         'accountant': 'accountant',
         'auditor': 'accountant',
-        'hr_manager': 'accountant',
-        'payroll_clerk': 'accountant',
+        'hr_manager': 'hr_manager',
+        'payroll_clerk': 'hr_manager',
         // Department-like alias
         'finance': 'accountant',
 
@@ -823,11 +833,40 @@ export const clockIn = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { staff_id, notes } = req.body;
+    const { staff_id, notes, in_method, device_id } = req.body;
     const attendance_date = new Date().toISOString().split('T')[0];
     const clock_in = new Date().toISOString();
 
-    // Check if there's an open shift for this staff member
+    // 1. Fetch Staff Profile to check branch and permissions
+    const { data: staff, error: staffError } = await supabase
+      .from('staff_profiles')
+      .select('id, branch_id, status')
+      .eq('id', staff_id)
+      .single();
+
+    if (staffError || !staff) {
+      res.status(404).json({ success: false, message: 'Staff member not found' });
+      return;
+    }
+
+    if (staff.status !== 'active') {
+      res.status(403).json({ success: false, message: 'Staff account is not active' });
+      return;
+    }
+
+    // 2. Branch Validation (If terminal device info is provided)
+    // In a real scenario, device_id would be mapped to a branch
+    if (device_id && device_id.startsWith('FG-') && req.user?.branch_id) {
+      if (staff.branch_id !== req.user.branch_id) {
+        res.status(403).json({
+          success: false,
+          message: `Cross-branch clock-in not allowed. Staff belongs to branch ${staff.branch_id}`
+        });
+        return;
+      }
+    }
+
+    // 3. Check if there's an open shift for this staff member
     const { data: openShift, error: checkError } = await supabase
       .from('staff_attendance')
       .select('id')
@@ -844,12 +883,17 @@ export const clockIn = async (
       return;
     }
 
+    const is_pin_fallback = (in_method === 'pin' || in_method === 'manual');
+
     const attendance = {
       staff_id,
       attendance_date,
       clock_in,
+      in_method: in_method || 'pin',
+      device_id,
       status: 'present',
       notes,
+      is_approved: !is_pin_fallback, // PIN fallback requires supervisor approval
       created_at: new Date().toISOString()
     };
 
@@ -879,7 +923,7 @@ export const clockOut = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { staff_id, notes } = req.body;
+    const { staff_id, notes, out_method, device_id } = req.body;
     const clock_out = new Date().toISOString();
 
     // Find the latest open shift
@@ -901,11 +945,21 @@ export const clockOut = async (
       return;
     }
 
+    // CALCULATE HOURS using Service
+    const hoursData = await AttendanceService.calculateShiftHours(staff_id, openShift.clock_in, clock_out);
+
     const { data, error } = await supabase
       .from('staff_attendance')
       .update({
         clock_out,
+        out_method: out_method || 'pin',
+        device_id: device_id || openShift.device_id,
         notes: notes || openShift.notes,
+        hours_normal: hoursData.hoursNormal,
+        hours_ot_weekday: hoursData.hoursOTWeekday,
+        hours_ot_rest: hoursData.hoursOTRest,
+        hours_ot_holiday: hoursData.hoursOTHoliday,
+        hours_night: hoursData.hoursNight,
         updated_at: new Date().toISOString()
       })
       .eq('id', openShift.id)
@@ -918,6 +972,93 @@ export const clockOut = async (
       success: true,
       data
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update attendance record (Manual Adjustment)
+// @route   PUT /api/staff/attendance/:id
+// @access  Private (Admin, Manager)
+export const updateAttendance = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { clock_in, clock_out, reason } = req.body;
+
+    if (!reason) {
+      res.status(400).json({ success: false, message: 'Reason is required for manual adjustment' });
+      return;
+    }
+
+    const { data: oldRecord } = await supabase.from('staff_attendance').select('*').eq('id', id).single();
+    if (!oldRecord) {
+      res.status(404).json({ success: false, message: 'Record not found' });
+      return;
+    }
+
+    const effectiveIn = clock_in || oldRecord.clock_in;
+    const effectiveOut = clock_out || oldRecord.clock_out;
+
+    let hoursData = {};
+    if (effectiveOut) {
+      hoursData = await AttendanceService.calculateShiftHours(oldRecord.staff_id, effectiveIn, effectiveOut);
+    }
+
+    const updateData = {
+      clock_in: effectiveIn,
+      clock_out: effectiveOut,
+      ...hoursData,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await supabase
+      .from('staff_attendance')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Log the audit
+    await AttendanceService.logAttendanceEdit(id, req.user?.id || '', oldRecord, updateData, reason);
+
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Approve/Reject attendance record
+// @route   PUT /api/staff/attendance/:id/approve
+// @access  Private (Admin, Manager)
+export const approveAttendance = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { approved, rejection_reason } = req.body;
+
+    const { data, error } = await supabase
+      .from('staff_attendance')
+      .update({
+        is_approved: approved,
+        rejection_reason: approved ? null : rejection_reason,
+        approved_by: req.user?.id,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(200).json({ success: true, data });
   } catch (error) {
     next(error);
   }
@@ -1143,6 +1284,72 @@ export const rejectLeaveRequest = async (
       success: true,
       message: 'Leave request rejected',
       data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get detailed attendance reports with compliance flags
+// @route   GET /api/staff/attendance/reports
+// @access  Private (Admin, Manager)
+export const getAttendanceReports = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { startDate, endDate, branchId, staffId } = req.query;
+
+    const { data: records, error } = await supabase
+      .from('staff_attendance')
+      .select(`
+        *,
+        staff:staff_profiles(
+          id,
+          branch_id,
+          rest_day,
+          user:users(first_name, last_name, department)
+        )
+      `)
+      .order('attendance_date', { ascending: false });
+
+    if (error) throw error;
+
+    let filtered = records || [];
+    if (startDate) filtered = filtered.filter(r => r.attendance_date >= startDate);
+    if (endDate) filtered = filtered.filter(r => r.attendance_date <= endDate);
+    if (branchId) filtered = filtered.filter(r => r.staff?.branch_id === branchId);
+    if (staffId) filtered = filtered.filter(r => r.staff_id === staffId);
+
+    // Compliance & Summaries
+    const reports = filtered.map(rec => {
+      const issues = [];
+      const totalHours = Number(rec.hours_normal || 0) + Number(rec.hours_ot_weekday || 0) +
+        Number(rec.hours_ot_rest || 0) + Number(rec.hours_ot_holiday || 0);
+
+      if (totalHours > 12) {
+        issues.push('Excessive daily hours (>12h)');
+      }
+      if (!rec.is_approved) {
+        issues.push('Pending supervisor approval (PIN clock-in)');
+      }
+      return { ...rec, issues };
+    });
+
+    const summary = reports.reduce((acc: any, rec: any) => {
+      acc.totalNormal = (acc.totalNormal || 0) + Number(rec.hours_normal || 0);
+      acc.totalOTWeekday = (acc.totalOTWeekday || 0) + Number(rec.hours_ot_weekday || 0);
+      acc.totalOTRest = (acc.totalOTRest || 0) + Number(rec.hours_ot_rest || 0);
+      acc.totalOTHoliday = (acc.totalOTHoliday || 0) + Number(rec.hours_ot_holiday || 0);
+      acc.totalNight = (acc.totalNight || 0) + Number(rec.hours_night || 0);
+      return acc;
+    }, {});
+
+    res.status(200).json({
+      success: true,
+      data: reports,
+      summary
     });
   } catch (error) {
     next(error);

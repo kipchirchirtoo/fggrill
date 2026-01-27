@@ -91,6 +91,13 @@ export default function KitchenOperationsPage() {
             icon: ClipboardList,
             href: '/dashboard/kitchen-operations/usage',
             color: 'amber'
+        },
+        {
+            title: 'Food Controls',
+            description: 'Yield rules & calculator',
+            icon: BarChart3,
+            href: '/dashboard/kitchen-operations/food-controls',
+            color: 'indigo'
         }
     ];
 

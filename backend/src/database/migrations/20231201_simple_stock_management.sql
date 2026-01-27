@@ -48,34 +48,31 @@ INSERT INTO simple_app_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS simple_shop_items (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    
-    -- Owner - can be user or branch
     shop_user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     branch_id INT REFERENCES branches(id) ON DELETE CASCADE,
-    
-    -- Item reference
     item_sku VARCHAR(50) NOT NULL,
-    
-    -- Stock
     quantity INT DEFAULT 0 CHECK (quantity >= 0),
     min_stock_level INT DEFAULT 5,
     max_stock_level INT DEFAULT 100,
-    
-    -- Tracking
     last_restocked TIMESTAMPTZ,
     last_sold TIMESTAMPTZ,
     total_sold INT DEFAULT 0,
     total_received INT DEFAULT 0,
-    
-    -- Timestamps
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    
-    -- Constraints
     CONSTRAINT unique_shop_user_item UNIQUE (shop_user_id, item_sku),
     CONSTRAINT unique_branch_shop_item UNIQUE (branch_id, item_sku),
     CONSTRAINT must_have_owner CHECK (shop_user_id IS NOT NULL OR branch_id IS NOT NULL)
 );
+
+ALTER TABLE simple_shop_items ADD COLUMN IF NOT EXISTS branch_id INT REFERENCES branches(id) ON DELETE CASCADE;
+ALTER TABLE simple_shop_items ADD COLUMN IF NOT EXISTS min_stock_level INT DEFAULT 5;
+ALTER TABLE simple_shop_items ADD COLUMN IF NOT EXISTS max_stock_level INT DEFAULT 100;
+ALTER TABLE simple_shop_items ADD COLUMN IF NOT EXISTS last_restocked TIMESTAMPTZ;
+ALTER TABLE simple_shop_items ADD COLUMN IF NOT EXISTS last_sold TIMESTAMPTZ;
+ALTER TABLE simple_shop_items ADD COLUMN IF NOT EXISTS total_sold INT DEFAULT 0;
+ALTER TABLE simple_shop_items ADD COLUMN IF NOT EXISTS total_received INT DEFAULT 0;
+ALTER TABLE simple_shop_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS idx_shop_items_user ON simple_shop_items(shop_user_id);
 CREATE INDEX IF NOT EXISTS idx_shop_items_branch ON simple_shop_items(branch_id);
@@ -88,37 +85,34 @@ CREATE INDEX IF NOT EXISTS idx_shop_items_low_stock ON simple_shop_items(quantit
 
 CREATE TABLE IF NOT EXISTS simple_transfer_items (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    
-    -- Who is requesting
     shop_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     branch_id INT REFERENCES branches(id),
-    
-    -- Item to transfer
     item_sku VARCHAR(50) NOT NULL,
-    
-    -- Quantity
     quantity INT NOT NULL CHECK (quantity > 0),
-    original_quantity INT,  -- What was originally in stock when requested
-    
-    -- Status
-    ordered BOOLEAN DEFAULT FALSE,  -- FALSE = in cart, TRUE = submitted for approval
+    original_quantity INT,
+    ordered BOOLEAN DEFAULT FALSE,
     approved BOOLEAN,
     approved_by UUID,
     approved_at TIMESTAMPTZ,
-    
-    -- Notes
     request_notes TEXT,
     approval_notes TEXT,
-    
-    -- Timestamps
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     submitted_at TIMESTAMPTZ,
     completed_at TIMESTAMPTZ,
-    
-    -- Prevent duplicate items in cart per user
     CONSTRAINT unique_user_item_transfer UNIQUE (shop_user_id, item_sku, ordered)
 );
+
+ALTER TABLE simple_transfer_items ADD COLUMN IF NOT EXISTS branch_id INT REFERENCES branches(id);
+ALTER TABLE simple_transfer_items ADD COLUMN IF NOT EXISTS original_quantity INT;
+ALTER TABLE simple_transfer_items ADD COLUMN IF NOT EXISTS approved BOOLEAN;
+ALTER TABLE simple_transfer_items ADD COLUMN IF NOT EXISTS approved_by UUID;
+ALTER TABLE simple_transfer_items ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+ALTER TABLE simple_transfer_items ADD COLUMN IF NOT EXISTS request_notes TEXT;
+ALTER TABLE simple_transfer_items ADD COLUMN IF NOT EXISTS approval_notes TEXT;
+ALTER TABLE simple_transfer_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE simple_transfer_items ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;
+ALTER TABLE simple_transfer_items ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_transfer_user ON simple_transfer_items(shop_user_id);
 CREATE INDEX IF NOT EXISTS idx_transfer_ordered ON simple_transfer_items(ordered);
@@ -131,30 +125,31 @@ CREATE INDEX IF NOT EXISTS idx_transfer_pending ON simple_transfer_items(shop_us
 
 CREATE TABLE IF NOT EXISTS transfer_batches (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    batch_number VARCHAR(30) NOT NULL UNIQUE,  -- FGH-TB-20251127-0001
-    
-    -- Requestor info
+    batch_number VARCHAR(30) NOT NULL UNIQUE,
     requested_by UUID NOT NULL REFERENCES users(id),
     requested_branch_id INT REFERENCES branches(id),
-    
-    -- Status
-    status VARCHAR(20) DEFAULT 'PENDING',  -- PENDING, APPROVED, PARTIAL, REJECTED, COMPLETED, CANCELLED
-    
-    -- Processing
+    status VARCHAR(20) DEFAULT 'PENDING',
     processed_by UUID,
     processed_at TIMESTAMPTZ,
     process_notes TEXT,
-    
-    -- Summary (denormalized for quick access)
     total_items INT DEFAULT 0,
     total_quantity INT DEFAULT 0,
     approved_items INT DEFAULT 0,
     approved_quantity INT DEFAULT 0,
-    
-    -- Timestamps
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE transfer_batches ADD COLUMN IF NOT EXISTS requested_branch_id INT REFERENCES branches(id);
+ALTER TABLE transfer_batches ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'PENDING';
+ALTER TABLE transfer_batches ADD COLUMN IF NOT EXISTS processed_by UUID;
+ALTER TABLE transfer_batches ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ;
+ALTER TABLE transfer_batches ADD COLUMN IF NOT EXISTS process_notes TEXT;
+ALTER TABLE transfer_batches ADD COLUMN IF NOT EXISTS total_items INT DEFAULT 0;
+ALTER TABLE transfer_batches ADD COLUMN IF NOT EXISTS total_quantity INT DEFAULT 0;
+ALTER TABLE transfer_batches ADD COLUMN IF NOT EXISTS approved_items INT DEFAULT 0;
+ALTER TABLE transfer_batches ADD COLUMN IF NOT EXISTS approved_quantity INT DEFAULT 0;
+ALTER TABLE transfer_batches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS idx_batch_status ON transfer_batches(status);
 CREATE INDEX IF NOT EXISTS idx_batch_user ON transfer_batches(requested_by);
@@ -244,30 +239,36 @@ CREATE TABLE IF NOT EXISTS stock_take_items (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     stock_take_id UUID NOT NULL REFERENCES stock_takes(id) ON DELETE CASCADE,
     item_sku VARCHAR(50) NOT NULL,
-    
-    -- Counts
-    system_quantity INT NOT NULL,  -- What system says we should have
-    counted_quantity INT,          -- What was actually counted
+    system_quantity INT NOT NULL,
+    counted_quantity INT,
     variance INT GENERATED ALWAYS AS (COALESCE(counted_quantity, 0) - system_quantity) STORED,
-    
-    -- Value
     unit_cost DECIMAL(10,2),
-    variance_value DECIMAL(12,2) GENERATED ALWAYS AS (variance * COALESCE(unit_cost, 0)) STORED,
-    
-    -- Status
-    status VARCHAR(20) DEFAULT 'PENDING',  -- PENDING, COUNTED, VERIFIED
-    
-    -- Notes
+    variance_value DECIMAL(12,2) GENERATED ALWAYS AS ((COALESCE(counted_quantity, 0) - system_quantity) * COALESCE(unit_cost, 0)) STORED,
+    status VARCHAR(20) DEFAULT 'PENDING',
     variance_reason TEXT,
     notes TEXT,
-    
-    -- Timestamps
     counted_at TIMESTAMPTZ,
     verified_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    
     CONSTRAINT unique_take_item UNIQUE (stock_take_id, item_sku)
 );
+
+-- Ensure missing columns exist
+ALTER TABLE stock_take_items ADD COLUMN IF NOT EXISTS unit_cost DECIMAL(10,2);
+ALTER TABLE stock_take_items ADD COLUMN IF NOT EXISTS variance_reason TEXT;
+ALTER TABLE stock_take_items ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE stock_take_items ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
+
+-- Handling generated columns in existing table
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='stock_take_items' AND column_name='variance') THEN
+        ALTER TABLE stock_take_items ADD COLUMN variance INT GENERATED ALWAYS AS (COALESCE(counted_quantity, 0) - system_quantity) STORED;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='stock_take_items' AND column_name='variance_value') THEN
+        ALTER TABLE stock_take_items ADD COLUMN variance_value DECIMAL(12,2) GENERATED ALWAYS AS ((COALESCE(counted_quantity, 0) - system_quantity) * COALESCE(unit_cost, 0)) STORED;
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_take_items_take ON stock_take_items(stock_take_id);
 CREATE INDEX IF NOT EXISTS idx_take_items_variance ON stock_take_items(variance) WHERE variance != 0;

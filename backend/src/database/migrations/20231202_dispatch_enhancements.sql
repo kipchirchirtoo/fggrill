@@ -8,38 +8,45 @@
 -- PART 1: VEHICLES TABLE
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS vehicles (
+-- Drop legacy tables to ensure clean UUID-based schema (safe since they were confirmed empty)
+DROP TABLE IF EXISTS vehicle_assignments CASCADE;
+DROP TABLE IF EXISTS vehicles CASCADE;
+
+CREATE TABLE vehicles (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    
-    -- Basic Info
     registration_number VARCHAR(20) NOT NULL UNIQUE,
+    vehicle_number VARCHAR(20), -- Alias for registration_number to support legacy code
     make VARCHAR(50),
     model VARCHAR(50),
     year INT,
     type VARCHAR(30),  -- VAN, TRUCK, MOTORCYCLE, CAR
-    
-    -- Capacity
+    vehicle_type VARCHAR(30), -- Alias for type to support legacy code
     capacity_kg DECIMAL(10,2),
-    capacity_volume VARCHAR(50),  -- e.g., "5 cubic meters"
-    
-    -- Status
+    capacity VARCHAR(50), -- Alias for capacity_kg to support legacy code
     status VARCHAR(20) DEFAULT 'AVAILABLE',  -- AVAILABLE, IN_USE, MAINTENANCE, RETIRED
     current_location VARCHAR(100),
-    
-    -- Insurance & Compliance
     insurance_expiry DATE,
     inspection_expiry DATE,
-    
-    -- Tracking
     last_used TIMESTAMPTZ,
     total_trips INT DEFAULT 0,
-    
-    -- Notes
+    current_mileage INT DEFAULT 0, -- Support legacy code
     notes TEXT,
-    
-    -- Timestamps
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Recreate vehicle_assignments with UUID support
+CREATE TABLE IF NOT EXISTS vehicle_assignments (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    vehicle_id UUID NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+    driver_id UUID REFERENCES users(id),
+    transfer_id INT, -- Legacy stock_transfers reference
+    start_time TIMESTAMPTZ DEFAULT NOW(),
+    end_time TIMESTAMPTZ,
+    start_mileage INT,
+    end_mileage INT,
+    fuel_used DECIMAL(10,2),
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_vehicles_status ON vehicles(status);
@@ -51,40 +58,40 @@ CREATE INDEX IF NOT EXISTS idx_vehicles_reg ON vehicles(registration_number);
 
 CREATE TABLE IF NOT EXISTS drivers (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    
-    -- Link to user (optional - can be external driver)
     user_id UUID REFERENCES users(id),
-    
-    -- Basic Info
     name VARCHAR(100) NOT NULL,
     phone VARCHAR(20) NOT NULL,
     alt_phone VARCHAR(20),
     email VARCHAR(100),
-    
-    -- License Info
     license_number VARCHAR(50),
     license_expiry DATE,
     license_class VARCHAR(10),  -- B, C, CE, etc.
-    
-    -- Employment
     employment_type VARCHAR(20) DEFAULT 'PERMANENT',  -- PERMANENT, CONTRACT, CASUAL
     branch_id INT REFERENCES branches(id),
-    
-    -- Status
     status VARCHAR(20) DEFAULT 'ACTIVE',  -- ACTIVE, INACTIVE, ON_LEAVE, TERMINATED
-    
-    -- Performance
     total_deliveries INT DEFAULT 0,
     total_distance_km DECIMAL(10,2) DEFAULT 0,
     rating DECIMAL(3,2),
-    
-    -- Notes
     notes TEXT,
-    
-    -- Timestamps
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure all required columns exist if table was pre-existing
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id);
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS alt_phone VARCHAR(20);
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS email VARCHAR(100);
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS license_number VARCHAR(50);
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS license_expiry DATE;
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS license_class VARCHAR(10);
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS employment_type VARCHAR(20) DEFAULT 'PERMANENT';
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS branch_id INT REFERENCES branches(id);
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'ACTIVE';
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS total_deliveries INT DEFAULT 0;
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS total_distance_km DECIMAL(10,2) DEFAULT 0;
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS rating DECIMAL(3,2);
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS idx_drivers_status ON drivers(status);
 CREATE INDEX IF NOT EXISTS idx_drivers_branch ON drivers(branch_id);

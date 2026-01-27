@@ -173,6 +173,28 @@ CREATE TABLE IF NOT EXISTS suppliers (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Ensure all required columns exist if table was pre-existing
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS code VARCHAR(20);
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS city VARCHAR(50);
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS payment_terms VARCHAR(50) DEFAULT 'NET30';
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'ACTIVE';
+
+DO $$ 
+BEGIN 
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='suppliers' AND column_name='supplier_code') 
+       AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='suppliers' AND column_name='code') THEN
+        UPDATE suppliers SET code = supplier_code WHERE code IS NULL;
+    END IF;
+END $$;
+
+-- Add unique constraint if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'suppliers_code_key') THEN
+        ALTER TABLE suppliers ADD CONSTRAINT suppliers_code_key UNIQUE (code);
+    END IF;
+END $$;
+
 -- ============================================================
 -- 8. DISPATCH TRACKING
 -- ============================================================

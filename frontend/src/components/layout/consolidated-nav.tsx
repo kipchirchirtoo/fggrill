@@ -1046,6 +1046,54 @@ export function ConsolidatedNav() {
     </>
   );
 
+  // HR Manager Navigation
+  const hrNav = (
+    <>
+      <NavItem
+        href="/dashboard/hr"
+        icon={Home}
+        label="HR Dashboard"
+        active={pathname === '/dashboard/hr'}
+      />
+
+      <NavGroup label="Employees" icon={Users} defaultOpen>
+        <NavItem
+          href="/dashboard/hr/employees"
+          icon={Users}
+          label="All Employees"
+          active={pathname === '/dashboard/hr/employees'}
+        />
+        <NavItem
+          href="/dashboard/hr/attendance"
+          icon={CalendarClock}
+          label="Attendance"
+          active={pathname === '/dashboard/hr/attendance'}
+        />
+        <NavItem
+          href="/dashboard/hr/leave"
+          icon={FileText}
+          label="Leave Requests"
+          active={pathname === '/dashboard/hr/leave'}
+        />
+      </NavGroup>
+
+      <NavGroup label="Payroll" icon={DollarSign}>
+        <NavItem
+          href="/dashboard/hr/salaries"
+          icon={CreditCard}
+          label="Salaries"
+          active={pathname === '/dashboard/hr/salaries'}
+        />
+        <NavItem
+          href="/dashboard/hr/payroll"
+          icon={DollarSign}
+          label="Payroll Processing"
+          active={pathname === '/dashboard/hr/payroll'}
+        />
+      </NavGroup>
+    </>
+  );
+
   // Kitchen Operations Navigation
   const kitchenOperationsNav = (
     <>
@@ -1103,6 +1151,8 @@ export function ConsolidatedNav() {
       return (
         <>
           {adminNav}
+          <hr className="my-4" />
+          {hrNav}
           <hr className="my-4" />
           {branchOperationsNav}
           <hr className="my-4" />
@@ -1225,6 +1275,11 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/cashier'}
         />
       );
+    }
+
+    // HR Management Navigation
+    if (user.role === UserRole.HR_MANAGER) {
+      return hrNav;
     }
 
     // Default navigation for roles without specific nav - redirect to role-specific dashboard

@@ -241,6 +241,11 @@ EXECUTE FUNCTION update_staff_usage_summary();
 -- PART 7: VIEWS FOR REPORTING
 -- ============================================================
 
+-- Drop views if they exist to prevent column rename errors
+DROP VIEW IF EXISTS v_kitchen_usage_details;
+DROP VIEW IF EXISTS v_staff_accountability;
+DROP VIEW IF EXISTS v_daily_kitchen_usage;
+
 -- View: Kitchen usage with item details
 CREATE OR REPLACE VIEW v_kitchen_usage_details AS
 SELECT 

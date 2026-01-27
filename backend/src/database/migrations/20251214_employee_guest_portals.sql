@@ -244,6 +244,9 @@ CREATE INDEX IF NOT EXISTS idx_amenity_bookings_date ON amenity_bookings(schedul
 -- DEMO USERS FOR EMPLOYEE AND GUEST PORTALS
 -- =====================================================
 
+-- Ensure users table has password_hash column (used by some portal features)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+
 -- Insert demo employee user
 INSERT INTO users (id, email, password_hash, first_name, last_name, role, status, branch_id)
 VALUES (
@@ -263,7 +266,7 @@ VALUES (
 -- Insert demo guest user
 INSERT INTO users (id, email, password_hash, first_name, last_name, role, status)
 VALUES (
-  'g1000000-0000-0000-0000-000000000001',
+  'f1000000-0000-0000-0000-000000000001',
   'guest@famousgate.com',
   '$2b$10$rQEY9zL5qK8xH3mN7pJ1/.XvYwZ4kL6mN8oP0qR2sT4uV6wX8yZ0a',
   'Jane',
@@ -278,7 +281,7 @@ VALUES (
 -- Create staff profile for employee
 INSERT INTO staff_profiles (user_id, role, department, shift, salary, start_date, id_number, status)
 SELECT 
-  'e1000000-0000-0000-0000-000000000001',
+  id,
   'employee',
   'housekeeping',
   'morning',
@@ -286,32 +289,35 @@ SELECT
   '2024-01-15',
   'EMP001234',
   'active'
-WHERE NOT EXISTS (
-  SELECT 1 FROM staff_profiles WHERE user_id = 'e1000000-0000-0000-0000-000000000001'
+FROM users WHERE email = 'employee@famousgate.com'
+AND NOT EXISTS (
+  SELECT 1 FROM staff_profiles sp JOIN users u ON sp.user_id = u.id WHERE u.email = 'employee@famousgate.com'
 );
 
 -- Create guest profile
 INSERT INTO guest_profiles (user_id, id_type, id_number, nationality, vip_status)
 SELECT 
-  'g1000000-0000-0000-0000-000000000001',
+  id,
   'passport',
   'AB1234567',
   'Kenya',
   false
-WHERE NOT EXISTS (
-  SELECT 1 FROM guest_profiles WHERE user_id = 'g1000000-0000-0000-0000-000000000001'
+FROM users WHERE email = 'guest@famousgate.com'
+AND NOT EXISTS (
+  SELECT 1 FROM guest_profiles gp JOIN users u ON gp.user_id = u.id WHERE u.email = 'guest@famousgate.com'
 );
 
 -- Create guest loyalty record
 INSERT INTO guest_loyalty (guest_id, total_points, tier, total_stays, total_spent)
 SELECT 
-  'g1000000-0000-0000-0000-000000000001',
+  id,
   1500,
   'silver',
   3,
   45000
-WHERE NOT EXISTS (
-  SELECT 1 FROM guest_loyalty WHERE guest_id = 'g1000000-0000-0000-0000-000000000001'
+FROM users WHERE email = 'guest@famousgate.com'
+AND NOT EXISTS (
+  SELECT 1 FROM guest_loyalty gl JOIN users u ON gl.guest_id = u.id WHERE u.email = 'guest@famousgate.com'
 );
 
 -- Insert sample hotel amenities
