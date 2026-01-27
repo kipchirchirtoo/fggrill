@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';
 import { idCardsAPI, authAPI } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { ShieldCheck, Download, Eye, Loader2, Camera, User } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -18,6 +19,7 @@ interface IDCardWidgetProps {
 }
 
 export function IDCardWidget({ user }: IDCardWidgetProps) {
+    const { checkAuth } = useAuth();
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -70,6 +72,9 @@ export function IDCardWidget({ user }: IDCardWidgetProps) {
             await authAPI.updateDetails({
                 profilePhoto: publicUrl
             });
+
+            // Refresh user context to get updated profile photo
+            await checkAuth();
 
             toast.success('Profile photo updated', { id: toastId });
         } catch (error) {
