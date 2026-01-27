@@ -17,12 +17,12 @@ class IDCardGenerator:
         self.height = 85.6 * mm
         self.logo_path = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'public', 'fglogo.png')
         
-        # Colors from the provided images
-        self.bg_brown = colors.HexColor("#A68B7A")  # Main brown/beige background
-        self.bg_pattern = colors.HexColor("#B69D8E") # Lighter brown for geometric pattern
-        self.dark_navy = colors.HexColor("#1E212D") # Dark navy/black for waves and text
-        self.text_labels = colors.HexColor("#333333") # Subtle dark for labels
-        self.text_values = colors.HexColor("#1E212D") # Rich dark for values
+        # Premium Brand Colors
+        self.bg_dark = colors.HexColor("#1A1917")    # Warm Black (Warm 900)
+        self.bg_charcoal = colors.HexColor("#2E2C28") # Charcoal (Warm 800)
+        self.accent_gold = colors.HexColor("#FCA311") # Brand Amber/Gold
+        self.text_white = colors.HexColor("#FFFFFF")
+        self.text_gray = colors.HexColor("#A8A49A")   # Warm Gray (Warm 400)
         self.white = colors.white
 
     def generate(self, employee_data):
@@ -44,195 +44,215 @@ class IDCardGenerator:
         buffer.seek(0)
         return buffer.getvalue()
 
-    def _draw_background_pattern(self, c):
-        """Draws the diagonal geometric shapes seen in the background"""
+    def _draw_tech_pattern(self, c):
+        """Draws a subtle digital/tech background pattern"""
         c.saveState()
-        c.setFillColor(self.bg_pattern)
+        c.setStrokeColor(self.accent_gold)
+        c.setLineWidth(0.1*mm)
+        c.setStrokeAlpha(0.1)
         
-        # Top right diagonal polygon
-        p = c.beginPath()
-        p.moveTo(self.width * 0.4, self.height)
-        p.lineTo(self.width, self.height)
-        p.lineTo(self.width, self.height * 0.7)
-        p.close()
-        c.drawPath(p, fill=1, stroke=0)
-        
-        # Middle diagonal section
-        p2 = c.beginPath()
-        p2.moveTo(0, self.height * 0.4)
-        p2.lineTo(self.width, self.height * 0.8)
-        p2.lineTo(self.width, self.height * 0.6)
-        p2.lineTo(0, self.height * 0.2)
-        p2.close()
-        c.drawPath(p2, fill=1, stroke=0)
-        
-        c.restoreState()
-
-    def _draw_wavy_decor(self, c, top=True):
-        """Draws the dark navy wavy shapes at top/bottom"""
-        c.saveState()
-        c.setFillColor(self.dark_navy)
-        
-        if top:
-            # Top Wave
-            p = c.beginPath()
-            p.moveTo(0, self.height)
-            p.lineTo(self.width, self.height)
-            p.lineTo(self.width, self.height - 10*mm)
-            p.curveTo(self.width * 0.7, self.height - 15*mm, self.width * 0.3, self.height - 5*mm, 0, self.height - 10*mm)
-            p.close()
-            c.drawPath(p, fill=1, stroke=0)
+        # Draw a subtle grid
+        step = 10*mm
+        for x in range(0, int(self.width/mm) + 10, 10):
+            c.line(x*mm, 0, x*mm, self.height)
+        for y in range(0, int(self.height/mm) + 10, 10):
+            c.line(0, y*mm, self.width, y*mm)
             
-            # Subtle secondary wave line
-            c.setStrokeColor(self.dark_navy)
-            c.setLineWidth(0.5*mm)
-            c.setStrokeAlpha(0.3)
-            c.bezier(0, self.height - 12*mm, self.width*0.3, self.height - 7*mm, self.width*0.7, self.height - 17*mm, self.width, self.height - 12*mm)
-        else:
-            # Bottom Wave
-            p = c.beginPath()
-            p.moveTo(0, 0)
-            p.lineTo(self.width, 0)
-            p.lineTo(self.width, 10*mm)
-            p.curveTo(self.width * 0.7, 5*mm, self.width * 0.3, 15*mm, 0, 10*mm)
-            p.close()
-            c.drawPath(p, fill=1, stroke=0)
-            
-            # Subtle secondary wave line
-            c.setStrokeColor(self.dark_navy)
-            c.setLineWidth(0.5*mm)
-            c.setStrokeAlpha(0.3)
-            c.bezier(0, 12*mm, self.width*0.3, 17*mm, self.width*0.7, 7*mm, self.width, 12*mm)
-            
+        # Draw some tech accents (corner brackets)
+        c.setStrokeAlpha(0.4)
+        c.setLineWidth(0.3*mm)
+        margin = 3*mm
+        len_ = 5*mm
+        
+        # Top Left
+        c.line(margin, self.height - margin, margin + len_, self.height - margin)
+        c.line(margin, self.height - margin, margin, self.height - margin - len_)
+        
+        # Top Right
+        c.line(self.width - margin, self.height - margin, self.width - margin - len_, self.height - margin)
+        c.line(self.width - margin, self.height - margin, self.width - margin, self.height - margin - len_)
+        
+        # Bottom Left
+        c.line(margin, margin, margin + len_, margin)
+        c.line(margin, margin, margin, margin + len_)
+        
+        # Bottom Right
+        c.line(self.width - margin, margin, self.width - margin - len_, margin)
+        c.line(self.width - margin, margin, self.width - margin, margin + len_)
+        
         c.restoreState()
 
     def _draw_front(self, c, data):
-        # Base background color
-        c.setFillColor(self.bg_brown)
+        # 1. Background
+        c.setFillColor(self.bg_dark)
         c.rect(0, 0, self.width, self.height, fill=1, stroke=0)
         
-        # Background pattern & Waves
-        self._draw_background_pattern(c)
-        self._draw_wavy_decor(c, top=True)
-        self._draw_wavy_decor(c, top=False)
+        # Gradient-like effect top
+        c.setFillColor(self.bg_charcoal)
+        p = c.beginPath()
+        p.moveTo(0, self.height)
+        p.lineTo(self.width, self.height)
+        p.lineTo(self.width, self.height * 0.6)
+        p.lineTo(0, self.height * 0.7)
+        p.close()
+        c.drawPath(p, fill=1, stroke=0)
+        
+        self._draw_tech_pattern(c)
 
-        # Centered Photo Circle
-        photo_x = self.width / 2
-        photo_y = self.height * 0.65
-        radius = 18*mm
+        # 2. Header: Logo & Company Name
+        if os.path.exists(self.logo_path):
+            try:
+                logo = ImageReader(self.logo_path)
+                # Draw logo centered at top
+                c.drawImage(logo, (self.width - 15*mm)/2, self.height - 18*mm, 
+                          width=15*mm, height=15*mm, mask='auto', preserveAspectRatio=True)
+            except:
+                pass
+        
+        c.setFont("Helvetica-Bold", 8)
+        c.setFillColor(self.accent_gold)
+        c.drawCentredString(self.width/2, self.height - 22*mm, "FAMOUS GATE HOTEL")
+        
+        c.setFont("Helvetica", 5)
+        c.setFillColor(self.text_white)
+        c.drawCentredString(self.width/2, self.height - 25*mm, "EXCELLENCE IN HOSPITALITY")
+
+        # 3. Photo Area (Central, glowing border)
+        photo_y = self.height * 0.52
+        radius = 16*mm
         
         c.saveState()
-        # Dark border for photo
-        c.setFillColor(self.dark_navy)
-        c.circle(photo_x, photo_y, radius + 0.5*mm, fill=1, stroke=0)
+        # Gold Glow/Border
+        c.setFillColor(self.accent_gold)
+        c.circle(self.width/2, photo_y, radius + 0.8*mm, fill=1, stroke=0)
         
-        # Clipping path for photo
-        clip_path = c.beginPath()
-        clip_path.circle(photo_x, photo_y, radius)
-        c.clipPath(clip_path, stroke=0)
+        # Dark inner border
+        c.setFillColor(self.bg_dark)
+        c.circle(self.width/2, photo_y, radius + 0.4*mm, fill=1, stroke=0)
+        
+        # Photo clip
+        path = c.beginPath()
+        path.circle(self.width/2, photo_y, radius)
+        c.clipPath(path, stroke=0)
         
         photo_path = data.get('photo_path')
         if photo_path and os.path.exists(photo_path):
             try:
                 img = ImageReader(photo_path)
-                c.drawImage(img, photo_x - radius, photo_y - radius, 
+                c.drawImage(img, self.width/2 - radius, photo_y - radius, 
                           width=2*radius, height=2*radius, preserveAspectRatio=True, anchor='c')
             except:
-                self._draw_placeholder_photo(c, photo_x, photo_y, radius)
+                self._draw_placeholder(c, self.width/2, photo_y, radius)
         else:
-            self._draw_placeholder_photo(c, photo_x, photo_y, radius)
+            self._draw_placeholder(c, self.width/2, photo_y, radius)
         c.restoreState()
 
-        # Employee Name
-        c.setFillColor(self.dark_navy)
-        name = data.get('name', 'DANIEL GALLEGO').upper()
-        font_size = 14
-        if len(name) > 15: font_size = 12
-        if len(name) > 20: font_size = 10
-        c.setFont("Helvetica-Bold", font_size)
-        c.drawCentredString(self.width / 2, self.height * 0.42, name)
+        # 4. Employee Details
+        text_y = self.height * 0.35
         
-        # Name Underline
-        c.setStrokeColor(self.dark_navy)
-        c.setLineWidth(1)
-        c.line(self.width * 0.2, self.height * 0.4, self.width * 0.8, self.height * 0.4)
+        # Name
+        c.setFont("Helvetica-Bold", 13)
+        c.setFillColor(self.text_white)
+        name = data.get('name', 'EMPLOYEE NAME').upper()
+        # Auto-scale text if too long
+        if c.stringWidth(name, "Helvetica-Bold", 13) > self.width - 10*mm:
+             c.setFont("Helvetica-Bold", 10)
+        c.drawCentredString(self.width/2, text_y, name)
         
         # Role
-        c.setFont("Helvetica", 10)
-        c.drawCentredString(self.width / 2, self.height * 0.36, data.get('role', 'MANAGER').upper())
+        text_y -= 5*mm
+        c.setFont("Helvetica-Bold", 9)
+        c.setFillColor(self.accent_gold)
+        c.drawCentredString(self.width/2, text_y, data.get('role', 'STAFF').upper())
         
-        # Details section (Staff ID, Email, Phone)
-        details_y = self.height * 0.28
-        spacing = 4*mm
+        # Divider
+        text_y -= 4*mm
+        c.setStrokeColor(self.text_gray)
+        c.setLineWidth(0.2*mm)
+        c.line(15*mm, text_y, self.width - 15*mm, text_y)
         
-        def draw_label_value(label, value, y):
-            c.setFont("Helvetica", 7)
-            c.setFillColor(self.text_labels)
-            label_text = f"{label} : "
-            c.drawString(10*mm, y, label_text)
-            
-            c.setFont("Helvetica", 7)
-            c.setFillColor(self.text_values)
-            c.drawString(28*mm, y, str(value if value else 'N/A'))
+        # Details (Grid layout)
+        text_y -= 5*mm
+        c.setFont("Helvetica", 6)
+        c.setFillColor(self.text_gray)
+        
+        # ID Label & Value
+        c.drawCentredString(self.width/2, text_y, "STAFF ID")
+        c.setFont("Helvetica-Bold", 8)
+        c.setFillColor(self.text_white)
+        c.drawCentredString(self.width/2, text_y - 3*mm, str(data.get('id_no', '---')))
 
-        draw_label_value("STAFF ID", data.get('id_no'), details_y)
-        draw_label_value("EMAIL", data.get('email'), details_y - spacing)
-        draw_label_value("PHONE", data.get('phone'), details_y - 2 * spacing)
-
-        # Barcode at bottom
-        barcode_value = str(data.get('id_no', '1234567890'))
+        # 5. Barcode (Footer)
+        # White background container for barcode to ensure readability
+        bar_area_h = 12*mm
+        c.setFillColor(self.white)
+        # Rounded rect for barcode
+        c.roundRect(5*mm, 6*mm, self.width - 10*mm, bar_area_h, 2*mm, fill=1, stroke=0)
+        
+        barcode_value = str(data.get('id_no', '12345'))
         try:
-            barcode = code128.Code128(barcode_value, barHeight=6*mm, barWidth=0.2*mm)
-            barcode.drawOn(c, (self.width - barcode.width) / 2, 10*mm)
+            # Code128 conforms to width
+            code = code128.Code128(barcode_value, barHeight=8*mm, barWidth=0.25*mm)
+            # Center it
+            code.drawOn(c, (self.width - code.width)/2, 8*mm)
         except:
             pass
 
     def _draw_back(self, c, data):
-        # Base background color
-        c.setFillColor(self.bg_brown)
+        # 1. Background
+        c.setFillColor(self.bg_dark)
         c.rect(0, 0, self.width, self.height, fill=1, stroke=0)
-        
-        # Background pattern & Waves
-        self._draw_background_pattern(c)
-        self._draw_wavy_decor(c, top=True)
-        self._draw_wavy_decor(c, top=False)
+        self._draw_tech_pattern(c)
 
-        # Terms & Conditions Header
-        c.setFillColor(self.dark_navy)
-        c.setFont("Helvetica", 10)
-        c.drawCentredString(self.width/2, self.height * 0.75, "TERMS & CONDITIONS")
+        # 2. Header
+        c.setFillColor(self.accent_gold)
+        c.setFont("Helvetica-Bold", 10)
+        c.drawCentredString(self.width/2, self.height - 12*mm, "TERMS & CONDITIONS")
         
-        # Terms Bullet points
-        c.setFont("Helvetica", 7)
-        c.setFillColor(self.text_values)
+        c.setStrokeColor(self.accent_gold)
+        c.line(15*mm, self.height - 14*mm, self.width - 15*mm, self.height - 14*mm)
+
+        # 3. Content
+        c.setFillColor(self.text_white)
+        c.setFont("Helvetica", 6.5)
+        
         terms = [
-            "Identification: All employees must keep their",
-            "ID cards visible or readily available while on",
-            "company premises to ensure proper access",
-            "control and identity verification.",
+            "This card remains the property of Famous Gate",
+            "Hotel and must be returned upon request or",
+            "termination of employment.",
             "",
-            "Usage: The ID card remains the exclusive",
-            "property of the company. It is issued for",
-            "personal use only and must not be lent,",
-            "copied, or misused in any manner."
+            "If found, please return to:",
+            "Famous Gate Hotel HR Department",
+            "",
+            "Use of this card constitutes acceptance of",
+            "company policies and security regulations."
         ]
         
-        text_obj = c.beginText(10*mm, self.height * 0.68)
-        text_obj.setFont("Helvetica", 7)
-        text_obj.setLeading(10)
+        text_obj = c.beginText(6*mm, self.height - 22*mm)
+        text_obj.setFont("Helvetica", 6.5)
+        text_obj.setLeading(9)
+        text_obj.setFillColor(self.text_white)
+        
         for line in terms:
-            if line:
-                # Add a small dot for actual bullets if needed, but the image uses a dot
-                if line.startswith("Identification") or line.startswith("Usage"):
-                    c.circle(8*mm, text_obj.getY() + 0.5*mm, 0.4*mm, fill=1, stroke=0)
-                text_obj.textLine(line)
+            if "Famous Gate" in line:
+                text_obj.setFillColor(self.accent_gold)
             else:
-                text_obj.textLine("")
+                text_obj.setFillColor(self.text_white)
+            text_obj.textLine(line)
+            
         c.drawText(text_obj)
 
-        # Scan for Validity
-        c.setFont("Helvetica", 9)
-        c.drawCentredString(self.width/2, self.height * 0.4, "SCAN FOR VALIDIITY")
+        # 4. QR Code Section (Scan for Validity)
+        qr_y = 25*mm
+        c.setFillColor(self.white)
+        # White box for QR
+        qr_size = 28*mm
+        x_pos = (self.width - qr_size)/2
+        
+        # Gold border container
+        c.setStrokeColor(self.accent_gold)
+        c.setLineWidth(0.5*mm)
+        c.roundRect(x_pos - 1*mm, qr_y - 1*mm, qr_size + 2*mm, qr_size + 2*mm, 1*mm, fill=0, stroke=1)
         
         # QR Code
         qr_data = data.get('qr_data', f"https://famousgate.hirall.com/verify/{data.get('id_no', 'N/A')}")
@@ -242,22 +262,27 @@ class IDCardGenerator:
             w = bounds[2] - bounds[0]
             h = bounds[3] - bounds[1]
             
-            qr_size = 25*mm
             d = Drawing(qr_size, qr_size, transform=[qr_size/w, 0, 0, qr_size/h, 0, 0])
             d.add(qr_code)
-            renderPDF.draw(d, c, (self.width - qr_size)/2, self.height * 0.18)
+            renderPDF.draw(d, c, x_pos, qr_y)
         except:
             pass
 
-        # Footer URL
-        c.setFillColor(self.dark_navy)
-        c.setFont("Helvetica", 8)
-        c.drawCentredString(self.width/2, 25*mm, "www.famousgate.hirall.com")
+        c.setFillColor(self.accent_gold)
+        c.setFont("Helvetica-Bold", 7)
+        c.drawCentredString(self.width/2, qr_y - 5*mm, "SCAN TO VERIFY")
 
-    def _draw_placeholder_photo(self, c, x, y, r):
-        c.setFillColor(self.dark_navy)
+        # 5. Footer
+        c.setFillColor(self.bg_charcoal)
+        c.rect(0, 0, self.width, 8*mm, fill=1, stroke=0)
+        c.setFillColor(self.text_gray)
+        c.setFont("Helvetica", 6)
+        c.drawCentredString(self.width/2, 3*mm, "www.famousgate.hirall.com")
+
+    def _draw_placeholder(self, c, x, y, r):
+        c.setFillColor(self.bg_charcoal)
         c.circle(x, y, r, fill=1, stroke=0)
-        c.setFillColor(self.white)
-        c.setFont("Helvetica-Bold", 15)
-        c.drawCentredString(x, y - 5*mm, "?")
+        c.setFillColor(self.text_gray)
+        c.setFont("Helvetica-Bold", 20)
+        c.drawCentredString(x, y - 6*mm, "?")
 
