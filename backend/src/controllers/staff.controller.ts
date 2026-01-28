@@ -5,6 +5,51 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { AttendanceService } from '../services/attendance.service';
 
+// Staff ID generation utility
+const generateStaffId = async (branchId: number | string | null, role: string): Promise<string> => {
+  try {
+    // 1. Get branch code
+    let branchCode = 'FG';
+    if (branchId) {
+      const { data: branch } = await supabase
+        .from('branches')
+        .select('code')
+        .eq('id', branchId)
+        .single();
+      if (branch?.code) branchCode = branch.code;
+    }
+
+    // 2. Determine if management role
+    const managementRoles = ['super_admin', 'branch_manager', 'general_manager', 'ceo', 'admin'];
+    const isManagement = managementRoles.includes(role.toLowerCase());
+
+    // 3. Get existing staff count for this branch
+    const { count } = await supabase
+      .from('staff_profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('branch_id', branchId);
+
+    const currentCount = count || 0;
+
+    // 4. Calculate sequential number
+    // Reserved 001-010 for management. Others start at 011.
+    let sequenceNumber: number;
+    if (isManagement) {
+      // For management, use 1-10 range. If 10 is exceeded, it will just keep growing but starting from 1.
+      sequenceNumber = (currentCount % 10) + 1;
+    } else {
+      // For others, start from 11.
+      sequenceNumber = currentCount + 11;
+    }
+
+    const paddedNumber = String(sequenceNumber).padStart(3, '0');
+    return `${branchCode}${paddedNumber}`;
+  } catch (error) {
+    logger.error('Error generating staff ID:', error);
+    return `STF${Math.floor(1000 + Math.random() * 9000)}`;
+  }
+};
+
 // Password generation utility
 const generateStrongPassword = (): string => {
   const length = 12;
@@ -204,18 +249,20 @@ export const createStaffMember = async (
       idNumber,
       employeeId,
       nationalId,
+      pos_pin,
       emergencyContact,
       address,
       branchId
     } = req.body;
 
-    const actualIdNumber = idNumber || employeeId || 'pending';
+    // Generate Staff ID if not provided
+    const actualIdNumber = idNumber || await generateStaffId(branchId, role);
 
     // Validate required fields
-    if (!firstName || !lastName || !email || !role || !department) {
+    if (!firstName || !lastName || !email || !role) {
       res.status(400).json({
         success: false,
-        message: 'Please provide all required fields: firstName, lastName, email, role, department'
+        message: 'Please provide all required fields: firstName, lastName, email, role'
       });
       return;
     }
@@ -340,6 +387,11 @@ export const createStaffMember = async (
           phone_number: phone,
           role: userRole,
           department: department,
+          pos_pin: pos_pin,
+          address: address,
+          emergency_contact: emergencyContact ? JSON.stringify(emergencyContact) : null,
+          shift: shift || 'morning',
+          branch_id: branchId ? parseInt(branchId) : null,
           created_at: new Date().toISOString()
         }])
         .select()
@@ -490,11 +542,26 @@ export const createStaffMember = async (
       throw new Error(`Failed to create staff profile: ${staffError.message}`);
     }
 
+    // ALSO update the user record if it already existed to ensure sync
+    if (existingUser) {
+      const userUpdateData: any = {
+        phone_number: phone,
+        pos_pin: pos_pin,
+        address: address,
+        emergency_contact: emergencyContact ? JSON.stringify(emergencyContact) : null,
+        shift: shift || 'morning',
+        branch_id: branchId ? parseInt(branchId) : null,
+        department: department
+      };
+
+      await supabase.from('users').update(userUpdateData).eq('id', userId);
+    }
+
     res.status(201).json({
       success: true,
       data: {
         staff: staffProfile,
-        generatedPassword: generatedPassword // Return password for admin to share with user
+        generatedPassword: existingUser ? undefined : generatedPassword
       },
       message: 'Staff member created successfully'
     });

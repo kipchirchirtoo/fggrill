@@ -19,7 +19,7 @@ async function runMigration() {
     try {
         console.log('🚀 Connecting to database...');
 
-        const sqlPath = path.join(__dirname, '../src/database/migrations/add_user_profile_fields.sql');
+        const sqlPath = path.join(__dirname, '../src/database/migrations/20260128_staff_terminal_fields.sql');
         const sqlContent = fs.readFileSync(sqlPath, 'utf-8');
 
         console.log('📝 Executing migration SQL...');

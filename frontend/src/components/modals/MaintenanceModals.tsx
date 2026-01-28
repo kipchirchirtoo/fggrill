@@ -47,6 +47,7 @@ const categoryOptions = [
 ];
 
 export function NewWorkOrderModal({ isOpen, onClose, onSubmit, branchId }: NewWorkOrderModalProps) {
+  const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<WorkOrderFormData>({
     title: '',
     description: '',
@@ -69,30 +70,34 @@ export function NewWorkOrderModal({ isOpen, onClose, onSubmit, branchId }: NewWo
         branch_id: branchId,
       });
       setErrors({});
+      setStep(1);
     }
   }, [isOpen, branchId]);
 
-  const validate = (): boolean => {
+  const validateStep = (currentStep: number): boolean => {
     const newErrors: Partial<Record<keyof WorkOrderFormData, string>> = {};
-    
-    if (!formData.title.trim()) {
-      newErrors.title = 'Title is required';
-    }
-    if (!formData.location.trim()) {
-      newErrors.location = 'Location is required';
-    }
-    if (!formData.description.trim()) {
-      newErrors.description = 'Description is required';
+
+    if (currentStep === 1) {
+      if (!formData.title.trim()) newErrors.title = 'Title is required';
+      if (!formData.description.trim()) newErrors.description = 'Description is required';
+    } else if (currentStep === 2) {
+      if (!formData.location.trim()) newErrors.location = 'Location is required';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validate()) return;
+  const handleNext = () => {
+    if (validateStep(step)) {
+      setStep(step + 1);
+    }
+  };
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+
+    if (!validateStep(step)) return;
 
     setIsSubmitting(true);
     try {
@@ -117,7 +122,6 @@ export function NewWorkOrderModal({ isOpen, onClose, onSubmit, branchId }: NewWo
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -126,154 +130,198 @@ export function NewWorkOrderModal({ isOpen, onClose, onSubmit, branchId }: NewWo
             onClick={!isSubmitting ? onClose : undefined}
           />
 
-          {/* Modal */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden"
+            transition={{ duration: 0.2 }}
+            className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
-                  <Wrench className="h-5 w-5 text-amber-600" />
+            <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100 shrink-0">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center">
+                  <Wrench className="h-6 w-6 text-amber-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-stone-900">New Work Order</h2>
-                  <p className="text-sm text-stone-500">Create a maintenance request</p>
+                  <h2 className="text-xl font-bold text-stone-900">New Maintenance Request</h2>
+                  <div className="flex items-center gap-2 mt-1">
+                    {[1, 2].map(s => (
+                      <div
+                        key={s}
+                        className={`h-1.5 rounded-full transition-all duration-300 ${s <= step ? 'w-10 bg-amber-500' : 'w-4 bg-stone-100'}`}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
               <button
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="p-2 rounded-lg hover:bg-stone-100 transition-colors disabled:opacity-50"
+                className="p-2.5 rounded-full hover:bg-stone-50 transition-colors"
               >
-                <X className="h-5 w-5 text-stone-500" />
+                <X className="h-5 w-5 text-stone-400" />
               </button>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto max-h-[calc(90vh-180px)]">
-              {/* Title */}
-              <IOSInput
-                label="Title"
-                placeholder="Brief description of the issue"
-                value={formData.title}
-                onChange={(e) => handleChange('title', e.target.value)}
-                error={errors.title}
-                icon={<FileText className="h-4 w-4" />}
-                disabled={isSubmitting}
-              />
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-6 min-h-[350px]">
+              <AnimatePresence mode="wait">
+                {step === 1 && (
+                  <motion.div
+                    key="step1"
+                    initial={{ x: 20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    exit={{ x: -20, opacity: 0 }}
+                    className="space-y-6"
+                  >
+                    <div className="flex items-center gap-2 text-amber-600 font-bold uppercase tracking-widest text-[10px] mb-2">
+                      <FileText className="h-3 w-3" />
+                      Step 1: Issue Identification
+                    </div>
 
-              {/* Location */}
-              <IOSInput
-                label="Location"
-                placeholder="Room number or area"
-                value={formData.location}
-                onChange={(e) => handleChange('location', e.target.value)}
-                error={errors.location}
-                icon={<MapPin className="h-4 w-4" />}
-                disabled={isSubmitting}
-              />
-
-              {/* Priority */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-stone-900">Priority</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {priorityOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => handleChange('priority', option.value)}
+                    <IOSInput
+                      label="Title"
+                      placeholder="e.g., Leaking sink in Room 204"
+                      value={formData.title}
+                      onChange={(e) => handleChange('title', e.target.value)}
+                      error={errors.title}
+                      icon={<FileText className="h-4 w-4" />}
                       disabled={isSubmitting}
-                      className={cn(
-                        'py-2.5 px-3 rounded-xl text-sm font-medium transition-all border-2',
-                        formData.priority === option.value
-                          ? 'border-stone-900 bg-stone-900 text-white'
-                          : 'border-stone-200 bg-white text-stone-600 hover:border-stone-300'
-                      )}
-                    >
-                      <div className="flex items-center justify-center gap-1.5">
-                        <div className={cn('w-2 h-2 rounded-full', option.color)} />
-                        <span>{option.label}</span>
+                    />
+
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-stone-900 ml-1">Category</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {categoryOptions.slice(0, 6).map((cat) => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => handleChange('category', cat)}
+                            className={cn(
+                              "px-4 py-2.5 rounded-xl text-sm font-medium transition-all text-left",
+                              formData.category === cat
+                                ? "bg-amber-100 text-amber-900 border-2 border-amber-300 shadow-sm"
+                                : "bg-stone-50 text-stone-600 border-2 border-transparent hover:bg-stone-100"
+                            )}
+                          >
+                            {cat}
+                          </button>
+                        ))}
                       </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
+                    </div>
 
-              {/* Category */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-stone-900">Category</label>
-                <select
-                  value={formData.category}
-                  onChange={(e) => handleChange('category', e.target.value)}
-                  disabled={isSubmitting}
-                  className="w-full h-11 px-4 rounded-xl border border-stone-200 bg-white text-sm focus:border-stone-400 focus:ring-1 focus:ring-stone-400 transition-colors"
-                >
-                  {categoryOptions.map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Description */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-stone-900">Description</label>
-                <textarea
-                  placeholder="Detailed description of the issue..."
-                  value={formData.description}
-                  onChange={(e) => handleChange('description', e.target.value)}
-                  disabled={isSubmitting}
-                  rows={4}
-                  className={cn(
-                    'w-full px-4 py-3 rounded-xl border bg-white text-sm resize-none focus:ring-1 transition-colors',
-                    errors.description
-                      ? 'border-red-300 focus:border-red-400 focus:ring-red-400'
-                      : 'border-stone-200 focus:border-stone-400 focus:ring-stone-400'
-                  )}
-                />
-                {errors.description && (
-                  <p className="text-xs text-red-500 flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3" />
-                    {errors.description}
-                  </p>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-stone-900 ml-1">Issue Description</label>
+                      <textarea
+                        placeholder="Please provide details about the problem..."
+                        value={formData.description}
+                        onChange={(e) => handleChange('description', e.target.value)}
+                        disabled={isSubmitting}
+                        rows={4}
+                        className={cn(
+                          'w-full px-4 py-3 rounded-2xl border-2 bg-stone-50 text-sm resize-none focus:ring-4 transition-all',
+                          errors.description
+                            ? 'border-red-200 focus:border-red-400 focus:ring-red-100'
+                            : 'border-transparent focus:border-amber-400 focus:ring-amber-50'
+                        )}
+                      />
+                    </div>
+                  </motion.div>
                 )}
-              </div>
 
-              {/* Due Date (Optional) */}
-              <IOSInput
-                label="Due Date (Optional)"
-                type="date"
-                value={formData.due_date || ''}
-                onChange={(e) => handleChange('due_date', e.target.value)}
-                icon={<Calendar className="h-4 w-4" />}
-                disabled={isSubmitting}
-              />
-            </form>
+                {step === 2 && (
+                  <motion.div
+                    key="step2"
+                    initial={{ x: 20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    exit={{ x: -20, opacity: 0 }}
+                    className="space-y-6"
+                  >
+                    <div className="flex items-center gap-2 text-amber-600 font-bold uppercase tracking-widest text-[10px] mb-2">
+                      <MapPin className="h-3 w-3" />
+                      Step 2: Context & Urgency
+                    </div>
+
+                    <IOSInput
+                      label="Precise Location"
+                      placeholder="e.g. Room 302, Staff Canteen, etc."
+                      value={formData.location}
+                      onChange={(e) => handleChange('location', e.target.value)}
+                      error={errors.location}
+                      icon={<MapPin className="h-4 w-4" />}
+                      disabled={isSubmitting}
+                    />
+
+                    <div className="space-y-3">
+                      <label className="block text-sm font-semibold text-stone-900 ml-1">Priority Level</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        {priorityOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => handleChange('priority', option.value as any)}
+                            disabled={isSubmitting}
+                            className={cn(
+                              'p-4 rounded-2xl text-sm font-bold transition-all border-2 text-left flex flex-col gap-2',
+                              formData.priority === option.value
+                                ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-md scale-[1.02]'
+                                : 'border-stone-100 bg-white text-stone-400 hover:border-stone-200'
+                            )}
+                          >
+                            <div className={cn('w-4 h-4 rounded-full shadow-inner', option.color)} />
+                            <span className="capitalize">{option.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <IOSInput
+                      label="Expected Completion (Optional)"
+                      type="date"
+                      value={formData.due_date || ''}
+                      onChange={(e) => handleChange('due_date', e.target.value)}
+                      icon={<Calendar className="h-4 w-4" />}
+                      disabled={isSubmitting}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* Footer */}
-            <div className="flex gap-3 px-6 py-4 border-t border-stone-100 bg-stone-50">
-              <IOSButton
-                type="button"
-                variant="secondary"
-                onClick={onClose}
-                disabled={isSubmitting}
-                className="flex-1"
-              >
-                Cancel
-              </IOSButton>
-              <IOSButton
-                type="submit"
-                variant="primary"
-                onClick={handleSubmit}
-                loading={isSubmitting}
-                className="flex-1 bg-amber-600 hover:bg-amber-700"
-              >
-                {isSubmitting ? 'Creating...' : 'Create Work Order'}
-              </IOSButton>
+            <div className="px-6 py-4 bg-stone-50 shrink-0 border-t border-stone-100">
+              <div className="flex gap-3">
+                {step > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setStep(step - 1)}
+                    disabled={isSubmitting}
+                    className="px-6 py-3 bg-white border border-stone-200 text-stone-600 rounded-2xl hover:bg-stone-100 font-bold transition-all shadow-sm"
+                  >
+                    Back
+                  </button>
+                )}
+                {step < 2 ? (
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    className="flex-1 px-6 py-3 bg-amber-600 text-white rounded-2xl hover:bg-amber-700 font-bold shadow-lg shadow-amber-600/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    Continue to Context
+                  </button>
+                ) : (
+                  <IOSButton
+                    type="submit"
+                    variant="primary"
+                    onClick={handleSubmit}
+                    loading={isSubmitting}
+                    className="flex-1 bg-amber-600 hover:bg-amber-700 h-14 rounded-2xl text-lg"
+                  >
+                    {isSubmitting ? 'Submitting...' : 'Send Request'}
+                  </IOSButton>
+                )}
+              </div>
             </div>
           </motion.div>
         </div>

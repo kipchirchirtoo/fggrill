@@ -34,7 +34,9 @@ export function StaffModal({ isOpen, onClose, mode = 'create', initialData, onSu
     phoneNumber: '',
     role: '',
     branchId: '',
-    password: ''
+    password: '',
+    nationalId: initialData?.national_id || '',
+    pos_pin: initialData?.user?.pos_pin || ''
   });
 
   const [branches, setBranches] = useState<any[]>([]);
@@ -121,23 +123,29 @@ export function StaffModal({ isOpen, onClose, mode = 'create', initialData, onSu
     try {
       if (mode === 'create') {
         await staffAPI.createStaffMember({
-          first_name: staffData.firstName,
-          last_name: staffData.lastName,
+          firstName: staffData.firstName,
+          lastName: staffData.lastName,
           email: staffData.email,
-          phone_number: staffData.phoneNumber,
+          phone: staffData.phoneNumber,
           role: staffData.role,
-          branch_id: staffData.branchId ? parseInt(staffData.branchId) : null,
-          password: staffData.password
+          branchId: staffData.branchId ? parseInt(staffData.branchId) : null,
+          password: staffData.password,
+          nationalId: staffData.nationalId,
+          pos_pin: staffData.pos_pin,
+          department: availableRoles.find(r => r.value === staffData.role)?.label || 'Employee'
         });
         toast.success('Staff member created successfully!');
       } else if (initialData?.id) {
         await staffAPI.updateStaffMember(initialData.id, {
-          first_name: staffData.firstName,
-          last_name: staffData.lastName,
+          firstName: staffData.firstName,
+          lastName: staffData.lastName,
           email: staffData.email,
-          phone_number: staffData.phoneNumber,
+          phone: staffData.phoneNumber,
           role: staffData.role,
-          branch_id: staffData.branchId ? parseInt(staffData.branchId) : (initialData.branch_id || null)
+          branchId: staffData.branchId ? parseInt(staffData.branchId) : (initialData.branch_id || null),
+          nationalId: staffData.nationalId,
+          pos_pin: staffData.pos_pin,
+          department: availableRoles.find(r => r.value === staffData.role)?.label || 'Employee'
         });
         toast.success('Staff member updated successfully!');
       }
@@ -160,7 +168,9 @@ export function StaffModal({ isOpen, onClose, mode = 'create', initialData, onSu
       phoneNumber: '',
       role: '',
       branchId: '',
-      password: ''
+      password: '',
+      nationalId: '',
+      pos_pin: ''
     });
   };
 
@@ -299,6 +309,20 @@ export function StaffModal({ isOpen, onClose, mode = 'create', initialData, onSu
                       </div>
                     </div>
                   )}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      National ID <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="nationalId"
+                      value={staffData.nationalId}
+                      onChange={handleChange}
+                      placeholder="Enter ID number"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -335,21 +359,33 @@ export function StaffModal({ isOpen, onClose, mode = 'create', initialData, onSu
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Branch Assignment
+                      Terminal Access PIN <span className="text-red-500">*</span>
                     </label>
-                    <select
-                      name="branchId"
-                      value={staffData.branchId}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    >
-                      <option value="">All Branches (Global)</option>
-                      {branches.map(branch => (
-                        <option key={branch.id} value={branch.id}>
-                          {branch.name} ({branch.code})
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <input
+                        type="password"
+                        name="pos_pin"
+                        value={staffData.pos_pin}
+                        onChange={handleChange}
+                        maxLength={6}
+                        placeholder="4-6 digit PIN"
+                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Required for check-in terminal</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Staff ID
+                    </label>
+                    <input
+                      type="text"
+                      value={mode === 'create' ? 'Auto-generated on save' : (initialData?.id_number || 'N/A')}
+                      disabled
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-ios-lg text-gray-500 italic"
+                    />
                   </div>
                 </div>
               </div>
