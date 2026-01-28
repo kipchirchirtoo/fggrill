@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { userAPI, idCardsAPI } from '@/lib/api';
+import { idCardsAPI, staffAPI } from '@/lib/api';
 import { toast } from 'sonner';
 import {
     User as UserIcon, Loader2, Download, Eye,
@@ -48,7 +48,8 @@ export default function IDCardsManagementPage() {
         start_date: '',
         role: '',
         email: '',
-        phone_number: ''
+        phone_number: '',
+        national_id: ''
     });
     const [isSaving, setIsSaving] = useState(false);
 
@@ -65,7 +66,8 @@ export default function IDCardsManagementPage() {
             start_date: emp.start_date || '',
             role: emp.role || '',
             email: emp.email || '',
-            phone_number: emp.phone_number || ''
+            phone_number: emp.phone_number || '',
+            national_id: emp.national_id || ''
         });
         setIsEditOpen(true);
     };
@@ -74,7 +76,7 @@ export default function IDCardsManagementPage() {
         if (!editEmployee) return;
         setIsSaving(true);
         try {
-            const res = await userAPI.updateUser(editEmployee.id, editData);
+            const res = await staffAPI.updateStaffMember(editEmployee.id, editData);
             if (res.success) {
                 toast.success('Employee details updated');
                 setIsEditOpen(false);
@@ -91,15 +93,23 @@ export default function IDCardsManagementPage() {
     const fetchEmployees = async () => {
         setIsLoading(true);
         try {
-            const res = await userAPI.getUsers();
+            const res = await staffAPI.getStaff();
             if (res.success) {
-                // Filter only staff/employees for this view usually, 
-                // but for Super Admin we might show all except maybe other super admins?
-                // Request says "all employees and staff"
-                setEmployees(res.data || []);
+                // Flatten the staff objects for easier consumption in the UI
+                const flattenedStaff = (res.data || []).map((s: any) => ({
+                    ...s,
+                    first_name: s.user?.first_name || '',
+                    last_name: s.user?.last_name || '',
+                    email: s.user?.email || '',
+                    phone_number: s.user?.phone_number || s.phone || '',
+                    role: s.user?.role || s.role || 'Staff',
+                    employee_id: s.id_number || s.employee_id || s.id.substring(0, 8).toUpperCase(),
+                    start_date: s.start_date
+                }));
+                setEmployees(flattenedStaff);
             }
         } catch (error) {
-            toast.error('Failed to load employees');
+            toast.error('Failed to load staff members');
         } finally {
             setIsLoading(false);
         }
@@ -115,12 +125,15 @@ export default function IDCardsManagementPage() {
             const data = {
                 name: `${emp.first_name} ${emp.last_name}`,
                 role: emp.role?.replace('_', ' ').toUpperCase() || 'EMPLOYEE',
-                id_no: emp.employee_id || emp.id.substring(0, 8).toUpperCase(),
+                id_no: emp.id_number || emp.employee_id || emp.id.substring(0, 8).toUpperCase(),
+                national_id: emp.national_id || 'N/A',
                 email: emp.email,
                 phone: emp.phone_number || 'N/A',
                 join_date: emp.start_date ? new Date(emp.start_date).toLocaleDateString() : 'N/A',
-                expire_date: '31/12/2026', // Placeholder expiry
-                photo_url: emp.profile_photo_url // Assuming backend serves this
+                expire_date: '31/12/2026',
+                photo_url: emp.profile_photo
+                    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/profile-photos/${emp.profile_photo}`
+                    : emp.profile_photo_url
             };
 
             const blob = await idCardsAPI.preview(data);
@@ -140,12 +153,15 @@ export default function IDCardsManagementPage() {
             const data = {
                 name: `${emp.first_name} ${emp.last_name}`,
                 role: emp.role?.replace('_', ' ').toUpperCase() || 'EMPLOYEE',
-                id_no: emp.employee_id || emp.id.substring(0, 8).toUpperCase(),
+                id_no: emp.id_number || emp.employee_id || emp.id.substring(0, 8).toUpperCase(),
+                national_id: emp.national_id || 'N/A',
                 email: emp.email,
                 phone: emp.phone_number || 'N/A',
                 join_date: emp.start_date ? new Date(emp.start_date).toLocaleDateString() : 'N/A',
                 expire_date: '31/12/2026',
-                photo_url: emp.profile_photo_url
+                photo_url: emp.profile_photo
+                    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/profile-photos/${emp.profile_photo}`
+                    : emp.profile_photo_url
             };
 
             const blob = await idCardsAPI.generate(data);
@@ -171,7 +187,7 @@ export default function IDCardsManagementPage() {
             const formData = new FormData();
             formData.append('photo', selectedFile);
 
-            const res = await userAPI.updateUser(uploadEmployee.id, formData);
+            const res = await staffAPI.updateStaffMember(uploadEmployee.id, formData);
 
             if (res.success) {
                 toast.success('Photo updated!');
@@ -299,6 +315,10 @@ export default function IDCardsManagementPage() {
                                     <div className="flex items-center gap-2 text-[10px] font-bold text-stone-500 uppercase">
                                         <ShieldCheck className="w-3 h-3" />
                                         ID: {emp.employee_id || 'NOT SET'}
+                                    </div>
+                                    <div className="flex items-center gap-2 text-[10px] font-bold text-stone-500 uppercase">
+                                        <UserCircle className="w-3 h-3 text-stone-300" />
+                                        NID: {emp.national_id || 'NOT SET'}
                                     </div>
                                     <div className="flex items-center gap-2 text-[10px] font-bold text-stone-500 uppercase">
                                         <Mail className="w-3 h-3 text-stone-300" />
@@ -478,6 +498,14 @@ export default function IDCardsManagementPage() {
                             <Input
                                 value={editData.phone_number}
                                 onChange={(e) => setEditData({ ...editData, phone_number: e.target.value })}
+                                className="bg-stone-50 border-none h-11 rounded-xl"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-stone-500 uppercase">National ID</label>
+                            <Input
+                                value={editData.national_id}
+                                onChange={(e) => setEditData({ ...editData, national_id: e.target.value })}
                                 className="bg-stone-50 border-none h-11 rounded-xl"
                             />
                         </div>
