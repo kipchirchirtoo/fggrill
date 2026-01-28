@@ -165,7 +165,13 @@ export default function HREmployeesPage() {
             department: member.department || '',
             phone: member.phone || '',
             national_id: member.national_id || '',
-            status: member.status
+            status: member.status,
+            pos_pin: (member as any).pos_pin || '',
+            shift: (member as any).shift || 'morning',
+            address: (member as any).address || '',
+            ec_name: (member as any).emergency_contact?.name || (member as any).ec_name || '',
+            ec_phone: (member as any).emergency_contact?.phone || (member as any).ec_phone || '',
+            ec_relationship: (member as any).emergency_contact?.relationship || (member as any).ec_relationship || ''
         });
         setEditModalOpen(true);
     };
@@ -334,332 +340,333 @@ export default function HREmployeesPage() {
                         resetForm();
                     }
                 }}>
-                    <div className="bg-[#F2F2F7] px-4 py-3 border-b flex items-center justify-between">
-                        <button
-                            onClick={() => {
-                                setAddModalOpen(false);
-                                setEditModalOpen(false);
-                                resetForm();
-                            }}
-                            className="text-[#007AFF] text-lg"
-                        >
-                            Cancel
-                        </button>
-                        <DialogTitle className="text-lg font-semibold">
-                            {addModalOpen ? 'Onboard Staff' : 'Edit Profile'}
-                        </DialogTitle>
-                        <div className="w-12"></div>
-                    </div>
-
-                    <div className="p-4 bg-[#F2F2F7] min-h-[460px]">
-                        {/* Step Indicator */}
-                        <div className="flex justify-center gap-1 mb-6">
-                            {[1, 2, 3, 4].map((step) => (
-                                <div
-                                    key={step}
-                                    className={`h-1.5 rounded-full transition-all duration-300 ${wizardStep === step ? 'w-8 bg-[#007AFF]' : 'w-2 bg-gray-300'
-                                        }`}
-                                />
-                            ))}
+                    <DialogContent className="max-w-[480px] p-0 overflow-hidden border-none rounded-ios-2xl bg-[#F2F2F7]">
+                        <div className="bg-[#F2F2F7] px-4 py-3 border-b flex items-center justify-between">
+                            <button
+                                onClick={() => {
+                                    setAddModalOpen(false);
+                                    setEditModalOpen(false);
+                                    resetForm();
+                                }}
+                                className="text-[#007AFF] text-lg"
+                            >
+                                Cancel
+                            </button>
+                            <DialogTitle className="text-lg font-semibold">
+                                {addModalOpen ? 'Onboard Staff' : 'Edit Profile'}
+                            </DialogTitle>
+                            <div className="w-12"></div>
                         </div>
 
-                        <AnimatePresence mode="wait">
-                            {wizardStep === 1 && (
-                                <motion.div
-                                    key="step1"
-                                    initial={{ opacity: 0, x: 20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: -20 }}
-                                    className="space-y-4"
-                                >
-                                    <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-stone-100">
-                                        <div className="p-4 border-b border-stone-50">
-                                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">First Name</label>
-                                            <Input
-                                                value={formData.first_name}
-                                                onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                                                className={`border-none p-0 h-auto focus-visible:ring-0 text-lg ${formErrors.first_name ? 'text-red-500' : ''}`}
-                                                placeholder="Required"
-                                            />
-                                        </div>
-                                        <div className="p-4">
-                                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Last Name</label>
-                                            <Input
-                                                value={formData.last_name}
-                                                onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                                                className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
-                                                placeholder="Required"
-                                            />
-                                        </div>
-                                    </div>
+                        <div className="p-4 bg-[#F2F2F7]">
+                            {/* Step Indicator */}
+                            <div className="flex justify-center gap-1 mb-6">
+                                {[1, 2, 3, 4].map((step) => (
+                                    <div
+                                        key={step}
+                                        className={`h-1.5 rounded-full transition-all duration-300 ${wizardStep === step ? 'w-8 bg-[#007AFF]' : 'w-2 bg-gray-300'
+                                            }`}
+                                    />
+                                ))}
+                            </div>
 
-                                    <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-stone-100">
-                                        <div className="p-4 border-b border-stone-50">
-                                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Email Address</label>
-                                            <Input
-                                                type="email"
-                                                value={formData.email}
-                                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                                className={`border-none p-0 h-auto focus-visible:ring-0 text-lg ${formErrors.email ? 'text-red-500' : ''}`}
-                                                placeholder="staff@fggrill.com"
-                                            />
-                                        </div>
-                                        <div className="p-4">
-                                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">National ID</label>
-                                            <Input
-                                                value={formData.national_id}
-                                                onChange={(e) => setFormData({ ...formData, national_id: e.target.value })}
-                                                className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
-                                                placeholder="Required for ID card"
-                                            />
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            )}
-
-                            {wizardStep === 2 && (
-                                <motion.div
-                                    key="step2"
-                                    initial={{ opacity: 0, x: 20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: -20 }}
-                                    className="space-y-4"
-                                >
-                                    <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-stone-100">
-                                        <div className="p-4 border-b border-stone-50">
-                                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">System Role</label>
-                                            <select
-                                                value={formData.role}
-                                                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                                                className="w-full bg-transparent border-none p-0 h-auto focus:ring-0 text-lg appearance-none cursor-pointer"
-                                            >
-                                                <option value="">Select role</option>
-                                                {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
-                                            </select>
-                                        </div>
-                                        <div className="p-4 border-b border-stone-50">
-                                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Department</label>
-                                            <select
-                                                value={formData.department}
-                                                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                                                className="w-full bg-transparent border-none p-0 h-auto focus:ring-0 text-lg appearance-none cursor-pointer"
-                                            >
-                                                <option value="">Select department</option>
-                                                {departments.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
-                                            </select>
-                                        </div>
-                                        <div className="p-4">
-                                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Branch</label>
-                                            <select
-                                                value={formData.branch_id}
-                                                onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })}
-                                                className="w-full bg-transparent border-none p-0 h-auto focus:ring-0 text-lg appearance-none cursor-pointer"
-                                            >
-                                                <option value="">Select branch</option>
-                                                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-stone-100 p-4">
-                                        <div className="flex items-center justify-between">
-                                            <label className="text-sm font-medium text-stone-700">Employment Status</label>
-                                            <select
-                                                value={formData.status}
-                                                onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
-                                                className="bg-transparent border-none p-0 h-auto focus:ring-0 text-[#007AFF] font-bold text-right appearance-none cursor-pointer"
-                                            >
-                                                <option value="active">Active</option>
-                                                <option value="inactive">Inactive</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            )}
-
-                            {wizardStep === 3 && (
-                                <motion.div
-                                    key="step3"
-                                    initial={{ opacity: 0, x: 20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: -20 }}
-                                    className="space-y-4"
-                                >
-                                    <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-stone-100">
-                                        <div className="p-4 border-b border-stone-50">
-                                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Residential Address</label>
-                                            <Input
-                                                value={formData.address}
-                                                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                                                className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
-                                                placeholder="Nairobi, Kenya"
-                                            />
-                                        </div>
-                                        <div className="p-4">
-                                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Personal Phone</label>
-                                            <Input
-                                                value={formData.phone}
-                                                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                                className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
-                                                placeholder="+254..."
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-stone-100">
-                                        <div className="p-4 border-b border-stone-50 text-[#FF3B30] font-bold text-[10px] uppercase tracking-wider">Emergency Contact</div>
-                                        <div className="p-4 border-b border-stone-50">
-                                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Full Name</label>
-                                            <Input
-                                                value={formData.ec_name}
-                                                onChange={(e) => setFormData({ ...formData, ec_name: e.target.value })}
-                                                className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
-                                                placeholder="Contact Name"
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-2">
-                                            <div className="p-4 border-r border-stone-50">
-                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Relationship</label>
+                            <AnimatePresence mode="wait">
+                                {wizardStep === 1 && (
+                                    <motion.div
+                                        key="step1"
+                                        initial={{ opacity: 0, x: 20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: -20 }}
+                                        className="space-y-4"
+                                    >
+                                        <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-stone-100">
+                                            <div className="p-4 border-b border-stone-50">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">First Name</label>
                                                 <Input
-                                                    value={formData.ec_relationship}
-                                                    onChange={(e) => setFormData({ ...formData, ec_relationship: e.target.value })}
-                                                    className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
-                                                    placeholder="Spouse"
+                                                    value={formData.first_name}
+                                                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                                                    className={`border-none p-0 h-auto focus-visible:ring-0 text-lg ${formErrors.first_name ? 'text-red-500' : ''}`}
+                                                    placeholder="Required"
                                                 />
                                             </div>
                                             <div className="p-4">
-                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Phone</label>
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Last Name</label>
                                                 <Input
-                                                    value={formData.ec_phone}
-                                                    onChange={(e) => setFormData({ ...formData, ec_phone: e.target.value })}
+                                                    value={formData.last_name}
+                                                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
                                                     className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
-                                                    placeholder="Phone"
+                                                    placeholder="Required"
                                                 />
                                             </div>
                                         </div>
-                                    </div>
-                                </motion.div>
-                            )}
 
-                            {wizardStep === 4 && (
-                                <motion.div
-                                    key="step4"
-                                    initial={{ opacity: 0, x: 20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: -20 }}
-                                    className="space-y-4"
-                                >
-                                    <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-stone-100">
-                                        <div className="p-4 border-b border-stone-50 font-bold text-[10px] text-[#007AFF] uppercase tracking-wider">System & POS Access</div>
-                                        <div className="p-4 border-b border-stone-50">
-                                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">POS PIN</label>
-                                            <Input
-                                                value={formData.pos_pin}
-                                                onChange={(e) => setFormData({ ...formData, pos_pin: e.target.value.toUpperCase() })}
-                                                className="border-none p-0 h-auto focus-visible:ring-0 text-lg font-mono"
-                                                maxLength={4}
-                                                placeholder="e.g. R001"
-                                            />
+                                        <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-stone-100">
+                                            <div className="p-4 border-b border-stone-50">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Email Address</label>
+                                                <Input
+                                                    type="email"
+                                                    value={formData.email}
+                                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                                    className={`border-none p-0 h-auto focus-visible:ring-0 text-lg ${formErrors.email ? 'text-red-500' : ''}`}
+                                                    placeholder="staff@fggrill.com"
+                                                />
+                                            </div>
+                                            <div className="p-4">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">National ID</label>
+                                                <Input
+                                                    value={formData.national_id}
+                                                    onChange={(e) => setFormData({ ...formData, national_id: e.target.value })}
+                                                    className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
+                                                    placeholder="Required for ID card"
+                                                />
+                                            </div>
                                         </div>
-                                        <div className="p-4">
-                                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Assigned Shift</label>
-                                            <select
-                                                value={formData.shift}
-                                                onChange={(e) => setFormData({ ...formData, shift: e.target.value })}
-                                                className="w-full bg-transparent border-none p-0 h-auto focus:ring-0 text-lg appearance-none cursor-pointer"
-                                            >
-                                                <option value="morning">Morning</option>
-                                                <option value="afternoon">Afternoon</option>
-                                                <option value="night">Night</option>
-                                            </select>
+                                    </motion.div>
+                                )}
+
+                                {wizardStep === 2 && (
+                                    <motion.div
+                                        key="step2"
+                                        initial={{ opacity: 0, x: 20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: -20 }}
+                                        className="space-y-4"
+                                    >
+                                        <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-stone-100">
+                                            <div className="p-4 border-b border-stone-50">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">System Role</label>
+                                                <select
+                                                    value={formData.role}
+                                                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                                                    className="w-full bg-transparent border-none p-0 h-auto focus:ring-0 text-lg appearance-none cursor-pointer"
+                                                >
+                                                    <option value="">Select role</option>
+                                                    {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="p-4 border-b border-stone-50">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Department</label>
+                                                <select
+                                                    value={formData.department}
+                                                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                                                    className="w-full bg-transparent border-none p-0 h-auto focus:ring-0 text-lg appearance-none cursor-pointer"
+                                                >
+                                                    <option value="">Select department</option>
+                                                    {departments.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="p-4">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Branch</label>
+                                                <select
+                                                    value={formData.branch_id}
+                                                    onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })}
+                                                    className="w-full bg-transparent border-none p-0 h-auto focus:ring-0 text-lg appearance-none cursor-pointer"
+                                                >
+                                                    <option value="">Select branch</option>
+                                                    {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                                </select>
+                                            </div>
                                         </div>
-                                    </div>
 
-                                    <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100/50">
-                                        <p className="text-[11px] text-blue-600 leading-relaxed">
-                                            Completing onboarding will create a system user account and a staff profile for ID card generation.
-                                        </p>
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                                        <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-stone-100 p-4">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-sm font-medium text-stone-700">Employment Status</label>
+                                                <select
+                                                    value={formData.status}
+                                                    onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
+                                                    className="bg-transparent border-none p-0 h-auto focus:ring-0 text-[#007AFF] font-bold text-right appearance-none cursor-pointer"
+                                                >
+                                                    <option value="active">Active</option>
+                                                    <option value="inactive">Inactive</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                )}
 
-                        {/* Navigation Bar */}
-                        <div className="flex gap-4 mt-8">
-                            {wizardStep > 1 && (
-                                <button
-                                    onClick={() => setWizardStep(prev => prev - 1)}
-                                    className="flex-1 py-3 px-4 rounded-xl bg-white border border-stone-200 text-stone-700 font-semibold active:bg-stone-50 transition-colors"
-                                >
-                                    Back
-                                </button>
-                            )}
+                                {wizardStep === 3 && (
+                                    <motion.div
+                                        key="step3"
+                                        initial={{ opacity: 0, x: 20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: -20 }}
+                                        className="space-y-4"
+                                    >
+                                        <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-stone-100">
+                                            <div className="p-4 border-b border-stone-50">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Residential Address</label>
+                                                <Input
+                                                    value={formData.address}
+                                                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                                                    className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
+                                                    placeholder="Nairobi, Kenya"
+                                                />
+                                            </div>
+                                            <div className="p-4">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Personal Phone</label>
+                                                <Input
+                                                    value={formData.phone}
+                                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                                    className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
+                                                    placeholder="+254..."
+                                                />
+                                            </div>
+                                        </div>
 
-                            {wizardStep < 4 ? (
-                                <button
-                                    onClick={() => {
-                                        if (wizardStep === 1) {
-                                            const errors: any = {};
-                                            if (!formData.first_name) errors.first_name = true;
-                                            if (!formData.email) errors.email = true;
-                                            if (Object.keys(errors).length > 0) {
-                                                setFormErrors(errors);
-                                                toast.error("Please fill in required fields");
-                                                return;
+                                        <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-stone-100">
+                                            <div className="p-4 border-b border-stone-50 text-[#FF3B30] font-bold text-[10px] uppercase tracking-wider">Emergency Contact</div>
+                                            <div className="p-4 border-b border-stone-50">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Full Name</label>
+                                                <Input
+                                                    value={formData.ec_name}
+                                                    onChange={(e) => setFormData({ ...formData, ec_name: e.target.value })}
+                                                    className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
+                                                    placeholder="Contact Name"
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-2">
+                                                <div className="p-4 border-r border-stone-50">
+                                                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Relationship</label>
+                                                    <Input
+                                                        value={formData.ec_relationship}
+                                                        onChange={(e) => setFormData({ ...formData, ec_relationship: e.target.value })}
+                                                        className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
+                                                        placeholder="Spouse"
+                                                    />
+                                                </div>
+                                                <div className="p-4">
+                                                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Phone</label>
+                                                    <Input
+                                                        value={formData.ec_phone}
+                                                        onChange={(e) => setFormData({ ...formData, ec_phone: e.target.value })}
+                                                        className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
+                                                        placeholder="Phone"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                )}
+
+                                {wizardStep === 4 && (
+                                    <motion.div
+                                        key="step4"
+                                        initial={{ opacity: 0, x: 20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: -20 }}
+                                        className="space-y-4"
+                                    >
+                                        <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-stone-100">
+                                            <div className="p-4 border-b border-stone-50 font-bold text-[10px] text-[#007AFF] uppercase tracking-wider">System & POS Access</div>
+                                            <div className="p-4 border-b border-stone-50">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">POS PIN (4-6 Digits)</label>
+                                                <Input
+                                                    value={formData.pos_pin}
+                                                    onChange={(e) => setFormData({ ...formData, pos_pin: e.target.value })}
+                                                    className="border-none p-0 h-auto focus-visible:ring-0 text-lg font-mono"
+                                                    maxLength={6}
+                                                    placeholder="e.g. 1234"
+                                                />
+                                            </div>
+                                            <div className="p-4">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Assigned Shift</label>
+                                                <select
+                                                    value={formData.shift}
+                                                    onChange={(e) => setFormData({ ...formData, shift: e.target.value })}
+                                                    className="w-full bg-transparent border-none p-0 h-auto focus:ring-0 text-lg appearance-none cursor-pointer"
+                                                >
+                                                    <option value="morning">Morning</option>
+                                                    <option value="afternoon">Afternoon</option>
+                                                    <option value="night">Night</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100/50">
+                                            <p className="text-[11px] text-blue-600 leading-relaxed">
+                                                Completing onboarding will create a system user account and a staff profile for ID card generation.
+                                            </p>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            {/* Navigation Bar */}
+                            <div className="flex gap-4 mt-8">
+                                {wizardStep > 1 && (
+                                    <button
+                                        onClick={() => setWizardStep(prev => prev - 1)}
+                                        className="flex-1 py-3 px-4 rounded-xl bg-white border border-stone-200 text-stone-700 font-semibold active:bg-stone-50 transition-colors"
+                                    >
+                                        Back
+                                    </button>
+                                )}
+
+                                {wizardStep < 4 ? (
+                                    <button
+                                        onClick={() => {
+                                            if (wizardStep === 1) {
+                                                const errors: any = {};
+                                                if (!formData.first_name) errors.first_name = true;
+                                                if (!formData.email) errors.email = true;
+                                                if (Object.keys(errors).length > 0) {
+                                                    setFormErrors(errors);
+                                                    toast.error("Please fill in required fields");
+                                                    return;
+                                                }
                                             }
-                                        }
-                                        setFormErrors({});
-                                        setWizardStep(prev => prev + 1);
-                                    }}
-                                    className="flex-1 py-3 px-4 rounded-xl bg-[#007AFF] text-white font-semibold active:bg-[#0062CC] shadow-md transition-shadow"
-                                >
-                                    Next
-                                </button>
-                            ) : (
-                                <button
-                                    onClick={addModalOpen ? handleCreateStaff : handleUpdateStaff}
-                                    className="flex-1 py-3 px-4 rounded-xl bg-[#34C759] text-white font-semibold active:bg-[#2EB150] shadow-md"
-                                    disabled={isSubmitting}
-                                >
-                                    {isSubmitting ? 'Syncing...' : (addModalOpen ? 'Complete Onboarding' : 'Save Changes')}
-                                </button>
-                            )}
+                                            setFormErrors({});
+                                            setWizardStep(prev => prev + 1);
+                                        }}
+                                        className="flex-1 py-3 px-4 rounded-xl bg-[#007AFF] text-white font-semibold active:bg-[#0062CC] shadow-md transition-shadow"
+                                    >
+                                        Next
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={addModalOpen ? handleCreateStaff : handleUpdateStaff}
+                                        className="flex-1 py-3 px-4 rounded-xl bg-[#34C759] text-white font-semibold active:bg-[#2EB150] shadow-md"
+                                        disabled={isSubmitting}
+                                    >
+                                        {isSubmitting ? 'Syncing...' : (addModalOpen ? 'Complete Onboarding' : 'Save Changes')}
+                                    </button>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
+                    </DialogContent>
+                </Dialog>
 
-            {/* Delete Confirmation */}
-            <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
-                <DialogContent className="max-w-[320px] bg-white p-6 rounded-ios-2xl border-none shadow-2xl">
-                    <div className="text-center">
-                        <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <Trash2 className="h-6 w-6 text-red-500" />
+                {/* Delete Confirmation */}
+                <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+                    <DialogContent className="max-w-[320px] bg-white p-6 rounded-ios-2xl border-none shadow-2xl">
+                        <div className="text-center">
+                            <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Trash2 className="h-6 w-6 text-red-500" />
+                            </div>
+                            <h3 className="text-lg font-bold text-stone-900">Remove Employee?</h3>
+                            <p className="text-stone-500 text-sm mt-2 font-medium">This will permanently remove the record from the system.</p>
                         </div>
-                        <h3 className="text-lg font-bold text-stone-900">Remove Employee?</h3>
-                        <p className="text-stone-500 text-sm mt-2 font-medium">This will permanently remove the record from the system.</p>
-                    </div>
-                    <div className="flex flex-col gap-2 mt-6">
-                        <IOSButton
-                            onClick={handleConfirmDelete}
-                            className="w-full bg-red-500 hover:bg-red-600 text-white border-none h-11"
-                            disabled={isSubmitting}
-                        >
-                            {isSubmitting ? 'Removing...' : 'Remove Record'}
-                        </IOSButton>
-                        <IOSButton
-                            variant="secondary"
-                            onClick={() => setConfirmDeleteOpen(false)}
-                            className="w-full h-11"
-                            disabled={isSubmitting}
-                        >
-                            Keep Record
-                        </IOSButton>
-                    </div>
-                </DialogContent>
-            </Dialog>
+                        <div className="flex flex-col gap-2 mt-6">
+                            <IOSButton
+                                onClick={handleConfirmDelete}
+                                className="w-full bg-red-500 hover:bg-red-600 text-white border-none h-11"
+                                disabled={isSubmitting}
+                            >
+                                {isSubmitting ? 'Removing...' : 'Remove Record'}
+                            </IOSButton>
+                            <IOSButton
+                                variant="secondary"
+                                onClick={() => setConfirmDeleteOpen(false)}
+                                className="w-full h-11"
+                                disabled={isSubmitting}
+                            >
+                                Keep Record
+                            </IOSButton>
+                        </div>
+                    </DialogContent>
+                </Dialog>
 
-        </DashboardLayout>
-        </ProtectedRoute >
+            </DashboardLayout>
+        </ProtectedRoute>
     );
 }
