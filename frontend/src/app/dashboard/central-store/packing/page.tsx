@@ -23,8 +23,15 @@ export default function PackingPage() {
     const fetchApprovedRequests = useCallback(async () => {
         setIsLoading(true);
         try {
-            const response = await storeAPI.getBranchRequests('APPROVED');
-            if (response.success) setRequests(response.data || []);
+            const [approvedRes, partialRes] = await Promise.all([
+                storeAPI.getBranchRequests('APPROVED'),
+                storeAPI.getBranchRequests('PARTIALLY_APPROVED')
+            ]);
+            let combinedRequests: StockRequest[] = [];
+            if (approvedRes.success) combinedRequests = [...combinedRequests, ...(approvedRes.data || [])];
+            if (partialRes.success) combinedRequests = [...combinedRequests, ...(partialRes.data || [])];
+
+            setRequests(combinedRequests);
         } catch (error) { console.error('Error:', error); }
         finally { setIsLoading(false); }
     }, []);
@@ -106,7 +113,10 @@ export default function PackingPage() {
                                             <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">REQ # {req.request_number}</p>
                                             <h3 className="text-lg font-semibold text-stone-900 mt-1 uppercase">{req.branch_name}</h3>
                                         </div>
-                                        <span className="text-[10px] font-bold px-2 py-0.5 bg-stone-100 text-stone-500 rounded uppercase">Approved</span>
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${req.status === 'PARTIALLY_APPROVED' ? 'bg-amber-100 text-amber-600' : 'bg-stone-100 text-stone-500'
+                                            }`}>
+                                            {req.status === 'PARTIALLY_APPROVED' ? 'Partial' : 'Approved'}
+                                        </span>
                                     </div>
                                     <div className="space-y-3 mb-5">
                                         <div className="flex items-center gap-2 text-[13px] text-stone-600">

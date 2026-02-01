@@ -369,7 +369,7 @@ export default function CentralRequestsPage() {
                                         </button>
                                     </>
                                 )}
-                                {selectedRequest.status === 'APPROVED' && (
+                                {['APPROVED', 'PARTIALLY_APPROVED'].includes(selectedRequest.status) && (
                                     <button
                                         className="btn-primary bg-emerald-600 hover:bg-emerald-700 px-6"
                                         onClick={() => {
