@@ -43,10 +43,7 @@ import {
   getBranchStock,
   getLowStockItems,
   recordStockOut,
-  createStockRequest,
-  getBranchRequests,
   getPendingRequests,
-  reviewStockRequest,
   createDispatch,
   dispatchItems,
   getDispatchHistory,
@@ -61,6 +58,10 @@ import {
 } from '../controllers/storekeeping/branch-inventory.controller';
 
 import {
+  getStockRequests,
+  getStockRequest,
+  createStockRequest,
+  reviewStockRequest,
   approveStockRequest,
   rejectStockRequest
 } from '../controllers/storekeeping/stock-requests.controller';
@@ -184,8 +185,9 @@ router.get('/stock-movements', authorize(branchRoles), getStockMovements);
 
 // Stock requests (Branch → Central)
 router.post('/stock-requests', authorize(branchRoles), createStockRequest);
-router.get('/stock-requests', authorize(branchRoles), getBranchRequests);
+router.get('/stock-requests', authorize(branchRoles), getStockRequests);
 router.get('/stock-requests/pending', authorize(centralRoles), getPendingRequests);
+router.get('/stock-requests/:id', authorize(branchRoles), getStockRequest);
 router.put('/stock-requests/:id/review', authorize(centralRoles), reviewStockRequest);
 router.put('/stock-requests/:id/approve', authorize(centralRoles), approveStockRequest);
 router.put('/stock-requests/:id/reject', authorize(centralRoles), rejectStockRequest);

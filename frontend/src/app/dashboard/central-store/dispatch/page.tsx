@@ -114,7 +114,12 @@ export default function DispatchPage() {
     };
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
+        <ProtectedRoute allowedRoles={[
+            UserRole.CENTRAL_STOREKEEPER,
+            UserRole.SUPER_ADMIN,
+            UserRole.GENERAL_MANAGER,
+            UserRole.CENTRAL_OPERATIONS_MANAGER
+        ]}>
             <DashboardLayout>
                 <div className="space-y-6">
                     {/* Header */}
@@ -133,8 +138,8 @@ export default function DispatchPage() {
                                         key={tab}
                                         onClick={() => setStatusTab(tab)}
                                         className={`px-3 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider transition-all ${statusTab === tab
-                                                ? 'bg-white text-stone-900 shadow-sm'
-                                                : 'text-stone-400 hover:text-stone-600'
+                                            ? 'bg-white text-stone-900 shadow-sm'
+                                            : 'text-stone-400 hover:text-stone-600'
                                             }`}
                                     >
                                         {tab.replace('_', ' ')}
@@ -273,8 +278,8 @@ export default function DispatchPage() {
                                 onClick={handleConfirmDispatch}
                                 disabled={!dispatchFormData.vehicle_id || !dispatchFormData.driver_id || isSubmitting}
                                 className={`h-10 px-5 rounded-lg text-sm font-bold shadow-sm transition-colors ${(!dispatchFormData.vehicle_id || !dispatchFormData.driver_id)
-                                        ? 'bg-stone-200 text-stone-400'
-                                        : 'bg-stone-900 text-white hover:bg-stone-800'
+                                    ? 'bg-stone-200 text-stone-400'
+                                    : 'bg-stone-900 text-white hover:bg-stone-800'
                                     }`}
                             >
                                 {isSubmitting ? 'Processing...' : 'Confirm Dispatch'}

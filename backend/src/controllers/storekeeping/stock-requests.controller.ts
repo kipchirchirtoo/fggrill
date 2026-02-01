@@ -67,7 +67,13 @@ export const getStockRequests = async (
         const status = req.query.status as string;
 
         // Allow central roles to fetch all requests (branchId is optional)
-        const isCentralRole = ['super_admin', 'general_manager', 'central_storekeeper', 'auditor'].includes(req.user?.role || '');
+        const isCentralRole = [
+            'super_admin',
+            'general_manager',
+            'central_storekeeper',
+            'central_operations_manager',
+            'auditor'
+        ].includes(req.user?.role || '');
 
         if (branchId === null) {
             if (!isCentralRole) {
@@ -82,7 +88,7 @@ export const getStockRequests = async (
             // Central roles keep branchId as null to fetch all
         }
 
-        const data = await BranchInventoryService.getBranchRequests(branchId, status);
+        const data = await BranchInventoryService.getRequests(branchId, status);
 
         res.status(200).json({
             success: true,
@@ -91,12 +97,7 @@ export const getStockRequests = async (
         });
     } catch (error) {
         logger.error('Error fetching stock requests:', error);
-        // Return empty list instead of crashing
-        res.status(200).json({
-            success: true,
-            count: 0,
-            data: []
-        });
+        next(error);
     }
 };
 
@@ -264,14 +265,36 @@ export const reviewStockRequest = async (
 ): Promise<void> => {
     try {
         const { id } = req.params;
-        const { action, review_notes, item_approvals } = req.body;
+        const { action, review_notes, item_approvals, approved_items } = req.body;
+        const items_to_approve = approved_items || item_approvals;
         const userId = req.user?.id;
 
         if (action === 'APPROVE') {
+            let finalApprovals = items_to_approve;
+
+            // If no specific item approvals provided, approve all pending items in full
+            if (!finalApprovals || finalApprovals.length === 0) {
+                const { data: pendingItems } = await supabase
+                    .from('stock_request_items')
+                    .select('id, requested_quantity')
+                    .eq('request_id', id);
+
+                finalApprovals = (pendingItems || []).map(item => ({
+                    id: item.id,
+                    approved_quantity: item.requested_quantity,
+                    status: 'APPROVED'
+                }));
+            }
+
+            if (!finalApprovals || finalApprovals.length === 0) {
+                res.status(400).json({ success: false, message: 'No items found to approve' });
+                return;
+            }
+
             const result = await BranchInventoryService.approveStockRequest(
                 id,
                 userId!,
-                item_approvals || [],
+                finalApprovals,
                 review_notes
             );
             res.status(200).json({

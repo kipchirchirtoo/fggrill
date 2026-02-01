@@ -106,7 +106,12 @@ export default function InventoryPage() {
   );
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
+    <ProtectedRoute allowedRoles={[
+      UserRole.CENTRAL_STOREKEEPER,
+      UserRole.SUPER_ADMIN,
+      UserRole.GENERAL_MANAGER,
+      UserRole.CENTRAL_OPERATIONS_MANAGER
+    ]}>
       <DashboardLayout>
         <div className="space-y-6">
           {/* Header */}

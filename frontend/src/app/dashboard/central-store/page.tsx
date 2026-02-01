@@ -7,7 +7,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { storeAPI } from '@/lib/api';
 import {
   Package, Truck, ClipboardList, RefreshCw, AlertTriangle,
-  Building2, Apple, Beer, Box, Navigation, ChevronRight
+  Building2, Apple, Beer, Box, Navigation, ChevronRight, BarChart3
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -117,7 +117,7 @@ export default function CentralStoreDashboard() {
           ))}
 
           {/* Bottom Links */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <Link href="/dashboard/central-store/suppliers">
               <div className="flex items-center justify-between p-4 bg-stone-50 hover:bg-stone-100 border border-stone-200 rounded-lg transition-colors group cursor-pointer">
                 <div className="flex items-center gap-3">
@@ -126,7 +126,7 @@ export default function CentralStoreDashboard() {
                   </div>
                   <div>
                     <p className="text-[13px] font-medium text-stone-800">Suppliers & Vendors</p>
-                    <p className="text-[11px] text-stone-500">Manage supply chain partners</p>
+                    <p className="text-[11px] text-stone-500">Manage partners</p>
                   </div>
                 </div>
                 <ChevronRight className="h-4 w-4 text-stone-300 group-hover:text-stone-400 transition-colors" />
@@ -140,7 +140,21 @@ export default function CentralStoreDashboard() {
                   </div>
                   <div>
                     <p className="text-[13px] font-medium text-stone-800">Physical Stock Takes</p>
-                    <p className="text-[11px] text-stone-500">Inventory audits & corrections</p>
+                    <p className="text-[11px] text-stone-500">Inventory audits</p>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-stone-300 group-hover:text-stone-400 transition-colors" />
+              </div>
+            </Link>
+            <Link href="/dashboard/central-store/reports">
+              <div className="flex items-center justify-between p-4 bg-stone-50 hover:bg-stone-100 border border-stone-200 rounded-lg transition-colors group cursor-pointer">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-stone-200/50 flex items-center justify-center">
+                    <BarChart3 className="h-4 w-4 text-stone-600" />
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-medium text-stone-800">Central Reports</p>
+                    <p className="text-[11px] text-stone-500">Analytics & PDFs</p>
                   </div>
                 </div>
                 <ChevronRight className="h-4 w-4 text-stone-300 group-hover:text-stone-400 transition-colors" />

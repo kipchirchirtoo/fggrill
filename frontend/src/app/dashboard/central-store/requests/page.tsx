@@ -36,6 +36,8 @@ export default function CentralRequestsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const [selectedRequest, setSelectedRequest] = useState<StockRequest | null>(null);
+    const [reviewNotes, setReviewNotes] = useState('');
+    const [isProcessing, setIsProcessing] = useState(false);
 
     const fetchRequests = useCallback(async () => {
         setIsLoading(true);
@@ -53,6 +55,31 @@ export default function CentralRequestsPage() {
     useEffect(() => {
         fetchRequests();
     }, [fetchRequests]);
+
+    const handleAction = async (action: 'APPROVE' | 'REJECT') => {
+        if (!selectedRequest) return;
+        setIsProcessing(true);
+        try {
+            const res = await storeAPI.reviewStockRequest(selectedRequest.id, {
+                action,
+                review_notes: reviewNotes,
+                approved_items: [] // Empty means approve as requested or reject all
+            });
+            if (res.success) {
+                toast.success(`Request ${action === 'APPROVE' ? 'approved' : 'rejected'} successfully`);
+                setReviewNotes('');
+                setSelectedRequest(null);
+                fetchRequests();
+            } else {
+                toast.error(res.message || "Action failed");
+            }
+        } catch (error) {
+            console.error('Error processing request:', error);
+            toast.error("Failed to process request");
+        } finally {
+            setIsProcessing(false);
+        }
+    };
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -78,7 +105,12 @@ export default function CentralRequestsPage() {
     };
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
+        <ProtectedRoute allowedRoles={[
+            UserRole.CENTRAL_STOREKEEPER,
+            UserRole.CENTRAL_OPERATIONS_MANAGER,
+            UserRole.SUPER_ADMIN,
+            UserRole.GENERAL_MANAGER
+        ]}>
             <DashboardLayout>
                 <div className="space-y-6">
                     {/* Header */}
@@ -275,9 +307,40 @@ export default function CentralRequestsPage() {
                                         </table>
                                     </div>
                                 </div>
+
+                                {selectedRequest.status === 'PENDING' && (
+                                    <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200">
+                                        <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest block mb-2">Review Notes (Optional)</label>
+                                        <textarea
+                                            value={reviewNotes}
+                                            onChange={(e) => setReviewNotes(e.target.value)}
+                                            placeholder="Add notes for the branch..."
+                                            className="w-full p-3 bg-white border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-stone-200 resize-none h-20"
+                                        />
+                                    </div>
+                                )}
                             </div>
 
                             <div className="bg-stone-50/80 px-6 py-4 border-t border-stone-100 flex justify-end gap-3">
+                                {selectedRequest.status === 'PENDING' && (
+                                    <>
+                                        <button
+                                            disabled={isProcessing}
+                                            onClick={() => handleAction('REJECT')}
+                                            className="btn-secondary text-rose-600 hover:bg-rose-50 hover:border-rose-200 px-6"
+                                        >
+                                            Reject
+                                        </button>
+                                        <button
+                                            disabled={isProcessing}
+                                            onClick={() => handleAction('APPROVE')}
+                                            className="btn-primary bg-stone-900 hover:bg-stone-800 px-6 flex items-center gap-2"
+                                        >
+                                            {isProcessing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                            Approve Request
+                                        </button>
+                                    </>
+                                )}
                                 {selectedRequest.status === 'APPROVED' && (
                                     <button
                                         className="btn-primary bg-emerald-600 hover:bg-emerald-700 px-6"

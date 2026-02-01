@@ -257,7 +257,7 @@ export async function createStockRequest(
 /**
  * Get stock requests for a branch (or all branches if branchId is null)
  */
-export async function getBranchRequests(branchId: number | null, status?: string) {
+export async function getRequests(branchId: number | null, status?: string) {
   let query = supabase
     .from('stock_requests')
     .select('*, requesting_branch:branches!requesting_branch_id(name)')

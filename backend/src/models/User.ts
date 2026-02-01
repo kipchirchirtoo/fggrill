@@ -76,6 +76,7 @@ export enum UserRole {
 
   // Operations
   BRANCH_OPERATIONS_MANAGER = 'branch_operations_manager',
+  CENTRAL_OPERATIONS_MANAGER = 'central_operations_manager',
   FACILITIES_MANAGER = 'facilities_manager',
 
   // General

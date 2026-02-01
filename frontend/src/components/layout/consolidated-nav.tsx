@@ -487,7 +487,14 @@ export function ConsolidatedNav() {
         />
       </NavGroup>
 
-
+      <NavGroup label="Inventory" icon={Package}>
+        <NavItem
+          href="/dashboard/branch-store/requests"
+          icon={ShoppingCart}
+          label="Beverage Requisitions"
+          active={pathname === '/dashboard/branch-store/requests'}
+        />
+      </NavGroup>
     </>
   );
 
@@ -509,10 +516,19 @@ export function ConsolidatedNav() {
           active={pathname.includes('/dashboard/procurement/purchase-orders')}
         />
         <NavItem
-          href="/dashboard/procurement/suppliers"
+          href="/dashboard/central-store/suppliers"
           icon={Users}
           label="Supplier Database"
-          active={pathname.includes('/dashboard/procurement/suppliers')}
+          active={pathname.includes('/dashboard/central-store/suppliers')}
+        />
+      </NavGroup>
+
+      <NavGroup label="Inventory & Logistics" icon={Package}>
+        <NavItem
+          href="/dashboard/central-store"
+          icon={Warehouse}
+          label="Central Store"
+          active={pathname.includes('/dashboard/central-store')}
         />
       </NavGroup>
 
@@ -692,6 +708,7 @@ export function ConsolidatedNav() {
     </>
   );
 
+
   // Central Storekeeper Navigation (Legacy)
   const centralStoreNav = (
     <>
@@ -758,28 +775,14 @@ export function ConsolidatedNav() {
           active={pathname.includes('/dashboard/procurement/purchase-orders')}
         />
         <NavItem
-          href="/dashboard/procurement/invoices"
-          icon={Receipt}
-          label="Supplier Invoices"
-          active={pathname.includes('/dashboard/procurement/invoices')}
-        />
-        <NavItem
-          href="/dashboard/procurement/payments"
-          icon={CreditCard}
-          label="Payments"
-          active={pathname.includes('/dashboard/procurement/payments')}
-        />
-        <NavItem
-          href="/dashboard/procurement/suppliers"
+          href="/dashboard/central-store/suppliers"
           icon={Store}
           label="Supplier Database"
-          active={pathname.includes('/dashboard/procurement/suppliers')}
+          active={pathname.includes('/dashboard/central-store/suppliers')}
         />
       </NavGroup>
 
-
-
-      <NavGroup label="Fleet" icon={Truck}>
+      <NavGroup label="Fleet & Logistics" icon={Truck}>
         <NavItem
           href="/dashboard/central-store/vehicles"
           icon={Truck}
@@ -794,7 +797,20 @@ export function ConsolidatedNav() {
         />
       </NavGroup>
 
-
+      <NavGroup label="Controls & Reports" icon={ShieldCheck}>
+        <NavItem
+          href="/dashboard/central-store/stock-takes"
+          icon={ClipboardList}
+          label="Stock Takes"
+          active={pathname === '/dashboard/central-store/stock-takes'}
+        />
+        <NavItem
+          href="/dashboard/central-store/reports"
+          icon={BarChart3}
+          label="Central Reports"
+          active={pathname === '/dashboard/central-store/reports'}
+        />
+      </NavGroup>
     </>
   );
 
@@ -841,6 +857,14 @@ export function ConsolidatedNav() {
         icon={TrendingDown}
         label="Stock Out"
         active={pathname === '/dashboard/branch-store/stock-out'}
+      />
+
+      <hr className="my-2 border-stone-100" />
+      <NavItem
+        href="/dashboard/branch-store/requests"
+        icon={ShoppingCart}
+        label="Store Requisitions"
+        active={pathname === '/dashboard/branch-store/requests'}
       />
     </>
   );
@@ -1267,30 +1291,18 @@ export function ConsolidatedNav() {
       return (
         <>
           {adminNav}
-          <hr className="my-4" />
+          <hr className="my-4 border-stone-100" />
+          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Inventory & Logistics</p>
+          {centralStoreNav}
+          <hr className="my-4 border-stone-100" />
+          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Corporate Functions</p>
+          {procurementNav}
+          <hr className="my-4 border-stone-100" />
           {hrNav}
-          <hr className="my-4" />
+          <hr className="my-4 border-stone-100" />
           {branchOperationsNav}
-          <hr className="my-4" />
+          <hr className="my-4 border-stone-100" />
           {facilitiesNav}
-          <hr className="my-4" />
-          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Kitchen Ops</p>
-          {kitchenOperationsNav}
-        </>
-      );
-    }
-
-
-    // Central Storekeeper Navigation (Legacy - has own dashboard)
-    if (user.role === UserRole.CENTRAL_STOREKEEPER) {
-      return centralStoreNav;
-    }
-
-    // General Manager Navigation (Legacy - has own dashboard)
-    if (user.role === UserRole.GENERAL_MANAGER) {
-      return (
-        <>
-          {gmNav}
           <hr className="my-4 border-stone-100" />
           <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Kitchen Ops</p>
           {kitchenOperationsNav}
@@ -1298,17 +1310,51 @@ export function ConsolidatedNav() {
       );
     }
 
-    // Branch Operations Manager Navigation
+
+    // General Manager Navigation
+    if (user.role === UserRole.GENERAL_MANAGER) {
+      return (
+        <>
+          {gmNav}
+          <hr className="my-4 border-stone-100" />
+          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Inventory & Logistics</p>
+          {centralStoreNav}
+          <hr className="my-4 border-stone-100" />
+          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Corporate Functions</p>
+          {procurementNav}
+          <hr className="my-4 border-stone-100" />
+          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Kitchen Ops</p>
+          {kitchenOperationsNav}
+        </>
+      );
+    }
+
+    // Central Store Management
+    if (user.role === UserRole.CENTRAL_STOREKEEPER || user.role === UserRole.CENTRAL_OPERATIONS_MANAGER) {
+      return centralStoreNav;
+    }
+
+    // Branch Store & Stock Management
+    if (user.role === UserRole.BRANCH_STOREKEEPER || user.role === UserRole.STOREKEEPER) {
+      return branchStoreNav;
+    }
+
+    // Procurement & Purchasing
+    if (user.role === UserRole.PROCUREMENT || user.role === UserRole.PURCHASING_MANAGER) {
+      return procurementNav;
+    }
+
+    // Accounting & Finance
+    if (user.role === UserRole.BRANCH_ACCOUNTANT || user.role === UserRole.ACCOUNTANT) {
+      return branchAccountantNav;
+    }
+
+    // Branch Operations
     if (user.role === UserRole.BRANCH_OPERATIONS_MANAGER) {
       return branchOperationsNav;
     }
 
-    // Branch Storekeeper Navigation (Legacy - has own dashboard)
-    if (user.role === UserRole.BRANCH_STOREKEEPER) {
-      return branchStoreNav;
-    }
-
-    // Branch Manager Navigation (Legacy - has own dashboard)
+    // Branch Management
     if (user.role === UserRole.BRANCH_MANAGER) {
       return (
         <>
@@ -1320,37 +1366,24 @@ export function ConsolidatedNav() {
       );
     }
 
-    // Facilities Manager Navigation
+    // Facilities & Maintenance
     if (user.role === UserRole.FACILITIES_MANAGER) {
       return facilitiesNav;
     }
-
-    // Housekeeping Navigation (Legacy - has own dashboard)
     if (user.role === UserRole.HOUSEKEEPING || user.role === UserRole.HOUSEKEEPING_SUPERVISOR) {
       return housekeepingNav;
     }
-
-    // Maintenance Navigation (Legacy - has own dashboard)
     if (user.role === UserRole.MAINTENANCE) {
       return maintenanceNav;
     }
 
-    // Receptionist Navigation
-    if (user.role === UserRole.RECEPTIONIST) {
-      return receptionNav;
-    }
-
-    // Restaurant Navigation
+    // Food & Beverage
     if (user.role === UserRole.RESTAURANT) {
       return restaurantNav;
     }
-
-    // POS Kitchen Navigation
     if (user.role === UserRole.POS_KITCHEN) {
       return posKitchenNav;
     }
-
-    // Kitchen Navigation
     if (user.role === UserRole.KITCHEN) {
       return (
         <>
@@ -1360,38 +1393,20 @@ export function ConsolidatedNav() {
         </>
       );
     }
-
-    // Kitchen Operations Navigation
     if (user.role === UserRole.KITCHEN_OPERATIONS) {
       return kitchenOperationsNav;
     }
-
-    // Bartender Navigation
     if (user.role === UserRole.BARTENDER) {
       return barNav;
     }
 
-    // Auditor Navigation
+    // Support & Oversight
     if (user.role === UserRole.AUDITOR) {
       return auditorNav;
     }
-
-    // Procurement Navigation
-    if (user.role === UserRole.PROCUREMENT) {
-      return procurementNav;
+    if (user.role === UserRole.RECEPTIONIST) {
+      return receptionNav;
     }
-
-    // Storekeeper Navigation
-    if (user.role === UserRole.STOREKEEPER) {
-      return branchStoreNav;
-    }
-
-    // Branch Accounting Navigation
-    if (user.role === UserRole.BRANCH_ACCOUNTANT) {
-      return branchAccountantNav;
-    }
-
-    // Cashier Navigation
     if (user.role === UserRole.CASHIER) {
       return (
         <NavItem
@@ -1402,13 +1417,10 @@ export function ConsolidatedNav() {
         />
       );
     }
-
-    // HR Management Navigation
     if (user.role === UserRole.HR_MANAGER) {
       return hrNav;
     }
 
-    // Default navigation for roles without specific nav - redirect to role-specific dashboard
     return null;
   };
 

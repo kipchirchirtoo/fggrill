@@ -11,7 +11,8 @@ import {
     Clock,
     CheckCircle2,
     XCircle,
-    Plus
+    Plus,
+    ShieldCheck
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -34,7 +35,7 @@ export default function ProcurementDashboard() {
         lowStockItems: 0
     });
 
-    const [recentPOs, setRecentPOs] = useState([]);
+    const [recentPOs, setRecentPOs] = useState<any[]>([]);
 
     // Mock data for initial layout - will be replaced with API calls
     useEffect(() => {
@@ -142,9 +143,9 @@ export default function ProcurementDashboard() {
                                         <TableCell>{po.total.toLocaleString()}</TableCell>
                                         <TableCell>
                                             <Badge variant={
-                                                po.status === 'approved' ? 'success' :
-                                                    po.status === 'received' ? 'info' :
-                                                        'warning'
+                                                po.status === 'approved' ? 'default' :
+                                                    po.status === 'received' ? 'secondary' :
+                                                        'outline'
                                             }>
                                                 {po.status}
                                             </Badge>
@@ -169,19 +170,19 @@ export default function ProcurementDashboard() {
                         </CardHeader>
                         <CardContent className="space-y-2">
                             <Button variant="outline" className="w-full justify-start text-stone-600" asChild>
-                                <Link href="/dashboard/procurement/suppliers">
+                                <Link href="/dashboard/central-store/suppliers">
                                     <Users className="h-4 w-4 mr-2" />
                                     Supplier Directory
                                 </Link>
                             </Button>
                             <Button variant="outline" className="w-full justify-start text-stone-600" asChild>
-                                <Link href="/dashboard/procurement/items">
+                                <Link href="/dashboard/central-store/inventory">
                                     <Package className="h-4 w-4 mr-2" />
                                     Item Master List
                                 </Link>
                             </Button>
                             <Button variant="outline" className="w-full justify-start text-stone-600" asChild>
-                                <Link href="/dashboard/procurement/reports/aging">
+                                <Link href="/dashboard/auditor/reports/aging">
                                     <TrendingUp className="h-4 w-4 mr-2" />
                                     Aging Analysis
                                 </Link>
@@ -218,4 +219,3 @@ export default function ProcurementDashboard() {
         </div>
     );
 }
-import { ShieldCheck } from 'lucide-react';

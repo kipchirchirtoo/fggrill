@@ -241,7 +241,13 @@ export const getBranchRequests = async (
     });
 
     // Allow central roles to fetch all requests (branchId is optional)
-    const isCentralRole = ['super_admin', 'general_manager', 'central_storekeeper', 'auditor'].includes(req.user?.role || '');
+    const isCentralRole = [
+      'super_admin',
+      'general_manager',
+      'central_storekeeper',
+      'central_operations_manager',
+      'auditor'
+    ].includes(req.user?.role || '');
 
     console.log('isCentralRole:', isCentralRole);
 
@@ -260,7 +266,7 @@ export const getBranchRequests = async (
 
     console.log('Final branchId for service call:', branchId);
 
-    const data = await BranchInventoryService.getBranchRequests(branchId, status);
+    const data = await BranchInventoryService.getRequests(branchId, status);
     console.log('Data returned from service:', data?.length);
 
     res.status(200).json({
