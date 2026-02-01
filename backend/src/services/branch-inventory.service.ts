@@ -524,7 +524,8 @@ export async function createDispatchFromRequest(
       from_branch_id: fromBranchId,
       to_branch_id: toBranchId,
       created_by: userId,
-      status: 'PENDING', // Changed from DRAFT to PENDING to match status check in frontend
+      status: 'READY', // Changed from PENDING to READY as per user workflow
+      packed_at: new Date().toISOString(), // Set packed_at since it is created as READY
       vehicle_number: vehicleNumber,
       driver_name: driverName,
       driver_phone: driverPhone,
@@ -597,7 +598,7 @@ export async function dispatchItems(
     }
 
     // Check if dispatch has already been processed
-    if (dispatch.status !== 'PENDING') {
+    if (dispatch.status !== 'READY') {
       throw new Error(`Dispatch is already ${dispatch.status.toLowerCase()}`);
     }
 
