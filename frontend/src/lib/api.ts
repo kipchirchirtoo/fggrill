@@ -199,6 +199,8 @@ export const storeAPI = {
     fetchAPI<any>(`/store/stock-requests/${id}/approve`, { method: 'PUT', body: JSON.stringify(data || {}) }),
   rejectStockRequest: (id: string, data?: { review_notes?: string }) =>
     fetchAPI<any>(`/store/stock-requests/${id}/reject`, { method: 'PUT', body: JSON.stringify(data || {}) }),
+  reviewStockRequest: (id: string, data: { action: 'APPROVE' | 'REJECT'; review_notes?: string; approved_items?: any[] }) =>
+    fetchAPI<any>(`/store/stock-requests/${id}/review`, { method: 'PUT', body: JSON.stringify(data) }),
   getBranchPerformance: (branchId: number, days: number = 1) =>
     fetchAPI<any>(`/store/stock-requests/branch-performance/${branchId}?days=${days}`),
 
