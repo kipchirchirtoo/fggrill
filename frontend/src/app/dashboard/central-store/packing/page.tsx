@@ -127,81 +127,78 @@ export default function PackingPage() {
 
                 {/* Packing Modal - Minimal Light UI */}
                 <Dialog open={packingModalOpen} onOpenChange={setPackingModalOpen}>
-                    <DialogContent className="max-w-xl bg-white border-none shadow-2xl p-0 overflow-hidden rounded-xl">
-                        <div className="bg-stone-900 p-6 text-white pb-10">
+                    <DialogContent className="max-w-xl bg-white border-none shadow-2xl p-0 overflow-hidden rounded-xl max-h-[85vh] flex flex-col">
+                        <div className="bg-stone-900 p-4 text-white pb-6 shrink-0">
                             <DialogHeader>
-                                <DialogTitle className="text-xl font-semibold flex items-center gap-3">
+                                <DialogTitle className="text-lg font-semibold flex items-center gap-2">
                                     <ClipboardList className="h-5 w-5 text-stone-400" />
                                     Checklist: {selectedRequest?.request_number}
                                 </DialogTitle>
-                                <p className="text-stone-400 text-[12px] mt-1 uppercase tracking-wider font-bold">Destination: {selectedRequest?.branch_name}</p>
+                                <p className="text-stone-400 text-[11px] mt-0.5 uppercase tracking-wider font-bold">Destination: {selectedRequest?.branch_name}</p>
                             </DialogHeader>
                         </div>
 
-                        <div className="px-6 -mt-6">
-                            <div className="bg-white border border-stone-100 shadow-lg rounded-lg p-5">
-                                <p className="text-[12px] text-stone-600 leading-relaxed">
+                        <div className="px-4 -mt-4 shrink-0 relative z-10">
+                            <div className="bg-white border border-stone-100 shadow-lg rounded-lg p-3">
+                                <p className="text-[11px] text-stone-600 leading-relaxed">
                                     Confirm all quantities physically before proceeding.
                                     Once all items are checked, you can generate the dispatch notice.
                                 </p>
                             </div>
                         </div>
 
-                        <div className="p-6 space-y-3 max-h-[400px] overflow-y-auto">
+                        <div className="p-4 space-y-2 overflow-y-auto min-h-0 flex-1">
                             {selectedRequest?.items.map((item) => (
                                 <div
                                     key={item.id}
                                     onClick={() => togglePacked(item.id)}
-                                    className={`group flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-all duration-300 ${packedItems[item.id]
+                                    className={`group flex items-center justify-between p-3 border rounded-xl cursor-pointer transition-all duration-300 ${packedItems[item.id]
                                         ? 'bg-emerald-50 border-emerald-200 shadow-sm'
                                         : 'bg-white border-stone-100 hover:border-stone-300 hover:shadow-md'
                                         }`}
                                 >
-                                    <div className="flex items-center gap-4">
-                                        <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${packedItems[item.id]
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300 shrink-0 ${packedItems[item.id]
                                             ? 'bg-emerald-500 border-emerald-500 scale-110'
                                             : 'border-stone-200 group-hover:border-stone-900 group-hover:scale-105'
                                             }`}>
-                                            {packedItems[item.id] && <Check className="h-4 w-4 text-white stroke-[3px]" />}
+                                            {packedItems[item.id] && <Check className="h-3.5 w-3.5 text-white stroke-[3px]" />}
                                         </div>
                                         <div>
-                                            <p className={`text-[15px] font-bold ${packedItems[item.id] ? 'text-emerald-900' : 'text-stone-900'}`}>
+                                            <p className={`text-sm font-bold ${packedItems[item.id] ? 'text-emerald-900' : 'text-stone-900'}`}>
                                                 {item.item_name}
                                             </p>
                                             <div className="flex items-center gap-2 mt-0.5">
                                                 <p className="text-[10px] text-stone-400 font-mono uppercase tracking-tighter">{item.item_sku}</p>
                                                 {item.requested_quantity !== item.approved_quantity && (
-                                                    <span className="text-[9px] bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded-full font-bold border border-rose-100 italic">Adjusted by Audit</span>
+                                                    <span className="text-[9px] bg-rose-50 text-rose-600 px-1.5 py-px rounded-full font-bold border border-rose-100 italic">Adjusted</span>
                                                 )}
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="text-right flex flex-col items-end">
+                                    <div className="text-right flex flex-col items-end pl-2">
                                         <div className="flex flex-col items-end">
-                                            <span className="text-[9px] font-bold text-stone-400 uppercase tracking-widest">To Pack</span>
-                                            <p className={`text-lg font-black ${packedItems[item.id] ? 'text-emerald-600' : 'text-stone-900'}`}>
-                                                {item.approved_quantity} <span className="text-[10px] font-bold">{item.unit}</span>
+                                            <span className="text-[9px] font-bold text-stone-400 uppercase tracking-widest leading-none mb-0.5">To Pack</span>
+                                            <p className={`text-base font-black ${packedItems[item.id] ? 'text-emerald-600' : 'text-stone-900'}`}>
+                                                {item.approved_quantity} <span className="text-[9px] font-bold">{item.unit}</span>
                                             </p>
                                         </div>
-                                        {item.requested_quantity !== item.approved_quantity && (
-                                            <p className="text-[10px] text-stone-400 line-through">Requested: {item.requested_quantity} {item.unit}</p>
-                                        )}
                                     </div>
                                 </div>
                             ))}
                         </div>
 
-                        <div className="p-6 bg-stone-50 border-t border-stone-100 flex justify-end gap-2">
-                            <button onClick={() => setPackingModalOpen(false)} className="btn-secondary">Cancel</button>
+                        <div className="p-4 bg-stone-50 border-t border-stone-100 flex justify-end gap-2 shrink-0">
+                            <button onClick={() => setPackingModalOpen(false)} className="btn-secondary h-9 text-sm">Cancel</button>
                             <button
                                 onClick={handleConfirmPacked}
                                 disabled={!allPacked || isProcessing}
-                                className={`h-10 px-5 rounded-lg text-sm font-medium transition-colors ${allPacked
+                                className={`h-9 px-4 rounded-lg text-sm font-medium transition-colors ${allPacked
                                     ? 'bg-stone-900 text-white hover:bg-stone-800'
                                     : 'bg-stone-200 text-stone-400 cursor-not-allowed'
                                     }`}
                             >
-                                {isProcessing ? 'Processing...' : 'Mark as Ready for Dispatch'}
+                                {isProcessing ? 'Processing...' : 'Mark as Ready'}
                             </button>
                         </div>
                     </DialogContent>

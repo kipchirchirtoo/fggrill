@@ -8,16 +8,15 @@ import { AttendanceService } from '../services/attendance.service';
 // Staff ID generation utility
 const generateStaffId = async (branchId: number | string | null, role: string): Promise<string> => {
   try {
-    // 1. Get branch code
-    let branchCode = 'FG';
+    // 1. Get branch code (Using padded Branch ID e.g. 01)
+    let branchCode = '00';
     if (branchId) {
-      const { data: branch } = await supabase
-        .from('branches')
-        .select('code')
-        .eq('id', branchId)
-        .single();
-      if (branch?.code) branchCode = branch.code;
+      // Only if numeric
+      if (!Number.isNaN(Number(branchId))) {
+        branchCode = String(branchId).padStart(2, '0');
+      }
     }
+    const prefix = `FG${branchCode}`;
 
     // 2. Determine if management role
     const managementRoles = ['super_admin', 'branch_manager', 'general_manager', 'ceo', 'admin'];
@@ -43,7 +42,7 @@ const generateStaffId = async (branchId: number | string | null, role: string): 
     }
 
     const paddedNumber = String(sequenceNumber).padStart(3, '0');
-    return `${branchCode}${paddedNumber}`;
+    return `${prefix}${paddedNumber}`;
   } catch (error) {
     logger.error('Error generating staff ID:', error);
     return `STF${Math.floor(1000 + Math.random() * 9000)}`;

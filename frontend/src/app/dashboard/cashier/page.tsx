@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import { toast } from 'sonner';
 import { fetchAPI } from '@/lib/api';
+import { PYTHON_API_URL } from '@/lib/config';
 import { IOSButton } from '@/components/ui/ios-button';
 import { Input } from '@/components/ui/input';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -83,7 +84,7 @@ export default function CashierPage() {
     const fetchInsights = async () => {
         setIsInsightLoading(true);
         try {
-            const pythonUrl = 'http://localhost:5001/api/analytics';
+            const pythonUrl = `${PYTHON_API_URL}/api/analytics`;
             const insightsRes = await fetch(`${pythonUrl}/pos/insights`);
             const forecastRes = await fetch(`${pythonUrl}/pos/forecast`, {
                 method: 'POST',

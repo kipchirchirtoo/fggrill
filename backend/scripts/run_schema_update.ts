@@ -13,31 +13,18 @@ const pool = new Pool({
     connectionString: dbUrl,
     ssl: { rejectUnauthorized: false }
 });
+await client.query(sqlContent);
+await client.query('COMMIT');
 
-async function runMigration() {
-    const client = await pool.connect();
-    try {
-        console.log('🚀 Connecting to database...');
-
-        const sqlPath = path.join(__dirname, '../src/database/migrations/20260128_staff_terminal_fields.sql');
-        const sqlContent = fs.readFileSync(sqlPath, 'utf-8');
-
-        console.log('📝 Executing migration SQL...');
-        console.log(sqlContent);
-
-        await client.query('BEGIN');
-        await client.query(sqlContent);
-        await client.query('COMMIT');
-
-        console.log('✅ Migration executed successfully!');
+console.log('✅ Migration executed successfully!');
     } catch (err: any) {
-        await client.query('ROLLBACK');
-        console.error('❌ Migration failed:', err.message);
-        process.exit(1);
-    } finally {
-        client.release();
-        await pool.end();
-    }
+    await client.query('ROLLBACK');
+    console.error('❌ Migration failed:', err.message);
+    process.exit(1);
+} finally {
+    client.release();
+    await pool.end();
+}
 }
 
 runMigration();

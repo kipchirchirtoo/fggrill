@@ -24,9 +24,13 @@ if command -v docker-compose &> /dev/null; then
 else
     echo "🐍 Starting unified service with Python..."
     
-    # Start Unified Service
-    echo "Starting Unified Python Service on port 5001..."
-    python3 app.py > logs/unified_service.log 2>&1 &
+    # Start Unified Service with Gunicorn (Production)
+    echo "Starting Unified Python Service (Gunicorn) on port 5001..."
+    
+    # Use gunicorn for production performance (4 workers)
+    # Ensure gunicorn is installed: pip install gunicorn
+    gunicorn --workers 4 --timeout 120 --bind 0.0.0.0:5001 app:app > logs/unified_service.log 2>&1 &
+    
     UNIFIED_PID=$!
     echo $UNIFIED_PID > pids/unified_service.pid
     

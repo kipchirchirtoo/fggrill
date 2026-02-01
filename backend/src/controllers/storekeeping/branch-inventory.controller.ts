@@ -358,11 +358,6 @@ export const createDispatch = async (
       return;
     }
 
-    if (!to_branch_id) {
-      res.status(400).json({ success: false, message: 'Destination branch ID is required' });
-      return;
-    }
-
     if (!items || !Array.isArray(items) || items.length === 0) {
       res.status(400).json({ success: false, message: 'At least one item is required for dispatch' });
       return;
@@ -401,18 +396,6 @@ export const createDispatch = async (
       return;
     }
 
-    // Get destination branch code
-    const { data: toBranch, error: branchError } = await supabase
-      .from('branches')
-      .select('code, name')
-      .eq('id', to_branch_id)
-      .single();
-
-    if (branchError || !toBranch?.code) {
-      res.status(400).json({ success: false, message: 'Destination branch not found' });
-      return;
-    }
-
     // Verify the request exists and is in a valid status
     const { data: request, error: requestError } = await supabase
       .from('stock_requests')
@@ -425,6 +408,29 @@ export const createDispatch = async (
       return;
     }
 
+    // If to_branch_id is missing, derive it from the request
+    let finalToBranchId = to_branch_id;
+    if (!finalToBranchId) {
+      finalToBranchId = request.requesting_branch_id;
+    }
+
+    if (!finalToBranchId) {
+      res.status(400).json({ success: false, message: 'Destination branch ID is required' });
+      return;
+    }
+
+    // Get destination branch code
+    const { data: toBranch, error: branchError } = await supabase
+      .from('branches')
+      .select('code, name')
+      .eq('id', finalToBranchId)
+      .single();
+
+    if (branchError || !toBranch?.code) {
+      res.status(400).json({ success: false, message: 'Destination branch not found' });
+      return;
+    }
+
     if (!['APPROVED', 'PARTIALLY_APPROVED'].includes(request.status)) {
       res.status(400).json({
         success: false,
@@ -434,7 +440,7 @@ export const createDispatch = async (
     }
 
     // Verify the request is for the correct destination branch
-    if (request.requesting_branch_id !== to_branch_id) {
+    if (request.requesting_branch_id !== finalToBranchId) {
       res.status(400).json({
         success: false,
         message: 'Destination branch does not match the branch that made the request'
@@ -446,7 +452,7 @@ export const createDispatch = async (
       const dispatch = await BranchInventoryService.createDispatchFromRequest(
         request_id,
         central.id,
-        to_branch_id,
+        finalToBranchId,
         toBranch.code,
         req.user.id,
         items,

@@ -96,24 +96,24 @@ export function DispatchModal({ isOpen, onClose, requestId, requestNumber, onSuc
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                 {/* Header */}
-                <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+                <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between z-10">
                     <div>
-                        <h2 className="text-xl font-semibold text-gray-900">Create Dispatch</h2>
-                        <p className="text-sm text-gray-500 mt-1">Request: {requestNumber}</p>
+                        <h2 className="text-lg font-semibold text-gray-900">Create Dispatch</h2>
+                        <p className="text-xs text-gray-500">Request: {requestNumber}</p>
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                        className="p-1 hover:bg-gray-100 rounded-full transition-colors"
                     >
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                <form onSubmit={handleSubmit} className="p-4 space-y-4">
                     {/* Vehicle Selection */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                             Vehicle <span className="text-red-500">*</span>
                         </label>
                         <select
@@ -128,7 +128,7 @@ export function DispatchModal({ isOpen, onClose, requestId, requestNumber, onSuc
                                     setFormData({ ...formData, vehicle_number: e.target.value });
                                 }
                             }}
-                            className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                             <option value="">Select a vehicle</option>
                             {vehicles.map((vehicle) => (
@@ -144,7 +144,7 @@ export function DispatchModal({ isOpen, onClose, requestId, requestNumber, onSuc
                                 required
                                 placeholder="Enter vehicle registration number"
                                 value={formData.vehicle_number}
-                                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-2"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-2"
                                 onChange={(e) => setFormData({ ...formData, vehicle_number: e.target.value })}
                             />
                         )}
@@ -152,7 +152,7 @@ export function DispatchModal({ isOpen, onClose, requestId, requestNumber, onSuc
 
                     {/* Driver Selection */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                             Driver <span className="text-red-500">*</span>
                         </label>
                         <select
@@ -172,7 +172,7 @@ export function DispatchModal({ isOpen, onClose, requestId, requestNumber, onSuc
                                     });
                                 }
                             }}
-                            className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                             <option value="">Select a driver</option>
                             {drivers.map((driver) => (
@@ -186,9 +186,9 @@ export function DispatchModal({ isOpen, onClose, requestId, requestNumber, onSuc
 
                     {/* Manual Driver Entry */}
                     {isManualDriver && (
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
                                     Driver Name
                                 </label>
                                 <input
@@ -197,11 +197,11 @@ export function DispatchModal({ isOpen, onClose, requestId, requestNumber, onSuc
                                     value={formData.driver_name}
                                     placeholder="Enter driver name"
                                     onChange={(e) => setFormData({ ...formData, driver_name: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
                                     Driver Phone
                                 </label>
                                 <input
@@ -210,7 +210,7 @@ export function DispatchModal({ isOpen, onClose, requestId, requestNumber, onSuc
                                     value={formData.driver_phone}
                                     placeholder="Enter phone number"
                                     onChange={(e) => setFormData({ ...formData, driver_phone: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 />
                             </div>
                         </div>
@@ -218,38 +218,39 @@ export function DispatchModal({ isOpen, onClose, requestId, requestNumber, onSuc
 
                     {/* Estimated Delivery */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                             Estimated Delivery Date
                         </label>
                         <input
                             type="datetime-local"
                             value={formData.estimated_delivery}
                             onChange={(e) => setFormData({ ...formData, estimated_delivery: e.target.value })}
-                            className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                     </div>
 
                     {/* Notes */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                             Dispatch Notes
                         </label>
                         <textarea
-                            rows={3}
+                            rows={2}
                             value={formData.dispatch_notes}
                             onChange={(e) => setFormData({ ...formData, dispatch_notes: e.target.value })}
                             placeholder="Add any special instructions or notes..."
-                            className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                         />
                     </div>
 
                     {/* Actions */}
-                    <div className="flex justify-end space-x-3 pt-4">
+                    <div className="flex justify-end space-x-3 pt-2">
                         <IOSButton
                             type="button"
                             variant="ghost"
                             onClick={onClose}
                             disabled={isLoading}
+                            className="text-sm"
                         >
                             Cancel
                         </IOSButton>
@@ -257,6 +258,7 @@ export function DispatchModal({ isOpen, onClose, requestId, requestNumber, onSuc
                             type="submit"
                             variant="primary"
                             disabled={isLoading}
+                            className="text-sm"
                         >
                             {isLoading ? 'Creating...' : 'Create Dispatch'}
                         </IOSButton>

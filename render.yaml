@@ -1,0 +1,45 @@
+services:
+  # Python Service
+  - type: web
+    name: famous-gate-python-service
+    env: python
+    region: frankfurt
+    plan: free
+    buildCommand: |
+      cd python-services
+      pip install -r requirements.txt
+    startCommand: |
+      cd python-services
+      gunicorn app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: FLASK_ENV
+        value: production
+      - key: PORT
+        value: 10000
+    autoDeploy: false
+
+  # Frontend (Static Site)
+  - type: web
+    name: famous-gate-frontend
+    env: node
+    region: frankfurt
+    plan: free
+    buildCommand: |
+      cd frontend
+      npm install
+      npm run build
+    startCommand: |
+      cd frontend
+      npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20.11.0
+      - key: NEXT_PUBLIC_API_URL
+        value: https://api.hirall.com
+      - key: NEXT_PUBLIC_PYTHON_SERVICE_URL
+        value: https://services.hirall.com
+      - key: NEXT_PUBLIC_REPORTS_SERVICE_URL
+        value: https://services.hirall.com
+    autoDeploy: false
