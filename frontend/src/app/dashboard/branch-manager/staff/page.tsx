@@ -183,7 +183,7 @@ export default function BranchStaffPage() {
 
   const handleClockIn = async (staffId: string) => {
     try {
-      const response = await staffAPI.clockIn(staffId);
+      const response = await staffAPI.clockIn({ staff_id: staffId });
       if (response.success) {
         toast.success('Clocked in successfully');
         fetchAttendance();
@@ -195,7 +195,7 @@ export default function BranchStaffPage() {
 
   const handleClockOut = async (staffId: string) => {
     try {
-      const response = await staffAPI.clockOut(staffId);
+      const response = await staffAPI.clockOut({ staff_id: staffId });
       if (response.success) {
         toast.success('Clocked out successfully');
         fetchAttendance();
