@@ -34,6 +34,7 @@ export default function DispatchPage() {
     const [dispatchModalOpen, setDispatchModalOpen] = useState(false);
     const [dispatchFormData, setDispatchFormData] = useState({ vehicle_id: '', driver_id: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isPrinting, setIsPrinting] = useState<string | null>(null);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -82,34 +83,19 @@ export default function DispatchPage() {
         }
     };
 
-    const printDeliveryNote = (dispatch: DispatchNote) => {
-        toast.info('Opening print view...');
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-            printWindow.document.write(`
-                <html>
-                    <head><title>Dispatch: ${dispatch.dispatch_number}</title></head>
-                    <body style="font-family: sans-serif; padding: 40px; color: #1c1917;">
-                        <h1 style="border-bottom: 2px solid #e7e5e4; padding-bottom: 10px;">DELIVERY NOTE</h1>
-                        <p><strong>Ref:</strong> ${dispatch.dispatch_number}</p>
-                        <p><strong>To Branch:</strong> ${dispatch.to_branch_name.toUpperCase()}</p>
-                        <p><strong>Date:</strong> ${new Date(dispatch.created_at).toLocaleDateString()}</p>
-                        <table style="width: 100%; border-collapse: collapse; margin-top: 30px;">
-                            <thead><tr style="background: #f5f5f4;"><th align="left" style="padding: 10px;">SKU</th><th align="left" style="padding: 10px;">Item</th><th align="right" style="padding: 10px;">Qty</th></tr></thead>
-                            <tbody>
-                                ${dispatch.items.map(i => `<tr style="border-bottom: 1px solid #f5f5f4;"><td style="padding: 10px;">${i.item_sku}</td><td style="padding: 10px;">${i.item_name}</td><td align="right" style="padding: 10px;">${i.quantity}</td></tr>`).join('')}
-                            </tbody>
-                        </table>
-                        <div style="margin-top: 50px; display: grid; grid-template-cols: 1fr 1fr; gap: 40px;">
-                            <div><p style="border-bottom: 1px solid #000; height: 30px;"></p><p>Authorized By</p></div>
-                            <div><p style="border-bottom: 1px solid #000; height: 30px;"></p><p>Receiver Name & Sign</p></div>
-                        </div>
-                    </body>
-                </html>
-            `);
-            printWindow.document.close();
-            printWindow.focus();
-            setTimeout(() => { printWindow.print(); }, 500);
+    const printDeliveryNote = async (dispatch: DispatchNote) => {
+        setIsPrinting(dispatch.id);
+        try {
+            const response = await storeAPI.generateDispatchPDF(dispatch);
+            if (response.success) {
+                toast.success('Professional PDF generated successfully');
+            } else {
+                toast.error(response.message || 'Failed to generate PDF');
+            }
+        } catch (error: any) {
+            toast.error(error.message || 'Error occurred');
+        } finally {
+            setIsPrinting(null);
         }
     };
 
@@ -219,9 +205,17 @@ export default function DispatchPage() {
                                                 </div>
                                             </div>
                                         )}
-                                        <button onClick={() => printDeliveryNote(dispatch)} className="w-full h-11 bg-white border border-stone-200 text-stone-600 text-[13px] font-bold rounded-lg hover:bg-stone-50 transition-colors flex items-center justify-center gap-2">
-                                            <Printer className="h-4 w-4" />
-                                            <span>Print Note</span>
+                                        <button
+                                            onClick={() => printDeliveryNote(dispatch)}
+                                            disabled={isPrinting === dispatch.id}
+                                            className="w-full h-11 bg-white border border-stone-200 text-stone-600 text-[13px] font-bold rounded-lg hover:bg-stone-50 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                                        >
+                                            {isPrinting === dispatch.id ? (
+                                                <RefreshCw className="h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <Printer className="h-4 w-4" />
+                                            )}
+                                            <span>{isPrinting === dispatch.id ? 'Generating...' : 'Print Note'}</span>
                                         </button>
                                     </div>
                                 </div>

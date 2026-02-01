@@ -285,8 +285,6 @@ export const storeAPI = {
     return fetchAPI<any>(`/store/stock-requests${qs ? `?${qs}` : ''}`);
   },
   getPendingRequests: () => fetchAPI<any>('/store/stock-requests/pending'),
-  reviewStockRequest: (id: string, data: { action: 'APPROVE' | 'REJECT'; review_notes?: string; approved_items: any[] }) =>
-    fetchAPI<any>(`/store/stock-requests/${id}/review`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // Dispatch
   createDispatch: (data: { request_id?: string; to_branch_id: number; items: Array<{ item_sku: string; dispatched_quantity: number }>; notes?: string }) =>
@@ -424,6 +422,32 @@ export const storeAPI = {
     if (params?.from_date) query.append('from_date', params.from_date);
     if (params?.to_date) query.append('to_date', params.to_date);
     return fetchAPI<any>(`/store/kitchen-usage/summary?${query}`);
+  },
+
+  generateDispatchPDF: async (dispatch: any) => {
+    try {
+      const response = await fetch(`${PYTHON_API_URL}/api/reports/generate/dispatch-note`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(dispatch)
+      });
+
+      if (!response.ok) throw new Error('Failed to generate PDF');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Dispatch_${dispatch.dispatch_number.split('/').join('_')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      return { success: true };
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      return { success: false, message: error instanceof Error ? error.message : 'Download failed' };
+    }
   },
 };
 

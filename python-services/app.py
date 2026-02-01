@@ -180,6 +180,25 @@ def generate_checkout_bill():
     except Exception as e:
         logger.error(f"Error generating checkout bill: {str(e)}")
         return jsonify({'error': str(e)}), 500
+@app.route('/api/reports/generate/dispatch-note', methods=['POST'])
+def generate_dispatch_note():
+    """Generate Dispatch Note PDF"""
+    try:
+        data = request.get_json()
+        logger.info(f"Generating dispatch note: {data.get('dispatch_number')}")
+        
+        # Generate PDF
+        pdf_file = branded_pdf_generator.generate_report('dispatch_note', data)
+        
+        return send_file(
+            pdf_file,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'Dispatch_{data.get("dispatch_number", "Note").replace("/", "_")}.pdf'
+        )
+    except Exception as e:
+        logger.error(f"Error generating dispatch note: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/reports/generate/pdf', methods=['POST'])
 def generate_pdf_report():

@@ -286,6 +286,7 @@ class BrandedPDFGenerator:
             'employee_credit': self._generate_employee_credit_report,
             'conference_invoice': self._generate_conference_invoice,
             'conference_summary': self._generate_conference_summary_report,
+            'dispatch_note': self._generate_dispatch_note,
         }
         
         generator = generators.get(report_type, self._generate_generic_report)
@@ -2572,6 +2573,84 @@ class BrandedPDFGenerator:
             ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ]))
         elements.append(recent_table)
+        
+        return self._create_pdf(elements)
+
+    def _generate_dispatch_note(self, data: Dict, filters: Dict) -> str:
+        """Generate Professional Dispatch/Delivery Note PDF"""
+        elements = []
+        
+        to_branch = data.get('to_branch') or {}
+        branch_name = data.get('to_branch_name') or (to_branch.get('name') if isinstance(to_branch, dict) else 'N/A')
+
+        elements.extend(self._create_header("DELIVERY NOTE", 
+            f"Date: {datetime.now().strftime('%d/%m/%Y')}", 
+            branch_name))
+        
+        # Dispatch & Logistics Info Table
+        logistics_data = [
+            ['DISPATCH DETAILS', '', 'LOGISTICS INFO', ''],
+            ['DN Reference:', data.get('dispatch_number', 'N/A'), 
+             'Vehicle:', data.get('vehicle_registration') or data.get('vehicle_number', 'N/A')],
+            ['Date Created:', str(data.get('created_at', ''))[:10] or 'N/A',
+             'Driver:', data.get('driver_name', 'N/A')],
+            ['To Branch:', branch_name,
+             'Status:', data.get('status', 'N/A')]
+        ]
+        
+        logistics_table = Table(logistics_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
+        logistics_table.setStyle(TableStyle([
+            ('SPAN', (0, 0), (1, 0)),
+            ('SPAN', (2, 0), (3, 0)),
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 1), (2, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(logistics_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Items Table
+        elements.append(Paragraph("<b>SHIPMENT CONTENTS</b>", self.styles['SectionHeader']))
+        
+        headers = ['SKU', 'Item Name', 'Quantity', 'Unit', 'Remarks']
+        item_data = [headers]
+        
+        for item in data.get('items', []):
+            item_data.append([
+                item.get('item_sku') or item.get('sku', 'N/A'),
+                item.get('item_name') or item.get('name', 'N/A'),
+                str(item.get('quantity') or item.get('dispatched_quantity', 0)),
+                item.get('unit', 'pcs'),
+                '' # Remarks column
+            ])
+            
+        if not item_data[1:]:
+             item_data.append(['No items listed', '-', '-', '-', '-'])
+             
+        item_table = Table(item_data, colWidths=[1.2*inch, 2.5*inch, 1*inch, 1*inch, 1.5*inch])
+        item_table.setStyle(self._get_table_style())
+        elements.append(item_table)
+        elements.append(Spacer(1, 0.5*inch))
+        
+        # Signature Section
+        sig_data = [
+            ['Authorized By:', '________________________', 'Receiver Name:', '________________________'],
+            ['Date / Sign:', '________________________', 'Date / Sign:', '________________________']
+        ]
+        sig_table = Table(sig_data, colWidths=[1.2*inch, 2.4*inch, 1.2*inch, 2.4*inch])
+        sig_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'BOTTOM'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 15),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(sig_table)
         
         return self._create_pdf(elements)
 
