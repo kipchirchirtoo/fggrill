@@ -39,7 +39,8 @@ export default function DispatchPage() {
         setIsLoading(true);
         try {
             const [readyRes, vehiclesRes, driversRes] = await Promise.all([
-                storeAPI.getDispatchHistory(statusTab),
+                // Map 'READY' tab to 'PENDING' status in backend
+                storeAPI.getDispatchHistory(statusTab === 'READY' ? 'PENDING' : statusTab),
                 storeAPI.getVehicles(),
                 storeAPI.getDrivers()
             ]);
