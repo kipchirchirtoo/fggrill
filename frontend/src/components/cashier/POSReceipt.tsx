@@ -11,7 +11,7 @@ interface ReceiptProps {
 export const POSReceipt: React.FC<ReceiptProps> = (props) => {
     // extract data whether it comes from props directly or nested
     const transaction = props.transaction || {};
-    const items = props.items || transaction.items || [];
+    const items = Array.isArray(props.items) ? props.items : (Array.isArray(transaction.items) ? transaction.items : []);
 
     // Default business info if not provided
     const businessInfo = props.businessInfo || {
@@ -49,8 +49,8 @@ export const POSReceipt: React.FC<ReceiptProps> = (props) => {
         <div id="pos-receipt" className="p-2 bg-white text-black font-mono text-[10px] w-[80mm] leading-tight mx-auto">
             {/* Header */}
             <div className="text-center mb-2">
-                <div className="flex justify-center mb-1">
-                    <img src="/fglogo.png" alt="FG Logo" className="w-12 h-12 object-contain" />
+                <div className="flex justify-center mb-1" suppressHydrationWarning>
+                    <img src="/fglogo.png" alt="FG Logo" className="w-12 h-12 object-contain" suppressHydrationWarning />
                 </div>
                 <h1 className="text-sm font-bold uppercase">{businessInfo.name}</h1>
                 <p>{businessInfo.address}</p>

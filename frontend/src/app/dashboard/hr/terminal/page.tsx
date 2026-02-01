@@ -129,7 +129,7 @@ export default function ClockInTerminal() {
                         <div className="space-y-6 animate-in fade-in zoom-in-95">
                             <div className="space-y-2">
                                 <h2 className="text-xl font-bold text-white">Choose Method</h2>
-                                <p className="text-stone-400 text-sm">Select verification method for {staffInfo.first_name}</p>
+                                <p className="text-stone-400 text-sm">Select verification method for {staffInfo?.first_name || 'Staff Member'}</p>
                             </div>
 
                             <div className="grid grid-cols-1 gap-3">
@@ -178,10 +178,10 @@ export default function ClockInTerminal() {
                         <div className="space-y-6 animate-in slide-in-from-right-8">
                             <div className="text-center space-y-2">
                                 <div className="w-20 h-20 rounded-full bg-blue-500 mx-auto flex items-center justify-center text-white text-2xl font-bold mb-4">
-                                    {staffInfo.first_name[0]}{staffInfo.last_name[0]}
+                                    {(staffInfo?.first_name?.[0] || '?').toUpperCase()}{(staffInfo?.last_name?.[0] || '?').toUpperCase()}
                                 </div>
-                                <h2 className="text-2xl font-bold text-white">{staffInfo.first_name} {staffInfo.last_name}</h2>
-                                <p className="text-stone-400 text-sm font-medium uppercase tracking-widest">{staffInfo.role}</p>
+                                <h2 className="text-2xl font-bold text-white">{staffInfo?.first_name || 'Unknown'} {staffInfo?.last_name || 'Staff'}</h2>
+                                <p className="text-stone-400 text-sm font-medium uppercase tracking-widest">{staffInfo?.role || 'STAFF'}</p>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4 mt-8">
@@ -224,7 +224,7 @@ export default function ClockInTerminal() {
                                 <CheckCircle2 className="h-12 w-12" />
                             </div>
                             <h2 className="text-3xl font-bold text-white mb-2">Success!</h2>
-                            <p className="text-stone-400 italic">Have a productive session, {staffInfo.first_name}.</p>
+                            <p className="text-stone-400 italic">Have a productive session, {staffInfo?.first_name || 'Staff Member'}.</p>
                         </div>
                     )}
                 </IOSCard>

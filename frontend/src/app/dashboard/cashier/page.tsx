@@ -546,17 +546,139 @@ export default function CashierPage() {
     };
 
     const handlePrint = () => {
-        const printContent = document.getElementById('pos-receipt');
-        if (!printContent) return;
+        if (!selectedTransaction) return;
 
         const printWindow = window.open('', '', 'width=600,height=600');
         if (!printWindow) return;
 
-        printWindow.document.write('<html><head><title>Print Receipt</title>');
-        printWindow.document.write('<style>body { font-family: monospace; padding: 20px; }</style>');
-        printWindow.document.write('</head><body>');
-        printWindow.document.write(printContent.innerHTML);
-        printWindow.document.write('</body></html>');
+        // Dynamically create receipt HTML
+        const items = selectedTransaction.items || cart || [];
+        const businessInfo = {
+            name: 'FG GRILL & LOUNGE',
+            address: '123 Avenue, Nairobi',
+            phone: '0700 000 000',
+            pin: 'P051234567X'
+        };
+
+        const totalAmount = selectedTransaction.total_amount || selectedTransaction.total || 0;
+        const subtotal = totalAmount / 1.16;
+        const tax = totalAmount - subtotal;
+        const receiptNumber = selectedTransaction.transaction_ref || selectedTransaction.receipt_number || 'N/A';
+        const formatDate = (date: any) => {
+            try {
+                if (!date) return new Date().toLocaleString();
+                return new Date(date).toLocaleString('en-US', {
+                    month: 'numeric',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: 'numeric',
+                    second: 'numeric',
+                    hour12: true
+                });
+            } catch (e) {
+                return new Date().toLocaleString();
+            }
+        };
+
+        const receiptHTML = `
+            <html>
+            <head>
+                <title>Print Receipt</title>
+                <style>
+                    body { font-family: monospace; padding: 20px; }
+                    .receipt { width: 80mm; margin: 0 auto; font-size: 10px; line-height: 1.2; }
+                    .center { text-align: center; }
+                    .bold { font-weight: bold; }
+                    .border-top { border-top: 1px dashed black; padding-top: 8px; }
+                    .border-bottom { border-bottom: 1px dashed black; padding-bottom: 8px; }
+                    table { width: 100%; border-collapse: collapse; }
+                    th, td { text-align: left; padding: 2px 0; }
+                    .text-right { text-align: right; }
+                    .logo { width: 48px; height: 48px; margin: 0 auto 8px; }
+                </style>
+            </head>
+            <body>
+                <div class="receipt">
+                    <div class="center">
+                        <h1 class="bold" style="font-size: 12px; margin: 8px 0;">${businessInfo.name}</h1>
+                        <p>${businessInfo.address}</p>
+                        <p>Tel: ${businessInfo.phone}</p>
+                        <p style="font-size: 9px; margin-top: 4px;">CASH RECEIPT</p>
+                    </div>
+                    
+                    <div class="border-top border-bottom" style="margin: 8px 0; padding: 4px 0;">
+                        <p>Receipt #: ${receiptNumber}</p>
+                        <p>Date: ${formatDate(selectedTransaction.created_at || selectedTransaction.date)}</p>
+                        ${selectedTransaction.table_number ? `<p>Table: ${selectedTransaction.table_number}</p>` : ''}
+                        ${selectedTransaction.room_number ? `<p>Room: ${selectedTransaction.room_number}</p>` : ''}
+                        ${selectedTransaction.customer_name ? `<p>Customer: ${selectedTransaction.customer_name}</p>` : ''}
+                        <p>Cashier: ${selectedTransaction.cashier_name || selectedTransaction.served_by || 'Staff'}</p>
+                    </div>
+                    
+                    <table>
+                        <thead>
+                            <tr style="border-bottom: 1px solid black;">
+                                <th style="width: 32px;">Qty</th>
+                                <th>Description</th>
+                                <th class="text-right">Price</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${items.map((item: any) => {
+            const qty = item.qty || item.quantity || 1;
+            const name = item.name || item.item_name || 'Item';
+            const price = item.line_total || item.total || (item.unit_price * qty) || 0;
+            return `
+                                    <tr>
+                                        <td>${qty}</td>
+                                        <td>${name}</td>
+                                        <td class="text-right">${price.toLocaleString()}</td>
+                                    </tr>
+                                `;
+        }).join('')}
+                        </tbody>
+                    </table>
+                    
+                    <div class="border-top" style="margin-top: 8px; padding-top: 4px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>SUBTOTAL</span>
+                            <span>KES ${Math.round(subtotal).toLocaleString()}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>TAX (16% incl.)</span>
+                            <span>KES ${Math.round(tax).toLocaleString()}</span>
+                        </div>
+                        <div class="bold border-top" style="display: flex; justify-content: space-between; margin-top: 4px; padding-top: 4px; font-size: 11px;">
+                            <span>TOTAL:</span>
+                            <span>KES ${totalAmount.toLocaleString()}</span>
+                        </div>
+                    </div>
+                    
+                    <div style="margin: 12px 0;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Payment:</span>
+                            <span style="text-transform: uppercase;">${selectedTransaction.payment_method || 'Cash'}</span>
+                        </div>
+                        ${selectedTransaction.mpesa_code ? `<p style="margin-top: 4px;">Ref: ${selectedTransaction.mpesa_code}</p>` : ''}
+                    </div>
+                    
+                    <div class="center border-top" style="padding-top: 8px;">
+                        <p class="bold" style="font-size: 11px;">THANK YOU!</p>
+                        <p style="font-size: 9px;">Please come again</p>
+                        <p style="font-size: 9px;">${businessInfo.name.toLowerCase().replace(/\s+/g, '')}@email.com</p>
+                    </div>
+                    
+                    <div class="center" style="font-size: 7px; color: #666; margin-top: 8px;">
+                        <p class="bold">System managed and made by Hirall</p>
+                        <p>+254 710 944 249 | admin@hirall.com</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `;
+
+        printWindow.document.write(receiptHTML);
         printWindow.document.close();
         printWindow.focus();
         printWindow.print();
@@ -569,18 +691,6 @@ export default function CashierPage() {
                 {showReceipt && selectedTransaction && (
                     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                         <IOSCard className="p-6 bg-white max-w-sm w-full">
-                            <div className="hidden">
-                                <POSReceipt
-                                    transaction={selectedTransaction}
-                                    items={selectedTransaction.items || cart}
-                                    businessInfo={{
-                                        name: 'FG GRILL & LOUNGE',
-                                        address: '123 Avenue, Nairobi',
-                                        phone: '0700 000 000',
-                                        pin: 'P051234567X'
-                                    }}
-                                />
-                            </div>
                             <div className="border border-dashed p-4 mb-4 bg-stone-50 rounded-lg overflow-hidden">
                                 <h3 className="text-center font-bold mb-2">RECEIPT PREVIEW</h3>
                                 <p className="text-center text-xs text-stone-500">A new tab will open for printing</p>
