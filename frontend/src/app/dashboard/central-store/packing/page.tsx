@@ -52,7 +52,7 @@ export default function PackingPage() {
                 to_branch_id: selectedRequest.to_branch_id,
                 items: selectedRequest.items.map(i => ({
                     item_sku: i.item_sku,
-                    quantity: i.approved_quantity
+                    dispatched_quantity: i.approved_quantity
                 })),
                 notes: `Packed from request ${selectedRequest.request_number}`
             };

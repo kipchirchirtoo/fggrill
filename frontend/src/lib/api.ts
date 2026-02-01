@@ -289,7 +289,7 @@ export const storeAPI = {
     fetchAPI<any>(`/store/stock-requests/${id}/review`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // Dispatch
-  createDispatch: (data: { request_id?: string; to_branch_id: number; items: Array<{ item_sku: string; quantity: number }>; notes?: string }) =>
+  createDispatch: (data: { request_id?: string; to_branch_id: number; items: Array<{ item_sku: string; dispatched_quantity: number }>; notes?: string }) =>
     fetchAPI<any>('/store/dispatch-notes', { method: 'POST', body: JSON.stringify(data) }),
   getDispatchHistory: (status?: string) => {
     const query = status ? `?status=${status}` : '';
