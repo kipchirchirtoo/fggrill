@@ -491,6 +491,71 @@ export function ConsolidatedNav() {
     </>
   );
 
+  // Procurement Navigation
+  const procurementNav = (
+    <>
+      <NavItem
+        href="/dashboard/procurement"
+        icon={ShoppingCart}
+        label="Procurement Overview"
+        active={pathname === '/dashboard/procurement'}
+      />
+
+      <NavGroup label="Purchasing" icon={ShoppingCart} defaultOpen>
+        <NavItem
+          href="/dashboard/procurement/purchase-orders"
+          icon={FileText}
+          label="Purchase Orders"
+          active={pathname.includes('/dashboard/procurement/purchase-orders')}
+        />
+        <NavItem
+          href="/dashboard/procurement/suppliers"
+          icon={Users}
+          label="Supplier Database"
+          active={pathname.includes('/dashboard/procurement/suppliers')}
+        />
+      </NavGroup>
+
+      <NavGroup label="Accounts Payable" icon={DollarSign} defaultOpen>
+        <NavItem
+          href="/dashboard/procurement/invoices"
+          icon={Receipt}
+          label="Supplier Invoices"
+          active={pathname.includes('/dashboard/procurement/invoices')}
+        />
+        <NavItem
+          href="/dashboard/procurement/payments"
+          icon={CreditCard}
+          label="Payments"
+          active={pathname.includes('/dashboard/procurement/payments')}
+        />
+      </NavGroup>
+
+    </NavGroup>
+
+      <NavGroup label="Central Store Ops" icon={Warehouse}>
+        <NavItem
+          href="/dashboard/central-store/dispatch"
+          icon={Truck}
+          label="Dispatch & Notes"
+          active={pathname.includes('/dashboard/central-store/dispatch')}
+        />
+        <NavItem
+          href="/dashboard/central-store/inventory"
+          icon={Package}
+          label="Master Inventory"
+          active={pathname.includes('/dashboard/central-store/inventory')}
+        />
+        <NavItem
+          href="/dashboard/central-store/vehicles"
+          icon={Truck}
+          label="Fleet Management"
+          active={pathname.includes('/dashboard/central-store/vehicles')}
+        />
+      </NavGroup>
+    </>
+  );
+
   // Auditor Navigation
   const auditorNav = (
     <>
@@ -501,40 +566,66 @@ export function ConsolidatedNav() {
         active={pathname === '/dashboard/auditor'}
       />
 
-      <NavGroup label="Monitoring" icon={ClipboardList} defaultOpen>
+      <NavGroup label="Procurement Verification" icon={ShieldCheck} defaultOpen>
+        <NavItem
+          href="/dashboard/auditor/procurement/grn"
+          icon={CheckCircle}
+          label="GRN Approvals"
+          active={pathname.includes('/dashboard/auditor/procurement/grn')}
+        />
+        <NavItem
+          href="/dashboard/auditor/procurement/invoices"
+          icon={FileText}
+          label="Invoice Verification"
+          active={pathname.includes('/dashboard/auditor/procurement/invoices')}
+        />
+        <NavItem
+          href="/dashboard/auditor/procurement/payments"
+          icon={CreditCard}
+          label="Payment Approvals"
+          active={pathname.includes('/dashboard/auditor/procurement/payments')}
+        />
+      </NavGroup>
+
+      <NavGroup label="Statutory Reports" icon={Scale} defaultOpen>
+        <NavItem
+          href="/dashboard/auditor/reports/vat"
+          icon={FileSpreadsheet}
+          label="Input VAT Report"
+          active={pathname.includes('/dashboard/auditor/reports/vat')}
+        />
+        <NavItem
+          href="/dashboard/auditor/reports/aging"
+          icon={BarChart3}
+          label="AP Aging Analysis"
+          active={pathname.includes('/dashboard/auditor/reports/aging')}
+        />
+        <NavItem
+          href="/dashboard/auditor/reports/grni"
+          icon={PieChart}
+          label="GRNI Report"
+          active={pathname.includes('/dashboard/auditor/reports/grni')}
+        />
+        <NavItem
+          href="/dashboard/auditor/reports/audit-trail"
+          icon={Shield}
+          label="Procurement Audit Log"
+          active={pathname.includes('/dashboard/auditor/reports/audit-trail')}
+        />
+      </NavGroup>
+
+      <NavGroup label="Operational Audit" icon={ClipboardList}>
         <NavItem
           href="/dashboard/auditor/orders"
           icon={CheckCircle}
-          label="Orders & Payments"
+          label="Daily Sales Audit"
           active={pathname === '/dashboard/auditor/orders'}
-        />
-        {/* Placeholder for future logs if needed */}
-      </NavGroup>
-
-      <NavGroup label="Audits" icon={Scale} defaultOpen>
-        <NavItem
-          href="/dashboard/auditor/sales"
-          icon={DollarSign}
-          label="Financial Audit"
-          active={pathname === '/dashboard/auditor/sales'}
         />
         <NavItem
           href="/dashboard/auditor/stock"
           icon={Package}
-          label="Inventory Audit"
+          label="Spot Checks"
           active={pathname === '/dashboard/auditor/stock'}
-        />
-        <NavItem
-          href="/dashboard/auditor/sold-items"
-          icon={BarChart3}
-          label="Sold Items Analytics"
-          active={pathname === '/dashboard/auditor/sold-items'}
-        />
-        <NavItem
-          href="/dashboard/auditor/reports"
-          icon={FileText}
-          label="Audit Reports"
-          active={pathname === '/dashboard/auditor/reports'}
         />
       </NavGroup>
     </>
@@ -653,11 +744,32 @@ export function ConsolidatedNav() {
           label="Dispatch & Notes"
           active={pathname === '/dashboard/central-store/dispatch'}
         />
+      </NavGroup>
+
+      <NavGroup label="Purchasing & Compliance" icon={ShoppingCart} defaultOpen>
         <NavItem
-          href="/dashboard/central-store/suppliers"
+          href="/dashboard/procurement/purchase-orders"
+          icon={FileText}
+          label="Purchase Orders"
+          active={pathname.includes('/dashboard/procurement/purchase-orders')}
+        />
+        <NavItem
+          href="/dashboard/procurement/invoices"
+          icon={Receipt}
+          label="Supplier Invoices"
+          active={pathname.includes('/dashboard/procurement/invoices')}
+        />
+        <NavItem
+          href="/dashboard/procurement/payments"
+          icon={CreditCard}
+          label="Payments"
+          active={pathname.includes('/dashboard/procurement/payments')}
+        />
+        <NavItem
+          href="/dashboard/procurement/suppliers"
           icon={Store}
-          label="Suppliers"
-          active={pathname === '/dashboard/central-store/suppliers'}
+          label="Supplier Database"
+          active={pathname.includes('/dashboard/procurement/suppliers')}
         />
       </NavGroup>
 
@@ -1258,6 +1370,16 @@ export function ConsolidatedNav() {
     // Auditor Navigation
     if (user.role === UserRole.AUDITOR) {
       return auditorNav;
+    }
+
+    // Procurement Navigation
+    if (user.role === UserRole.PROCUREMENT) {
+      return procurementNav;
+    }
+
+    // Storekeeper Navigation
+    if (user.role === UserRole.STOREKEEPER) {
+      return branchStoreNav;
     }
 
     // Branch Accounting Navigation

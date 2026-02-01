@@ -15,17 +15,17 @@ export const getPurchaseOrders = async (
         const { branch_id, status, from_date, to_date } = req.query;
 
         let query = supabase
-            .from('purchase_orders')
+            .from('store_purchase_orders')
             .select(`
         *,
-        supplier:suppliers(id, name, code),
+        supplier:store_suppliers(id, name, supplier_code),
         receiving_branch:branches!receiving_branch_id(id, name, code),
-        created_by_user:users!created_by(id, first_name, last_name),
-        approved_by_user:users!approved_by(id, first_name, last_name),
-        received_by_user:users!received_by(id, first_name, last_name),
-        items:purchase_order_items(
+        created_by_user:users!created_by_id(id, first_name, last_name),
+        approved_by_user:users!approved_by_id(id, first_name, last_name),
+        received_by_user:users!received_by_id(id, first_name, last_name),
+        items:store_po_items(
           *,
-          item:simple_items!item_sku(sku, item_name, description, unit)
+          item:store_items(id, name, item_code, unit)
         )
       `)
             .order('created_at', { ascending: false });
@@ -38,26 +38,20 @@ export const getPurchaseOrders = async (
             query = query.eq('status', status);
         }
         if (from_date) {
-            query = query.gte('created_at', from_date);
+            query = query.gte('po_date', from_date);
         }
         if (to_date) {
-            query = query.lte('created_at', to_date);
+            query = query.lte('po_date', to_date);
         }
 
         const { data: orders, error } = await query;
 
         if (error) throw error;
 
-        // Map supplier_name for frontend compatibility if needed, though frontend should use supplier object
-        const mappedOrders = orders?.map(order => ({
-            ...order,
-            supplier_name: order.supplier?.name
-        }));
-
         res.status(200).json({
             success: true,
-            count: mappedOrders?.length || 0,
-            data: mappedOrders || []
+            count: orders?.length || 0,
+            data: orders || []
         });
     } catch (error) {
         logger.error('Error fetching purchase orders:', error);
@@ -77,17 +71,17 @@ export const getPurchaseOrder = async (
         const { id } = req.params;
 
         const { data: order, error } = await supabase
-            .from('purchase_orders')
+            .from('store_purchase_orders')
             .select(`
         *,
-        supplier:suppliers(id, name, code, contact_person, email, phone, address),
+        supplier:store_suppliers(*),
         receiving_branch:branches!receiving_branch_id(id, name, code, contact_person),
-        created_by_user:users!created_by(id, first_name, last_name, email),
-        approved_by_user:users!approved_by(id, first_name, last_name, email),
-        received_by_user:users!received_by(id, first_name, last_name, email),
-        items:purchase_order_items(
+        created_by_user:users!created_by_id(id, first_name, last_name, email),
+        approved_by_user:users!approved_by_id(id, first_name, last_name, email),
+        received_by_user:users!received_by_id(id, first_name, last_name, email),
+        items:store_po_items(
           *,
-          item:simple_items!item_sku(sku, item_name, description, unit, category)
+          item:store_items(id, name, item_code, unit, category)
         )
       `)
             .eq('id', id)
@@ -97,14 +91,9 @@ export const getPurchaseOrder = async (
             throw new AppError('Purchase order not found', 404);
         }
 
-        const mappedOrder = {
-            ...order,
-            supplier_name: order.supplier?.name
-        };
-
         res.status(200).json({
             success: true,
-            data: mappedOrder
+            data: order
         });
     } catch (error) {
         next(error);
@@ -123,9 +112,12 @@ export const createPurchaseOrder = async (
         const {
             supplier_id,
             receiving_branch_id,
-            expected_delivery,
-            order_notes,
-            items
+            po_date,
+            expected_delivery_date,
+            special_instructions,
+            items,
+            payment_terms,
+            delivery_terms
         } = req.body;
 
         const userId = req.user?.id;
@@ -135,36 +127,37 @@ export const createPurchaseOrder = async (
         }
 
         // Generate PO number using database function
-        const { data: poNumberData, error: numberError } = await supabase
-            .rpc('get_next_po_number');
+        const { data: po_number, error: numberError } = await supabase
+            .rpc('generate_po_number');
 
         if (numberError) {
             logger.error('Error generating PO number:', numberError);
             throw new AppError('Failed to generate PO number', 500);
         }
 
-        const po_number = poNumberData;
-
         // Calculate totals
         const subtotal = items.reduce((sum: number, item: any) =>
-            sum + (item.quantity * item.unit_price), 0); // Note: frontend sends quantity/unit_price
+            sum + (item.quantity * item.unit_price), 0);
         const tax_amount = subtotal * 0.16; // 16% VAT
         const total_amount = subtotal + tax_amount;
 
         // Create purchase order
         const { data: newPO, error: poError } = await supabase
-            .from('purchase_orders')
+            .from('store_purchase_orders')
             .insert({
                 po_number,
                 supplier_id,
                 receiving_branch_id,
-                created_by: userId,
-                expected_delivery,
-                order_notes,
+                created_by_id: userId,
+                po_date: po_date || new Date().toISOString().split('T')[0],
+                expected_delivery_date,
+                special_instructions,
                 subtotal,
                 tax_amount,
                 total_amount,
-                status: 'PENDING' // Changed to PENDING to match frontend expectation
+                status: 'draft',
+                payment_terms,
+                delivery_terms
             })
             .select()
             .single();
@@ -174,37 +167,23 @@ export const createPurchaseOrder = async (
         // Insert PO items
         const poItems = items.map((item: any) => ({
             po_id: newPO.id,
-            item_sku: item.item_sku,
-            ordered_quantity: item.quantity,
-            unit_cost: item.unit_price,
-            total_cost: item.quantity * item.unit_price,
-            status: 'PENDING'
+            item_id: item.item_id,
+            quantity_ordered: item.quantity,
+            quantity_pending: item.quantity,
+            unit_price: item.unit_price,
+            total_price: item.quantity * item.unit_price,
+            tax_amount: (item.quantity * item.unit_price) * 0.16
         }));
 
         const { error: itemsError } = await supabase
-            .from('purchase_order_items')
+            .from('store_po_items')
             .insert(poItems);
 
         if (itemsError) throw itemsError;
 
-        // Fetch complete PO with items
-        const { data: completePO } = await supabase
-            .from('purchase_orders')
-            .select(`
-        *,
-        supplier:suppliers(id, name, code),
-        receiving_branch:branches!receiving_branch_id(id, name, code),
-        items:purchase_order_items(
-          *,
-          item:simple_items!item_sku(sku, item_name, description, unit)
-        )
-      `)
-            .eq('id', newPO.id)
-            .single();
-
         res.status(201).json({
             success: true,
-            data: completePO
+            data: newPO
         });
     } catch (error) {
         logger.error('Error creating purchase order:', error);
@@ -225,12 +204,14 @@ export const approvePurchaseOrder = async (
         const userId = req.user?.id;
 
         const { data: order, error } = await supabase
-            .from('purchase_orders')
+            .from('store_purchase_orders')
             .update({
-                status: 'SENT',
-                approved_by: userId,
+                status: 'approved',
+                approved_by_id: userId,
                 approved_at: new Date().toISOString(),
+                sent_to_supplier: true,
                 sent_at: new Date().toISOString(),
+                sent_by_id: userId,
                 updated_at: new Date().toISOString()
             })
             .eq('id', id)
@@ -250,7 +231,7 @@ export const approvePurchaseOrder = async (
     }
 };
 
-// @desc    Receive purchase order and update stock
+// @desc    Receive purchase order (Legacy - replaced by GRN)
 // @route   PUT /api/purchase-orders/:id/receive
 // @access  Private
 export const receivePurchaseOrder = async (
@@ -259,93 +240,11 @@ export const receivePurchaseOrder = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { id } = req.params;
-        const { items_received, actual_delivery, delivery_notes } = req.body;
-        const userId = req.user?.id;
-
-        // Get PO details
-        const { data: po, error: fetchError } = await supabase
-            .from('purchase_orders')
-            .select(`
-        *,
-        items:purchase_order_items(*)
-      `)
-            .eq('id', id)
-            .single();
-
-        if (fetchError || !po) {
-            throw new AppError('Purchase order not found', 404);
-        }
-
-        // Update PO status
-        await supabase
-            .from('purchase_orders')
-            .update({
-                status: 'RECEIVED',
-                received_by: userId,
-                received_at: new Date().toISOString(),
-                actual_delivery: actual_delivery || new Date().toISOString(),
-                delivery_notes,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', id);
-
-        // Update PO items with received quantities
-        for (const receivedItem of items_received) {
-            await supabase
-                .from('purchase_order_items')
-                .update({
-                    received_quantity: receivedItem.received_quantity,
-                    status: receivedItem.received_quantity >= receivedItem.ordered_quantity ? 'RECEIVED' : 'PARTIAL'
-                })
-                .eq('id', receivedItem.item_id);
-
-            // Find original item
-            const originalItem = po.items.find((i: any) => i.id === receivedItem.item_id);
-
-            if (originalItem && receivedItem.received_quantity > 0) {
-                // Add to branch stock
-                await supabase.rpc('update_branch_stock', {
-                    p_branch_id: po.receiving_branch_id,
-                    p_item_sku: originalItem.item_sku,
-                    p_quantity_change: receivedItem.received_quantity
-                });
-
-                // Log stock movement
-                await supabase
-                    .from('branch_stock_movements')
-                    .insert({
-                        branch_id: po.receiving_branch_id,
-                        item_sku: originalItem.item_sku,
-                        movement_type: 'PURCHASE',
-                        quantity: receivedItem.received_quantity,
-                        reference_type: 'PO',
-                        reference_id: id,
-                        reference_number: po.po_number,
-                        performed_by: userId,
-                        notes: `Received from PO ${po.po_number} - ${po.supplier_name}`
-                    });
-            }
-        }
-
-        // Check if all items received
-        const allReceived = items_received.every((item: any) =>
-            item.received_quantity >= item.ordered_quantity
-        );
-
-        if (allReceived) {
-            await supabase
-                .from('purchase_orders')
-                .update({ status: 'COMPLETED' })
-                .eq('id', id);
-        }
-
-        res.status(200).json({
-            success: true,
-            message: 'Purchase order received and stock updated'
-        });
+        // This endpoint will eventually be deprecated in favor of GRN controller
+        // For now, it will redirect to or simulate GRN creation if needed, 
+        // but it's better to keep it simple or throw an error to use the new GRN workflow.
+        throw new AppError('Please use the GRN (Goods Received Note) workflow for receiving goods', 400);
     } catch (error) {
-        logger.error('Error receiving purchase order:', error);
         next(error);
     }
 };
@@ -362,9 +261,9 @@ export const cancelPurchaseOrder = async (
         const { id } = req.params;
 
         const { data: order, error } = await supabase
-            .from('purchase_orders')
+            .from('store_purchase_orders')
             .update({
-                status: 'CANCELLED',
+                status: 'cancelled',
                 updated_at: new Date().toISOString()
             })
             .eq('id', id)
@@ -394,11 +293,20 @@ export const updatePurchaseOrder = async (
 ): Promise<void> => {
     try {
         const { id } = req.params;
-        const { supplier_id, receiving_branch_id, expected_delivery, order_notes, items } = req.body;
+        const {
+            supplier_id,
+            receiving_branch_id,
+            po_date,
+            expected_delivery_date,
+            special_instructions,
+            items,
+            payment_terms,
+            delivery_terms
+        } = req.body;
 
-        // Check if PO exists and is in PENDING status
+        // Check if PO exists and is in draft/pending status
         const { data: order, error: fetchError } = await supabase
-            .from('purchase_orders')
+            .from('store_purchase_orders')
             .select('*')
             .eq('id', id)
             .single();
@@ -407,8 +315,8 @@ export const updatePurchaseOrder = async (
             throw new AppError('Purchase order not found', 404);
         }
 
-        if (order.status !== 'PENDING') {
-            throw new AppError('Only pending purchase orders can be updated', 400);
+        if (order.status !== 'draft' && order.status !== 'pending_approval') {
+            throw new AppError('Only draft or pending purchase orders can be updated', 400);
         }
 
         // Calculate totals
@@ -419,15 +327,18 @@ export const updatePurchaseOrder = async (
 
         // Update PO
         const { data: updatedPO, error: updateError } = await supabase
-            .from('purchase_orders')
+            .from('store_purchase_orders')
             .update({
                 supplier_id,
                 receiving_branch_id,
-                expected_delivery,
-                order_notes,
+                po_date,
+                expected_delivery_date,
+                special_instructions,
                 subtotal,
                 tax_amount,
                 total_amount,
+                payment_terms,
+                delivery_terms,
                 updated_at: new Date().toISOString()
             })
             .eq('id', id)
@@ -438,22 +349,23 @@ export const updatePurchaseOrder = async (
 
         // Delete old items
         await supabase
-            .from('purchase_order_items')
+            .from('store_po_items')
             .delete()
             .eq('po_id', id);
 
         // Insert new items
         const poItems = items.map((item: any) => ({
             po_id: id,
-            item_sku: item.item_sku,
-            ordered_quantity: item.quantity,
-            unit_cost: item.unit_price,
-            total_cost: item.quantity * item.unit_price,
-            status: 'PENDING'
+            item_id: item.item_id,
+            quantity_ordered: item.quantity,
+            quantity_pending: item.quantity,
+            unit_price: item.unit_price,
+            total_price: item.quantity * item.unit_price,
+            tax_amount: (item.quantity * item.unit_price) * 0.16
         }));
 
         const { error: itemsError } = await supabase
-            .from('purchase_order_items')
+            .from('store_po_items')
             .insert(poItems);
 
         if (itemsError) throw itemsError;
@@ -480,9 +392,9 @@ export const deletePurchaseOrder = async (
     try {
         const { id } = req.params;
 
-        // Check if PO exists and is in PENDING status
+        // Check if PO exists and is in draft status
         const { data: order, error: fetchError } = await supabase
-            .from('purchase_orders')
+            .from('store_purchase_orders')
             .select('*')
             .eq('id', id)
             .single();
@@ -491,19 +403,19 @@ export const deletePurchaseOrder = async (
             throw new AppError('Purchase order not found', 404);
         }
 
-        if (order.status !== 'PENDING') {
-            throw new AppError('Only pending purchase orders can be deleted', 400);
+        if (order.status !== 'draft') {
+            throw new AppError('Only draft purchase orders can be deleted', 400);
         }
 
         // Delete items first
         await supabase
-            .from('purchase_order_items')
+            .from('store_po_items')
             .delete()
             .eq('po_id', id);
 
         // Delete PO
         const { error: deleteError } = await supabase
-            .from('purchase_orders')
+            .from('store_purchase_orders')
             .delete()
             .eq('id', id);
 

@@ -71,6 +71,8 @@ export enum UserRole {
   BRANCH_STOREKEEPER = 'branch_storekeeper',
   INVENTORY_CLERK = 'inventory_clerk',
   PURCHASING_MANAGER = 'purchasing_manager',
+  PROCUREMENT = 'procurement',
+  STOREKEEPER = 'storekeeper',
 
   // Operations
   BRANCH_OPERATIONS_MANAGER = 'branch_operations_manager',

@@ -3272,6 +3272,46 @@ export const employeePortalAPI = {
 
 
 // =====================================================
+// PROCUREMENT API
+// =====================================================
+
+export const procurementAPI = {
+  // Purchase Orders
+  getPurchaseOrders: (status?: string) => fetchAPI<any>(`/procurement/purchase-orders${status ? `?status=${status}` : ''}`),
+  getPurchaseOrder: (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}`),
+  createPurchaseOrder: (data: any) => fetchAPI<any>('/procurement/purchase-orders', { method: 'POST', body: JSON.stringify(data) }),
+  approvePurchaseOrder: (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}/approve`, { method: 'PUT' }),
+  cancelPurchaseOrder: (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}/cancel`, { method: 'PUT' }),
+
+  // GRN
+  getGRNs: (status?: string) => fetchAPI<any>(`/procurement/grn${status ? `?status=${status}` : ''}`),
+  getGRN: (id: string) => fetchAPI<any>(`/procurement/grn/${id}`),
+  createGRN: (data: any) => fetchAPI<any>('/procurement/grn', { method: 'POST', body: JSON.stringify(data) }),
+  approveGRN: (id: string) => fetchAPI<any>(`/procurement/grn/${id}/approve`, { method: 'PUT' }),
+  cancelGRN: (id: string) => fetchAPI<any>(`/procurement/grn/${id}/cancel`, { method: 'PUT' }),
+
+  // Supplier Invoices
+  getInvoices: (status?: string) => fetchAPI<any>(`/procurement/invoices${status ? `?status=${status}` : ''}`),
+  getInvoice: (id: string) => fetchAPI<any>(`/procurement/invoices/${id}`),
+  createInvoice: (data: any) => fetchAPI<any>('/procurement/invoices', { method: 'POST', body: JSON.stringify(data) }),
+  submitInvoice: (id: string) => fetchAPI<any>(`/procurement/invoices/${id}/submit`, { method: 'PUT' }),
+  approveInvoice: (id: string) => fetchAPI<any>(`/procurement/invoices/${id}/approve`, { method: 'PUT' }),
+  rejectInvoice: (id: string, reason: string) => fetchAPI<any>(`/procurement/invoices/${id}/reject`, { method: 'PUT', body: JSON.stringify({ reason }) }),
+
+  // Supplier Payments
+  getPayments: () => fetchAPI<any>('/procurement/payments'),
+  getPayment: (id: string) => fetchAPI<any>(`/procurement/payments/${id}`),
+  createPayment: (data: any) => fetchAPI<any>('/procurement/payments', { method: 'POST', body: JSON.stringify(data) }),
+  processPayment: (id: string) => fetchAPI<any>(`/procurement/payments/${id}/process`, { method: 'PUT' }),
+
+  // Reports
+  getAgingAnalysis: () => fetchAPI<any>('/procurement/reports/aging'),
+  getVATReport: (startDate: string, endDate: string) => fetchAPI<any>(`/procurement/reports/vat?startDate=${startDate}&endDate=${endDate}`),
+  getGRNIReport: () => fetchAPI<any>('/procurement/reports/grni'),
+  getAuditTrail: (entityType?: string) => fetchAPI<any>(`/procurement/reports/audit-trail${entityType ? `?entityType=${entityType}` : ''}`),
+};
+
+// =====================================================
 // UNIFIED API EXPORT
 // =====================================================
 
@@ -3303,6 +3343,7 @@ export const api = {
   cashier: cashierAPI,
   employeePortal: employeePortalAPI,
   idCards: idCardsAPI,
+  procurement: procurementAPI,
 };
 
 export default api;

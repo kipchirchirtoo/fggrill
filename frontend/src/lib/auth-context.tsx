@@ -33,6 +33,9 @@ export enum UserRole {
   ACCOUNTANT = 'accountant',
   BRANCH_ACCOUNTANT = 'branch_accountant',
   AUDITOR = 'auditor',
+  PROCUREMENT = 'procurement',
+  STOREKEEPER = 'storekeeper',
+  PURCHASING_MANAGER = 'purchasing_manager',
   CASHIER = 'cashier',
   HR_MANAGER = 'hr_manager',
   EMPLOYEE = 'employee',
@@ -315,10 +318,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       [UserRole.ACCOUNTANT]: '/dashboard/branch-accounting',
       [UserRole.BRANCH_ACCOUNTANT]: '/dashboard/branch-accounting',
       [UserRole.AUDITOR]: '/dashboard/auditor',
+      [UserRole.PROCUREMENT]: '/dashboard/procurement',
+      [UserRole.STOREKEEPER]: '/dashboard/storekeeping',
+      [UserRole.PURCHASING_MANAGER]: '/dashboard/procurement',
       [UserRole.CASHIER]: '/dashboard/cashier',
       [UserRole.HR_MANAGER]: '/dashboard/hr',
-      [UserRole.EMPLOYEE]: '/portal/employee',
-      [UserRole.GUEST]: '/portal/guest'
+      [UserRole.EMPLOYEE]: '/dashboard/employee',
+      [UserRole.GUEST]: '/dashboard/guest',
     };
 
     const path = roleRedirects[role] || '/dashboard';
