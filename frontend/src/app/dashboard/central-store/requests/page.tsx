@@ -37,6 +37,7 @@ export default function CentralRequestsPage() {
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const [selectedRequest, setSelectedRequest] = useState<StockRequest | null>(null);
     const [reviewNotes, setReviewNotes] = useState('');
+    const [approvedQuantities, setApprovedQuantities] = useState<Record<string, number>>({});
     const [isProcessing, setIsProcessing] = useState(false);
 
     const fetchRequests = useCallback(async () => {
@@ -60,10 +61,14 @@ export default function CentralRequestsPage() {
         if (!selectedRequest) return;
         setIsProcessing(true);
         try {
+            const approvedItems = action === 'APPROVE'
+                ? Object.entries(approvedQuantities).map(([id, qty]) => ({ id, approved_quantity: qty }))
+                : [];
+
             const res = await storeAPI.reviewStockRequest(selectedRequest.id, {
                 action,
                 review_notes: reviewNotes,
-                approved_items: [] // Empty means approve as requested or reject all
+                approved_items: approvedItems
             });
             if (res.success) {
                 toast.success(`Request ${action === 'APPROVE' ? 'approved' : 'rejected'} successfully`);
@@ -181,7 +186,15 @@ export default function CentralRequestsPage() {
                                 <IOSCard
                                     key={req.id}
                                     className="p-0 overflow-hidden group hover:border-stone-300 transition-all cursor-pointer"
-                                    onClick={() => setSelectedRequest(req)}
+                                    onClick={() => {
+                                        setSelectedRequest(req);
+                                        // Initialize approved quantities with requested amounts
+                                        const initialQuantities: Record<string, number> = {};
+                                        req.items.forEach(item => {
+                                            initialQuantities[item.id] = item.requested_quantity;
+                                        });
+                                        setApprovedQuantities(initialQuantities);
+                                    }}
                                 >
                                     <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                         <div className="flex items-center gap-4">
@@ -299,7 +312,22 @@ export default function CentralRequestsPage() {
                                                             {item.requested_quantity} {item.unit}
                                                         </td>
                                                         <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">
-                                                            {item.approved_quantity || '--'} {item.unit}
+                                                            {selectedRequest.status === 'PENDING' ? (
+                                                                <input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    max={item.requested_quantity}
+                                                                    className="w-20 px-2 py-1 text-right bg-emerald-50 border border-emerald-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                                                    value={approvedQuantities[item.id] ?? item.requested_quantity}
+                                                                    onChange={(e) => {
+                                                                        const val = Math.max(0, Math.min(item.requested_quantity, parseInt(e.target.value) || 0));
+                                                                        setApprovedQuantities(prev => ({ ...prev, [item.id]: val }));
+                                                                    }}
+                                                                />
+                                                            ) : (
+                                                                <span>{item.approved_quantity || '--'}</span>
+                                                            )}
+                                                            <span className="ml-1 text-xs font-normal text-stone-400">{item.unit}</span>
                                                         </td>
                                                     </tr>
                                                 ))}
