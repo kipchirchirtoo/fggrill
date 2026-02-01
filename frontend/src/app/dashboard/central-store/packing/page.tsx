@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -19,6 +20,7 @@ export default function PackingPage() {
     const [packingModalOpen, setPackingModalOpen] = useState(false);
     const [packedItems, setPackedItems] = useState<Record<string, boolean>>({});
     const [isProcessing, setIsProcessing] = useState(false);
+    const router = useRouter();
 
     const fetchApprovedRequests = useCallback(async () => {
         setIsLoading(true);
@@ -69,6 +71,11 @@ export default function PackingPage() {
                 toast.success('Items packed and ready for dispatch');
                 setPackingModalOpen(false);
                 fetchApprovedRequests();
+
+                toast.info('Redirecting to Dispatch Station...');
+                setTimeout(() => {
+                    router.push('/dashboard/central-store/dispatch');
+                }, 1500);
             } else {
                 toast.error(response.message || 'Failed to create dispatch');
             }

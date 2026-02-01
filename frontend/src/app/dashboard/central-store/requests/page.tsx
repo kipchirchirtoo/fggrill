@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -39,6 +40,7 @@ export default function CentralRequestsPage() {
     const [reviewNotes, setReviewNotes] = useState('');
     const [approvedQuantities, setApprovedQuantities] = useState<Record<string, number>>({});
     const [isProcessing, setIsProcessing] = useState(false);
+    const router = useRouter();
 
     const fetchRequests = useCallback(async () => {
         setIsLoading(true);
@@ -75,6 +77,13 @@ export default function CentralRequestsPage() {
                 setReviewNotes('');
                 setSelectedRequest(null);
                 fetchRequests();
+
+                if (action === 'APPROVE') {
+                    toast.info('Redirecting to Packing Station...');
+                    setTimeout(() => {
+                        router.push('/dashboard/central-store/packing');
+                    }, 1500);
+                }
             } else {
                 toast.error(res.message || "Action failed");
             }
