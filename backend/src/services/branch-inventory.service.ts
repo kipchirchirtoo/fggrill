@@ -829,17 +829,28 @@ export async function getDispatchHistory(fromBranchId: number, status?: string) 
     .select('id, name, code')
     .in('id', branchIds);
 
-  // Get item counts
+  // Get items with details
   const dispatchIds = dispatches.map(d => d.id);
   const { data: items } = await supabase
     .from('dispatch_items')
-    .select('dispatch_id')
+    .select(`
+      *,
+      item:simple_items!item_sku(sku, item_name, description, unit)
+    `)
     .in('dispatch_id', dispatchIds);
 
   return dispatches.map(dispatch => ({
     ...dispatch,
     to_branch: branches?.find(b => b.id === dispatch.to_branch_id),
-    items_count: (items || []).filter(i => i.dispatch_id === dispatch.id).length
+    items: (items || [])
+      .filter(i => i.dispatch_id === dispatch.id)
+      .map(i => ({
+        id: i.id,
+        item_sku: i.item_sku,
+        item_name: i.item?.item_name || i.item_sku, // Handle possible missing join
+        quantity: i.dispatched_quantity,
+        unit: i.item?.unit || 'units'
+      }))
   }));
 }
 

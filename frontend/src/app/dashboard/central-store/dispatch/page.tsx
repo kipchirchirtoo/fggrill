@@ -187,15 +187,15 @@ export default function DispatchPage() {
                                     <div className="p-6 flex-1 min-w-0">
                                         <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-4">Shipment Contents</p>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                            {dispatch.items.slice(0, 6).map((item) => (
+                                            {(dispatch.items || []).slice(0, 6).map((item) => (
                                                 <div key={item.id} className="flex items-center justify-between p-2.5 rounded-md border border-stone-100 bg-stone-50/30">
                                                     <span className="text-[12px] font-medium text-stone-800 truncate pr-2">{item.item_name}</span>
                                                     <span className="text-[11px] font-bold text-stone-400 shrink-0">{item.quantity} {item.unit}</span>
                                                 </div>
                                             ))}
-                                            {dispatch.items.length > 6 && (
+                                            {(dispatch.items?.length || 0) > 6 && (
                                                 <div className="p-2.5 text-[11px] text-stone-400 italic">
-                                                    + {dispatch.items.length - 6} more items...
+                                                    + {(dispatch.items?.length || 0) - 6} more items...
                                                 </div>
                                             )}
                                         </div>
