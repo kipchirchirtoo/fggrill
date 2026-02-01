@@ -264,10 +264,52 @@ export const reviewStockRequest = async (
 ): Promise<void> => {
     try {
         const { id } = req.params;
-        const { review_notes, item_approvals } = req.body;
+        const { action, review_notes, item_approvals } = req.body;
         const userId = req.user?.id;
 
-        // Update request status
+        if (action === 'APPROVE') {
+            const result = await BranchInventoryService.approveStockRequest(
+                id,
+                userId!,
+                item_approvals || [],
+                review_notes
+            );
+            res.status(200).json({
+                success: true,
+                message: 'Stock request approved successfully',
+                data: result
+            });
+            return;
+        }
+
+        if (action === 'REJECT') {
+            // Fetch items to reject all
+            const { data: items } = await supabase
+                .from('stock_request_items')
+                .select('id')
+                .eq('request_id', id);
+
+            const rejectedItems = (items || []).map(item => ({
+                id: item.id,
+                approved_quantity: 0,
+                status: 'REJECTED'
+            }));
+
+            const result = await BranchInventoryService.approveStockRequest(
+                id,
+                userId!,
+                rejectedItems,
+                review_notes
+            );
+            res.status(200).json({
+                success: true,
+                message: 'Stock request rejected',
+                data: result
+            });
+            return;
+        }
+
+        // Default: Set to UNDER_REVIEW
         const { data: request, error: updateError } = await supabase
             .from('stock_requests')
             .update({
@@ -282,20 +324,6 @@ export const reviewStockRequest = async (
             .single();
 
         if (updateError) throw updateError;
-
-        // Update item approvals if provided
-        if (item_approvals && Array.isArray(item_approvals)) {
-            for (const approval of item_approvals) {
-                await supabase
-                    .from('stock_request_items')
-                    .update({
-                        approved_quantity: approval.approved_quantity,
-                        status: approval.status,
-                        rejection_reason: approval.rejection_reason
-                    })
-                    .eq('id', approval.item_id);
-            }
-        }
 
         res.status(200).json({
             success: true,
@@ -320,58 +348,17 @@ export const approveStockRequest = async (
         const { approved_quantity_notes, item_approvals } = req.body;
         const userId = req.user?.id;
 
-        // 1. Update the main request status
-        const { data: request, error } = await supabase
-            .from('stock_requests')
-            .update({
-                status: 'APPROVED',
-                reviewed_by: userId,
-                reviewed_at: new Date().toISOString(),
-                approved_quantity_notes,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (error) throw error;
-
-        // 2. Update individual items if approvals provided
-        if (item_approvals && Array.isArray(item_approvals)) {
-            for (const item of item_approvals) {
-                await supabase
-                    .from('stock_request_items')
-                    .update({
-                        approved_quantity: item.approved_quantity,
-                        status: 'APPROVED'
-                    })
-                    .eq('request_id', id)
-                    .eq('id', item.id);
-            }
-        } else {
-            // Default: Set approved_quantity to requested_quantity for all items
-            const { data: items } = await supabase
-                .from('stock_request_items')
-                .select('id, requested_quantity')
-                .eq('request_id', id);
-
-            if (items) {
-                for (const item of items) {
-                    await supabase
-                        .from('stock_request_items')
-                        .update({
-                            approved_quantity: item.requested_quantity,
-                            status: 'APPROVED'
-                        })
-                        .eq('id', item.id);
-                }
-            }
-        }
+        const result = await BranchInventoryService.approveStockRequest(
+            id,
+            userId!,
+            item_approvals || [],
+            approved_quantity_notes
+        );
 
         res.status(200).json({
             success: true,
             message: 'Stock request approved successfully',
-            data: request
+            data: result
         });
     } catch (error) {
         logger.error('Error approving stock request:', error);
@@ -392,31 +379,29 @@ export const rejectStockRequest = async (
         const { review_notes } = req.body;
         const userId = req.user?.id;
 
-        const { data: request, error } = await supabase
-            .from('stock_requests')
-            .update({
-                status: 'REJECTED',
-                reviewed_by: userId,
-                reviewed_at: new Date().toISOString(),
-                review_notes,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (error) throw error;
-
-        // Also update item statuses
-        await supabase
+        // Fetch items to reject all
+        const { data: items } = await supabase
             .from('stock_request_items')
-            .update({ status: 'REJECTED' })
+            .select('id')
             .eq('request_id', id);
+
+        const rejectedItems = (items || []).map(item => ({
+            id: item.id,
+            approved_quantity: 0,
+            status: 'REJECTED'
+        }));
+
+        const result = await BranchInventoryService.approveStockRequest(
+            id,
+            userId!,
+            rejectedItems,
+            review_notes
+        );
 
         res.status(200).json({
             success: true,
-            message: 'Stock request rejected',
-            data: request
+            message: 'Stock request rejected successfully',
+            data: result
         });
     } catch (error) {
         logger.error('Error rejecting stock request:', error);

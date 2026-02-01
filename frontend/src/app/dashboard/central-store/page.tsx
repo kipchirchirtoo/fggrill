@@ -44,6 +44,7 @@ export default function CentralStoreDashboard() {
     {
       title: "Logistics Hub",
       links: [
+        { href: '/dashboard/central-store/requests', icon: ClipboardList, label: 'Requisitions', desc: 'Monitor requests' },
         { href: '/dashboard/central-store/packing', icon: Box, label: 'Packing Station', desc: 'Order fulfillment' },
         { href: '/dashboard/central-store/dispatch', icon: Truck, label: 'Dispatch', desc: 'Transit tracking' },
         { href: '/dashboard/central-store/vehicles', icon: Navigation, label: 'Fleet Management', desc: 'Vehicles & drivers' },

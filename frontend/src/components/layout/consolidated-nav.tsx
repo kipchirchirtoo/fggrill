@@ -531,8 +531,6 @@ export function ConsolidatedNav() {
         />
       </NavGroup>
 
-    </NavGroup>
-
       <NavGroup label="Central Store Ops" icon={Warehouse}>
         <NavItem
           href="/dashboard/central-store/dispatch"
@@ -732,6 +730,12 @@ export function ConsolidatedNav() {
       </NavGroup>
 
       <NavGroup label="Fulfillment" icon={ClipboardList}>
+        <NavItem
+          href="/dashboard/central-store/requests"
+          icon={ClipboardList}
+          label="Requisitions"
+          active={pathname === '/dashboard/central-store/requests'}
+        />
         <NavItem
           href="/dashboard/central-store/packing"
           icon={Package}

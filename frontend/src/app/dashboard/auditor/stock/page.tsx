@@ -11,14 +11,36 @@ import { auditAPI, storeAPI, auditorReportsAPI, reportsService } from '@/lib/api
 import { toast } from 'sonner';
 
 const RequisitionDetailsModal = ({ request, isOpen, onClose, onAction }: { request: any, isOpen: boolean, onClose: () => void, onAction: (id: string, action: 'APPROVE' | 'REJECT') => void }) => {
+    const [centralStock, setCentralStock] = useState<any[]>([]);
+    const [isLoadingStock, setIsLoadingStock] = useState(false);
+
+    useEffect(() => {
+        if (isOpen && request) {
+            fetchCentralStock();
+        }
+    }, [isOpen, request]);
+
+    const fetchCentralStock = async () => {
+        setIsLoadingStock(true);
+        try {
+            // Assuming branch_id 1 is Central Store
+            const res = await storeAPI.getBranchStock(1);
+            if (res.success) setCentralStock(res.data || []);
+        } catch (e) {
+            console.error('Failed to fetch central stock:', e);
+        } finally {
+            setIsLoadingStock(false);
+        }
+    };
+
     if (!isOpen || !request) return null;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-stone-900/40 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto border border-stone-100 animate-in fade-in zoom-in duration-200">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-stone-100 animate-in fade-in zoom-in duration-200">
                 <div className="px-6 py-4 border-b border-stone-100 flex justify-between items-center bg-stone-50/50">
                     <div>
-                        <h3 className="text-[16px] font-bold text-stone-900">Requisition Details</h3>
+                        <h3 className="text-[16px] font-bold text-stone-900">Requisition Approval</h3>
                         <p className="text-[11px] text-stone-500">{request.requesting_branch?.name || 'Local'} • {new Date(request.created_at).toLocaleDateString()}</p>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-stone-200 rounded-full transition-colors">
@@ -27,38 +49,71 @@ const RequisitionDetailsModal = ({ request, isOpen, onClose, onAction }: { reque
                 </div>
 
                 <div className="p-6 space-y-5">
-                    <div className="space-y-1">
-                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Reason for Request</p>
-                        <p className="text-[13px] text-stone-900 bg-stone-50 p-3 rounded-lg border border-stone-100 italic">"{request.reason || 'Routine replenishment'}"</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Reason for Request</p>
+                            <p className="text-[13px] text-stone-900 bg-stone-50 p-3 rounded-lg border border-stone-100 italic">"{request.reason || 'Routine replenishment'}"</p>
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Request Status</p>
+                            <div className="flex items-center gap-2 mt-2">
+                                <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${request.priority === 'URGENT' ? 'bg-rose-100 text-rose-700' : 'bg-stone-100 text-stone-700'}`}>
+                                    {request.priority} Priority
+                                </span>
+                                <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded text-[10px] font-bold uppercase tracking-wider">
+                                    PENDING APPROVAL
+                                </span>
+                            </div>
+                        </div>
                     </div>
 
                     <div className="space-y-3">
-                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Requested Items</p>
+                        <div className="flex items-center justify-between">
+                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Requested Items & Availability</p>
+                            {isLoadingStock && <RefreshCw className="h-3 w-3 animate-spin text-stone-400" />}
+                        </div>
                         <div className="bg-stone-50 rounded-xl border border-stone-100 divide-y divide-stone-100 overflow-hidden">
-                            {(request.items || []).map((item: any, idx: number) => (
-                                <div key={idx} className="px-4 py-3 flex justify-between items-center">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded bg-white border border-stone-100 flex items-center justify-center">
-                                            <Package className="h-4 w-4 text-stone-400" />
+                            {(request.items || []).map((item: any, idx: number) => {
+                                const cStock = centralStock.find(cs => cs.item_sku === item.item_sku);
+                                const isShortage = cStock ? cStock.quantity < item.quantity : true;
+
+                                return (
+                                    <div key={idx} className="px-4 py-3 flex justify-between items-center bg-white group hover:bg-stone-50 transition-colors">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-9 h-9 rounded-lg bg-stone-100 border border-stone-100 flex items-center justify-center group-hover:bg-white transition-colors">
+                                                <Package className="h-4 w-4 text-stone-400" />
+                                            </div>
+                                            <div>
+                                                <p className="text-[13px] font-bold text-stone-800">{item.item_name}</p>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-[10px] text-stone-400">Branch Stock: <span className="font-bold text-stone-600 font-mono">{item.current_stock || 0}</span></p>
+                                                    <span className="text-stone-300">•</span>
+                                                    <p className="text-[10px] text-stone-400">Par: <span className="font-bold text-stone-600 font-mono">{item.item?.max_stock_level || '--'}</span></p>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="text-[13px] font-medium text-stone-800">{item.item_name}</p>
-                                            <p className="text-[11px] text-stone-400">Current Branch Stock: {item.current_stock || 0}</p>
+                                        <div className="flex items-center gap-6">
+                                            <div className="text-right">
+                                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tighter">Central Store</p>
+                                                <p className={`text-[13px] font-mono font-bold ${isShortage ? 'text-rose-500' : 'text-emerald-600'}`}>
+                                                    {cStock ? `${cStock.quantity} ${item.unit || 'pcs'}` : '0 available'}
+                                                </p>
+                                            </div>
+                                            <div className="text-right bg-stone-900 text-white px-3 py-1.5 rounded-lg">
+                                                <p className="text-[9px] text-stone-400 uppercase font-black leading-none mb-0.5">REQUESTED</p>
+                                                <p className="text-[14px] font-black font-mono">{item.quantity} {item.unit || 'pcs'}</p>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-[14px] font-bold text-stone-900">{item.quantity} {item.unit || 'pcs'}</p>
-                                        <p className="text-[10px] text-stone-400 uppercase font-bold tracking-tight">Requested</p>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
 
                 <div className="px-6 py-4 bg-stone-50/50 flex justify-end gap-3 shadow-[inset_0_1px_0_0_rgba(0,0,0,0.05)]">
-                    <button onClick={() => onAction(request.id, 'REJECT')} className="btn-secondary text-rose-600 border-rose-100 hover:bg-rose-50 px-4 py-2 text-[12px] font-bold">Reject</button>
-                    <button onClick={() => onAction(request.id, 'APPROVE')} className="btn-primary bg-stone-900 hover:bg-black px-6 py-2 text-[12px] font-bold">Approve Stock Release</button>
+                    <button onClick={() => onAction(request.id, 'REJECT')} className="btn-secondary text-rose-600 border-rose-100 hover:bg-rose-50 px-6 py-2.5 text-[12px] font-bold rounded-xl">Reject Requisition</button>
+                    <button onClick={() => onAction(request.id, 'APPROVE')} className="btn-primary bg-stone-900 hover:bg-black px-8 py-2.5 text-[12px] font-bold shadow-lg shadow-stone-200 rounded-xl">Approve Stock Release</button>
                 </div>
             </div>
         </div>
@@ -157,13 +212,13 @@ export default function StockAuditPage() {
             const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
             const lastDay = today.toISOString().split('T')[0];
 
-            await reportsService.downloadReport('stock_usage', {
+            await auditorReportsAPI.exportBrandedPdf('stock_usage', {
                 branch_id: activeBranchId || 1,
                 start_date: firstDay,
                 end_date: lastDay,
                 branch_name: activeBranchId === 0 ? 'All Branches' : `Branch #${activeBranchId}`
             });
-            toast.success("Report downloaded successfully");
+            toast.success("Report generated successfully");
         } catch (e) {
             console.error(e);
             toast.error("Failed to export report");
@@ -224,7 +279,10 @@ export default function StockAuditPage() {
 
     const handleAction = async (id: string, action: 'APPROVE' | 'REJECT') => {
         try {
-            const res = await storeAPI.reviewStockRequest(id, { action });
+            const res = await storeAPI.reviewStockRequest(id, {
+                action,
+                approved_items: [] // Empty means approve as requested or reject all
+            });
             if (res.success) {
                 toast.success(`Request ${action === 'APPROVE' ? 'approved' : 'rejected'}`);
                 fetchStockData(); // Refresh list

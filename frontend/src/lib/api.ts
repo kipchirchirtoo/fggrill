@@ -2501,6 +2501,25 @@ export const auditorReportsAPI = {
   getEmployeeCredit: () => {
     return fetchAPI<any>('/reports/auditor/employee-credit');
   },
+  exportBrandedPdf: async (reportType: string, params: any) => {
+    const query = new URLSearchParams();
+    Object.keys(params).forEach(key => query.append(key, String(params[key])));
+    const response = await fetch(`${API_URL}/api/reports/auditor/export/${reportType}?${query}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    });
+    if (!response.ok) throw new Error('Export failed');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${reportType}_${new Date().getTime()}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    return true;
+  }
 };
 
 export const conferenceAPI = {

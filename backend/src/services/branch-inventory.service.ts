@@ -236,14 +236,14 @@ export async function createStockRequest(
   // Notify Central Storekeeper
   try {
     await notificationService.notifyRole(
-      'central_storekeeper',
+      'auditor',
       'New Stock Request',
       `Branch ${branchCode} has submitted a new stock request (${requestNumber}). Priority: ${priority}`,
       {
         type: 'info',
         category: 'stock',
         priority: priority === 'URGENT' ? 'urgent' : 'medium',
-        actionUrl: '/dashboard/central-store/dispatch',
+        actionUrl: '/dashboard/auditor/stock',
         metadata: { request_id: request.id, branch_code: branchCode }
       }
     );
@@ -425,10 +425,25 @@ export async function approveStockRequest(
         .single();
 
       if (requestDetails) {
+        // Notify Central Storekeeper to start packing
+        await notificationService.notifyRole(
+          'central_storekeeper',
+          'Stock Request Approved',
+          `Stock Request ${requestDetails.request_number} has been approved. Please proceed to packing.`,
+          {
+            type: 'info',
+            category: 'stock',
+            priority: 'high',
+            actionUrl: '/dashboard/central-store/packing',
+            metadata: { request_id: requestId, branch_id: requestDetails.requesting_branch_id }
+          }
+        );
+
+        // Also notify general manager as per current flow
         await notificationService.notifyRole(
           'general_manager',
           'Stock Request Approved',
-          `Stock Request ${requestDetails.request_number} approved by Auditor. Ready for dispatch.`,
+          `Stock Request ${requestDetails.request_number} approved by Auditor. Ready for fulfillment.`,
           {
             type: 'info',
             category: 'stock',
