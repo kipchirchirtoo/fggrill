@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
-interface MenuItem { id: string; name: string; description?: string; price: number; category: string; is_available: boolean; }
+interface MenuItem { id: string; name: string; description?: string; price: number; category: string | { name: string }; is_available: boolean; }
 
 export default function AdminMenuPage() {
   const { user } = useAuth();
@@ -128,7 +128,7 @@ export default function AdminMenuPage() {
               {filteredItems.map((item) => (
                 <IOSCard key={item.id} className={`p-4 ${!item.is_available ? 'opacity-60' : ''}`}>
                   <div className="flex items-start justify-between mb-2">
-                    <div><p className="font-bold">{item.name}</p><p className="text-sm text-gray-500">{item.category}</p></div>
+                    <div><p className="font-bold">{item.name}</p><p className="text-sm text-gray-500">{typeof item.category === 'object' ? item.category?.name : item.category}</p></div>
                     <IOSBadge className={item.is_available ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>{item.is_available ? 'Available' : 'Unavailable'}</IOSBadge>
                   </div>
                   {item.description && <p className="text-sm text-gray-500 mb-3">{item.description}</p>}
