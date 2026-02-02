@@ -1,21 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAuth, UserRole } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { IOSCard } from '@/components/ui/ios-card';
-import { IOSButton } from '@/components/ui/ios-button';
-import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import {
-    ShoppingCart, Plus, RefreshCw, ArrowLeft, Check, X, Clock
+    ShoppingCart, Plus, RefreshCw, ArrowLeft, X, Filter, Search
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { UserRole } from '@/lib/auth-context';
 
 interface Requisition {
     id: number;
@@ -27,7 +23,6 @@ interface Requisition {
 }
 
 export default function RequisitionsPage() {
-    const { user } = useAuth();
     const { activeBranchId } = useBranch();
     const [requisitions, setRequisitions] = useState<Requisition[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -35,6 +30,7 @@ export default function RequisitionsPage() {
     const [selectedItems, setSelectedItems] = useState<any[]>([]);
     const [priority, setPriority] = useState('NORMAL');
     const [reason, setReason] = useState('');
+    const [filterStatus, setFilterStatus] = useState<string>('ALL');
 
     useEffect(() => {
         fetchRequisitions();
@@ -101,15 +97,19 @@ export default function RequisitionsPage() {
     };
 
     const getStatusBadge = (status: string) => {
-        const badges: Record<string, { bg: string; text: string }> = {
-            PENDING: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-            APPROVED: { bg: 'bg-green-100', text: 'text-green-700' },
-            REJECTED: { bg: 'bg-red-100', text: 'text-red-700' },
-            FULFILLED: { bg: 'bg-blue-100', text: 'text-blue-700' }
+        const styles: Record<string, string> = {
+            PENDING: 'bg-yellow-100 text-yellow-700',
+            APPROVED: 'bg-green-100 text-green-700',
+            REJECTED: 'bg-red-100 text-red-700',
+            FULFILLED: 'bg-blue-100 text-blue-700'
         };
-        const badge = badges[status] || { bg: 'bg-stone-100', text: 'text-stone-700' };
-        return <IOSBadge className={`${badge.bg} ${badge.text}`}>{status}</IOSBadge>;
+        const style = styles[status] || 'bg-stone-100 text-stone-700';
+        return <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold uppercase ${style}`}>{status}</span>;
     };
+
+    const filteredRequisitions = filterStatus === 'ALL'
+        ? requisitions
+        : requisitions.filter(r => r.status === filterStatus);
 
     return (
         <ProtectedRoute allowedRoles={[
@@ -119,176 +119,227 @@ export default function RequisitionsPage() {
             <DashboardLayout>
                 <div className="space-y-6">
                     {/* Header */}
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div className="flex items-center gap-4">
                             <Link href="/dashboard/kitchen-operations">
-                                <button className="p-2 hover:bg-stone-100 rounded-full transition-colors">
-                                    <ArrowLeft className="h-5 w-5 text-stone-600" />
+                                <button className="p-2 hover:bg-stone-100 rounded-lg transition-colors text-stone-500 hover:text-stone-900">
+                                    <ArrowLeft className="h-5 w-5" />
                                 </button>
                             </Link>
                             <div>
-                                <h1 className="text-[22px] sm:text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">
-                                    Stock Requisitions
-                                </h1>
-                                <p className="text-stone-500 text-sm mt-0.5">
-                                    Request items from main store
-                                </p>
+                                <h1 className="page-title">Stock Requisitions</h1>
+                                <p className="page-subtitle">Request items from main store</p>
                             </div>
                         </div>
-                        <div className="flex gap-2">
-                            <IOSButton
+                        <div className="flex gap-3">
+                            <button
                                 onClick={fetchRequisitions}
-                                leftIcon={<RefreshCw className={isLoading ? 'animate-spin' : ''} />}
-                                variant="secondary"
+                                className="btn-secondary"
+                                disabled={isLoading}
                             >
-                                Refresh
-                            </IOSButton>
-                            <IOSButton
+                                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                                <span>Refresh</span>
+                            </button>
+                            <button
                                 onClick={() => setIsModalOpen(true)}
-                                leftIcon={<Plus />}
+                                className="btn-primary"
                             >
-                                New Requisition
-                            </IOSButton>
+                                <Plus className="h-4 w-4" />
+                                <span>New Request</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Filters */}
+                    <div className="card-elevated p-4">
+                        <div className="flex items-center gap-4 overflow-x-auto">
+                            <Filter className="h-4 w-4 text-stone-400 shrink-0" />
+                            {['ALL', 'PENDING', 'APPROVED', 'FULFILLED', 'REJECTED'].map((status) => (
+                                <button
+                                    key={status}
+                                    onClick={() => setFilterStatus(status)}
+                                    className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors whitespace-nowrap ${filterStatus === status
+                                            ? 'bg-stone-900 text-white'
+                                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                                        }`}
+                                >
+                                    {status === 'ALL' ? 'All Requests' : status}
+                                </button>
+                            ))}
                         </div>
                     </div>
 
                     {/* Requisitions List */}
-                    <div className="grid gap-4">
-                        {isLoading ? (
-                            <IOSCard className="p-8 text-center">
-                                <RefreshCw className="h-8 w-8 animate-spin mx-auto text-stone-400" />
-                            </IOSCard>
-                        ) : requisitions.length === 0 ? (
-                            <IOSCard className="p-8 text-center">
-                                <ShoppingCart className="h-12 w-12 mx-auto mb-2 text-stone-300" />
-                                <p className="text-stone-500">No requisitions found</p>
-                            </IOSCard>
-                        ) : (
-                            requisitions.map((req) => (
-                                <IOSCard key={req.id} className="p-4">
-                                    <div className="flex items-start justify-between mb-3">
-                                        <div>
-                                            <h3 className="font-bold text-stone-900">{req.requisition_number}</h3>
-                                            <p className="text-sm text-stone-500">
-                                                {new Date(req.requested_at).toLocaleString()}
-                                            </p>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            {getStatusBadge(req.status)}
-                                            <IOSBadge className={
-                                                req.priority === 'URGENT' ? 'bg-red-100 text-red-700' :
-                                                    req.priority === 'HIGH' ? 'bg-orange-100 text-orange-700' :
-                                                        'bg-stone-100 text-stone-700'
-                                            }>
-                                                {req.priority}
-                                            </IOSBadge>
-                                        </div>
-                                    </div>
-                                    <div className="text-sm text-stone-600">
-                                        {req.items?.length || 0} item(s)
-                                    </div>
-                                </IOSCard>
-                            ))
-                        )}
+                    <div className="card-elevated overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead className="bg-stone-50 border-b border-stone-100">
+                                    <tr>
+                                        <th className="px-5 py-3 text-left text-[11px] font-bold text-stone-500 uppercase">Requisition No.</th>
+                                        <th className="px-5 py-3 text-left text-[11px] font-bold text-stone-500 uppercase">Date</th>
+                                        <th className="px-5 py-3 text-left text-[11px] font-bold text-stone-500 uppercase">Status</th>
+                                        <th className="px-5 py-3 text-left text-[11px] font-bold text-stone-500 uppercase">Priority</th>
+                                        <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase">Items</th>
+                                        <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-stone-100">
+                                    {isLoading ? (
+                                        <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-stone-500">Loading requisitions...</td></tr>
+                                    ) : filteredRequisitions.length === 0 ? (
+                                        <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-stone-500">No requisitions found</td></tr>
+                                    ) : (
+                                        filteredRequisitions.map((req) => (
+                                            <tr key={req.id} className="hover:bg-stone-50/50 transition-colors">
+                                                <td className="px-5 py-3">
+                                                    <span className="font-mono text-[13px] font-medium text-stone-900">{req.requisition_number}</span>
+                                                </td>
+                                                <td className="px-5 py-3 text-[13px] text-stone-600">
+                                                    {new Date(req.requested_at).toLocaleDateString()}
+                                                </td>
+                                                <td className="px-5 py-3">
+                                                    {getStatusBadge(req.status)}
+                                                </td>
+                                                <td className="px-5 py-3">
+                                                    <span className={`text-[11px] font-bold uppercase ${req.priority === 'URGENT' ? 'text-red-600' :
+                                                            req.priority === 'HIGH' ? 'text-orange-600' :
+                                                                'text-stone-500'
+                                                        }`}>
+                                                        {req.priority}
+                                                    </span>
+                                                </td>
+                                                <td className="px-5 py-3 text-right text-[13px] text-stone-600">
+                                                    {req.items?.length || 0}
+                                                </td>
+                                                <td className="px-5 py-3 text-right">
+                                                    <button className="text-[13px] font-medium text-blue-600 hover:text-blue-700">
+                                                        View Details
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
 
                     {/* Create Requisition Modal */}
                     <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                            <DialogHeader>
-                                <DialogTitle>Create Stock Requisition</DialogTitle>
+                        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+                            <DialogHeader className="px-6 py-5 border-b border-stone-100 bg-stone-50/50">
+                                <DialogTitle className="flex items-center gap-2 text-[17px] font-semibold text-stone-900">
+                                    <ShoppingCart className="h-5 w-5 text-stone-500" />
+                                    Create Stock Requisition
+                                </DialogTitle>
                             </DialogHeader>
 
-                            <div className="space-y-4 mt-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Priority</label>
+                            <div className="overflow-y-auto px-6 py-6 flex-1 space-y-6">
+                                <div className="grid grid-cols-2 gap-5">
+                                    <div className="space-y-1.5">
+                                        <label className="input-label">Priority Level</label>
                                         <select
                                             value={priority}
                                             onChange={(e) => setPriority(e.target.value)}
-                                            className="w-full h-10 px-3 rounded-ios-lg border border-stone-200"
+                                            className="input-field"
                                         >
-                                            <option value="LOW">Low</option>
-                                            <option value="NORMAL">Normal</option>
-                                            <option value="HIGH">High</option>
-                                            <option value="URGENT">Urgent</option>
+                                            <option value="LOW">Low - Normal Replenishment</option>
+                                            <option value="NORMAL">Normal - Standard Request</option>
+                                            <option value="HIGH">High - Urgent Need</option>
+                                            <option value="URGENT">Urgent - Critical Shortage</option>
                                         </select>
                                     </div>
+                                    <div className="space-y-1.5">
+                                        <label className="input-label">Reason for Request</label>
+                                        <input
+                                            value={reason}
+                                            onChange={(e) => setReason(e.target.value)}
+                                            placeholder="e.g., Weekly restocking"
+                                            className="input-field"
+                                        />
+                                    </div>
                                 </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Reason</label>
-                                    <textarea
-                                        value={reason}
-                                        onChange={(e) => setReason(e.target.value)}
-                                        placeholder="Why do you need these items?"
-                                        className="w-full px-3 py-2 border rounded-ios-lg"
-                                        rows={2}
-                                    />
-                                </div>
-
-                                <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <label className="block text-sm font-medium">Items</label>
-                                        <IOSButton size="sm" onClick={addItem} leftIcon={<Plus />}>
-                                            Add Item
-                                        </IOSButton>
+                                <div className="border-t border-stone-100 pt-6">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-sm font-bold text-stone-900">Items to Request</h3>
+                                        <button
+                                            onClick={addItem}
+                                            className="btn-secondary py-1.5 px-3 h-auto text-xs"
+                                        >
+                                            <Plus className="h-3.5 w-3.5" />
+                                            <span>Add Item</span>
+                                        </button>
                                     </div>
 
-                                    <div className="space-y-2">
+                                    <div className="space-y-3">
                                         {selectedItems.map((item, index) => (
-                                            <div key={index} className="grid grid-cols-12 gap-2 items-end">
-                                                <div className="col-span-3">
-                                                    <Input
-                                                        placeholder="SKU"
+                                            <div key={index} className="grid grid-cols-12 gap-3 items-end bg-stone-50 p-3 rounded-lg border border-stone-100">
+                                                <div className="col-span-3 space-y-1">
+                                                    <label className="input-label">SKU</label>
+                                                    <input
                                                         value={item.item_sku}
                                                         onChange={(e) => updateItem(index, 'item_sku', e.target.value)}
+                                                        placeholder="SKU"
+                                                        className="input-field py-1.5 text-xs h-8"
                                                     />
                                                 </div>
-                                                <div className="col-span-4">
-                                                    <Input
-                                                        placeholder="Item Name"
+                                                <div className="col-span-5 space-y-1">
+                                                    <label className="input-label">Item Name</label>
+                                                    <input
                                                         value={item.item_name}
                                                         onChange={(e) => updateItem(index, 'item_name', e.target.value)}
+                                                        placeholder="Item Name"
+                                                        className="input-field py-1.5 text-xs h-8"
                                                     />
                                                 </div>
-                                                <div className="col-span-2">
-                                                    <Input
+                                                <div className="col-span-2 space-y-1">
+                                                    <label className="input-label">Qty</label>
+                                                    <input
                                                         type="number"
-                                                        placeholder="Qty"
                                                         value={item.requested_quantity}
                                                         onChange={(e) => updateItem(index, 'requested_quantity', Number(e.target.value))}
+                                                        className="input-field py-1.5 text-xs h-8"
                                                     />
                                                 </div>
-                                                <div className="col-span-2">
-                                                    <Input
-                                                        placeholder="Unit"
-                                                        value={item.unit_of_measure}
-                                                        onChange={(e) => updateItem(index, 'unit_of_measure', e.target.value)}
-                                                    />
-                                                </div>
-                                                <div className="col-span-1">
-                                                    <IOSButton
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        onClick={() => removeItem(index)}
-                                                    >
-                                                        <X className="h-4 w-4" />
-                                                    </IOSButton>
+                                                <div className="col-span-2 space-y-1">
+                                                    <label className="input-label">Unit</label>
+                                                    <div className="flex items-center gap-2">
+                                                        <input
+                                                            value={item.unit_of_measure}
+                                                            onChange={(e) => updateItem(index, 'unit_of_measure', e.target.value)}
+                                                            placeholder="kg"
+                                                            className="input-field py-1.5 text-xs h-8"
+                                                        />
+                                                        <button
+                                                            onClick={() => removeItem(index)}
+                                                            className="text-stone-400 hover:text-red-500 transition-colors"
+                                                        >
+                                                            <X className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}
+                                        {selectedItems.length === 0 && (
+                                            <div className="text-center py-8 border-2 border-dashed border-stone-200 rounded-lg">
+                                                <p className="text-sm text-stone-500">No items added to this requisition yet.</p>
+                                                <button onClick={addItem} className="text-sm text-blue-600 font-medium hover:underline mt-1">
+                                                    Add your first item
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
+                            </div>
 
-                                <div className="flex justify-end gap-2 pt-4 border-t">
-                                    <IOSButton variant="secondary" onClick={() => setIsModalOpen(false)}>
-                                        Cancel
-                                    </IOSButton>
-                                    <IOSButton onClick={handleCreateRequisition}>
-                                        Create Requisition
-                                    </IOSButton>
-                                </div>
+                            <div className="flex gap-3 px-6 py-4 border-t border-stone-100 bg-stone-50/50">
+                                <button className="btn-secondary flex-1" onClick={() => setIsModalOpen(false)}>
+                                    Cancel
+                                </button>
+                                <button className="btn-primary flex-1" onClick={handleCreateRequisition}>
+                                    Submit Request
+                                </button>
                             </div>
                         </DialogContent>
                     </Dialog>

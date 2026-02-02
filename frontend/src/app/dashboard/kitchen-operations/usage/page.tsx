@@ -1,27 +1,25 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAuth, UserRole } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { IOSCard } from '@/components/ui/ios-card';
-import { IOSButton } from '@/components/ui/ios-button';
-import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import {
-    ClipboardList, Plus, RefreshCw, ArrowLeft
+    ClipboardList, Plus, RefreshCw, ArrowLeft, Search, Filter
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { UserRole } from '@/lib/auth-context';
 
 export default function UsageTrackingPage() {
     const { activeBranchId } = useBranch();
     const [usageEntries, setUsageEntries] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterType, setFilterType] = useState('ALL');
     const [formData, setFormData] = useState({
         item_sku: '',
         item_name: '',
@@ -52,6 +50,11 @@ export default function UsageTrackingPage() {
     };
 
     const handleSubmit = async () => {
+        if (!formData.item_name || !formData.quantity) {
+            toast.error('Please fill in required fields');
+            return;
+        }
+
         try {
             const response = await api.kitchen.recordUsage({
                 ...formData,
@@ -76,6 +79,24 @@ export default function UsageTrackingPage() {
         }
     };
 
+    const filteredEntries = usageEntries.filter(entry => {
+        const matchesSearch = entry.item_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            entry.item_sku?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesFilter = filterType === 'ALL' || entry.usage_type === filterType;
+        return matchesSearch && matchesFilter;
+    });
+
+    const getUsageBadge = (type: string) => {
+        const styles: Record<string, string> = {
+            STAFF_MEAL: 'bg-blue-100 text-blue-700',
+            COMPLIMENTARY: 'bg-green-100 text-green-700',
+            TEST: 'bg-amber-100 text-amber-700',
+            OTHER: 'bg-stone-100 text-stone-700'
+        };
+        const style = styles[type] || 'bg-stone-100 text-stone-700';
+        return <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold uppercase ${style}`}>{type.replace('_', ' ')}</span>;
+    };
+
     return (
         <ProtectedRoute allowedRoles={[
             UserRole.KITCHEN, UserRole.POS_KITCHEN, UserRole.KITCHEN_OPERATIONS, UserRole.RESTAURANT,
@@ -84,178 +105,214 @@ export default function UsageTrackingPage() {
             <DashboardLayout>
                 <div className="space-y-6">
                     {/* Header */}
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div className="flex items-center gap-4">
                             <Link href="/dashboard/kitchen-operations">
-                                <button className="p-2 hover:bg-stone-100 rounded-full transition-colors">
-                                    <ArrowLeft className="h-5 w-5 text-stone-600" />
+                                <button className="p-2 hover:bg-stone-100 rounded-lg transition-colors text-stone-500 hover:text-stone-900">
+                                    <ArrowLeft className="h-5 w-5" />
                                 </button>
                             </Link>
                             <div>
-                                <h1 className="text-[22px] sm:text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">
-                                    Usage Tracking
-                                </h1>
-                                <p className="text-stone-500 text-sm mt-0.5">
-                                    Manual usage entries
-                                </p>
+                                <h1 className="page-title">Usage Tracking</h1>
+                                <p className="page-subtitle">Manual usage entries</p>
                             </div>
                         </div>
-                        <div className="flex gap-2">
-                            <IOSButton
+                        <div className="flex gap-3">
+                            <button
                                 onClick={fetchUsage}
-                                leftIcon={<RefreshCw className={isLoading ? 'animate-spin' : ''} />}
-                                variant="secondary"
+                                className="btn-secondary"
+                                disabled={isLoading}
                             >
-                                Refresh
-                            </IOSButton>
-                            <IOSButton onClick={() => setIsModalOpen(true)} leftIcon={<Plus />}>
-                                Record Usage
-                            </IOSButton>
+                                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                                <span>Refresh</span>
+                            </button>
+                            <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
+                                <Plus className="h-4 w-4" />
+                                <span>Record Usage</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Filters */}
+                    <div className="card-elevated p-4">
+                        <div className="flex flex-col md:flex-row gap-4">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search by item name or SKU..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="input-field pl-10"
+                                />
+                            </div>
+                            <select
+                                value={filterType}
+                                onChange={(e) => setFilterType(e.target.value)}
+                                className="input-field w-full md:w-48"
+                            >
+                                <option value="ALL">All Types</option>
+                                <option value="STAFF_MEAL">Staff Meal</option>
+                                <option value="COMPLIMENTARY">Complimentary</option>
+                                <option value="TEST">Test Cooking</option>
+                                <option value="OTHER">Other</option>
+                            </select>
                         </div>
                     </div>
 
                     {/* Usage List */}
-                    <IOSCard>
+                    <div className="card-elevated overflow-hidden">
                         <div className="overflow-x-auto">
                             <table className="w-full">
-                                <thead className="bg-stone-50">
+                                <thead className="bg-stone-50 border-b border-stone-100">
                                     <tr>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-stone-500 uppercase">Date</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-stone-500 uppercase">Item</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-stone-500 uppercase">Type</th>
-                                        <th className="px-4 py-3 text-right text-xs font-bold text-stone-500 uppercase">Quantity</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-stone-500 uppercase">Notes</th>
+                                        <th className="px-5 py-3 text-left text-[11px] font-bold text-stone-500 uppercase">Date</th>
+                                        <th className="px-5 py-3 text-left text-[11px] font-bold text-stone-500 uppercase">Item</th>
+                                        <th className="px-5 py-3 text-left text-[11px] font-bold text-stone-500 uppercase">Type</th>
+                                        <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase">Quantity</th>
+                                        <th className="px-5 py-3 text-left text-[11px] font-bold text-stone-500 uppercase">Shift</th>
+                                        <th className="px-5 py-3 text-left text-[11px] font-bold text-stone-500 uppercase">Notes</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y">
+                                <tbody className="divide-y divide-stone-100">
                                     {isLoading ? (
-                                        <tr>
-                                            <td colSpan={5} className="px-4 py-8 text-center">
-                                                <RefreshCw className="h-8 w-8 animate-spin mx-auto text-stone-400" />
-                                            </td>
-                                        </tr>
-                                    ) : usageEntries.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={5} className="px-4 py-8 text-center text-stone-500">
-                                                No usage entries found
-                                            </td>
-                                        </tr>
+                                        <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-stone-500">Loading usage entries...</td></tr>
+                                    ) : filteredEntries.length === 0 ? (
+                                        <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-stone-500">No usage entries found</td></tr>
                                     ) : (
-                                        usageEntries.map((entry) => (
-                                            <tr key={entry.id} className="hover:bg-stone-50">
-                                                <td className="px-4 py-3 text-sm">
+                                        filteredEntries.map((entry) => (
+                                            <tr key={entry.id} className="hover:bg-stone-50/50 transition-colors">
+                                                <td className="px-5 py-3 text-[13px] text-stone-600">
                                                     {new Date(entry.created_at).toLocaleString()}
                                                 </td>
-                                                <td className="px-4 py-3">
-                                                    <p className="font-medium text-stone-900">{entry.item_name}</p>
-                                                    <p className="text-xs text-stone-500">{entry.item_sku}</p>
+                                                <td className="px-5 py-3">
+                                                    <p className="text-[13px] font-semibold text-stone-900">{entry.item_name}</p>
+                                                    <p className="text-[10px] text-stone-500 mt-0.5">{entry.item_sku || '-'}</p>
                                                 </td>
-                                                <td className="px-4 py-3">
-                                                    <IOSBadge className="bg-blue-100 text-blue-700">{entry.usage_type}</IOSBadge>
+                                                <td className="px-5 py-3">
+                                                    {getUsageBadge(entry.usage_type)}
                                                 </td>
-                                                <td className="px-4 py-3 text-right font-mono">
+                                                <td className="px-5 py-3 text-right text-[13px] font-bold font-variant-numeric text-stone-900">
                                                     {entry.quantity} {entry.unit_of_measure}
                                                 </td>
-                                                <td className="px-4 py-3 text-sm text-stone-600">{entry.notes || '-'}</td>
+                                                <td className="px-5 py-3 text-[13px] text-stone-600 capitalize">
+                                                    {entry.shift ? entry.shift.toLowerCase() : '-'}
+                                                </td>
+                                                <td className="px-5 py-3 text-[13px] text-stone-500 italic">
+                                                    {entry.notes || '-'}
+                                                </td>
                                             </tr>
                                         ))
                                     )}
                                 </tbody>
                             </table>
                         </div>
-                    </IOSCard>
+                    </div>
 
                     {/* Record Usage Modal */}
                     <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle>Record Usage</DialogTitle>
+                        <DialogContent className="max-w-lg max-h-[85vh] flex flex-col p-0 overflow-hidden">
+                            <DialogHeader className="px-6 py-5 border-b border-stone-100 bg-stone-50/50">
+                                <DialogTitle className="flex items-center gap-2 text-[17px] font-semibold text-stone-900">
+                                    <ClipboardList className="h-5 w-5 text-stone-500" />
+                                    Record Kitchen Usage
+                                </DialogTitle>
                             </DialogHeader>
 
-                            <div className="space-y-4 mt-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Item SKU</label>
-                                        <Input
-                                            value={formData.item_sku}
-                                            onChange={(e) => setFormData({ ...formData, item_sku: e.target.value })}
-                                            placeholder="e.g., RICE-001"
+                            <div className="overflow-y-auto px-6 py-6 flex-1 space-y-5">
+                                <div className="space-y-4">
+                                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800">
+                                        Use this form to record manual usage like staff meals, taste testing, or complimentary items. Do not use for wastage.
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1.5">
+                                            <label className="input-label">Item Name</label>
+                                            <input
+                                                value={formData.item_name}
+                                                onChange={(e) => setFormData({ ...formData, item_name: e.target.value })}
+                                                placeholder="e.g., White Rice"
+                                                className="input-field"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="input-label">Item SKU</label>
+                                            <input
+                                                value={formData.item_sku}
+                                                onChange={(e) => setFormData({ ...formData, item_sku: e.target.value })}
+                                                placeholder="Optional"
+                                                className="input-field"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1.5">
+                                            <label className="input-label">Quantity</label>
+                                            <input
+                                                type="number"
+                                                value={formData.quantity}
+                                                onChange={(e) => setFormData({ ...formData, quantity: Number(e.target.value) })}
+                                                className="input-field"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="input-label">Unit</label>
+                                            <input
+                                                value={formData.unit_of_measure}
+                                                onChange={(e) => setFormData({ ...formData, unit_of_measure: e.target.value })}
+                                                placeholder="kg"
+                                                className="input-field"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1.5">
+                                            <label className="input-label">Usage Type</label>
+                                            <select
+                                                value={formData.usage_type}
+                                                onChange={(e) => setFormData({ ...formData, usage_type: e.target.value })}
+                                                className="input-field"
+                                            >
+                                                <option value="STAFF_MEAL">Staff Meal</option>
+                                                <option value="COMPLIMENTARY">Complimentary</option>
+                                                <option value="TEST">Test Cooking</option>
+                                                <option value="OTHER">Other</option>
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="input-label">Shift</label>
+                                            <select
+                                                value={formData.shift}
+                                                onChange={(e) => setFormData({ ...formData, shift: e.target.value })}
+                                                className="input-field"
+                                            >
+                                                <option value="DAY">Day Shift</option>
+                                                <option value="NIGHT">Night Shift</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <label className="input-label">Notes</label>
+                                        <textarea
+                                            value={formData.notes}
+                                            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                            className="input-field min-h-[80px] py-2"
+                                            placeholder="Who authorized this? Any details..."
                                         />
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Item Name</label>
-                                        <Input
-                                            value={formData.item_name}
-                                            onChange={(e) => setFormData({ ...formData, item_name: e.target.value })}
-                                            placeholder="e.g., White Rice"
-                                        />
-                                    </div>
                                 </div>
+                            </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Quantity</label>
-                                        <Input
-                                            type="number"
-                                            value={formData.quantity}
-                                            onChange={(e) => setFormData({ ...formData, quantity: Number(e.target.value) })}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Unit</label>
-                                        <Input
-                                            value={formData.unit_of_measure}
-                                            onChange={(e) => setFormData({ ...formData, unit_of_measure: e.target.value })}
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Usage Type</label>
-                                        <select
-                                            value={formData.usage_type}
-                                            onChange={(e) => setFormData({ ...formData, usage_type: e.target.value })}
-                                            className="w-full h-10 px-3 rounded-ios-lg border border-stone-200"
-                                        >
-                                            <option value="STAFF_MEAL">Staff Meal</option>
-                                            <option value="COMPLIMENTARY">Complimentary</option>
-                                            <option value="TEST">Test Cooking</option>
-                                            <option value="OTHER">Other</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Shift</label>
-                                        <select
-                                            value={formData.shift}
-                                            onChange={(e) => setFormData({ ...formData, shift: e.target.value })}
-                                            className="w-full h-10 px-3 rounded-ios-lg border border-stone-200"
-                                        >
-                                            <option value="DAY">Day</option>
-                                            <option value="NIGHT">Night</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Notes</label>
-                                    <textarea
-                                        value={formData.notes}
-                                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-ios-lg"
-                                        rows={2}
-                                        placeholder="Additional details..."
-                                    />
-                                </div>
-
-                                <div className="flex justify-end gap-2 pt-4 border-t">
-                                    <IOSButton variant="secondary" onClick={() => setIsModalOpen(false)}>
-                                        Cancel
-                                    </IOSButton>
-                                    <IOSButton onClick={handleSubmit}>
-                                        Record Usage
-                                    </IOSButton>
-                                </div>
+                            <div className="flex gap-3 px-6 py-4 border-t border-stone-100 bg-stone-50/50">
+                                <button className="btn-secondary flex-1" onClick={() => setIsModalOpen(false)}>
+                                    Cancel
+                                </button>
+                                <button className="btn-primary flex-1" onClick={handleSubmit}>
+                                    Record Usage
+                                </button>
                             </div>
                         </DialogContent>
                     </Dialog>
