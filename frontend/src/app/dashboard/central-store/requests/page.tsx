@@ -33,6 +33,7 @@ interface StockRequest {
 }
 
 export default function CentralRequestsPage() {
+    const { user } = useAuth();
     const [requests, setRequests] = useState<StockRequest[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -321,7 +322,7 @@ export default function CentralRequestsPage() {
                                                             {item.requested_quantity} {item.unit}
                                                         </td>
                                                         <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">
-                                                            {selectedRequest.status === 'PENDING' && user?.role !== UserRole.CENTRAL_STOREKEEPER ? (
+                                                            {selectedRequest.status === 'PENDING' && user?.role === UserRole.AUDITOR ? (
                                                                 <input
                                                                     type="number"
                                                                     min="0"
@@ -345,7 +346,7 @@ export default function CentralRequestsPage() {
                                     </div>
                                 </div>
 
-                                {selectedRequest.status === 'PENDING' && user?.role !== UserRole.CENTRAL_STOREKEEPER && (
+                                {selectedRequest.status === 'PENDING' && user?.role === UserRole.AUDITOR && (
                                     <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200">
                                         <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest block mb-2">Review Notes (Optional)</label>
                                         <textarea
@@ -360,12 +361,7 @@ export default function CentralRequestsPage() {
 
                             <div className="bg-stone-50/80 px-6 py-4 border-t border-stone-100 flex justify-end gap-3 font-medium">
                                 {selectedRequest.status === 'PENDING' && (
-                                    user?.role === UserRole.CENTRAL_STOREKEEPER ? (
-                                        <div className="flex items-center gap-2 text-amber-600 text-[13px] bg-amber-50 px-4 py-2 rounded-xl border border-amber-100">
-                                            <Clock className="h-4 w-4" />
-                                            <span>Awaiting Auditor Approval</span>
-                                        </div>
-                                    ) : (
+                                    user?.role === UserRole.AUDITOR ? (
                                         <>
                                             <button
                                                 disabled={isProcessing}
@@ -383,6 +379,11 @@ export default function CentralRequestsPage() {
                                                 Approve Request
                                             </button>
                                         </>
+                                    ) : (
+                                        <div className="flex items-center gap-2 text-amber-600 text-[13px] bg-amber-50 px-4 py-2 rounded-xl border border-amber-100">
+                                            <Clock className="h-4 w-4" />
+                                            <span>Awaiting Auditor Approval</span>
+                                        </div>
                                     )
                                 )}
                                 {['APPROVED', 'PARTIALLY_APPROVED'].includes(selectedRequest.status) && (
