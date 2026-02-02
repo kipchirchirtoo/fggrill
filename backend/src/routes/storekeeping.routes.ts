@@ -183,7 +183,7 @@ router.post('/branch-stock/out', authorize(branchRoles), recordStockOut);
 router.post('/branch-stock/adjustment', authorize(branchRoles), updateBranchStock);
 router.get('/stock-movements', authorize(branchRoles), getStockMovements);
 
-const auditorRoles = [UserRole.AUDITOR];
+const auditorRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR];
 
 // Stock requests (Branch → Central)
 router.post('/stock-requests', authorize(branchRoles), createStockRequest);

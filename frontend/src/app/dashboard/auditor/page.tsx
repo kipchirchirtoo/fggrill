@@ -15,7 +15,6 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import AuditorApprovalPanel from '@/components/accounting/AuditorApprovalPanel';
 
 export default function AuditorDashboard() {
     const { activeBranchId, activeBranch } = useBranch();
@@ -80,6 +79,49 @@ export default function AuditorDashboard() {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    const mvpModules = [
+        {
+            title: 'Sales & Stock Verification',
+            desc: 'Reconcile POS records with physical stock movements and branch orders.',
+            icon: Package,
+            href: '/dashboard/auditor/sales-verification',
+            color: 'bg-blue-50 text-blue-600 border-blue-100',
+            stats: `${stats.voidedOrders} suspicious voids`
+        },
+        {
+            title: 'Financial Control',
+            desc: 'Daily reconciliation of Cash, M-Pesa, and Card payments against verified sales.',
+            icon: DollarSign,
+            href: '/dashboard/auditor/financial-verification',
+            color: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+            stats: 'Daily reconciliation status'
+        },
+        {
+            title: 'Revenue Oversight',
+            desc: 'Monitor multi-department revenue (Restaurant, Bar, Hotel) for leakage detection.',
+            icon: TrendingUp,
+            href: '/dashboard/auditor/revenue-oversight',
+            color: 'bg-amber-50 text-amber-600 border-amber-100',
+            stats: 'Yield & sales analysis'
+        },
+        {
+            title: 'Expenditure Verification',
+            desc: 'Audit all payments and expenses to ensure legitimacy and proper sign-offs.',
+            icon: ShieldCheck,
+            href: '/dashboard/auditor/expenditure-verification',
+            color: 'bg-purple-50 text-purple-600 border-purple-100',
+            stats: `${stats.unverifiedExpenses} pending review`
+        },
+        {
+            title: 'Audit Reporting',
+            desc: 'Generate comprehensive performance reports and track auditor accountability.',
+            icon: FileCheck,
+            href: '/dashboard/auditor/audit-reports',
+            color: 'bg-stone-50 text-stone-600 border-stone-100',
+            stats: 'Statement generation'
+        }
+    ];
 
     return (
         <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
@@ -160,15 +202,51 @@ export default function AuditorDashboard() {
                         />
                     </div>
 
-                    {/* Stock Request Approvals - Primary Focus */}
+                    {/* MVP Core Modules Grid */}
                     <div>
                         <div className="flex items-center gap-3 mb-6">
                             <div className="h-px bg-stone-200 flex-1"></div>
-                            <h2 className="text-[14px] font-black uppercase tracking-[0.2em] text-stone-400">Stock Request Approvals</h2>
+                            <h2 className="text-[14px] font-black uppercase tracking-[0.2em] text-stone-400">Core Verification Modules</h2>
                             <div className="h-px bg-stone-200 flex-1"></div>
                         </div>
 
-                        <AuditorApprovalPanel />
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {mvpModules.map((module, i) => (
+                                <Link key={i} href={module.href} className="group">
+                                    <div className="h-full border border-stone-200 bg-white rounded-2xl p-6 transition-all duration-300 group-hover:border-stone-900 group-hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] flex flex-col relative overflow-hidden">
+                                        {/* Background accent */}
+                                        <div className={`absolute -right-4 -top-4 w-24 h-24 rounded-full opacity-[0.03] transition-transform duration-500 group-hover:scale-150 ${module.color}`}></div>
+
+                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center border mb-6 group-hover:animate-pulse transition-colors ${module.color}`}>
+                                            <module.icon className="h-7 w-7" />
+                                        </div>
+
+                                        <h3 className="text-[20px] font-black text-stone-900 mb-2 leading-tight group-hover:text-stone-900 transition-colors">{module.title}</h3>
+                                        <p className="text-stone-500 text-[14px] leading-relaxed mb-6 flex-grow ">
+                                            {module.desc}
+                                        </p>
+
+                                        <div className="flex items-center justify-between mt-auto pt-6 border-t border-stone-50">
+                                            <span className="text-[12px] font-black tracking-tight text-stone-400 group-hover:text-stone-700 transition-colors">
+                                                {module.stats}
+                                            </span>
+                                            <div className="w-8 h-8 rounded-full border border-stone-200 flex items-center justify-center group-hover:bg-stone-900 group-hover:border-stone-900 group-hover:text-white transition-all">
+                                                <ChevronRight className="h-4 w-4" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </Link>
+                            ))}
+
+                            {/* Audit Plan Quick Action */}
+                            <div className="border-2 border-dashed border-stone-200 rounded-2xl p-6 flex flex-col justify-center items-center text-center group cursor-pointer hover:border-stone-400 transition-colors">
+                                <div className="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center mb-4 group-hover:bg-stone-200 transition-colors">
+                                    <ClipboardList className="h-5 w-5 text-stone-500" />
+                                </div>
+                                <h3 className="text-[16px] font-bold text-stone-900">Initiate Audit Plan</h3>
+                                <p className="text-xs text-stone-400 mt-1 max-w-[150px]">Define scope and schedule for upcoming internal audits</p>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Bottom Section: Recent Findings & Tools */}
