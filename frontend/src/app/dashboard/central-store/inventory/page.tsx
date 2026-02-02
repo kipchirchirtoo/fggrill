@@ -43,7 +43,7 @@ export default function InventoryPage() {
     try {
       const payload = { ...formData, quantity: isEdit ? selectedItem?.quantity : 0 };
       const response = isEdit && selectedItem
-        ? await storeAPI.updateItem(selectedItem.id, payload)
+        ? await storeAPI.updateItem(selectedItem.sku, payload)
         : await storeAPI.createItem(payload);
 
       if (response.success) {
@@ -211,7 +211,7 @@ export default function InventoryPage() {
                               <button onClick={() => openEditModal(item)} className="p-2 text-stone-400 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors">
                                 <Edit className="h-4 w-4" />
                               </button>
-                              <button onClick={() => handleDelete(item.id)} className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                              <button onClick={() => handleDelete(item.sku)} className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
                                 <Trash2 className="h-4 w-4" />
                               </button>
                             </div>

@@ -70,6 +70,13 @@ export const getDispatchNotes = async (
             .select('*')
             .in('dispatch_id', dispatchIds);
 
+        // Get item details
+        const itemSkus = [...new Set(items?.map(i => i.item_sku) || [])];
+        const { data: itemDetails } = await supabase
+            .from('simple_items')
+            .select('sku, item_name, unit')
+            .in('sku', itemSkus);
+
         // Get vehicle and driver details
         const vehicleIds = dispatches.map(d => d.vehicle_id).filter(Boolean);
         const driverIds = dispatches.map(d => d.driver_id).filter(Boolean);
@@ -90,7 +97,14 @@ export const getDispatchNotes = async (
             from_branch: branches?.find(b => b.id === dispatch.from_branch_id),
             to_branch: branches?.find(b => b.id === dispatch.to_branch_id),
             to_branch_name: branches?.find(b => b.id === dispatch.to_branch_id)?.name,
-            items: items?.filter(i => i.dispatch_id === dispatch.id) || [],
+            items: items?.filter(i => i.dispatch_id === dispatch.id).map(i => {
+                const details = itemDetails?.find(d => d.sku === i.item_sku);
+                return {
+                    ...i,
+                    item_name: details?.item_name || i.item_sku,
+                    unit: details?.unit || 'Units'
+                };
+            }) || [],
             vehicle: vehicles?.find(v => v.id === dispatch.vehicle_id),
             vehicle_registration: vehicles?.find(v => v.id === dispatch.vehicle_id)?.registration_number,
             driver: drivers?.find(d => d.id === dispatch.driver_id),
