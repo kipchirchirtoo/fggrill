@@ -80,7 +80,8 @@ export enum UserRole {
   FACILITIES_MANAGER = 'facilities_manager',
 
   // General
-  EMPLOYEE = 'employee'
+  EMPLOYEE = 'employee',
+  DRIVER = 'driver'
 }
 
 export interface IUser {

@@ -92,6 +92,7 @@ export const getRoles = async (
       { value: 'auditor', label: 'Auditor', description: 'Financial auditing' },
       { value: 'central_storekeeper', label: 'Central Storekeeper', description: 'Central inventory management' },
       { value: 'branch_storekeeper', label: 'Branch Storekeeper', description: 'Branch inventory management' },
+      { value: 'driver', label: 'Driver', description: 'Delivery and transportation' },
       { value: 'employee', label: 'Employee', description: 'General employee access' }
     ];
 
@@ -355,7 +356,8 @@ export const createStaffMember = async (
         'central_storekeeper': 'accountant',
         'branch_storekeeper': 'accountant',
         'inventory_clerk': 'accountant',
-        'purchasing_manager': 'accountant'
+        'purchasing_manager': 'accountant',
+        'driver': 'driver'
       };
 
       const normalizedRole = String(role || '').toLowerCase();
@@ -474,7 +476,8 @@ export const createStaffMember = async (
       'central_storekeeper': 'finance',
       'branch_storekeeper': 'finance',
       'inventory_clerk': 'finance',
-      'purchasing_manager': 'finance'
+      'purchasing_manager': 'finance',
+      'driver': 'maintenance'
     };
 
     const normalizedRole = String(role || '').toLowerCase();

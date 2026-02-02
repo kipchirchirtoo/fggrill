@@ -9,7 +9,11 @@ import {
   getAuditTrail,
   createAuditPlan,
   createFinding,
-  getFindings
+  getFindings,
+  getSalesVerification,
+  getFinancialReconciliation,
+  getRevenueOversight,
+  getExpenditureVerification
 } from '../controllers/auditor.controller';
 import {
   getConsumptionConfigs,
@@ -117,5 +121,11 @@ router.get('/payroll/variances',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
   getPayrollVariances
 );
+
+// MVP Modules
+router.get('/verify/sales', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getSalesVerification);
+router.get('/verify/finances', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getFinancialReconciliation);
+router.get('/verify/revenue', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getRevenueOversight);
+router.get('/verify/expenditure', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getExpenditureVerification);
 
 export default router;

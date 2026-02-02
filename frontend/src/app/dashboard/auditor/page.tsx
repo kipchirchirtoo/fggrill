@@ -4,11 +4,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     ClipboardList, Clock, CheckCircle, AlertTriangle,
     RefreshCw, BarChart3, ShoppingBag, Package,
-    ChevronRight, Calendar as CalendarIcon
+    ChevronRight, Calendar as CalendarIcon,
+    ShieldCheck, DollarSign, PieChart, TrendingUp,
+    FileCheck, Activity, Search, Filter
 } from 'lucide-react';
 import { auditAPI, storeAPI, restaurantAPI } from '@/lib/api';
-import { DashboardLayout } from '@/components/layout/dashboard-layout'; // Changed from BranchAware...
-import { BranchSelector, useBranch } from '@/lib/branch-context'; // Import BranchSelector direct
+import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { BranchSelector, useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
 import Link from 'next/link';
@@ -21,13 +23,12 @@ export default function AuditorDashboard() {
         totalAudits: 0,
         pendingReviews: 0,
         complianceScore: 92,
-        recentFindings: 0,
+        highRiskFindings: 0,
         voidedOrders: 0,
-        estimatedLeakage: 0
+        unverifiedExpenses: 0
     });
 
     const [recentLogs, setRecentLogs] = useState<any[]>([]);
-    const [analytics, setAnalytics] = useState<any>(null);
     const [dateRange, setDateRange] = useState({
         startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         endDate: new Date().toISOString().split('T')[0]
@@ -37,47 +38,36 @@ export default function AuditorDashboard() {
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-            // Use undefined for branchId if activeBranchId is 0 or null to fetch all
             const effectiveBranchId = activeBranchId === 0 ? undefined : (activeBranchId || undefined);
 
-            const [logsRes, requestsRes, ordersRes, reconRes, analyticsRes] = await Promise.all([
+            const [logsRes, requestsRes, ordersRes, expensesRes] = await Promise.all([
                 auditAPI.getAuditLogs({ branchId: effectiveBranchId }),
                 storeAPI.getBranchRequests('PENDING', effectiveBranchId),
                 restaurantAPI.getOrders({ status: 'cancelled', branchId: effectiveBranchId }),
-                auditAPI.getReconciliationAudit({ branch_id: effectiveBranchId }),
-                auditAPI.getSoldItemsAnalytics({
-                    branch_id: effectiveBranchId,
-                    from_date: dateRange.startDate,
-                    to_date: dateRange.endDate
-                })
+                auditAPI.verifyExpenditure({ branch_id: effectiveBranchId, status: 'pending' })
             ]);
 
             if (logsRes.success) {
                 const logs = logsRes.data || [];
-                const pendingCount = requestsRes.success ? (requestsRes.data || []).length : 0;
+                const pendingRequests = requestsRes.success ? (requestsRes.data || []).length : 0;
                 const voidedCount = ordersRes.success ? (ordersRes.data || []).length : 0;
-                const leakageValue = reconRes.success ? (reconRes.data?.total_leakage_value || 0) : 0;
-                const highRisks = logs.filter((l: any) => l.severity === 'high').length + (leakageValue > 5000 ? 1 : 0);
+                const unverifiedExp = expensesRes.success ? (expensesRes.data || []).length : 0;
+                const highRisks = logs.filter((l: any) => l.severity === 'high').length;
 
-                // Dynamic compliance score calculation
                 const score = logs.length > 0
                     ? Math.max(60, 100 - (highRisks * 10) - (logs.filter((l: any) => l.severity === 'medium').length * 2))
                     : 100;
 
                 setStats({
                     totalAudits: logs.length,
-                    pendingReviews: pendingCount,
+                    pendingReviews: pendingRequests,
                     complianceScore: Math.round(score),
-                    recentFindings: highRisks,
+                    highRiskFindings: highRisks,
                     voidedOrders: voidedCount,
-                    estimatedLeakage: leakageValue
+                    unverifiedExpenses: unverifiedExp
                 });
 
                 setRecentLogs(logs.slice(0, 5));
-            }
-
-            if (analyticsRes.success) {
-                setAnalytics(analyticsRes.data);
             }
         } catch (e) {
             console.error("Auditor fetch failed:", e);
@@ -90,208 +80,271 @@ export default function AuditorDashboard() {
         fetchData();
     }, [fetchData]);
 
-    const statCards = [
-        { label: 'Total Audits', value: stats.totalAudits.toString(), icon: ClipboardList },
-        { label: 'Pending Reviews', value: stats.pendingReviews.toString(), icon: Clock },
-        { label: 'Compliance Score', value: `${stats.complianceScore}%`, icon: CheckCircle },
-        { label: 'High Risks', value: stats.recentFindings.toString(), icon: AlertTriangle },
-    ];
-
-    const quickLinks = [
-        { href: '/dashboard/auditor/procurement/grn', icon: CheckCircle, label: 'Financial Approvals', desc: 'Expense & Stock sign-off' },
-        { href: '/dashboard/auditor/reports/audit-trail', icon: ClipboardList, label: 'Audit Trail', desc: 'Immutable activity logs' },
-        { href: '/dashboard/auditor/stock', icon: Package, label: 'Stock Audit', desc: 'Inventory & variance' },
-        { href: '/dashboard/auditor/reports', icon: BarChart3, label: 'Reports & Analytics', desc: 'Statement generation' },
+    const mvpModules = [
+        {
+            title: 'Sales & Stock Verification',
+            desc: 'Reconcile POS records with physical stock movements and branch orders.',
+            icon: Package,
+            href: '/dashboard/auditor/sales-verification',
+            color: 'bg-blue-50 text-blue-600 border-blue-100',
+            stats: `${stats.voidedOrders} suspicious voids`
+        },
+        {
+            title: 'Financial Control',
+            desc: 'Daily reconciliation of Cash, M-Pesa, and Card payments against verified sales.',
+            icon: DollarSign,
+            href: '/dashboard/auditor/financial-verification',
+            color: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+            stats: 'Daily reconciliation status'
+        },
+        {
+            title: 'Revenue Oversight',
+            desc: 'Monitor multi-department revenue (Restaurant, Bar, Hotel) for leakage detection.',
+            icon: TrendingUp,
+            href: '/dashboard/auditor/revenue-oversight',
+            color: 'bg-amber-50 text-amber-600 border-amber-100',
+            stats: 'Yield & sales analysis'
+        },
+        {
+            title: 'Expenditure Verification',
+            desc: 'Audit all payments and expenses to ensure legitimacy and proper sign-offs.',
+            icon: ShieldCheck,
+            href: '/dashboard/auditor/expenditure-verification',
+            color: 'bg-purple-50 text-purple-600 border-purple-100',
+            stats: `${stats.unverifiedExpenses} pending review`
+        },
+        {
+            title: 'Audit Reporting',
+            desc: 'Generate comprehensive performance reports and track auditor accountability.',
+            icon: FileCheck,
+            href: '/dashboard/auditor/audit-reports',
+            color: 'bg-stone-50 text-stone-600 border-stone-100',
+            stats: 'Statement generation'
+        }
     ];
 
     return (
         <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
             <DashboardLayout>
-                <div className="space-y-6">
-                    {/* Header */}
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-8 max-w-[1400px] mx-auto pb-10">
+                    {/* Header Section */}
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-stone-100">
                         <div>
-                            <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Internal Audit Oversight</h1>
-                            <p className="text-stone-500 mt-0.5">{activeBranchId === 0 ? "Viewing all branches" : `Monitoring ${activeBranch?.name || 'Loading...'}`}</p>
+                            <div className="flex items-center gap-2 mb-2">
+                                <ShieldCheck className="h-6 w-6 text-stone-900" />
+                                <span className="text-xs font-bold uppercase tracking-widest text-stone-400">Auditor Control Center</span>
+                            </div>
+                            <h1 className="text-[32px] font-black text-stone-900 tracking-tight leading-none">Internal Audit & Verification</h1>
+                            <p className="text-stone-500 mt-3 font-medium">
+                                {activeBranchId === 0 ? "Corporate-wide oversight across all branches" : `Comprehensive verification for ${activeBranch?.name}`}
+                            </p>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-lg px-3 py-1.5 h-[42px]">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <BranchSelector />
+                            <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-xl px-4 py-2 h-[48px] shadow-sm">
                                 <CalendarIcon className="h-4 w-4 text-stone-400" />
+                                <span className="text-sm font-bold text-stone-600">Period:</span>
                                 <input
                                     type="date"
                                     value={dateRange.startDate}
                                     onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-                                    className="text-xs font-medium text-stone-600 outline-none"
+                                    className="text-sm font-semibold text-stone-900 outline-none bg-transparent"
                                 />
-                                <span className="text-stone-300">to</span>
+                                <span className="text-stone-300">→</span>
                                 <input
                                     type="date"
                                     value={dateRange.endDate}
                                     onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-                                    className="text-xs font-medium text-stone-600 outline-none"
+                                    className="text-sm font-semibold text-stone-900 outline-none bg-transparent"
                                 />
                             </div>
-                            <BranchSelector />
                             <button
                                 onClick={fetchData}
                                 disabled={isLoading}
-                                className="btn-secondary h-[42px]"
+                                className="h-[48px] px-6 bg-stone-900 text-white rounded-xl font-bold flex items-center gap-2 transition-transform active:scale-95 hover:bg-black shadow-md shadow-stone-200"
                             >
-                                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                                <span className="hidden sm:inline">Refresh</span>
+                                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                                Refresh Oversight
                             </button>
                         </div>
                     </div>
 
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                        {statCards.map((stat, i) => (
-                            <div key={i} className="stat-card">
-                                <div className="stat-icon">
-                                    <stat.icon className="h-5 w-5" />
-                                </div>
-                                <p className="stat-value text-[22px]">{stat.value}</p>
-                                <p className="stat-label text-[12px] mt-1">{stat.label}</p>
-                            </div>
-                        ))}
+                    {/* Key Metrics Row */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <MetricCard
+                            label="Compliance Score"
+                            value={`${stats.complianceScore}%`}
+                            trend={2.4}
+                            icon={CheckCircle}
+                            color="emerald"
+                        />
+                        <MetricCard
+                            label="Audit Findings"
+                            value={stats.highRiskFindings.toString()}
+                            subLabel="High risk exceptions"
+                            icon={AlertTriangle}
+                            color="rose"
+                            invertTrend
+                        />
+                        <MetricCard
+                            label="Pending Approvals"
+                            value={stats.pendingReviews.toString()}
+                            subLabel="Stock & inventory"
+                            icon={Clock}
+                            color="amber"
+                        />
+                        <MetricCard
+                            label="Voided Transactions"
+                            value={stats.voidedOrders.toString()}
+                            subLabel="POS cancellations"
+                            icon={Activity}
+                            color="stone"
+                        />
                     </div>
 
-                    {/* Custom Analytics Section */}
-                    {analytics && (
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                            <div className="lg:col-span-2 card-elevated p-6 bg-white overflow-hidden relative">
-                                <div className="flex items-center justify-between mb-6">
-                                    <div>
-                                        <h3 className="text-[17px] font-bold text-stone-900 flex items-center gap-2">
-                                            <BarChart3 className="h-5 w-5 text-amber-500" />
-                                            Sold Items Analytics
-                                        </h3>
-                                        <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest mt-1">Volume Performance by Category</p>
-                                    </div>
-                                    <button className="text-[11px] font-bold text-stone-400 hover:text-stone-900 uppercase tracking-widest transition-colors">
-                                        View Full Report
-                                    </button>
-                                </div>
-
-                                <div className="space-y-4">
-                                    {(analytics.category_performance || []).slice(0, 5).map((cat: any, i: number) => (
-                                        <div key={i} className="space-y-1.5">
-                                            <div className="flex justify-between text-[13px] font-medium">
-                                                <span className="text-stone-700">{cat.category || 'Uncategorized'}</span>
-                                                <span className="text-stone-900">{cat.total_sold} items</span>
-                                            </div>
-                                            <div className="h-2 bg-stone-50 rounded-full overflow-hidden">
-                                                <div
-                                                    className="h-full bg-stone-900 rounded-full transition-all duration-1000"
-                                                    style={{ width: `${Math.min(100, (cat.total_sold / (analytics.total_sold || 1)) * 100 * 2)}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {(!analytics.category_performance || analytics.category_performance.length === 0) && (
-                                        <div className="py-20 text-center text-stone-400 text-sm italic">
-                                            No sales data captured for this period/branch.
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="card-elevated p-6 bg-stone-50 border-none">
-                                <h3 className="text-[15px] font-bold text-stone-900 mb-6 flex items-center gap-2">
-                                    <ShoppingBag className="h-5 w-5 text-stone-400" />
-                                    Top Revenue Drivers
-                                </h3>
-                                <div className="space-y-4">
-                                    {(analytics.top_items || []).slice(0, 3).map((item: any, i: number) => (
-                                        <div key={i} className="p-4 bg-white rounded-xl shadow-sm border border-stone-100">
-                                            <p className="text-[13px] font-bold text-stone-900">{item.item_name}</p>
-                                            <div className="flex justify-between items-end mt-2">
-                                                <div>
-                                                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-tight">Units Sold</p>
-                                                    <p className="text-[15px] font-black text-stone-700">{item.total_quantity}</p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-tight">Revenue</p>
-                                                    <p className="text-[15px] font-black text-stone-900">KES {item.total_revenue?.toLocaleString()}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {(!analytics.top_items || analytics.top_items.length === 0) && (
-                                        <p className="text-center py-10 text-stone-300 text-xs italic">No items recorded</p>
-                                    )}
-                                </div>
-                            </div>
+                    {/* MVP Core Modules Grid */}
+                    <div>
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="h-px bg-stone-200 flex-1"></div>
+                            <h2 className="text-[14px] font-black uppercase tracking-[0.2em] text-stone-400">Core Verification Modules</h2>
+                            <div className="h-px bg-stone-200 flex-1"></div>
                         </div>
-                    )}
 
-                    {/* Quick Access */}
-                    <div className="card-elevated p-6">
-                        <div className="section-header mb-4">
-                            <div>
-                                <h2 className="section-title">Audit Modules</h2>
-                                <p className="section-subtitle">Core compliance tracking</p>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-                            {quickLinks.map((link) => (
-                                <Link key={link.href} href={link.href}>
-                                    <div className="action-card group py-3">
-                                        <div className="action-card-icon w-10 h-10">
-                                            <link.icon className="h-4 w-4" />
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {mvpModules.map((module, i) => (
+                                <Link key={i} href={module.href} className="group">
+                                    <div className="h-full border border-stone-200 bg-white rounded-2xl p-6 transition-all duration-300 group-hover:border-stone-900 group-hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] flex flex-col relative overflow-hidden">
+                                        {/* Background accent */}
+                                        <div className={`absolute -right-4 -top-4 w-24 h-24 rounded-full opacity-[0.03] transition-transform duration-500 group-hover:scale-150 ${module.color}`}></div>
+
+                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center border mb-6 group-hover:animate-pulse transition-colors ${module.color}`}>
+                                            <module.icon className="h-7 w-7" />
                                         </div>
-                                        <p className="action-card-label text-[12px]">{link.label}</p>
-                                        <p className="text-[11px] text-stone-400 mt-0.5">{link.desc}</p>
+
+                                        <h3 className="text-[20px] font-black text-stone-900 mb-2 leading-tight group-hover:text-stone-900 transition-colors">{module.title}</h3>
+                                        <p className="text-stone-500 text-[14px] leading-relaxed mb-6 flex-grow ">
+                                            {module.desc}
+                                        </p>
+
+                                        <div className="flex items-center justify-between mt-auto pt-6 border-t border-stone-50">
+                                            <span className="text-[12px] font-black tracking-tight text-stone-400 group-hover:text-stone-700 transition-colors">
+                                                {module.stats}
+                                            </span>
+                                            <div className="w-8 h-8 rounded-full border border-stone-200 flex items-center justify-center group-hover:bg-stone-900 group-hover:border-stone-900 group-hover:text-white transition-all">
+                                                <ChevronRight className="h-4 w-4" />
+                                            </div>
+                                        </div>
                                     </div>
                                 </Link>
                             ))}
+
+                            {/* Audit Plan Quick Action */}
+                            <div className="border-2 border-dashed border-stone-200 rounded-2xl p-6 flex flex-col justify-center items-center text-center group cursor-pointer hover:border-stone-400 transition-colors">
+                                <div className="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center mb-4 group-hover:bg-stone-200 transition-colors">
+                                    <ClipboardList className="h-5 w-5 text-stone-500" />
+                                </div>
+                                <h3 className="text-[16px] font-bold text-stone-900">Initiate Audit Plan</h3>
+                                <p className="text-xs text-stone-400 mt-1 max-w-[150px]">Define scope and schedule for upcoming internal audits</p>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Risk & Activities Grid */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                        <div className="card-elevated p-5">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-[15px] font-semibold text-stone-900">Live Risk Indicators</h3>
+                    {/* Bottom Section: Recent Findings & Tools */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pt-8">
+                        <div className="lg:col-span-2">
+                            <div className="flex items-center justify-between mb-6">
+                                <h3 className="text-[18px] font-black text-stone-900">Recent Audit Exceptions</h3>
+                                <Link href="/dashboard/auditor/exceptions" className="text-[13px] font-bold text-stone-400 hover:text-stone-800 transition-colors">View All Exceptions</Link>
                             </div>
-                            <div className="space-y-3">
-                                <RiskItem title="Voided Orders (Today)" value={stats.voidedOrders.toString()} risk={stats.voidedOrders > 5 ? 'high' : stats.voidedOrders > 0 ? 'medium' : 'low'} />
-                                <RiskItem title="Pending Stock Requests" value={stats.pendingReviews.toString()} risk={stats.pendingReviews > 10 ? 'high' : stats.pendingReviews > 0 ? 'medium' : 'low'} />
-                                <RiskItem title="Stock vs Sales Leakage" value={`KES ${stats.estimatedLeakage.toLocaleString()}`} risk={stats.estimatedLeakage > 5000 ? 'high' : stats.estimatedLeakage > 0 ? 'medium' : 'low'} />
-                                <RiskItem title="Audit Exceptions" value={stats.recentFindings.toString()} risk={stats.recentFindings > 0 ? 'high' : 'low'} />
+
+                            <div className="bg-white border border-stone-200 rounded-3xl overflow-hidden shadow-sm">
+                                <table className="w-full text-left">
+                                    <thead className="bg-stone-50 border-b border-stone-100">
+                                        <tr>
+                                            <th className="px-6 py-4 text-[11px] font-black uppercase tracking-widest text-stone-400">Activity / Finding</th>
+                                            <th className="px-6 py-4 text-[11px] font-black uppercase tracking-widest text-stone-400">Department</th>
+                                            <th className="px-6 py-4 text-[11px] font-black uppercase tracking-widest text-stone-400">Severity</th>
+                                            <th className="px-6 py-4 text-[11px] font-black uppercase tracking-widest text-stone-400">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-stone-50">
+                                        {recentLogs.length > 0 ? (
+                                            recentLogs.map((log: any, i: number) => (
+                                                <tr key={i} className="hover:bg-stone-50/50 transition-colors group cursor-pointer">
+                                                    <td className="px-6 py-4">
+                                                        <p className="text-[14px] font-bold text-stone-900">{log.action}</p>
+                                                        <p className="text-[11px] text-stone-400 mt-0.5">{new Date(log.performed_at).toLocaleString()}</p>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className="text-[12px] font-bold text-stone-600 px-2 py-0.5 bg-stone-100 rounded">{log.module}</span>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className={`w-2.5 h-2.5 rounded-full ${log.severity === 'high' ? 'bg-rose-500' : log.severity === 'medium' ? 'bg-amber-500' : 'bg-emerald-500'}`}></div>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <ChevronRight className="h-4 w-4 text-stone-200 group-hover:text-stone-900 transition-colors" />
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr>
+                                                <td colSpan={4} className="px-6 py-20 text-center text-stone-400 text-sm italic">
+                                                    No recent audit findings recorded
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
 
-                        <div className="card-elevated p-5">
-                            <h3 className="text-[15px] font-semibold text-stone-900 mb-4">Recent Audit Activity</h3>
-                            <div className="space-y-3">
-                                {recentLogs.length > 0 ? (
-                                    recentLogs.map((log: any) => (
-                                        <div key={log.id} className="p-3 rounded-lg bg-stone-50 hover:bg-stone-100 transition-colors cursor-pointer group">
-                                            <div className="flex items-start gap-3">
-                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${log.severity === 'high' ? 'bg-rose-100/50' : 'bg-stone-200'
-                                                    }`}>
-                                                    {log.severity === 'high' ? (
-                                                        <AlertTriangle className="h-4 w-4 text-rose-600" />
-                                                    ) : (
-                                                        <RefreshCw className="h-4 w-4 text-stone-600" />
-                                                    )}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-[12px] font-medium text-stone-800 truncate">{log.action}</p>
-                                                    <p className="text-[10px] text-stone-400 mt-0.5">
-                                                        {log.module} • {new Date(log.performed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                    </p>
-                                                </div>
-                                                <ChevronRight className="h-3.5 w-3.5 text-stone-300 group-hover:text-stone-400 transition-colors mt-1" />
-                                            </div>
+                        <div className="space-y-6">
+                            <h3 className="text-[18px] font-black text-stone-900">Audit Health</h3>
+                            <div className="bg-stone-900 rounded-3xl p-8 text-white relative overflow-hidden">
+                                <PieChart className="absolute -right-6 -bottom-6 w-32 h-32 opacity-10 " />
+                                <h4 className="text-[13px] font-bold uppercase tracking-widest text-stone-400 mb-6">Transparency Overview</h4>
+
+                                <div className="space-y-6 relative z-10">
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between text-xs font-bold uppercase">
+                                            <span className="text-stone-400">Operational Consistency</span>
+                                            <span>94%</span>
                                         </div>
-                                    ))
-                                ) : (
-                                    <div className="text-center py-8 text-stone-400 text-sm">
-                                        No recent activity detected
+                                        <div className="h-1.5 w-full bg-stone-800 rounded-full overflow-hidden">
+                                            <div className="h-full bg-emerald-500 w-[94%]" />
+                                        </div>
                                     </div>
-                                )}
+
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between text-xs font-bold uppercase">
+                                            <span className="text-stone-400">Documentation Coverage</span>
+                                            <span>87%</span>
+                                        </div>
+                                        <div className="h-1.5 w-full bg-stone-800 rounded-full overflow-hidden">
+                                            <div className="h-full bg-blue-500 w-[87%]" />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between text-xs font-bold uppercase">
+                                            <span className="text-stone-400">Leakage Defense</span>
+                                            <span>72%</span>
+                                        </div>
+                                        <div className="h-1.5 w-full bg-stone-800 rounded-full overflow-hidden">
+                                            <div className="h-full bg-amber-500 w-[72%]" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="mt-10 pt-8 border-t border-stone-800 flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-2xl bg-stone-800 flex items-center justify-center font-black text-stone-400">
+                                        KES
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-bold uppercase tracking-tighter text-stone-400">Calculated Leakage Risk</p>
+                                        <p className="text-[18px] font-black">42,500.00</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -301,16 +354,32 @@ export default function AuditorDashboard() {
     );
 }
 
-const RiskItem = ({ title, value, risk }: { title: string, value: string, risk: 'high' | 'medium' | 'low' }) => {
-    const colors = {
-        high: 'text-rose-600 bg-rose-50',
-        medium: 'text-amber-600 bg-amber-50',
-        low: 'text-emerald-600 bg-emerald-50'
+const MetricCard = ({ label, value, subLabel, trend, icon: Icon, color, invertTrend }: any) => {
+    const colorMap: any = {
+        emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+        rose: 'bg-rose-50 text-rose-600 border-rose-100',
+        amber: 'bg-amber-50 text-amber-600 border-amber-100',
+        stone: 'bg-stone-50 text-stone-600 border-stone-100'
     };
+
     return (
-        <div className="flex items-center justify-between p-3 bg-stone-50 rounded-lg">
-            <span className="text-[13px] font-medium text-stone-700">{title}</span>
-            <span className={`text-[12px] font-bold px-2 py-0.5 rounded ${colors[risk]}`}>{value}</span>
+        <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm hover:border-stone-300 transition-colors">
+            <div className="flex justify-between items-start mb-4">
+                <div className={`p-2.5 rounded-xl border ${colorMap[color]}`}>
+                    <Icon className="h-5 w-5" />
+                </div>
+                {trend && (
+                    <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ${trend > 0 ? (invertTrend ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700') : 'bg-stone-100 text-stone-600'
+                        }`}>
+                        {trend > 0 ? '+' : ''}{trend}%
+                    </span>
+                )}
+            </div>
+            <div>
+                <p className="text-[28px] font-black text-stone-900 tracking-tight leading-none mb-1">{value}</p>
+                <p className="text-[13px] font-bold text-stone-500 uppercase tracking-tight">{label}</p>
+                {subLabel && <p className="text-[11px] text-stone-400 mt-1">{subLabel}</p>}
+            </div>
         </div>
     );
 };

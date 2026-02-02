@@ -8,7 +8,7 @@ import { financeAPI, staffAPI, systemAPI } from '@/lib/api';
 import {
   DollarSign, Users, Building2, Bed, RefreshCw,
   UserCog, Package, FileText, Wrench, Utensils, ClipboardList, Settings,
-  TrendingUp, ArrowUpRight, ChevronRight
+  TrendingUp, ArrowUpRight, ChevronRight, Truck, Car
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -121,6 +121,31 @@ export default function AdminDashboard() {
                   { href: '/dashboard/admin/system/branches', icon: Building2, label: 'Branches', desc: 'Manage locations' },
                   { href: '/dashboard/admin/system/departments', icon: Users, label: 'Departments', desc: 'Organizational structure' },
                   { href: '/dashboard/admin/audit', icon: ClipboardList, label: 'Audit Logs', desc: 'Activity tracking' },
+                ].map((item) => (
+                  <Link key={item.href} href={item.href}>
+                    <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-stone-50 transition-colors group cursor-pointer">
+                      <div className="w-9 h-9 rounded-lg bg-stone-100 flex items-center justify-center group-hover:bg-stone-200 transition-colors">
+                        <item.icon className="h-4 w-4 text-stone-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-[13px] font-medium text-stone-800">{item.label}</p>
+                        <p className="text-[11px] text-stone-500">{item.desc}</p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-stone-300 group-hover:text-stone-400 transition-colors" />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            {/* Fleet & Logistics */}
+            <div className="card-elevated p-5">
+              <h3 className="text-[15px] font-semibold text-stone-900 mb-4">Fleet & Logistics</h3>
+              <div className="space-y-2">
+                {[
+                  { href: '/dashboard/admin/vehicles', icon: Car, label: 'Vehicles', desc: 'Fleet management' },
+                  { href: '/dashboard/admin/drivers', icon: Truck, label: 'Drivers', desc: 'Delivery staff' },
+                  { href: '/dashboard/admin/suppliers', icon: Building2, label: 'Suppliers', desc: 'Vendor management' },
                 ].map((item) => (
                   <Link key={item.href} href={item.href}>
                     <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-stone-50 transition-colors group cursor-pointer">

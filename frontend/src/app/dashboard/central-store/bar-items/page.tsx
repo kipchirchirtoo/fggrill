@@ -9,7 +9,17 @@ import { Beer, RefreshCw, Search, Package } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatNumber } from '@/lib/utils';
 
-interface Item { id: string; sku: string; item_name: string; category: string; quantity: number; reorder_level: number; unit_of_measure: string; cost_price: number; }
+interface Item {
+    id: string;
+    sku: string;
+    item_name: string;
+    description?: string;
+    category: string;
+    quantity: number;
+    reorder_level: number;
+    unit_of_measure: string;
+    cost_price: number;
+}
 
 export default function BarItemsPage() {
     const [items, setItems] = useState<Item[]>([]);
@@ -19,31 +29,44 @@ export default function BarItemsPage() {
     const fetchItems = useCallback(async () => {
         setIsLoading(true);
         try {
-            // Fetching all items and filtering locally to ensure all "bar stuff" is captured
-            const response = await storeAPI.getItems();
+            // Fetching all items (high limit) and filtering locally to ensure all "bar stuff" is captured
+            const response = await storeAPI.getItems({ limit: 5000 });
             if (response.success) {
                 const allItems = response.data || [];
                 const barRelated = allItems.filter((item: Item) => {
-                    const category = item.category?.toLowerCase();
-                    const name = item.item_name?.toLowerCase();
-                    const sku = item.sku?.toUpperCase();
+                    const category = item.category?.toLowerCase() || '';
+                    const itemName = item.item_name?.toLowerCase() || '';
+                    const description = item.description?.toLowerCase() || '';
+                    const sku = item.sku?.toUpperCase() || '';
+
+                    // Combine name and description for better matching
+                    const searchableText = `${itemName} ${description}`.trim();
 
                     // Matches for beverage category or bar-specific SKU
-                    const isBeverage = category === 'beverage' || category === 'bar';
-                    const isBarSKU = sku?.includes('-BAR-') || sku?.startsWith('FGH-BAR-');
+                    const isBeverage = category === 'beverage' || category === 'bar' || category === 'drinks' || category === 'spirits' || category === 'wines';
+                    const isBarSKU = sku.includes('-BAR-') || sku.startsWith('FGH-BAR-') || sku.includes('BAR');
 
                     // Keywords that should definitely be included
-                    const isBarKeyword = name?.includes('wine') || name?.includes('spirit') ||
-                        name?.includes('beer') || name?.includes('whisky') ||
-                        name?.includes('vodka') || name?.includes('soda') ||
-                        name?.includes('liquor');
+                    const barKeywords = [
+                        'wine', 'spirit', 'beer', 'whisky', 'whiskey', 'vodka', 'soda', 'liquor',
+                        'rum', 'cognac', 'gin', 'brandy', 'tequila', 'champagne', 'cider',
+                        'juice', 'water', 'tonic', 'liqueur', 'syrup', 'beverage', 'drink',
+                        'coke', 'fanta', 'sprite', 'krest', 'stoney', 'novida', 'dasani',
+                        'savanna', 'guinness', 'tusker', 'pilsner', 'whiteback', 'smirnoff',
+                        'gilbeys', 'jameson', 'hennessy', 'martell', 'viceroy', 'bond 7',
+                        'black label', 'red label', 'jack daniels', 'captain morgan'
+                    ];
+
+                    const isBarKeyword = barKeywords.some(kw => searchableText.includes(kw));
 
                     // Strict exclusions for non-bar items that might have 'bar' in name (like Bar Soap)
-                    const isExcluded = category === 'cleaning_supplies' ||
+                    // But if it's already in beverage category, don't exclude it
+                    const isNonBarCategory = category === 'cleaning_supplies' ||
                         category === 'toiletries' ||
-                        category === 'office_supplies' ||
-                        name?.includes('soap') ||
-                        name?.includes('detergent');
+                        category === 'office_supplies';
+
+                    const isExcluded = isNonBarCategory &&
+                        (searchableText.includes('soap') || searchableText.includes('detergent') || searchableText.includes('paper'));
 
                     return (isBeverage || isBarSKU || isBarKeyword) && !isExcluded;
                 });

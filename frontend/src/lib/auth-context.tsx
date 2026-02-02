@@ -40,6 +40,7 @@ export enum UserRole {
   CASHIER = 'cashier',
   HR_MANAGER = 'hr_manager',
   EMPLOYEE = 'employee',
+  DRIVER = 'driver',
   GUEST = 'guest'
 }
 

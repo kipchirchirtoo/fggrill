@@ -205,11 +205,12 @@ export const storeAPI = {
     fetchAPI<any>(`/store/stock-requests/branch-performance/${branchId}?days=${days}`),
 
   // Items/Inventory
-  getItems: (params?: { search?: string; category?: string; branch_id?: number }) => {
+  getItems: (params?: { search?: string; category?: string; branch_id?: number; limit?: number }) => {
     const query = new URLSearchParams();
     if (params?.search) query.append('search', params.search);
     if (params?.category) query.append('category', params.category);
     if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.limit) query.append('limit', String(params.limit));
     return fetchAPI<any>(`/store/items?${query}`);
   },
   getItem: (id: string) => fetchAPI<any>(`/store/items/${id}`),
@@ -475,9 +476,17 @@ export const systemAPI = {
 
 export const staffAPI = {
   // Staff CRUD
-  getStaff: (branchId?: number) => {
-    const query = branchId ? `?branch_id=${branchId}` : '';
-    return fetchAPI<any>(`/staff${query}`);
+  getStaff: (params?: { branchId?: number; role?: string; search?: string; department?: string; status?: string; page?: number; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.branchId) query.append('branch_id', String(params.branchId));
+    if (params?.role) query.append('role', params.role);
+    if (params?.search) query.append('search', params.search);
+    if (params?.department) query.append('department', params.department);
+    if (params?.status) query.append('status', params.status);
+    if (params?.page) query.append('page', String(params.page));
+    if (params?.limit) query.append('limit', String(params.limit));
+    const queryString = query.toString() ? `?${query.toString()}` : '';
+    return fetchAPI<any>(`/staff${queryString}`);
   },
   getStaffMember: (id: string) => fetchAPI<any>(`/staff/${id}`),
   createStaffMember: (data: any) => fetchAPI<any>('/staff', { method: 'POST', body: JSON.stringify(data) }),
@@ -2546,6 +2555,34 @@ export const auditAPI = {
     if (filters?.action) params.append('action', filters.action);
 
     return fetchPythonAPI<any>(`/audit/trail?${params.toString()}`);
+  },
+
+  // New MVP Verification Endpoints
+  verifySales: (params: { branch_id?: number; start_date?: string; end_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params.start_date) query.append('start_date', params.start_date);
+    if (params.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/auditor/verify/sales?${query}`);
+  },
+  verifyFinances: (params: { branch_id?: number; date?: string }) => {
+    const query = new URLSearchParams();
+    if (params.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params.date) query.append('date', params.date);
+    return fetchAPI<any>(`/auditor/verify/finances?${query}`);
+  },
+  verifyRevenue: (params: { branch_id?: number; start_date?: string; end_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params.start_date) query.append('start_date', params.start_date);
+    if (params.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/auditor/verify/revenue?${query}`);
+  },
+  verifyExpenditure: (params: { branch_id?: number; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params.status) query.append('status', params.status);
+    return fetchAPI<any>(`/auditor/verify/expenditure?${query}`);
   },
 };
 
