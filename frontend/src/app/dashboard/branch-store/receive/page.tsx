@@ -133,30 +133,30 @@ export default function BranchReceivePage() {
         </div>
 
         <Dialog open={isReceiveModalOpen} onOpenChange={setIsReceiveModalOpen}>
-          <DialogContent className="w-[95vw] sm:w-full max-w-xl max-h-[80vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
+          <DialogContent className="w-[95vw] sm:w-full max-w-lg max-h-[75vh] flex flex-col p-0 overflow-hidden rounded-xl border-none shadow-2xl">
             <div className="flex flex-col flex-1 min-h-0 bg-white">
               {/* Sticky Header */}
-              <div className="p-6 border-b border-stone-100 flex-none bg-white">
+              <div className="p-4 border-b border-stone-100 flex-none bg-white">
                 <DialogHeader>
-                  <DialogTitle className="text-xl font-black text-stone-900 tracking-tight">
-                    Receive Delivery: {selectedDispatch?.dispatch_number}
+                  <DialogTitle className="text-base font-bold text-stone-900">
+                    Receive: {selectedDispatch?.dispatch_number}
                   </DialogTitle>
                 </DialogHeader>
               </div>
 
               {/* Scrollable Body */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {/* Logistics Info Section */}
-                <div className="bg-stone-50 border border-stone-200 rounded-xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div className="space-y-2">
-                    <h3 className="text-[11px] font-black text-stone-400 uppercase tracking-widest">Logistics Information</h3>
-                    <div className="flex gap-8 text-sm">
+                <div className="bg-stone-50 border border-stone-200 rounded-lg p-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div className="space-y-1">
+                    <h3 className="text-[10px] font-bold text-stone-400 uppercase">Logistics</h3>
+                    <div className="flex gap-4 text-xs">
                       <div>
-                        <p className="text-[10px] text-stone-400 uppercase font-black tracking-tight">Vehicle</p>
+                        <p className="text-[9px] text-stone-400 uppercase font-bold">Vehicle</p>
                         <p className="font-bold text-stone-900">{selectedDispatch?.vehicle_registration || 'N/A'}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] text-stone-400 uppercase font-black tracking-tight">Driver</p>
+                        <p className="text-[9px] text-stone-400 uppercase font-bold">Driver</p>
                         <p className="font-bold text-stone-900">{selectedDispatch?.driver_name || 'N/A'}</p>
                       </div>
                     </div>
@@ -173,55 +173,55 @@ export default function BranchReceivePage() {
                         };
                       });
                       setReceivedItems(allGood);
-                      toast.success('All quantities set to expected amounts');
+                      toast.success('All set to expected');
                     }}
-                    className="px-4 py-2.5 bg-stone-900 text-white text-[12px] font-bold rounded-xl shadow-lg shadow-stone-200 hover:bg-black transition-all flex items-center gap-2 active:scale-95"
+                    className="px-3 py-1.5 bg-stone-900 text-white text-[11px] font-bold rounded-lg hover:bg-black transition-all flex items-center gap-1.5 active:scale-95 whitespace-nowrap"
                   >
-                    <Check className="h-4 w-4" />
-                    <span>Mark All Verified</span>
+                    <Check className="h-3.5 w-3.5" />
+                    <span>Mark Verified</span>
                   </button>
                 </div>
 
                 {/* Items List */}
-                <div className="space-y-4">
-                  <h3 className="text-[11px] font-black text-stone-400 uppercase tracking-widest px-1">Shipment Contents</h3>
+                <div className="space-y-2">
+                  <h3 className="text-[10px] font-bold text-stone-400 uppercase">Items</h3>
                   {selectedDispatch?.items.map((item) => (
-                    <div key={item.id} className="p-5 border border-stone-100 rounded-2xl bg-white shadow-sm hover:border-stone-200 transition-colors space-y-4">
+                    <div key={item.id} className="p-3 border border-stone-100 rounded-lg bg-white hover:border-stone-200 transition-colors space-y-2">
                       <div className="flex justify-between items-center">
                         <div>
-                          <p className="font-black text-stone-900">{item.item?.name || item.item_sku}</p>
-                          <p className="text-[10px] text-stone-400 font-bold uppercase tracking-tight">{item.item_sku}</p>
+                          <p className="font-bold text-sm text-stone-900">{item.item?.name || item.item_sku}</p>
+                          <p className="text-[9px] text-stone-400 font-semibold uppercase">{item.item_sku}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-[11px] font-black text-stone-400 uppercase tracking-tight">Expected</p>
-                          <p className="text-lg font-black text-[#007AFF] leading-none">{item.dispatched_quantity}</p>
+                          <p className="text-[9px] font-bold text-stone-400 uppercase">Expected</p>
+                          <p className="text-base font-bold text-[#007AFF]">{item.dispatched_quantity}</p>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-stone-50/50 p-4 rounded-xl border border-stone-100">
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-stone-400 uppercase tracking-wider ml-1">Received</label>
+                      <div className="grid grid-cols-3 gap-2 bg-stone-50/50 p-2 rounded-lg">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-stone-400 uppercase">Received</label>
                           <Input
                             type="number"
-                            className="bg-white border-stone-200 rounded-lg font-bold focus:ring-[#007AFF]"
+                            className="h-8 text-xs bg-white border-stone-200 rounded font-semibold focus:ring-[#007AFF]"
                             value={receivedItems[item.id]?.quantity}
                             onChange={(e) => setReceivedItems({ ...receivedItems, [item.id]: { ...receivedItems[item.id], quantity: parseInt(e.target.value) || 0 } })}
                           />
                         </div>
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-rose-400 uppercase tracking-wider ml-1">Damaged</label>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-rose-400 uppercase">Damaged</label>
                           <Input
                             type="number"
-                            className="bg-white border-stone-200 rounded-lg font-bold focus:ring-[#007AFF]"
+                            className="h-8 text-xs bg-white border-stone-200 rounded font-semibold focus:ring-[#007AFF]"
                             value={receivedItems[item.id]?.damaged}
                             onChange={(e) => setReceivedItems({ ...receivedItems, [item.id]: { ...receivedItems[item.id], damaged: parseInt(e.target.value) || 0 } })}
                           />
                         </div>
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-amber-500 uppercase tracking-wider ml-1">Missing</label>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-amber-500 uppercase">Missing</label>
                           <Input
                             type="number"
-                            className="bg-white border-stone-200 rounded-lg font-bold focus:ring-[#007AFF]"
+                            className="h-8 text-xs bg-white border-stone-200 rounded font-semibold focus:ring-[#007AFF]"
                             value={receivedItems[item.id]?.missing}
                             onChange={(e) => setReceivedItems({ ...receivedItems, [item.id]: { ...receivedItems[item.id], missing: parseInt(e.target.value) || 0 } })}
                           />
@@ -232,31 +232,31 @@ export default function BranchReceivePage() {
                 </div>
 
                 {/* Additional Notes */}
-                <div className="pt-2">
-                  <label className="text-[11px] font-black text-stone-400 uppercase tracking-widest px-1 mb-2 block">Discrepancy Notes / Verification Remarks</label>
+                <div className="pt-1">
+                  <label className="text-[10px] font-bold text-stone-400 uppercase mb-1.5 block">Notes</label>
                   <textarea
-                    className="w-full bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-[#007AFF]/20 outline-none min-h-[100px] transition-all"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-lg p-2 text-xs font-medium focus:ring-1 focus:ring-[#007AFF]/20 outline-none min-h-[60px] transition-all"
                     value={deliveryNotes}
                     onChange={(e) => setDeliveryNotes(e.target.value)}
-                    placeholder="Enter any observations about the condition of the items..."
+                    placeholder="Enter observations..."
                   />
                 </div>
               </div>
 
               {/* Sticky Footer */}
-              <div className="p-6 border-t border-stone-100 flex-none bg-white">
-                <div className="flex gap-4">
+              <div className="p-3 border-t border-stone-100 flex-none bg-white">
+                <div className="flex gap-3">
                   <button
                     onClick={() => setIsReceiveModalOpen(false)}
-                    className="flex-1 h-12 rounded-xl border border-stone-200 font-bold text-stone-500 hover:bg-stone-50 transition-colors"
+                    className="flex-1 h-10 rounded-lg border border-stone-200 font-bold text-sm text-stone-500 hover:bg-stone-50 transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleConfirmDelivery}
-                    className="flex-1 h-12 rounded-xl bg-[#007AFF] text-white font-black hover:bg-blue-600 transition-all shadow-lg shadow-blue-100 active:scale-95"
+                    className="flex-1 h-10 rounded-lg bg-[#007AFF] text-white text-sm font-bold hover:bg-blue-600 transition-all active:scale-95"
                   >
-                    Confirm & Update Stock
+                    Confirm & Update
                   </button>
                 </div>
               </div>
