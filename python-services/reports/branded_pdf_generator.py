@@ -2612,10 +2612,23 @@ class BrandedPDFGenerator:
         elements.append(Spacer(1, 0.2*inch))
         
         # Logistics Info Section
+        # Handle both flat fields (vehicle_registration, driver_name) and nested objects (vehicle.registration_number, driver.name)
+        vehicle_info = data.get('vehicle_registration') or data.get('vehicle_number', '')
+        if not vehicle_info and isinstance(data.get('vehicle'), dict):
+            vehicle_info = data.get('vehicle', {}).get('registration_number', 'N/A')
+        if not vehicle_info:
+            vehicle_info = 'N/A'
+            
+        driver_info = data.get('driver_name', '')
+        if not driver_info and isinstance(data.get('driver'), dict):
+            driver_info = data.get('driver', {}).get('name', 'N/A')
+        if not driver_info:
+            driver_info = 'N/A'
+        
         logistics_data = [
             ['LOGISTICS INFO', ''],
-            ['Vehicle:', data.get('vehicle_registration') or data.get('vehicle_number', 'N/A')],
-            ['Driver:', data.get('driver_name', 'N/A')],
+            ['Vehicle:', vehicle_info],
+            ['Driver:', driver_info],
             ['Status:', data.get('status', 'N/A')]
         ]
         

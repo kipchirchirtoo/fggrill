@@ -186,6 +186,9 @@ def generate_dispatch_note():
     try:
         data = request.get_json()
         logger.info(f"Generating dispatch note: {data.get('dispatch_number')}")
+        logger.info(f"Dispatch data keys: {list(data.keys())}")
+        logger.info(f"Vehicle info: {data.get('vehicle_registration')} / {data.get('vehicle')}")
+        logger.info(f"Driver info: {data.get('driver_name')} / {data.get('driver')}")
         
         # Generate PDF
         pdf_file = branded_pdf_generator.generate_report('dispatch_note', data)
