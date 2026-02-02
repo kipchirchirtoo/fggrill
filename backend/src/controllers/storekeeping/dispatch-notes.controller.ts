@@ -70,12 +70,31 @@ export const getDispatchNotes = async (
             .select('*')
             .in('dispatch_id', dispatchIds);
 
+        // Get vehicle and driver details
+        const vehicleIds = dispatches.map(d => d.vehicle_id).filter(Boolean);
+        const driverIds = dispatches.map(d => d.driver_id).filter(Boolean);
+
+        const { data: vehicles } = vehicleIds.length > 0 ? await supabase
+            .from('vehicles')
+            .select('id, registration_number, model')
+            .in('id', vehicleIds) : { data: [] };
+
+        const { data: drivers } = driverIds.length > 0 ? await supabase
+            .from('drivers')
+            .select('id, name, license_number, phone')
+            .in('id', driverIds) : { data: [] };
+
         // Map data
         const enrichedDispatches = dispatches.map(dispatch => ({
             ...dispatch,
             from_branch: branches?.find(b => b.id === dispatch.from_branch_id),
             to_branch: branches?.find(b => b.id === dispatch.to_branch_id),
-            items: items?.filter(i => i.dispatch_id === dispatch.id) || []
+            to_branch_name: branches?.find(b => b.id === dispatch.to_branch_id)?.name,
+            items: items?.filter(i => i.dispatch_id === dispatch.id) || [],
+            vehicle: vehicles?.find(v => v.id === dispatch.vehicle_id),
+            vehicle_registration: vehicles?.find(v => v.id === dispatch.vehicle_id)?.registration_number,
+            driver: drivers?.find(d => d.id === dispatch.driver_id),
+            driver_name: drivers?.find(d => d.id === dispatch.driver_id)?.name
         }));
 
         res.status(200).json({
@@ -437,15 +456,22 @@ export const dispatchItems = async (
             throw new AppError('Dispatch is already in transit', 400);
         }
 
+        const { vehicle_id, driver_id } = req.body;
+
         // Update dispatch status to IN_TRANSIT
+        const updateData: any = {
+            status: 'IN_TRANSIT',
+            dispatched_at: new Date().toISOString(),
+            dispatcher_id: userId,
+            updated_at: new Date().toISOString()
+        };
+
+        if (vehicle_id) updateData.vehicle_id = vehicle_id;
+        if (driver_id) updateData.driver_id = driver_id;
+
         const { error: updateError } = await supabase
             .from('dispatch_notes')
-            .update({
-                status: 'IN_TRANSIT',
-                dispatched_at: new Date().toISOString(),
-                dispatcher_id: userId,
-                updated_at: new Date().toISOString()
-            })
+            .update(updateData)
             .eq('id', id);
 
         if (updateError) throw updateError;

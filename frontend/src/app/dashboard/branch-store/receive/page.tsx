@@ -21,6 +21,10 @@ interface IncomingDispatch {
   estimated_delivery: string;
   from_branch: { name: string; };
   items: any[];
+  vehicle?: { registration_number: string; model: string; };
+  vehicle_registration?: string;
+  driver?: { name: string; phone: string; };
+  driver_name?: string;
 }
 
 export default function BranchReceivePage() {
@@ -132,6 +136,22 @@ export default function BranchReceivePage() {
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Receive Delivery: {selectedDispatch?.dispatch_number}</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-4">
+              {/* Logistics Info Section */}
+              <div className="bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2">
+                <h3 className="text-sm font-bold text-stone-700 uppercase tracking-wider">Logistics Information</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-[10px] text-stone-400 uppercase font-bold">Vehicle</p>
+                    <p className="font-medium text-stone-900">{selectedDispatch?.vehicle_registration || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-stone-400 uppercase font-bold">Driver</p>
+                    <p className="font-medium text-stone-900">{selectedDispatch?.driver_name || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Items Section */}
               {selectedDispatch?.items.map((item) => (
                 <div key={item.id} className="p-4 border rounded-ios-lg space-y-3">
                   <div className="flex justify-between font-medium">

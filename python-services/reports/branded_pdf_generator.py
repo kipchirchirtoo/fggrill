@@ -2587,26 +2587,45 @@ class BrandedPDFGenerator:
             f"Date: {datetime.now().strftime('%d/%m/%Y')}", 
             branch_name))
         
-        # Dispatch & Logistics Info Table
-        logistics_data = [
-            ['DISPATCH DETAILS', '', 'LOGISTICS INFO', ''],
-            ['DN Reference:', data.get('dispatch_number', 'N/A'), 
-             'Vehicle:', data.get('vehicle_registration') or data.get('vehicle_number', 'N/A')],
-            ['Date Created:', str(data.get('created_at', ''))[:10] or 'N/A',
-             'Driver:', data.get('driver_name', 'N/A')],
-            ['To Branch:', branch_name,
-             'Status:', data.get('status', 'N/A')]
+        
+        # Dispatch Details Section
+        dispatch_data = [
+            ['DISPATCH DETAILS', ''],
+            ['DN Reference:', data.get('dispatch_number', 'N/A')],
+            ['Date Created:', str(data.get('created_at', ''))[:10] or 'N/A'],
+            ['To Branch:', branch_name],
         ]
         
-        logistics_table = Table(logistics_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
-        logistics_table.setStyle(TableStyle([
-            ('SPAN', (0, 0), (1, 0)),
-            ('SPAN', (2, 0), (3, 0)),
+        dispatch_table = Table(dispatch_data, colWidths=[2*inch, 5.5*inch])
+        dispatch_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('SPAN', (0, 0), (1, 0)),
             ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
-            ('FONTNAME', (2, 1), (2, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(dispatch_table)
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # Logistics Info Section
+        logistics_data = [
+            ['LOGISTICS INFO', ''],
+            ['Vehicle:', data.get('vehicle_registration') or data.get('vehicle_number', 'N/A')],
+            ['Driver:', data.get('driver_name', 'N/A')],
+            ['Status:', data.get('status', 'N/A')]
+        ]
+        
+        logistics_table = Table(logistics_data, colWidths=[2*inch, 5.5*inch])
+        logistics_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GREEN),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('SPAN', (0, 0), (1, 0)),
+            ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
             ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('TOPPADDING', (0, 0), (-1, -1), 6),
