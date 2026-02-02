@@ -359,113 +359,115 @@ export default function StockLedgerPage() {
 
                     {/* Capture Ledger Modal */}
                     <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                        <DialogContent className="max-w-xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
-                            <DialogHeader className="px-5 py-4 border-b border-stone-100 bg-stone-50/50">
+                        <DialogContent className="max-w-xl max-h-[80vh] flex flex-col p-0 overflow-hidden">
+                            <DialogHeader className="px-5 py-3 border-b border-stone-100 bg-stone-50/50">
                                 <DialogTitle className="flex items-center gap-2 text-[17px] font-semibold text-stone-900">
                                     <BookOpen className="h-5 w-5 text-stone-500" />
                                     Capture Daily Entry
                                 </DialogTitle>
                             </DialogHeader>
 
-                            <div className="overflow-y-auto px-5 py-5 flex-1 space-y-5">
-                                <div className="grid grid-cols-2 gap-5">
-                                    <div className="space-y-4">
-                                        <h3 className="text-[12px] font-semibold uppercase tracking-wider text-stone-500 border-b border-stone-100 pb-1">Item Details</h3>
+                            <div className="overflow-y-auto px-5 py-4 flex-1 space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-3">
+                                        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 border-b border-stone-100 pb-1">Item Details</h3>
                                         <div>
-                                            <label className="input-label">Item Name</label>
+                                            <label className="input-label mb-1">Item Name</label>
                                             <input
                                                 value={formData.item_name}
                                                 onChange={(e) => setFormData({ ...formData, item_name: e.target.value })}
                                                 placeholder="e.g., Prepared Chicken"
-                                                className="input-field py-2 text-sm"
+                                                className="input-field py-1.5 text-sm"
                                             />
                                         </div>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-2 gap-2">
                                             <div>
-                                                <label className="input-label">Item ID</label>
+                                                <label className="input-label mb-1">Item ID</label>
                                                 <input
                                                     value={formData.item_id}
                                                     onChange={(e) => setFormData({ ...formData, item_id: e.target.value })}
-                                                    placeholder="Optional"
-                                                    className="input-field py-2 text-sm"
+                                                    placeholder="Opt."
+                                                    className="input-field py-1.5 text-sm"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="input-label">Unit</label>
+                                                <label className="input-label mb-1">Unit</label>
                                                 <input
                                                     value={formData.unit_of_measure}
                                                     onChange={(e) => setFormData({ ...formData, unit_of_measure: e.target.value })}
-                                                    className="input-field py-2 text-sm"
+                                                    className="input-field py-1.5 text-sm"
                                                 />
                                             </div>
                                         </div>
                                         <div>
-                                            <label className="input-label">Date</label>
+                                            <label className="input-label mb-1">Date</label>
                                             <input
                                                 type="date"
                                                 value={formData.entry_date}
                                                 onChange={(e) => setFormData({ ...formData, entry_date: e.target.value })}
-                                                className="input-field py-2 text-sm"
+                                                className="input-field py-1.5 text-sm"
                                             />
                                         </div>
                                     </div>
 
-                                    <div className="space-y-4">
-                                        <h3 className="text-[12px] font-semibold uppercase tracking-wider text-stone-500 border-b border-stone-100 pb-1">Usage & Balances</h3>
-                                        <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-3">
+                                        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 border-b border-stone-100 pb-1">Usage & Balances</h3>
+                                        <div className="grid grid-cols-2 gap-2">
                                             <div>
-                                                <label className="input-label">Opening</label>
+                                                <label className="input-label mb-1">Opening</label>
                                                 <input
                                                     type="number"
                                                     value={formData.opening_balance}
                                                     onChange={(e) => setFormData({ ...formData, opening_balance: Number(e.target.value) })}
-                                                    className="input-field py-2 text-sm"
+                                                    className="input-field py-1.5 text-sm"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="input-label text-green-600">Received</label>
+                                                <label className="input-label mb-1 text-green-600">Received</label>
                                                 <input
                                                     type="number"
                                                     value={formData.received_quantity}
                                                     onChange={(e) => setFormData({ ...formData, received_quantity: Number(e.target.value) })}
-                                                    className="input-field py-2 text-sm border-green-200 focus:border-green-400 focus:ring-green-400/20"
+                                                    className="input-field py-1.5 text-sm border-green-200 focus:border-green-400 focus:ring-green-400/20"
                                                 />
                                             </div>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-2 gap-2">
                                             <div>
-                                                <label className="input-label text-blue-600">Used</label>
+                                                <label className="input-label mb-1 text-blue-600">Used</label>
                                                 <input
                                                     type="number"
                                                     value={formData.used_quantity}
                                                     onChange={(e) => setFormData({ ...formData, used_quantity: Number(e.target.value) })}
-                                                    className="input-field py-2 text-sm border-blue-200 focus:border-blue-400 focus:ring-blue-400/20"
+                                                    className="input-field py-1.5 text-sm border-blue-200 focus:border-blue-400 focus:ring-blue-400/20"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="input-label text-red-600">Wastage</label>
+                                                <label className="input-label mb-1 text-red-600">Wastage</label>
                                                 <input
                                                     type="number"
                                                     value={formData.wastage_quantity}
                                                     onChange={(e) => setFormData({ ...formData, wastage_quantity: Number(e.target.value) })}
-                                                    className="input-field py-2 text-sm border-red-200 focus:border-red-400 focus:ring-red-400/20"
+                                                    className="input-field py-1.5 text-sm border-red-200 focus:border-red-400 focus:ring-red-400/20"
                                                 />
                                             </div>
                                         </div>
-                                        <div className="bg-stone-50 p-2.5 rounded-lg border border-stone-100">
-                                            <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">Closing (Auto)</p>
-                                            <p className="text-[15px] font-bold text-stone-900 mt-0.5">
-                                                {(formData.opening_balance + formData.received_quantity - formData.used_quantity - formData.wastage_quantity).toFixed(2)} {formData.unit_of_measure}
-                                            </p>
+                                        <div className="bg-stone-50 p-2 rounded-lg border border-stone-100 mt-1">
+                                            <div className="flex justify-between items-center">
+                                                <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">Closing Balance</p>
+                                                <p className="text-[14px] font-bold text-stone-900">
+                                                    {(formData.opening_balance + formData.received_quantity - formData.used_quantity - formData.wastage_quantity).toFixed(2)} {formData.unit_of_measure}
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="space-y-3 bg-stone-50/50 p-4 rounded-xl border border-stone-100">
-                                    <h3 className="text-[12px] font-semibold uppercase tracking-wider text-stone-500 border-b border-stone-200 pb-1">Financial Reconciliation</h3>
+                                <div className="space-y-3 bg-stone-50/50 p-3 rounded-xl border border-stone-100">
+                                    <h3 className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 border-b border-stone-200 pb-1">Financial Reconciliation</h3>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
-                                            <label className="input-label flex items-center gap-1.5 text-green-700">
+                                            <label className="input-label mb-1 flex items-center gap-1.5 text-green-700">
                                                 Expected Sales
                                             </label>
                                             <div className="relative">
@@ -474,14 +476,14 @@ export default function StockLedgerPage() {
                                                     type="number"
                                                     value={formData.expected_sales}
                                                     onChange={(e) => setFormData({ ...formData, expected_sales: Number(e.target.value) })}
-                                                    className="input-field py-2 pl-9 text-sm"
+                                                    className="input-field py-1.5 pl-9 text-sm"
                                                     placeholder="0"
                                                 />
                                             </div>
-                                            <p className="text-[10px] text-stone-400 mt-1 italic">Kitchen portions used × price</p>
+                                            <p className="text-[9px] text-stone-400 mt-0.5 italic">Portions × Price</p>
                                         </div>
                                         <div>
-                                            <label className="input-label flex items-center gap-1.5 text-blue-700">
+                                            <label className="input-label mb-1 flex items-center gap-1.5 text-blue-700">
                                                 System Sales
                                             </label>
                                             <div className="relative">
@@ -490,25 +492,20 @@ export default function StockLedgerPage() {
                                                     type="number"
                                                     value={formData.system_sales}
                                                     onChange={(e) => setFormData({ ...formData, system_sales: Number(e.target.value) })}
-                                                    className="input-field py-2 pl-9 text-sm"
+                                                    className="input-field py-1.5 pl-9 text-sm"
                                                     placeholder="0"
                                                 />
                                             </div>
-                                            <p className="text-[10px] text-stone-400 mt-1 italic">Actual POS sales report</p>
+                                            <p className="text-[9px] text-stone-400 mt-0.5 italic">From POS Report</p>
                                         </div>
                                     </div>
                                     {formData.expected_sales > 0 && formData.system_sales > 0 && (
-                                        <div className={`p-3 rounded-lg flex items-start gap-2 ${formData.expected_sales - formData.system_sales > 0 ? 'bg-red-50 text-red-800 border border-red-100' : 'bg-green-50 text-green-800 border border-green-100'}`}>
-                                            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                                        <div className={`p-2 rounded-lg flex items-start gap-2 ${formData.expected_sales - formData.system_sales > 0 ? 'bg-red-50 text-red-800 border border-red-100' : 'bg-green-50 text-green-800 border border-green-100'}`}>
+                                            <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                                             <div>
                                                 <p className="text-xs font-bold">
                                                     Variance: KES {(formData.expected_sales - formData.system_sales).toLocaleString()}
                                                     {formData.expected_sales - formData.system_sales > 0 ? ' (Shortfall)' : ' (Surplus)'}
-                                                </p>
-                                                <p className="text-[10px] opacity-80 mt-0.5">
-                                                    {formData.expected_sales - formData.system_sales > 0
-                                                        ? 'Actual sales are lower than expected based on usage.'
-                                                        : 'Actual sales are higher than expected based on usage.'}
                                                 </p>
                                             </div>
                                         </div>
@@ -516,17 +513,17 @@ export default function StockLedgerPage() {
                                 </div>
 
                                 <div>
-                                    <label className="input-label">Remarks</label>
+                                    <label className="input-label mb-1">Remarks</label>
                                     <textarea
                                         value={formData.remarks}
                                         onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
-                                        className="input-field min-h-[60px] text-sm py-2"
-                                        placeholder="Explain any variances or unusual activities..."
+                                        className="input-field min-h-[50px] text-sm py-1.5"
+                                        placeholder="Explain any variances..."
                                     />
                                 </div>
                             </div>
 
-                            <div className="flex gap-3 px-5 py-4 border-t border-stone-100 bg-stone-50/50">
+                            <div className="flex gap-3 px-5 py-3 border-t border-stone-100 bg-stone-50/50">
                                 <button
                                     className="btn-secondary flex-1"
                                     onClick={() => setIsModalOpen(false)}

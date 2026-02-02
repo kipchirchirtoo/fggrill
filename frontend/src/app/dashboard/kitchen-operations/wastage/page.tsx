@@ -213,7 +213,7 @@ export default function WastagePage() {
 
                     {/* Record Wastage Modal */}
                     <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                        <DialogContent className="max-w-lg max-h-[85vh] flex flex-col p-0 overflow-hidden">
+                        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col p-0 overflow-hidden">
                             <DialogHeader className="px-6 py-5 border-b border-stone-100 bg-stone-50/50">
                                 <DialogTitle className="flex items-center gap-2 text-[17px] font-semibold text-stone-900">
                                     <Trash2 className="h-5 w-5 text-stone-500" />

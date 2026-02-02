@@ -159,8 +159,8 @@ export default function RequisitionsPage() {
                                     key={status}
                                     onClick={() => setFilterStatus(status)}
                                     className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors whitespace-nowrap ${filterStatus === status
-                                            ? 'bg-stone-900 text-white'
-                                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                                        ? 'bg-stone-900 text-white'
+                                        : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                                         }`}
                                 >
                                     {status === 'ALL' ? 'All Requests' : status}
@@ -202,8 +202,8 @@ export default function RequisitionsPage() {
                                                 </td>
                                                 <td className="px-5 py-3">
                                                     <span className={`text-[11px] font-bold uppercase ${req.priority === 'URGENT' ? 'text-red-600' :
-                                                            req.priority === 'HIGH' ? 'text-orange-600' :
-                                                                'text-stone-500'
+                                                        req.priority === 'HIGH' ? 'text-orange-600' :
+                                                            'text-stone-500'
                                                         }`}>
                                                         {req.priority}
                                                     </span>
@@ -226,7 +226,7 @@ export default function RequisitionsPage() {
 
                     {/* Create Requisition Modal */}
                     <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+                        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col p-0 overflow-hidden">
                             <DialogHeader className="px-6 py-5 border-b border-stone-100 bg-stone-50/50">
                                 <DialogTitle className="flex items-center gap-2 text-[17px] font-semibold text-stone-900">
                                     <ShoppingCart className="h-5 w-5 text-stone-500" />
