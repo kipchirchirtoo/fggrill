@@ -20,10 +20,19 @@ export default function CentralStoreDashboard() {
     try {
       const dashboardRes = await storeAPI.getCentralDashboard();
       if (dashboardRes.success) {
+        const data = dashboardRes.data || {};
+        const stats = data.stats || {};
+
+        // Handle potentially nested stats or direct values
+        // lowStockItems comes as an array from the specific controller endpoint
+        const lowStockCount = Array.isArray(data.lowStockItems)
+          ? data.lowStockItems.length
+          : (data.lowStockItems || stats.lowStock || 0);
+
         setStats({
-          totalItems: dashboardRes.data?.totalItems || 0,
-          lowStock: dashboardRes.data?.lowStockItems || 0,
-          inTransit: dashboardRes.data?.inTransit || 0,
+          totalItems: stats.totalItems || data.totalItems || 0,
+          lowStock: typeof lowStockCount === 'number' ? lowStockCount : 0,
+          inTransit: stats.inTransit || data.inTransit || 0,
         });
       }
     } catch (error) { console.error('Error fetching dashboard stats:', error); }
