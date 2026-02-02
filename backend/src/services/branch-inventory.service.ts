@@ -790,10 +790,28 @@ export async function getIncomingDispatches(branchId: number) {
     .select('sku, item_name, description, unit_of_measure')
     .in('sku', itemSkus.length > 0 ? itemSkus : ['']);
 
+  // Get vehicle and driver details
+  const vehicleIds = dispatches.map(d => d.vehicle_id).filter(Boolean);
+  const driverIds = dispatches.map(d => d.driver_id).filter(Boolean);
+
+  const { data: vehicles } = vehicleIds.length > 0 ? await supabase
+    .from('vehicles')
+    .select('id, registration_number, model')
+    .in('id', vehicleIds) : { data: [] };
+
+  const { data: drivers } = driverIds.length > 0 ? await supabase
+    .from('drivers')
+    .select('id, name, license_number, phone')
+    .in('id', driverIds) : { data: [] };
+
   // Combine
   const data = dispatches.map(dispatch => ({
     ...dispatch,
     from_branch: branches?.find(b => b.id === dispatch.from_branch_id),
+    vehicle: vehicles?.find(v => v.id === dispatch.vehicle_id),
+    vehicle_registration: vehicles?.find(v => v.id === dispatch.vehicle_id)?.registration_number,
+    driver: drivers?.find(d => d.id === dispatch.driver_id),
+    driver_name: drivers?.find(d => d.id === dispatch.driver_id)?.name,
     items: (items || [])
       .filter(i => i.dispatch_id === dispatch.id)
       .map(item => ({
