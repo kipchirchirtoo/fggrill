@@ -133,63 +133,132 @@ export default function BranchReceivePage() {
         </div>
 
         <Dialog open={isReceiveModalOpen} onOpenChange={setIsReceiveModalOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>Receive Delivery: {selectedDispatch?.dispatch_number}</DialogTitle></DialogHeader>
-            <div className="space-y-4 mt-4">
-              {/* Logistics Info Section */}
-              <div className="bg-stone-50 border border-stone-200 rounded-lg p-4 flex justify-between items-center group">
-                <div className="space-y-2">
-                  <h3 className="text-sm font-bold text-stone-700 uppercase tracking-wider">Logistics Information</h3>
-                  <div className="flex gap-6 text-sm">
-                    <div>
-                      <p className="text-[10px] text-stone-400 uppercase font-bold">Vehicle</p>
-                      <p className="font-medium text-stone-900">{selectedDispatch?.vehicle_registration || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-stone-400 uppercase font-bold">Driver</p>
-                      <p className="font-medium text-stone-900">{selectedDispatch?.driver_name || 'N/A'}</p>
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    const allGood: Record<string, any> = {};
-                    selectedDispatch?.items.forEach(item => {
-                      allGood[item.id] = {
-                        quantity: item.dispatched_quantity,
-                        damaged: 0,
-                        missing: 0,
-                        note: 'Received as dispatched'
-                      };
-                    });
-                    setReceivedItems(allGood);
-                    toast.success('All quantities set to expected amounts');
-                  }}
-                  className="px-4 py-2 bg-white border border-[#007AFF]/20 text-[#007AFF] text-xs font-bold rounded-lg shadow-sm hover:bg-[#007AFF]/5 transition-all flex items-center gap-2"
-                >
-                  <Check className="h-4 w-4" />
-                  <span>Receive All Correct</span>
-                </button>
+          <DialogContent className="max-w-2xl h-[90vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
+            <div className="flex flex-col h-full bg-white">
+              {/* Sticky Header */}
+              <div className="p-6 border-b border-stone-100 flex-none bg-white">
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-black text-stone-900 tracking-tight">
+                    Receive Delivery: {selectedDispatch?.dispatch_number}
+                  </DialogTitle>
+                </DialogHeader>
               </div>
 
-              {/* Items Section */}
-              {selectedDispatch?.items.map((item) => (
-                <div key={item.id} className="p-4 border rounded-ios-lg space-y-3">
-                  <div className="flex justify-between font-medium">
-                    <span>{item.item?.name || item.item_sku}</span>
-                    <span className="text-gray-500">Expected: {item.dispatched_quantity}</span>
+              {/* Scrollable Body */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {/* Logistics Info Section */}
+                <div className="bg-stone-50 border border-stone-200 rounded-xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div className="space-y-2">
+                    <h3 className="text-[11px] font-black text-stone-400 uppercase tracking-widest">Logistics Information</h3>
+                    <div className="flex gap-8 text-sm">
+                      <div>
+                        <p className="text-[10px] text-stone-400 uppercase font-black tracking-tight">Vehicle</p>
+                        <p className="font-bold text-stone-900">{selectedDispatch?.vehicle_registration || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-stone-400 uppercase font-black tracking-tight">Driver</p>
+                        <p className="font-bold text-stone-900">{selectedDispatch?.driver_name || 'N/A'}</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div><label className="text-[10px] text-gray-400 uppercase">Received</label><Input type="number" value={receivedItems[item.id]?.quantity} onChange={(e) => setReceivedItems({ ...receivedItems, [item.id]: { ...receivedItems[item.id], quantity: parseInt(e.target.value) || 0 } })} /></div>
-                    <div><label className="text-[10px] text-gray-400 uppercase">Damaged</label><Input type="number" value={receivedItems[item.id]?.damaged} onChange={(e) => setReceivedItems({ ...receivedItems, [item.id]: { ...receivedItems[item.id], damaged: parseInt(e.target.value) || 0 } })} /></div>
-                    <div><label className="text-[10px] text-gray-400 uppercase">Missing</label><Input type="number" value={receivedItems[item.id]?.missing} onChange={(e) => setReceivedItems({ ...receivedItems, [item.id]: { ...receivedItems[item.id], missing: parseInt(e.target.value) || 0 } })} /></div>
-                  </div>
+                  <button
+                    onClick={() => {
+                      const allGood: Record<string, any> = {};
+                      selectedDispatch?.items.forEach(item => {
+                        allGood[item.id] = {
+                          quantity: item.dispatched_quantity,
+                          damaged: 0,
+                          missing: 0,
+                          note: 'Received as dispatched'
+                        };
+                      });
+                      setReceivedItems(allGood);
+                      toast.success('All quantities set to expected amounts');
+                    }}
+                    className="px-4 py-2.5 bg-stone-900 text-white text-[12px] font-bold rounded-xl shadow-lg shadow-stone-200 hover:bg-black transition-all flex items-center gap-2 active:scale-95"
+                  >
+                    <Check className="h-4 w-4" />
+                    <span>Mark All Verified</span>
+                  </button>
                 </div>
-              ))}
-              <div><label className="text-sm font-medium">Delivery Notes</label><Input value={deliveryNotes} onChange={(e) => setDeliveryNotes(e.target.value)} placeholder="Condition, discrepancies, etc." /></div>
-              <div className="flex gap-3 pt-4">
-                <IOSButton variant="secondary" onClick={() => setIsReceiveModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                <IOSButton onClick={handleConfirmDelivery} className="flex-1">Confirm Receipt</IOSButton>
+
+                {/* Items List */}
+                <div className="space-y-4">
+                  <h3 className="text-[11px] font-black text-stone-400 uppercase tracking-widest px-1">Shipment Contents</h3>
+                  {selectedDispatch?.items.map((item) => (
+                    <div key={item.id} className="p-5 border border-stone-100 rounded-2xl bg-white shadow-sm hover:border-stone-200 transition-colors space-y-4">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="font-black text-stone-900">{item.item?.name || item.item_sku}</p>
+                          <p className="text-[10px] text-stone-400 font-bold uppercase tracking-tight">{item.item_sku}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[11px] font-black text-stone-400 uppercase tracking-tight">Expected</p>
+                          <p className="text-lg font-black text-[#007AFF] leading-none">{item.dispatched_quantity}</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-stone-50/50 p-4 rounded-xl border border-stone-100">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-stone-400 uppercase tracking-wider ml-1">Received</label>
+                          <Input
+                            type="number"
+                            className="bg-white border-stone-200 rounded-lg font-bold focus:ring-[#007AFF]"
+                            value={receivedItems[item.id]?.quantity}
+                            onChange={(e) => setReceivedItems({ ...receivedItems, [item.id]: { ...receivedItems[item.id], quantity: parseInt(e.target.value) || 0 } })}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-rose-400 uppercase tracking-wider ml-1">Damaged</label>
+                          <Input
+                            type="number"
+                            className="bg-white border-stone-200 rounded-lg font-bold focus:ring-[#007AFF]"
+                            value={receivedItems[item.id]?.damaged}
+                            onChange={(e) => setReceivedItems({ ...receivedItems, [item.id]: { ...receivedItems[item.id], damaged: parseInt(e.target.value) || 0 } })}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-amber-500 uppercase tracking-wider ml-1">Missing</label>
+                          <Input
+                            type="number"
+                            className="bg-white border-stone-200 rounded-lg font-bold focus:ring-[#007AFF]"
+                            value={receivedItems[item.id]?.missing}
+                            onChange={(e) => setReceivedItems({ ...receivedItems, [item.id]: { ...receivedItems[item.id], missing: parseInt(e.target.value) || 0 } })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Additional Notes */}
+                <div className="pt-2">
+                  <label className="text-[11px] font-black text-stone-400 uppercase tracking-widest px-1 mb-2 block">Discrepancy Notes / Verification Remarks</label>
+                  <textarea
+                    className="w-full bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-[#007AFF]/20 outline-none min-h-[100px] transition-all"
+                    value={deliveryNotes}
+                    onChange={(e) => setDeliveryNotes(e.target.value)}
+                    placeholder="Enter any observations about the condition of the items..."
+                  />
+                </div>
+              </div>
+
+              {/* Sticky Footer */}
+              <div className="p-6 border-t border-stone-100 flex-none bg-white">
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => setIsReceiveModalOpen(false)}
+                    className="flex-1 h-12 rounded-xl border border-stone-200 font-bold text-stone-500 hover:bg-stone-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmDelivery}
+                    className="flex-1 h-12 rounded-xl bg-[#007AFF] text-white font-black hover:bg-blue-600 transition-all shadow-lg shadow-blue-100 active:scale-95"
+                  >
+                    Confirm & Update Stock
+                  </button>
+                </div>
               </div>
             </div>
           </DialogContent>

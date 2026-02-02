@@ -686,7 +686,10 @@ export async function confirmDelivery(
 
   // Update each item and add to branch stock
   for (const receivedItem of receivedItems) {
-    const dispatchItem = dispatch.items.find((i: any) => i.id === receivedItem.id);
+    const itemId = receivedItem.id || (receivedItem as any).item_id;
+    if (!itemId) continue;
+
+    const dispatchItem = dispatch.items.find((i: any) => i.id === itemId);
     if (!dispatchItem) continue;
 
     // Update dispatch item
@@ -699,7 +702,7 @@ export async function confirmDelivery(
         discrepancy_reason: receivedItem.discrepancy_reason,
         status: receivedItem.received_quantity === dispatchItem.dispatched_quantity ? 'RECEIVED' : 'PARTIAL'
       })
-      .eq('id', receivedItem.id);
+      .eq('id', itemId);
 
     // Add to branch stock
     await updateBranchStock(
