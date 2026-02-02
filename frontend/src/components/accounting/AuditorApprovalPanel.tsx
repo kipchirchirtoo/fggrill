@@ -14,19 +14,20 @@ interface RequestItem { id: string; item_name: string; item_sku: string; request
 interface StockRequest {
     id: string;
     request_number: string;
-    from_branch_id: number;
+    requesting_branch_id: number;
     branch_name: string;
     status: string;
+    priority: string;
     created_at: string;
     reason: string;
     items: RequestItem[];
 }
 
 interface PerformanceData {
-    total_sales: number;
-    order_count: number;
-    average_order: number;
-    days_period: number;
+    totalSales: number;
+    orderCount: number;
+    averageOrder: number;
+    startDate: string;
 }
 
 export default function AuditorApprovalPanel() {
@@ -48,15 +49,16 @@ export default function AuditorApprovalPanel() {
                 setRequests(pendingRequests);
 
                 // Fetch performance for unique branches
-                const branchIds = [...new Set(pendingRequests.map((r: any) => r.from_branch_id))];
+                const branchIds = [...new Set(pendingRequests.map((r: any) => r.requesting_branch_id))];
                 for (const bId of branchIds as number[]) {
+                    if (!bId) continue;
                     const perfRes = await storeAPI.getBranchPerformance(bId, 1);
                     if (perfRes.success) {
                         setPerformance(prev => ({ ...prev, [bId]: perfRes.data }));
                     }
                 }
             }
-        } catch (error) { console.error('Error:', error); }
+        } catch (error) { console.error('Error fetching requests:', error); }
         finally { setIsLoading(false); }
     }, []);
 
@@ -66,7 +68,7 @@ export default function AuditorApprovalPanel() {
         setSelectedRequest(request);
         // Initialize approved quantities with requested quantities
         const initialQuantities: Record<string, number> = {};
-        request.items.forEach(item => {
+        request.items?.forEach(item => {
             initialQuantities[item.id] = item.requested_quantity;
         });
         setApprovedQuantities(initialQuantities);
@@ -143,14 +145,15 @@ export default function AuditorApprovalPanel() {
             ) : (
                 <div className="grid grid-cols-1 gap-4">
                     {requests.map((request) => {
-                        const perf = performance[request.from_branch_id];
+                        const perf = performance[request.requesting_branch_id];
                         return (
                             <IOSCard key={request.id} className="p-0 overflow-hidden border-none shadow-sm group">
                                 <div className="flex flex-col md:flex-row">
                                     <div className="p-5 flex-1">
                                         <div className="flex items-center gap-3 mb-3">
                                             <span className="font-bold text-stone-900">{request.request_number}</span>
-                                            <IOSBadge color="warning">PENDING AUDIT</IOSBadge>
+                                            <IOSBadge color={request.priority === 'URGENT' ? 'danger' : 'warning'}>{request.priority || 'NORMAL'}</IOSBadge>
+                                            <IOSBadge color="info">PENDING AUDIT</IOSBadge>
                                             <span className="text-xs text-stone-400 font-medium ml-auto">{new Date(request.created_at).toLocaleDateString()}</span>
                                         </div>
 
@@ -169,7 +172,7 @@ export default function AuditorApprovalPanel() {
                                             {perf && (
                                                 <div className="bg-emerald-50 rounded-ios-lg px-3 py-2 border border-emerald-100">
                                                     <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Yesterday Sales</p>
-                                                    <p className="font-bold text-emerald-700">KES {formatNumber(perf.total_sales)}</p>
+                                                    <p className="font-bold text-emerald-700">KES {formatNumber(perf.totalSales)}</p>
                                                 </div>
                                             )}
                                         </div>
@@ -203,17 +206,17 @@ export default function AuditorApprovalPanel() {
                                 <IOSCard className="p-4 bg-stone-900 border-none">
                                     <TrendingUp className="h-5 w-5 text-emerald-400 mb-2" />
                                     <p className="text-xs font-bold text-stone-400 uppercase tracking-widest">Yesterday Sales</p>
-                                    <p className="text-lg font-bold text-white">KES {formatNumber(performance[selectedRequest.from_branch_id]?.total_sales || 0)}</p>
+                                    <p className="text-lg font-bold text-white">KES {formatNumber(performance[selectedRequest.requesting_branch_id]?.totalSales || 0)}</p>
                                 </IOSCard>
                                 <IOSCard className="p-4 border-none shadow-sm bg-stone-50">
                                     <Package className="h-5 w-5 text-blue-500 mb-2" />
                                     <p className="text-xs font-bold text-stone-400 uppercase tracking-widest">Order Count</p>
-                                    <p className="text-lg font-bold text-stone-800">{performance[selectedRequest.from_branch_id]?.order_count || 0}</p>
+                                    <p className="text-lg font-bold text-stone-800">{performance[selectedRequest.requesting_branch_id]?.orderCount || 0}</p>
                                 </IOSCard>
                                 <IOSCard className="p-4 border-none shadow-sm bg-stone-50">
                                     <TrendingUp className="h-5 w-5 text-stone-400 mb-2" />
                                     <p className="text-xs font-bold text-stone-400 uppercase tracking-widest">Avg Ticket Size</p>
-                                    <p className="text-lg font-bold text-stone-800">KES {formatNumber(performance[selectedRequest.from_branch_id]?.average_order || 0)}</p>
+                                    <p className="text-lg font-bold text-stone-800">KES {formatNumber(performance[selectedRequest.requesting_branch_id]?.averageOrder || 0)}</p>
                                 </IOSCard>
                             </div>
 

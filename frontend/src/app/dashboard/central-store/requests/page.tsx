@@ -321,7 +321,7 @@ export default function CentralRequestsPage() {
                                                             {item.requested_quantity} {item.unit}
                                                         </td>
                                                         <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">
-                                                            {selectedRequest.status === 'PENDING' ? (
+                                                            {selectedRequest.status === 'PENDING' && user?.role !== UserRole.CENTRAL_STOREKEEPER ? (
                                                                 <input
                                                                     type="number"
                                                                     min="0"
@@ -345,7 +345,7 @@ export default function CentralRequestsPage() {
                                     </div>
                                 </div>
 
-                                {selectedRequest.status === 'PENDING' && (
+                                {selectedRequest.status === 'PENDING' && user?.role !== UserRole.CENTRAL_STOREKEEPER && (
                                     <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200">
                                         <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest block mb-2">Review Notes (Optional)</label>
                                         <textarea
@@ -358,25 +358,32 @@ export default function CentralRequestsPage() {
                                 )}
                             </div>
 
-                            <div className="bg-stone-50/80 px-6 py-4 border-t border-stone-100 flex justify-end gap-3">
+                            <div className="bg-stone-50/80 px-6 py-4 border-t border-stone-100 flex justify-end gap-3 font-medium">
                                 {selectedRequest.status === 'PENDING' && (
-                                    <>
-                                        <button
-                                            disabled={isProcessing}
-                                            onClick={() => handleAction('REJECT')}
-                                            className="btn-secondary text-rose-600 hover:bg-rose-50 hover:border-rose-200 px-6"
-                                        >
-                                            Reject
-                                        </button>
-                                        <button
-                                            disabled={isProcessing}
-                                            onClick={() => handleAction('APPROVE')}
-                                            className="btn-primary bg-stone-900 hover:bg-stone-800 px-6 flex items-center gap-2"
-                                        >
-                                            {isProcessing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                                            Approve Request
-                                        </button>
-                                    </>
+                                    user?.role === UserRole.CENTRAL_STOREKEEPER ? (
+                                        <div className="flex items-center gap-2 text-amber-600 text-[13px] bg-amber-50 px-4 py-2 rounded-xl border border-amber-100">
+                                            <Clock className="h-4 w-4" />
+                                            <span>Awaiting Auditor Approval</span>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <button
+                                                disabled={isProcessing}
+                                                onClick={() => handleAction('REJECT')}
+                                                className="btn-secondary text-rose-600 hover:bg-rose-50 hover:border-rose-200 px-6"
+                                            >
+                                                Reject
+                                            </button>
+                                            <button
+                                                disabled={isProcessing}
+                                                onClick={() => handleAction('APPROVE')}
+                                                className="btn-primary bg-stone-900 hover:bg-stone-800 px-6 flex items-center gap-2"
+                                            >
+                                                {isProcessing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                                Approve Request
+                                            </button>
+                                        </>
+                                    )
                                 )}
                                 {['APPROVED', 'PARTIALLY_APPROVED'].includes(selectedRequest.status) && (
                                     <button
