@@ -259,7 +259,7 @@ export default function AuditorDashboard() {
                         <div className="lg:col-span-2">
                             <div className="flex items-center justify-between mb-6">
                                 <h3 className="text-[18px] font-black text-stone-900">Recent Audit Exceptions</h3>
-                                <Link href="/dashboard/auditor/exceptions" className="text-[13px] font-bold text-stone-400 hover:text-stone-800 transition-colors">View All Exceptions</Link>
+                                <Link href="/dashboard/auditor/audit-reports" className="text-[13px] font-bold text-stone-400 hover:text-stone-800 transition-colors">View All Exceptions</Link>
                             </div>
 
                             <div className="bg-white border border-stone-200 rounded-3xl overflow-hidden shadow-sm">

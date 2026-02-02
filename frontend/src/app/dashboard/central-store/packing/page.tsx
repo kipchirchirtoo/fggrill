@@ -54,7 +54,11 @@ export default function PackingPage() {
         setPackedItems(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
-    const allPacked = selectedRequest?.items.every(item => packedItems[item.id]);
+    const allPacked = selectedRequest?.items
+        ? selectedRequest.items
+            .filter(item => item.approved_quantity > 0)
+            .every(item => packedItems[item.id])
+        : false;
 
     const handleConfirmPacked = async () => {
         if (!selectedRequest || !allPacked) return;
@@ -63,10 +67,12 @@ export default function PackingPage() {
             const dispatchData = {
                 request_id: selectedRequest.id,
                 to_branch_id: selectedRequest.to_branch_id,
-                items: selectedRequest.items.map(i => ({
-                    item_sku: i.item_sku,
-                    dispatched_quantity: i.approved_quantity
-                })),
+                items: selectedRequest.items
+                    .filter(i => i.approved_quantity > 0)
+                    .map(i => ({
+                        item_sku: i.item_sku,
+                        dispatched_quantity: i.approved_quantity
+                    })),
                 notes: `Packed from request ${selectedRequest.request_number}`
             };
 
@@ -205,9 +211,11 @@ export default function PackingPage() {
                                 <button
                                     onClick={() => {
                                         const allChecked: Record<string, boolean> = {};
-                                        selectedRequest?.items.forEach(item => {
-                                            allChecked[item.id] = true;
-                                        });
+                                        selectedRequest?.items
+                                            .filter(item => item.approved_quantity > 0)
+                                            .forEach(item => {
+                                                allChecked[item.id] = true;
+                                            });
                                         setPackedItems(allChecked);
                                         toast.success('All items marked as physically packed');
                                     }}
@@ -220,44 +228,46 @@ export default function PackingPage() {
                         </div>
 
                         <div className="p-4 space-y-2 overflow-y-auto min-h-0 flex-1">
-                            {selectedRequest?.items.map((item) => (
-                                <div
-                                    key={item.id}
-                                    onClick={() => togglePacked(item.id)}
-                                    className={`group flex items-center justify-between p-3 border rounded-xl cursor-pointer transition-all duration-300 ${packedItems[item.id]
-                                        ? 'bg-emerald-50 border-emerald-200 shadow-sm'
-                                        : 'bg-white border-stone-100 hover:border-stone-300 hover:shadow-md'
-                                        }`}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300 shrink-0 ${packedItems[item.id]
-                                            ? 'bg-emerald-500 border-emerald-500 scale-110'
-                                            : 'border-stone-200 group-hover:border-stone-900 group-hover:scale-105'
-                                            }`}>
-                                            {packedItems[item.id] && <Check className="h-3.5 w-3.5 text-white stroke-[3px]" />}
+                            {selectedRequest?.items
+                                .filter(item => item.approved_quantity > 0)
+                                .map((item) => (
+                                    <div
+                                        key={item.id}
+                                        onClick={() => togglePacked(item.id)}
+                                        className={`group flex items-center justify-between p-3 border rounded-xl cursor-pointer transition-all duration-300 ${packedItems[item.id]
+                                            ? 'bg-emerald-50 border-emerald-200 shadow-sm'
+                                            : 'bg-white border-stone-100 hover:border-stone-300 hover:shadow-md'
+                                            }`}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300 shrink-0 ${packedItems[item.id]
+                                                ? 'bg-emerald-500 border-emerald-500 scale-110'
+                                                : 'border-stone-200 group-hover:border-stone-900 group-hover:scale-105'
+                                                }`}>
+                                                {packedItems[item.id] && <Check className="h-3.5 w-3.5 text-white stroke-[3px]" />}
+                                            </div>
+                                            <div>
+                                                <p className={`text-sm font-bold ${packedItems[item.id] ? 'text-emerald-900' : 'text-stone-900'}`}>
+                                                    {item.item_name}
+                                                </p>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <p className="text-[10px] text-stone-400 font-mono uppercase tracking-tighter">{item.item_sku}</p>
+                                                    {item.requested_quantity !== item.approved_quantity && (
+                                                        <span className="text-[9px] bg-rose-50 text-rose-600 px-1.5 py-px rounded-full font-bold border border-rose-100 italic">Adjusted</span>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className={`text-sm font-bold ${packedItems[item.id] ? 'text-emerald-900' : 'text-stone-900'}`}>
-                                                {item.item_name}
-                                            </p>
-                                            <div className="flex items-center gap-2 mt-0.5">
-                                                <p className="text-[10px] text-stone-400 font-mono uppercase tracking-tighter">{item.item_sku}</p>
-                                                {item.requested_quantity !== item.approved_quantity && (
-                                                    <span className="text-[9px] bg-rose-50 text-rose-600 px-1.5 py-px rounded-full font-bold border border-rose-100 italic">Adjusted</span>
-                                                )}
+                                        <div className="text-right flex flex-col items-end pl-2">
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-[9px] font-bold text-stone-400 uppercase tracking-widest leading-none mb-0.5">To Pack</span>
+                                                <p className={`text-base font-black ${packedItems[item.id] ? 'text-emerald-600' : 'text-stone-900'}`}>
+                                                    {item.approved_quantity} <span className="text-[9px] font-bold">{item.unit}</span>
+                                                </p>
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="text-right flex flex-col items-end pl-2">
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-[9px] font-bold text-stone-400 uppercase tracking-widest leading-none mb-0.5">To Pack</span>
-                                            <p className={`text-base font-black ${packedItems[item.id] ? 'text-emerald-600' : 'text-stone-900'}`}>
-                                                {item.approved_quantity} <span className="text-[9px] font-bold">{item.unit}</span>
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
+                                ))}
                         </div>
 
                         <div className="p-4 bg-stone-50 border-t border-stone-100 flex justify-end gap-2 shrink-0">
