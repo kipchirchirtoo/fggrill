@@ -139,7 +139,7 @@ export default function SalesAuditPage() {
             const endDate = today.toISOString().split('T')[0];
 
             await auditorReportsAPI.exportBrandedPdf('revenue_reconciliation', {
-                branch_id: activeBranchId || 1,
+                branch_id: activeBranchId === null || activeBranchId === 0 ? 1 : activeBranchId,
                 start_date: startDate,
                 end_date: endDate
             });

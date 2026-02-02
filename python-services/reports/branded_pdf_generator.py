@@ -145,8 +145,8 @@ class BrandedPDFGenerator:
         # Company info
         company_info = [
             Paragraph("<b>FAMOUS GATE HOTEL & LOUNGE</b>", self.styles['Normal']),
-            Paragraph("Main Highway, Near City Center", self.styles['SmallText']),
-            Paragraph("Nairobi, Kenya", self.styles['SmallText']),
+            Paragraph("Kericho-Kisumu Highway", self.styles['SmallText']),
+            Paragraph("Kericho, Kenya", self.styles['SmallText']),
             Paragraph("Tel: +254 700 000 000 | Email: accounts@famousgate.co.ke", self.styles['SmallText']),
         ]
         

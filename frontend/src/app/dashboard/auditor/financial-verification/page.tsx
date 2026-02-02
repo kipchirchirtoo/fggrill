@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     DollarSign, CreditCard, Wallet, AlertCircle,
     RefreshCw, Filter, Download, ArrowUpRight,
-    TrendingUp, ShieldCheck, Search, Info, Smartphone, FileDown
+    TrendingUp, ShieldCheck, Search, Info, Smartphone, FileDown, CheckCircle
 } from 'lucide-react';
 import { auditAPI, auditorReportsAPI } from '@/lib/api';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -24,7 +24,7 @@ export default function FinancialVerification() {
         setIsLoading(true);
         try {
             const res = await auditAPI.verifyFinances({
-                branch_id: activeBranchId === 0 ? undefined : activeBranchId,
+                branch_id: activeBranchId === null || activeBranchId === 0 ? undefined : activeBranchId,
                 date: selectedDate
             });
 
@@ -45,7 +45,7 @@ export default function FinancialVerification() {
         setIsExporting(true);
         try {
             await auditorReportsAPI.exportBrandedPdf('expenditure_audit', {
-                branch_id: activeBranchId || 1,
+                branch_id: activeBranchId === null || activeBranchId === 0 ? 1 : activeBranchId,
                 start_date: selectedDate,
                 end_date: selectedDate
             });

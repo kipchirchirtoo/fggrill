@@ -28,7 +28,7 @@ export default function RevenueOversight() {
         setIsLoading(true);
         try {
             const res = await auditAPI.verifyRevenue({
-                branch_id: activeBranchId === 0 ? undefined : activeBranchId,
+                branch_id: activeBranchId === null || activeBranchId === 0 ? undefined : activeBranchId,
                 start_date: dateRange.startDate,
                 end_date: dateRange.endDate
             });
@@ -50,7 +50,7 @@ export default function RevenueOversight() {
         setIsExporting(true);
         try {
             await auditorReportsAPI.exportBrandedPdf('revenue_reconciliation', {
-                branch_id: activeBranchId || 1,
+                branch_id: activeBranchId === null || activeBranchId === 0 ? 1 : activeBranchId,
                 start_date: dateRange.startDate,
                 end_date: dateRange.endDate
             });

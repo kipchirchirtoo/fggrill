@@ -450,17 +450,25 @@ def export_auditor_report(report_type):
             'branch_name': branch_name
         }
         
-        # Fetch data from database (this would be implemented in database_fetcher)
-        # For now, we'll generate a placeholder report
-        report_data = {
-            'report_type': report_type,
-            'branch_id': branch_id,
-            'branch_name': branch_name,
-            'start_date': start_date,
-            'end_date': end_date,
-            'generated_at': datetime.now().isoformat(),
-            'data': []  # Placeholder - would be populated by database_fetcher
-        }
+        
+        # Fetch real data from database using database_fetcher
+        try:
+            report_data = database_fetcher.fetch_report_data(report_type, filters)
+            logger.info(f"Fetched report data: {len(str(report_data))} bytes")
+        except Exception as fetch_error:
+            logger.warning(f"Error fetching data from database: {str(fetch_error)}, using placeholder")
+            # Fallback to placeholder if database fetch fails
+            report_data = {
+                'report_type': report_type,
+                'branch_id': branch_id,
+                'branch_name': branch_name,
+                'start_date': start_date,
+                'end_date': end_date,
+                'generated_at': datetime.now().isoformat(),
+                'data': [],
+                'error': 'No data available'
+            }
+        
         
         # Generate branded PDF
         pdf_file = branded_pdf_generator.generate_report(report_type, report_data, filters)

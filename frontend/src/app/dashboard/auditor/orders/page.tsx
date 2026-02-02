@@ -43,11 +43,11 @@ export default function OrdersAuditPage() {
             let res;
 
             if (activeTab === 'restaurant') {
-                res = await restaurantAPI.getOrders({ from_date, to_date, branchId: activeBranchId || undefined });
+                res = await restaurantAPI.getOrders({ from_date, to_date, branchId: activeBranchId === null || activeBranchId === 0 ? undefined : activeBranchId });
             } else if (activeTab === 'bar') {
-                res = await barAPI.getOrders({ status: 'paid', from_date, to_date, branchId: activeBranchId || undefined });
+                res = await barAPI.getOrders({ status: 'paid', from_date, to_date, branchId: activeBranchId === null || activeBranchId === 0 ? undefined : activeBranchId });
             } else if (activeTab === 'bookings') {
-                res = await bookingsAPI.getBookings({ checkIn: from_date, checkOut: to_date, limit: 50, branch_id: activeBranchId || undefined });
+                res = await bookingsAPI.getBookings({ checkIn: from_date, checkOut: to_date, limit: 50, branch_id: activeBranchId === null || activeBranchId === 0 ? undefined : activeBranchId });
             }
 
             if (res && res.success) {

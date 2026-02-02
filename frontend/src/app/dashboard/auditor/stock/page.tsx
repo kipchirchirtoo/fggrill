@@ -213,7 +213,7 @@ export default function StockAuditPage() {
             const lastDay = today.toISOString().split('T')[0];
 
             await auditorReportsAPI.exportBrandedPdf('stock_usage', {
-                branch_id: activeBranchId || 1,
+                branch_id: activeBranchId === null || activeBranchId === 0 ? 1 : activeBranchId,
                 start_date: firstDay,
                 end_date: lastDay,
                 branch_name: activeBranchId === 0 ? 'All Branches' : `Branch #${activeBranchId}`
@@ -235,7 +235,7 @@ export default function StockAuditPage() {
             const lastDay = today.toISOString();
 
             // Handle All Branches (0) or specific branch
-            const effectiveBranchId = activeBranchId === 0 ? undefined : activeBranchId;
+            const effectiveBranchId = activeBranchId === null || activeBranchId === 0 ? undefined : activeBranchId;
 
             // 1. Fetch Stock Usage vs Requested
             // Note: Currently the backend might require a branch_id. 
