@@ -23,12 +23,30 @@ export default function BarItemsPage() {
             const response = await storeAPI.getItems();
             if (response.success) {
                 const allItems = response.data || [];
-                const barRelated = allItems.filter((item: Item) =>
-                    item.category?.toLowerCase() === 'beverage' ||
-                    item.category?.toLowerCase() === 'bar' ||
-                    item.item_name?.toLowerCase().includes('bar') ||
-                    item.sku?.toLowerCase().includes('BAR')
-                );
+                const barRelated = allItems.filter((item: Item) => {
+                    const category = item.category?.toLowerCase();
+                    const name = item.item_name?.toLowerCase();
+                    const sku = item.sku?.toUpperCase();
+
+                    // Matches for beverage category or bar-specific SKU
+                    const isBeverage = category === 'beverage' || category === 'bar';
+                    const isBarSKU = sku?.includes('-BAR-') || sku?.startsWith('FGH-BAR-');
+
+                    // Keywords that should definitely be included
+                    const isBarKeyword = name?.includes('wine') || name?.includes('spirit') ||
+                        name?.includes('beer') || name?.includes('whisky') ||
+                        name?.includes('vodka') || name?.includes('soda') ||
+                        name?.includes('liquor');
+
+                    // Strict exclusions for non-bar items that might have 'bar' in name (like Bar Soap)
+                    const isExcluded = category === 'cleaning_supplies' ||
+                        category === 'toiletries' ||
+                        category === 'office_supplies' ||
+                        name?.includes('soap') ||
+                        name?.includes('detergent');
+
+                    return (isBeverage || isBarSKU || isBarKeyword) && !isExcluded;
+                });
                 setItems(barRelated);
             }
         } catch (error) { console.error('Error:', error); }
