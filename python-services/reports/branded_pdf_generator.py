@@ -724,12 +724,12 @@ class BrandedPDFGenerator:
                 status = 'OK'
             
             item_data.append([
-                str(item.get('code') or '')[:10],
-                str(item.get('name') or '')[:25],
-                str(item.get('category') or '')[:15],
+                str(item.get('code') or ''),
+                str(item.get('name') or ''),
+                str(item.get('category') or ''),
                 self._format_number(qty),
                 self._format_number(min_qty),
-                str(item.get('unit') or 'pcs')[:5],
+                str(item.get('unit') or 'pcs'),
                 self._format_currency(item.get('value') or 0),
                 status
             ])
@@ -737,7 +737,7 @@ class BrandedPDFGenerator:
         if len(item_data) == 1:
             item_data.append(['No items', '-', '-', '-', '-', '-', '-', '-'])
         
-        item_table = Table(item_data, colWidths=[0.8*inch, 1.8*inch, 1*inch, 0.6*inch, 0.6*inch, 0.5*inch, 1*inch, 0.9*inch])
+        item_table = Table(item_data, colWidths=[1.2*inch, 1.4*inch, 1*inch, 0.6*inch, 0.6*inch, 0.5*inch, 1*inch, 0.9*inch])
         item_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), HEADER_GREEN),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
