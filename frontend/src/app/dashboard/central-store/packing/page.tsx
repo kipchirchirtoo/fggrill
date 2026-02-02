@@ -33,7 +33,12 @@ export default function PackingPage() {
             if (approvedRes.success) combinedRequests = [...combinedRequests, ...(approvedRes.data || [])];
             if (partialRes.success) combinedRequests = [...combinedRequests, ...(partialRes.data || [])];
 
-            setRequests(combinedRequests);
+            // Filter out requests that are already marked as READY or DISPATCHED
+            const pendingPackingRequests = combinedRequests.filter(
+                req => req.status !== 'READY' && req.status !== 'DISPATCHED'
+            );
+
+            setRequests(pendingPackingRequests);
         } catch (error) { console.error('Error:', error); }
         finally { setIsLoading(false); }
     }, []);
