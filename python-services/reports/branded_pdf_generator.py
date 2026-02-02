@@ -138,8 +138,9 @@ class BrandedPDFGenerator:
         # Company info
         company_info = [
             Paragraph("<b>FAMOUS GATE HOTEL & LOUNGE</b>", self.styles['Normal']),
-            Paragraph("P.O. Box 12345, Nairobi, Kenya", self.styles['SmallText']),
-            Paragraph("Tel: +254 700 123 456 | Email: info@famousgate.co.ke", self.styles['SmallText']),
+            Paragraph("Main Highway, Near City Center", self.styles['SmallText']),
+            Paragraph("Nairobi, Kenya", self.styles['SmallText']),
+            Paragraph("Tel: +254 700 000 000 | Email: accounts@famousgate.co.ke", self.styles['SmallText']),
         ]
         
         # Date info
@@ -288,6 +289,33 @@ class BrandedPDFGenerator:
             'conference_summary': self._generate_conference_summary_report,
             'dispatch_note': self._generate_dispatch_note,
         }
+        
+        # Normalize report type - handle common variations and cases
+        report_type = report_type.lower().strip()
+        
+        # Add aliases for common IDs used in frontend
+        aliases = {
+            'inventory_status_report': 'inventory_status',
+            'stock_movement_report': 'stock_movement',
+            'room_supplies_report': 'room_supplies',
+            'daily_sales_report': 'daily_sales',
+            'financial_summary_report': 'financial_summary',
+            'revenue_analysis_report': 'revenue_analysis',
+            'expense_report': 'expense',
+            'payroll_summary_report': 'payroll_summary',
+            'restaurant_sales_report': 'restaurant_sales',
+            'bar_sales_report': 'bar_sales',
+            'occupancy_report': 'occupancy',
+            'housekeeping_report': 'housekeeping',
+            'maintenance_report': 'maintenance',
+            'mod_report': 'manager_duty',
+            'audit_performance': 'reconciliation_audit',
+            'compliance_report': 'compliance',
+            'attendance_report': 'employee_attendance',
+            'dispatch_note_report': 'dispatch_note'
+        }
+        
+        report_type = aliases.get(report_type, report_type)
         
         generator = generators.get(report_type, self._generate_generic_report)
         return generator(data, filters)
@@ -684,7 +712,7 @@ class BrandedPDFGenerator:
         headers = ['Item Code', 'Item Name', 'Category', 'Qty', 'Min Qty', 'Unit', 'Value', 'Status']
         item_data = [headers]
         
-        for item in data.get('items', [])[:30]:  # Limit to 30 items
+        for item in data.get('items', []):  # Removed limit to allow full inventory
             qty = item.get('quantity') or 0
             min_qty = item.get('min_quantity') or 0
             
@@ -2241,9 +2269,9 @@ class BrandedPDFGenerator:
         # Company info
         company_info = [
             Paragraph("<b>FAMOUS GATE HOTEL & LOUNGE</b>", self.styles['Normal']),
-            Paragraph("P.O. Box 12345, Nairobi, Kenya", self.styles['SmallText']),
-            Paragraph("Tel: +254 700 123 456", self.styles['SmallText']),
-            Paragraph("Email: info@famousgate.co.ke", self.styles['SmallText']),
+            Paragraph("Main Highway, Nairobi, Kenya", self.styles['SmallText']),
+            Paragraph("Tel: +254 700 000 000", self.styles['SmallText']),
+            Paragraph("Email: accounts@famousgate.co.ke", self.styles['SmallText']),
         ]
         
         header_data = []

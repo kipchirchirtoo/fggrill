@@ -205,25 +205,25 @@ def generate_dispatch_note():
 
 @app.route('/api/reports/generate/pdf', methods=['POST'])
 def generate_pdf_report():
-    """Generate PDF report"""
+    """Generate PDF report (aliased to branded for consistency)"""
     try:
         data = request.get_json()
         report_type = data.get('reportType')
         filters = data.get('filters', {})
         
-        logger.info(f"Generating PDF report: {report_type}")
+        logger.info(f"Generating PDF report: {report_type} (using branded engine)")
         
         # Fetch data based on report type
-        report_data = data_fetcher.fetch_report_data(report_type, filters)
+        report_data = database_fetcher.fetch_report_data(report_type, filters)
         
-        # Generate PDF
-        pdf_file = pdf_generator.generate_report(report_type, report_data, filters)
+        # Generate branded PDF
+        pdf_file = branded_pdf_generator.generate_report(report_type, report_data, filters)
         
         return send_file(
             pdf_file,
             mimetype='application/pdf',
             as_attachment=True,
-            download_name=f'{report_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+            download_name=f'FG_{report_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
         )
     except Exception as e:
         logger.error(f"Error generating PDF report: {str(e)}")

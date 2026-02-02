@@ -15,7 +15,9 @@ interface StockRequest { id: string; request_number: string; status: string; bra
 
 export default function PackingPage() {
     const [requests, setRequests] = useState<StockRequest[]>([]);
+    const [historyRequests, setHistoryRequests] = useState<StockRequest[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState<'to-pack' | 'history'>('to-pack');
     const [selectedRequest, setSelectedRequest] = useState<StockRequest | null>(null);
     const [packingModalOpen, setPackingModalOpen] = useState(false);
     const [packedItems, setPackedItems] = useState<Record<string, boolean>>({});
@@ -25,15 +27,17 @@ export default function PackingPage() {
     const fetchApprovedRequests = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [approvedRes, partialRes] = await Promise.all([
+            const [approvedRes, partialRes, dispatchedRes] = await Promise.all([
                 storeAPI.getBranchRequests('APPROVED'),
-                storeAPI.getBranchRequests('PARTIALLY_APPROVED')
+                storeAPI.getBranchRequests('PARTIALLY_APPROVED'),
+                storeAPI.getBranchRequests('DISPATCHED')
             ]);
             let combinedRequests: StockRequest[] = [];
             if (approvedRes.success) combinedRequests = [...combinedRequests, ...(approvedRes.data || [])];
             if (partialRes.success) combinedRequests = [...combinedRequests, ...(partialRes.data || [])];
 
             setRequests(combinedRequests);
+            if (dispatchedRes.success) setHistoryRequests(dispatchedRes.data || []);
         } catch (error) { console.error('Error:', error); }
         finally { setIsLoading(false); }
     }, []);
@@ -96,33 +100,62 @@ export default function PackingPage() {
                             <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Packing Station</h1>
                             <p className="text-stone-500 mt-0.5">Prepare approved branch requisitions for delivery</p>
                         </div>
-                        <button onClick={fetchApprovedRequests} disabled={isLoading} className="btn-secondary h-10 px-3">
-                            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                            <span>Refresh</span>
-                        </button>
+                        <div className="flex items-center gap-3">
+                            <div className="flex p-1 bg-stone-100 rounded-lg">
+                                <button
+                                    onClick={() => setActiveTab('to-pack')}
+                                    className={`px-4 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider transition-all ${activeTab === 'to-pack'
+                                        ? 'bg-white text-stone-900 shadow-sm'
+                                        : 'text-stone-400 hover:text-stone-600'
+                                        }`}
+                                >
+                                    To Pack ({requests.length})
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('history')}
+                                    className={`px-4 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider transition-all ${activeTab === 'history'
+                                        ? 'bg-white text-stone-900 shadow-sm'
+                                        : 'text-stone-400 hover:text-stone-600'
+                                        }`}
+                                >
+                                    History ({historyRequests.length})
+                                </button>
+                            </div>
+                            <button onClick={fetchApprovedRequests} disabled={isLoading} className="btn-secondary h-10 px-3">
+                                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                            </button>
+                        </div>
                     </div>
 
                     {/* Request Grid - Minimal Stone */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {isLoading ? (
-                            <div className="col-span-full py-20 text-center text-stone-300">Loading pending requests...</div>
-                        ) : requests.length === 0 ? (
+                            <div className="col-span-full py-20 text-center text-stone-300">Loading requests...</div>
+                        ) : (activeTab === 'to-pack' ? requests : historyRequests).length === 0 ? (
                             <div className="col-span-full bg-white border border-stone-100 p-20 text-center flex flex-col items-center rounded-lg">
                                 <Box className="h-12 w-12 text-stone-100 mb-4" />
-                                <h3 className="text-lg font-medium text-stone-400">Queue is empty</h3>
-                                <p className="text-stone-300 text-sm">No approved requests waiting to be packed.</p>
+                                <h3 className="text-lg font-medium text-stone-400">
+                                    {activeTab === 'to-pack' ? 'Queue is empty' : 'History is empty'}
+                                </h3>
+                                <p className="text-stone-300 text-sm">
+                                    {activeTab === 'to-pack' ? 'No approved requests waiting.' : 'No items have been packed yet.'}
+                                </p>
                             </div>
                         ) : (
-                            requests.map((req) => (
-                                <div key={req.id} className="bg-white border border-stone-100 p-5 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+                            (activeTab === 'to-pack' ? requests : historyRequests).map((req) => (
+                                <div key={req.id} className="bg-white border border-stone-100 p-5 rounded-lg shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
                                     <div className="flex justify-between items-start mb-4">
                                         <div>
                                             <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">REQ # {req.request_number}</p>
                                             <h3 className="text-lg font-semibold text-stone-900 mt-1 uppercase">{req.branch_name}</h3>
                                         </div>
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${req.status === 'PARTIALLY_APPROVED' ? 'bg-amber-100 text-amber-600' : 'bg-stone-100 text-stone-500'
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${req.status === 'PARTIALLY_APPROVED' ? 'bg-amber-100 text-amber-600' :
+                                            req.status === 'DISPATCHED' ? 'bg-emerald-100 text-emerald-600' :
+                                                'bg-stone-100 text-stone-500'
                                             }`}>
-                                            {req.status === 'PARTIALLY_APPROVED' ? 'Partial' : 'Approved'}
+                                            {req.status === 'PARTIALLY_APPROVED' ? 'Partial' :
+                                                req.status === 'DISPATCHED' ? 'Packed' :
+                                                    'Approved'}
                                         </span>
                                     </div>
                                     <div className="space-y-3 mb-5">
@@ -132,10 +165,18 @@ export default function PackingPage() {
                                         </div>
                                         <p className="text-[11px] text-stone-400">Created: {new Date(req.created_at).toLocaleDateString()}</p>
                                     </div>
-                                    <button onClick={() => handleStartPacking(req)} className="w-full flex items-center justify-center gap-2 py-2.5 bg-stone-900 text-white text-[13px] font-medium rounded-lg hover:bg-stone-800 transition-colors">
-                                        <span>Start Packing</span>
-                                        <ArrowRight className="h-4 w-4" />
-                                    </button>
+
+                                    {activeTab === 'to-pack' ? (
+                                        <button onClick={() => handleStartPacking(req)} className="w-full flex items-center justify-center gap-2 py-2.5 bg-stone-900 text-white text-[13px] font-medium rounded-lg hover:bg-stone-800 transition-colors">
+                                            <span>Start Packing</span>
+                                            <ArrowRight className="h-4 w-4" />
+                                        </button>
+                                    ) : (
+                                        <div className="flex items-center gap-2 text-emerald-600 text-[12px] font-bold bg-emerald-50 p-2 rounded justify-center">
+                                            <CheckCircle2 className="h-4 w-4" />
+                                            <span>Already Packed & Dispatched</span>
+                                        </div>
+                                    )}
                                 </div>
                             ))
                         )}
@@ -156,11 +197,25 @@ export default function PackingPage() {
                         </div>
 
                         <div className="px-4 -mt-4 shrink-0 relative z-10">
-                            <div className="bg-white border border-stone-100 shadow-lg rounded-lg p-3">
-                                <p className="text-[11px] text-stone-600 leading-relaxed">
+                            <div className="bg-white border border-stone-100 shadow-lg rounded-lg p-3 flex justify-between items-center group">
+                                <p className="text-[11px] text-stone-600 leading-relaxed pr-4">
                                     Confirm all quantities physically before proceeding.
                                     Once all items are checked, you can generate the dispatch notice.
                                 </p>
+                                <button
+                                    onClick={() => {
+                                        const allChecked: Record<string, boolean> = {};
+                                        selectedRequest?.items.forEach(item => {
+                                            allChecked[item.id] = true;
+                                        });
+                                        setPackedItems(allChecked);
+                                        toast.success('All items marked as physically packed');
+                                    }}
+                                    className="px-3 py-1.5 bg-emerald-50 text-emerald-600 text-[11px] font-bold rounded-md hover:bg-emerald-100 transition-colors whitespace-nowrap border border-emerald-100 flex items-center gap-1.5"
+                                >
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    <span>Check All</span>
+                                </button>
                             </div>
                         </div>
 

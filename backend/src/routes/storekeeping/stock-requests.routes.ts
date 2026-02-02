@@ -26,11 +26,11 @@ router.get('/branch-performance/:branchId', authorize([UserRole.AUDITOR, UserRol
 router.route('/:id')
     .get(getStockRequest);
 
-router.put('/:id/review', reviewStockRequest);
+router.put('/:id/review', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), reviewStockRequest);
 
 // Strict Auditor Approval Workflow
-router.put('/:id/approve', authorize([UserRole.AUDITOR]), approveStockRequest);
-router.put('/:id/reject', authorize([UserRole.AUDITOR]), rejectStockRequest);
+router.put('/:id/approve', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), approveStockRequest);
+router.put('/:id/reject', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), rejectStockRequest);
 
 router.put('/:id/cancel', cancelStockRequest);
 

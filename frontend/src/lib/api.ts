@@ -301,14 +301,14 @@ export const storeAPI = {
     }),
   getIncomingDispatches: () => fetchAPI<any>('/store/incoming-dispatches'),
   confirmDelivery: (id: string, data: {
-    received_items: Array<{
-      id: string;
+    items_received: Array<{
+      item_id: string;
       received_quantity: number;
       damaged_quantity?: number;
       missing_quantity?: number;
       discrepancy_reason?: string;
     }>;
-    delivery_notes?: string;
+    discrepancy_notes?: string;
   }) =>
     fetchAPI<any>(`/store/dispatch-notes/${id}/confirm`, {
       method: 'PUT',
@@ -2375,10 +2375,10 @@ export const reportsAPI = {
     return { success: true };
   },
   exportPdf: async (reportType: string, filters: Record<string, any> = {}) => {
-    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/generate/pdf`, {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/generate/branded-pdf`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reportType, filters }),
+      body: JSON.stringify({ reportType, filters, useRealData: true }),
     });
 
     if (!response.ok) {
@@ -2392,7 +2392,7 @@ export const reportsAPI = {
     const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/generate/excel`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reportType, filters }),
+      body: JSON.stringify({ reportType, filters, useRealData: true }),
     });
 
     if (!response.ok) {

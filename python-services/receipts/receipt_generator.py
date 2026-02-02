@@ -27,7 +27,7 @@ class ReceiptGenerator:
         self.company_name = "FAMOUS GATE HOTEL"
         self.company_address = "Kericho, Kenya"
         self.company_phone = "+254 700 000 000"
-        self.company_email = "info@famousgate.co.ke"
+        self.company_email = "accounts@famousgate.co.ke"
         
     def generate_receipt(self, receipt_data: Dict[str, Any], vat_inclusive: bool = True) -> bytes:
         """Generate a thermal-style receipt PDF"""
@@ -279,7 +279,7 @@ class InvoiceGenerator:
         self.company_name = "Famous Gate Hotel"
         self.company_address = "Kericho, Kenya"
         self.company_phone = "+254 700 000 000"
-        self.company_email = "info@famousgate.co.ke"
+        self.company_email = "accounts@famousgate.co.ke"
         self.company_website = "www.famousgate.co.ke"
         
     def generate_invoice(self, invoice_data: Dict[str, Any]) -> bytes:
@@ -513,7 +513,7 @@ class InventoryReceiptGenerator:
             'Title',
             parent=styles['Heading1'],
             fontSize=18,
-            textColor=colors.HexColor('#1a365d'),
+            textColor=colors.HexColor('#3C3C43'),
             fontName='Helvetica-Bold',
             spaceAfter=5
         )
@@ -522,15 +522,15 @@ class InventoryReceiptGenerator:
             'Subtitle',
             parent=styles['Normal'],
             fontSize=12,
-            textColor=colors.HexColor('#1a365d'),
+            textColor=colors.HexColor('#3C3C43'),
             fontName='Helvetica'
         )
         
         # === HEADER BAR ===
         header_bar = Table([['', '']], colWidths=[170*mm, 10*mm])
         header_bar.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#1a365d')),
-            ('LINEBELOW', (0, 0), (-1, -1), 3, colors.HexColor('#1a365d')),
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#3C3C43')),
+            ('LINEBELOW', (0, 0), (-1, -1), 3, colors.HexColor('#3C3C43')),
         ]))
         elements.append(header_bar)
         elements.append(Spacer(1, 5*mm))
@@ -599,7 +599,7 @@ class InventoryReceiptGenerator:
         items_table = Table(table_data, colWidths=[20*mm, 90*mm, 35*mm, 35*mm])
         items_table.setStyle(TableStyle([
             # Header
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a365d')),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3C3C43')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 9),
@@ -618,7 +618,7 @@ class InventoryReceiptGenerator:
             ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
             # Grid
             ('GRID', (0, 0), (-1, -2), 0.5, colors.HexColor('#dddddd')),
-            ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#1a365d')),
+            ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#3C3C43')),
         ]))
         elements.append(items_table)
         elements.append(Spacer(1, 10*mm))

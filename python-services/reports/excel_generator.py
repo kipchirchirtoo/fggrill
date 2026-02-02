@@ -7,7 +7,9 @@ import tempfile
 
 class ExcelReportGenerator:
     def __init__(self):
-        self.header_fill = PatternFill(start_color="34495e", end_color="34495e", fill_type="solid")
+        # Branded colors: #3C3C43 (Dark Gray), #34C759 (Green)
+        self.header_fill = PatternFill(start_color="3C3C43", end_color="3C3C43", fill_type="solid")
+        self.green_fill = PatternFill(start_color="34C759", end_color="34C759", fill_type="solid")
         self.header_font = Font(bold=True, color="FFFFFF", size=12)
         self.border = Border(
             left=Side(style='thin'),

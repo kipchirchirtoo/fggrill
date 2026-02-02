@@ -6,7 +6,8 @@ import {
     RefreshCw, BarChart3, ShoppingBag, Package,
     ChevronRight, Calendar as CalendarIcon,
     ShieldCheck, DollarSign, PieChart, TrendingUp,
-    FileCheck, Activity, Search, Filter
+    FileCheck, Activity, Search, Filter,
+    CreditCard, ShoppingCart, FileText, Scale
 } from 'lucide-react';
 import { auditAPI, storeAPI, restaurantAPI } from '@/lib/api';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -24,8 +25,7 @@ export default function AuditorDashboard() {
         pendingReviews: 0,
         complianceScore: 92,
         highRiskFindings: 0,
-        voidedOrders: 0,
-        unverifiedExpenses: 0
+        voidedOrders: 0
     });
 
     const [recentLogs, setRecentLogs] = useState<any[]>([]);
@@ -40,18 +40,16 @@ export default function AuditorDashboard() {
         try {
             const effectiveBranchId = activeBranchId === 0 ? undefined : (activeBranchId || undefined);
 
-            const [logsRes, requestsRes, ordersRes, expensesRes] = await Promise.all([
+            const [logsRes, requestsRes, ordersRes] = await Promise.all([
                 auditAPI.getAuditLogs({ branchId: effectiveBranchId }),
                 storeAPI.getBranchRequests('PENDING', effectiveBranchId),
-                restaurantAPI.getOrders({ status: 'cancelled', branchId: effectiveBranchId }),
-                auditAPI.verifyExpenditure({ branch_id: effectiveBranchId, status: 'pending' })
+                restaurantAPI.getOrders({ status: 'cancelled', branchId: effectiveBranchId })
             ]);
 
             if (logsRes.success) {
                 const logs = logsRes.data || [];
                 const pendingRequests = requestsRes.success ? (requestsRes.data || []).length : 0;
                 const voidedCount = ordersRes.success ? (ordersRes.data || []).length : 0;
-                const unverifiedExp = expensesRes.success ? (expensesRes.data || []).length : 0;
                 const highRisks = logs.filter((l: any) => l.severity === 'high').length;
 
                 const score = logs.length > 0
@@ -63,8 +61,7 @@ export default function AuditorDashboard() {
                     pendingReviews: pendingRequests,
                     complianceScore: Math.round(score),
                     highRiskFindings: highRisks,
-                    voidedOrders: voidedCount,
-                    unverifiedExpenses: unverifiedExp
+                    voidedOrders: voidedCount
                 });
 
                 setRecentLogs(logs.slice(0, 5));
@@ -82,44 +79,52 @@ export default function AuditorDashboard() {
 
     const mvpModules = [
         {
-            title: 'Sales & Stock Verification',
-            desc: 'Reconcile POS records with physical stock movements and branch orders.',
-            icon: Package,
-            href: '/dashboard/auditor/sales-verification',
+            title: 'Approve Stock Requests',
+            desc: 'Review and approve/reject stock replenishment requests from branches.',
+            icon: CheckCircle,
+            href: '/dashboard/auditor/approvals',
+            color: 'bg-stone-900 text-white border-stone-800',
+            stats: `${stats.pendingReviews} pending requests`
+        },
+        {
+            title: 'Confirm Sales',
+            desc: 'Verify daily transactions and reconcile POS records with physical collections.',
+            icon: CreditCard,
+            href: '/dashboard/auditor/sales',
             color: 'bg-blue-50 text-blue-600 border-blue-100',
-            stats: `${stats.voidedOrders} suspicious voids`
+            stats: `${stats.voidedOrders} voided orders`
         },
         {
-            title: 'Financial Control',
-            desc: 'Daily reconciliation of Cash, M-Pesa, and Card payments against verified sales.',
-            icon: DollarSign,
-            href: '/dashboard/auditor/financial-verification',
-            color: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-            stats: 'Daily reconciliation status'
-        },
-        {
-            title: 'Revenue Oversight',
-            desc: 'Monitor multi-department revenue (Restaurant, Bar, Hotel) for leakage detection.',
-            icon: TrendingUp,
-            href: '/dashboard/auditor/revenue-oversight',
+            title: 'Confirm Stock Levels',
+            desc: 'Perform spot checks and verify physical stock movements against theoretical use.',
+            icon: Package,
+            href: '/dashboard/auditor/stock',
             color: 'bg-amber-50 text-amber-600 border-amber-100',
-            stats: 'Yield & sales analysis'
+            stats: 'Inventory variance audit'
         },
         {
-            title: 'Expenditure Verification',
-            desc: 'Audit all payments and expenses to ensure legitimacy and proper sign-offs.',
-            icon: ShieldCheck,
-            href: '/dashboard/auditor/expenditure-verification',
+            title: 'Confirm Branch Orders',
+            desc: 'Match orders from branches against actual sales and consumption data.',
+            icon: ShoppingCart,
+            href: '/dashboard/auditor/orders',
+            color: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+            stats: 'Order reconciliation'
+        },
+        {
+            title: 'View Items Sold',
+            desc: 'Detailed analytics of item performance and sales across all branches.',
+            icon: FileText,
+            href: '/dashboard/auditor/sold-items',
             color: 'bg-purple-50 text-purple-600 border-purple-100',
-            stats: `${stats.unverifiedExpenses} pending review`
+            stats: 'Sales performance view'
         },
         {
-            title: 'Audit Reporting',
-            desc: 'Generate comprehensive performance reports and track auditor accountability.',
-            icon: FileCheck,
+            title: 'Compare items sold against requisitions',
+            desc: 'Compare items sold against requisitions to detect leakage or stock errors.',
+            icon: Scale,
             href: '/dashboard/auditor/audit-reports',
-            color: 'bg-stone-50 text-stone-600 border-stone-100',
-            stats: 'Statement generation'
+            color: 'bg-rose-50 text-rose-600 border-rose-100',
+            stats: 'Reconciliation report'
         }
     ];
 

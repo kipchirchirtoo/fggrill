@@ -279,28 +279,58 @@ export default function AuditorApprovalPanel() {
                                         You can adjust the quantities individual items based on their sales performance.
                                     </p>
                                 </div>
+                                <button
+                                    onClick={() => {
+                                        const fullApprovals: Record<string, number> = {};
+                                        selectedRequest.items.forEach(item => {
+                                            fullApprovals[item.id] = item.requested_quantity;
+                                        });
+                                        setApprovedQuantities(fullApprovals);
+                                        toast.success('Reset to full requested quantities');
+                                    }}
+                                    className="px-4 py-2 bg-white border border-stone-200 text-stone-600 text-xs font-bold rounded-lg hover:bg-stone-50 transition-all flex items-center gap-2"
+                                >
+                                    <RefreshCw className="h-3.5 w-3.5" />
+                                    <span>Reset to Requested Quantities</span>
+                                </button>
                             </div>
                         </div>
                     )}
 
-                    <DialogFooter className="gap-3 pt-6 border-t border-stone-100">
+                    <DialogFooter className="gap-3 pt-6 border-t border-stone-100 flex-col sm:flex-row">
                         <IOSButton
                             variant="secondary"
                             onClick={() => handleDecision('REJECT')}
                             disabled={isActionLoading}
                             leftIcon={<XCircle className="h-4 w-4" />}
-                            className="bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100 font-bold"
+                            className="bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100 font-bold sm:w-auto"
                         >
                             Decline Request
                         </IOSButton>
-                        <IOSButton
-                            onClick={() => handleDecision('APPROVE')}
-                            disabled={isActionLoading}
-                            leftIcon={<CheckCircle className="h-4 w-4" />}
-                            className="bg-stone-900 text-white flex-1 font-bold"
-                        >
-                            {isActionLoading ? 'Processing...' : 'Approve for Packing'}
-                        </IOSButton>
+                        <div className="flex gap-2 flex-1">
+                            <IOSButton
+                                onClick={() => {
+                                    const fullApprovals: Record<string, number> = {};
+                                    selectedRequest?.items.forEach(item => {
+                                        fullApprovals[item.id] = item.requested_quantity;
+                                    });
+                                    setApprovedQuantities(fullApprovals);
+                                    handleDecision('APPROVE');
+                                }}
+                                disabled={isActionLoading}
+                                className="bg-white border-2 border-stone-800 text-stone-900 flex-1 font-bold hover:bg-stone-50"
+                            >
+                                Approve Fully
+                            </IOSButton>
+                            <IOSButton
+                                onClick={() => handleDecision('APPROVE')}
+                                disabled={isActionLoading}
+                                leftIcon={<CheckCircle className="h-4 w-4" />}
+                                className="bg-stone-900 text-white flex-1 font-bold"
+                            >
+                                {isActionLoading ? 'Processing...' : 'Confirm Adjustments'}
+                            </IOSButton>
+                        </div>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

@@ -72,17 +72,17 @@ export default function BranchReceivePage() {
 
     try {
       const payload = {
-        received_items: selectedDispatch.items.map(item => {
+        items_received: selectedDispatch.items.map(item => {
           const verification = receivedItems[item.id] || { quantity: item.dispatched_quantity, damaged: 0, missing: 0, note: '' };
           return {
-            id: item.id,
+            item_id: item.id,
             received_quantity: verification.quantity,
             damaged_quantity: verification.damaged,
             missing_quantity: verification.missing,
             discrepancy_reason: verification.note
           };
         }),
-        delivery_notes: deliveryNotes
+        discrepancy_notes: deliveryNotes
       };
 
       await storeAPI.confirmDelivery(selectedDispatch.id, payload);
@@ -137,18 +137,39 @@ export default function BranchReceivePage() {
             <DialogHeader><DialogTitle>Receive Delivery: {selectedDispatch?.dispatch_number}</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-4">
               {/* Logistics Info Section */}
-              <div className="bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2">
-                <h3 className="text-sm font-bold text-stone-700 uppercase tracking-wider">Logistics Information</h3>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-[10px] text-stone-400 uppercase font-bold">Vehicle</p>
-                    <p className="font-medium text-stone-900">{selectedDispatch?.vehicle_registration || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-stone-400 uppercase font-bold">Driver</p>
-                    <p className="font-medium text-stone-900">{selectedDispatch?.driver_name || 'N/A'}</p>
+              <div className="bg-stone-50 border border-stone-200 rounded-lg p-4 flex justify-between items-center group">
+                <div className="space-y-2">
+                  <h3 className="text-sm font-bold text-stone-700 uppercase tracking-wider">Logistics Information</h3>
+                  <div className="flex gap-6 text-sm">
+                    <div>
+                      <p className="text-[10px] text-stone-400 uppercase font-bold">Vehicle</p>
+                      <p className="font-medium text-stone-900">{selectedDispatch?.vehicle_registration || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-stone-400 uppercase font-bold">Driver</p>
+                      <p className="font-medium text-stone-900">{selectedDispatch?.driver_name || 'N/A'}</p>
+                    </div>
                   </div>
                 </div>
+                <button
+                  onClick={() => {
+                    const allGood: Record<string, any> = {};
+                    selectedDispatch?.items.forEach(item => {
+                      allGood[item.id] = {
+                        quantity: item.dispatched_quantity,
+                        damaged: 0,
+                        missing: 0,
+                        note: 'Received as dispatched'
+                      };
+                    });
+                    setReceivedItems(allGood);
+                    toast.success('All quantities set to expected amounts');
+                  }}
+                  className="px-4 py-2 bg-white border border-[#007AFF]/20 text-[#007AFF] text-xs font-bold rounded-lg shadow-sm hover:bg-[#007AFF]/5 transition-all flex items-center gap-2"
+                >
+                  <Check className="h-4 w-4" />
+                  <span>Receive All Correct</span>
+                </button>
               </div>
 
               {/* Items Section */}

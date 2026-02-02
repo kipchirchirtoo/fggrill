@@ -82,8 +82,8 @@ class DatabaseFetcher:
         """Parse date filters"""
         # Default to today if no dates provided
         today = datetime.now().strftime('%Y-%m-%d')
-        start_date = filters.get('start_date', today)
-        end_date = filters.get('end_date', today)
+        start_date = filters.get('start_date', filters.get('startDate', today))
+        end_date = filters.get('end_date', filters.get('endDate', today))
         
         # Log the dates being used for debugging
         logger.info(f"Parsing dates - start: {start_date}, end: {end_date}, branch_id: {filters.get('branch_id')}")
@@ -404,37 +404,77 @@ class DatabaseFetcher:
         
         if not self.client:
             return data
-        
+            
         try:
-            query = self.client.table('inventory_items').select('*')
-            items = query.execute()
-            
-            for item in (items.data or []):
-                qty = item.get('quantity', 0) or item.get('current_stock', 0) or 0
-                min_qty = item.get('min_quantity', 0) or item.get('reorder_level', 0) or 0
-                unit_cost = item.get('unit_cost', 0) or item.get('cost', 0) or 0
+            # If Branch 1 (Central) or no branch specified, use simple_items
+            if not branch_id or str(branch_id) == '1':
+                query = self.client.table('simple_items').select('*').eq('is_active', True)
+                items = query.execute()
                 
-                data['total_items'] += 1
-                data['total_value'] += qty * unit_cost
+                for item in (items.data or []):
+                    qty = item.get('quantity', 0) or 0
+                    min_qty = item.get('reorder_level', 0) or 0
+                    unit_cost = item.get('cost_price', 0) or 0
+                    
+                    data['total_items'] += 1
+                    data['total_value'] += qty * unit_cost
+                    
+                    if qty <= 0:
+                        data['out_of_stock'] += 1
+                    elif qty < min_qty:
+                        data['low_stock_count'] += 1
+                    
+                    data['items'].append({
+                        'code': item.get('sku', ''),
+                        'name': item.get('item_name', item.get('description', '')),
+                        'category': item.get('category', ''),
+                        'quantity': qty,
+                        'min_quantity': min_qty,
+                        'unit': item.get('unit_of_measure', 'pcs'),
+                        'value': qty * unit_cost,
+                        # Excel compatibility
+                        'itemCode': item.get('sku', ''),
+                        'itemName': item.get('item_name', item.get('description', '')),
+                        'currentStock': qty,
+                        'minStock': min_qty
+                    })
+            else:
+                # Use branch_stock table which joins with simple_items
+                query = self.client.table('branch_stock').select('*, item:simple_items(*)').eq('branch_id', branch_id)
+                items = query.execute()
                 
-                if qty == 0:
-                    data['out_of_stock'] += 1
-                elif qty < min_qty:
-                    data['low_stock_count'] += 1
-                
-                data['items'].append({
-                    'code': item.get('item_code', item.get('sku', '')),
-                    'name': item.get('name', ''),
-                    'category': item.get('category', ''),
-                    'quantity': qty,
-                    'min_quantity': min_qty,
-                    'unit': item.get('unit', 'pcs'),
-                    'value': qty * unit_cost
-                })
-            
+                for entry in (items.data or []):
+                    item = entry.get('item', {}) or {}
+                    qty = entry.get('quantity', 0) or 0
+                    # For branches, we might not have a specific min_qty, use global or default
+                    min_qty = entry.get('reorder_level') or item.get('reorder_level', 0) or 0
+                    unit_cost = item.get('cost_price', 0) or 0
+                    
+                    data['total_items'] += 1
+                    data['total_value'] += qty * unit_cost
+                    
+                    if qty <= 0:
+                        data['out_of_stock'] += 1
+                    elif qty < min_qty:
+                        data['low_stock_count'] += 1
+                    
+                    data['items'].append({
+                        'code': item.get('sku', ''),
+                        'name': item.get('item_name', item.get('description', '')),
+                        'category': item.get('category', ''),
+                        'quantity': qty,
+                        'min_quantity': min_qty,
+                        'unit': item.get('unit_of_measure', 'pcs'),
+                        'value': qty * unit_cost,
+                        # Excel compatibility
+                        'itemCode': item.get('sku', ''),
+                        'itemName': item.get('item_name', item.get('description', '')),
+                        'currentStock': qty,
+                        'minStock': min_qty
+                    })
         except Exception as e:
             logger.error(f"Error fetching inventory: {e}")
-        
+            
         return data
 
     def _fetch_housekeeping(self, filters: Dict) -> Dict[str, Any]:
@@ -758,17 +798,18 @@ class DatabaseFetcher:
             return data
         
         try:
-            items = self.client.table('inventory_items').select('*')\
-                .or_('category.ilike.%room%,category.ilike.%amenity%,category.ilike.%linen%,category.ilike.%toiletry%')\
+            # Search in simple_items for room-related categories
+            items = self.client.table('simple_items').select('*')\
+                .or_('category.ilike.%room%,category.ilike.%amenity%,category.ilike.%linen%,category.ilike.%toiletry%,category.ilike.%housekeeping%')\
                 .execute()
             
             for item in (items.data or []):
                 data['supplies'].append({
-                    'name': item.get('name', ''),
+                    'name': item.get('item_name', item.get('description', '')),
                     'category': item.get('category', ''),
-                    'quantity': item.get('quantity', 0) or item.get('current_stock', 0) or 0,
-                    'unit': item.get('unit', 'pcs'),
-                    'reorder_level': item.get('min_quantity', 0) or item.get('reorder_level', 0) or 0
+                    'quantity': item.get('quantity', 0) or 0,
+                    'unit': item.get('unit_of_measure', 'pcs'),
+                    'reorder_level': item.get('reorder_level', 0) or 0
                 })
             
         except Exception as e:
@@ -1007,33 +1048,62 @@ class DatabaseFetcher:
     def _fetch_stock_movement(self, filters: Dict) -> Dict[str, Any]:
         """Fetch stock movement data"""
         start_date, end_date = self._parse_dates(filters)
+        branch_id = filters.get('branch_id')
         
         data = {'movements': []}
         
         if not self.client:
             return data
-        
+            
         try:
-            movements = self.client.table('stock_movements').select('*')\
-                .gte('created_at', f'{start_date}T00:00:00')\
-                .lte('created_at', f'{end_date}T23:59:59')\
-                .order('created_at', desc=True).execute()
-            
-            for m in (movements.data or []):
-                data['movements'].append({
-                    'date': m.get('created_at', '')[:10],
-                    'item_code': m.get('item_code', ''),
-                    'item_name': m.get('item_name', ''),
-                    'type': m.get('movement_type', ''),
-                    'quantity': m.get('quantity', 0),
-                    'from': m.get('from_location', ''),
-                    'to': m.get('to_location', ''),
-                    'reference': m.get('reference', '')
-                })
-            
+            if not branch_id or str(branch_id) == '1':
+                # Central Store movements from stock_history
+                movements = self.client.table('stock_history').select('*, item:simple_items(item_name)')\
+                    .gte('created_at', f'{start_date}T00:00:00')\
+                    .lte('created_at', f'{end_date}T23:59:59')\
+                    .order('created_at', desc=True).execute()
+                
+                for m in (movements.data or []):
+                    item = m.get('item', {}) or {}
+                    data['movements'].append({
+                        'date': m.get('created_at', '')[:10],
+                        'item_code': m.get('item_sku', ''),
+                        'item_name': item.get('item_name', m.get('item_sku', '')),
+                        'type': m.get('change_type', ''),
+                        'quantity': m.get('quantity_change', 0),
+                        'from': 'Central Store' if m.get('change_type') == 'OUT' else 'Supplier/Adj',
+                        'to': 'Branch/Adj' if m.get('change_type') == 'OUT' else 'Central Store',
+                        'reference': m.get('reference', m.get('reason', '')),
+                        # Excel compatibility
+                        'itemCode': m.get('item_sku', ''),
+                        'itemName': item.get('item_name', m.get('item_sku', ''))
+                    })
+            else:
+                # Branch movements from branch_stock_movements
+                movements = self.client.table('branch_stock_movements').select('*, item:simple_items(item_name)')\
+                    .eq('branch_id', branch_id)\
+                    .gte('created_at', f'{start_date}T00:00:00')\
+                    .lte('created_at', f'{end_date}T23:59:59')\
+                    .order('created_at', desc=True).execute()
+                
+                for m in (movements.data or []):
+                    item = m.get('item', {}) or {}
+                    data['movements'].append({
+                        'date': m.get('created_at', '')[:10],
+                        'item_code': m.get('item_sku', ''),
+                        'item_name': item.get('item_name', m.get('item_sku', '')),
+                        'type': m.get('movement_type', ''),
+                        'quantity': m.get('quantity', 0),
+                        'from': 'Global' if m.get('movement_type') == 'DISPATCH_RECEIVE' else 'Branch',
+                        'to': 'Branch',
+                        'reference': m.get('reference_number', m.get('reference_type', '')),
+                        # Excel compatibility
+                        'itemCode': m.get('item_sku', ''),
+                        'itemName': item.get('item_name', m.get('item_sku', ''))
+                    })
         except Exception as e:
             logger.error(f"Error fetching stock movements: {e}")
-        
+            
         return data
 
     def _fetch_arrivals_departures(self, filters: Dict) -> Dict[str, Any]:
@@ -1758,5 +1828,55 @@ class DatabaseFetcher:
             
         except Exception as e:
             logger.error(f"Error fetching conference reports: {e}")
+            
+        return data
+    def _fetch_bar_sales(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch bar sales and inventory"""
+        start_date, end_date = self._parse_dates(filters)
+        branch_id = filters.get('branch_id')
+        
+        data = {
+            'total_revenue': 0,
+            'total_orders': 0,
+            'avg_order': 0,
+            'top_items': [],
+            'inventory': []
+        }
+        
+        if not self.client: return data
+        
+        try:
+            # Basic revenue from bar_orders
+            query = self.client.table('bar_orders').select('*')\
+                .gte('created_at', f'{start_date}T00:00:00')\
+                .lte('created_at', f'{end_date}T23:59:59')\
+                .eq('status', 'paid')
+            
+            if branch_id:
+                query = query.eq('branch_id', branch_id)
+                
+            orders = query.execute()
+            
+            for o in (orders.data or []):
+                data['total_revenue'] += o.get('total_amount', 0) or 0
+                data['total_orders'] += 1
+            
+            if data['total_orders'] > 0:
+                data['avg_order'] = data['total_revenue'] / data['total_orders']
+            
+            # Fetch inventory from simple_items (category 'bar')
+            inv_query = self.client.table('simple_items').select('*')\
+                .ilike('category', '%bar%')
+            inv_items = inv_query.execute()
+            
+            for i in (inv_items.data or []):
+                data['inventory'].append({
+                    'name': i.get('item_name', i.get('description', '')),
+                    'quantity': i.get('quantity', 0),
+                    'unit': i.get('unit_of_measure', 'pcs')
+                })
+                
+        except Exception as e:
+            logger.error(f"Error fetching bar sales: {e}")
             
         return data

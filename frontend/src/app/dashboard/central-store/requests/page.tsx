@@ -45,8 +45,35 @@ export default function CentralRequestsPage() {
     const fetchRequests = useCallback(async () => {
         setIsLoading(true);
         try {
-            const response = await storeAPI.getBranchRequests(statusFilter === 'all' ? undefined : statusFilter);
-            if (response.success) setRequests(response.data || []);
+            // If status is 'all', we want active/unfulfilled requests
+            const activeStatuses = ['PENDING', 'UNDER_REVIEW', 'APPROVED', 'PARTIALLY_APPROVED', 'DISPATCHED'];
+            const historyStatuses = ['DELIVERED', 'REJECTED', 'CANCELLED'];
+
+            const isHistory = statusFilter === 'HISTORY';
+            const filterToUse = (statusFilter === 'all' || isHistory) ? undefined : statusFilter;
+
+            const response = await storeAPI.getBranchRequests(filterToUse);
+
+            if (response.success) {
+                let data = response.data || [];
+
+                // If 'all' is selected, filter out fulfilled/past stuff
+                if (statusFilter === 'all') {
+                    data = data.filter((r: any) => activeStatuses.includes(r.status));
+                }
+
+                // If 'HISTORY' is selected, show only completed stuff
+                if (isHistory) {
+                    data = data.filter((r: any) => historyStatuses.includes(r.status));
+                }
+
+                // Ensure sorting is newest first
+                data.sort((a: any, b: any) =>
+                    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                );
+
+                setRequests(data);
+            }
         } catch (error) {
             console.error('Error:', error);
             toast.error('Failed to fetch requests');
@@ -134,12 +161,12 @@ export default function CentralRequestsPage() {
                             <p className="text-stone-500 mt-0.5">Monitor and track stock requests from all branches</p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <div className="flex p-1 bg-stone-100 rounded-lg">
-                                {['all', 'PENDING', 'APPROVED', 'DISPATCHED'].map((filter) => (
+                            <div className="flex p-1 bg-stone-100 rounded-lg overflow-x-auto max-w-[calc(100vw-40px)] no-scrollbar">
+                                {['all', 'PENDING', 'APPROVED', 'DISPATCHED', 'HISTORY'].map((filter) => (
                                     <button
                                         key={filter}
                                         onClick={() => setStatusFilter(filter)}
-                                        className={`px-3 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider transition-all ${statusFilter === filter
+                                        className={`px-3 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider transition-all whitespace-nowrap ${statusFilter === filter
                                             ? 'bg-white text-stone-900 shadow-sm'
                                             : 'text-stone-400 hover:text-stone-600'
                                             }`}
