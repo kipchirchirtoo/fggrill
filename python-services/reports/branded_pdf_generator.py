@@ -103,6 +103,13 @@ class BrandedPDFGenerator:
             fontName='Helvetica'
         ))
         self.styles.add(ParagraphStyle(
+            name='TableText',
+            parent=self.styles['Normal'],
+            fontSize=8,
+            textColor=FG_BLACK,
+            fontName='Helvetica'
+        ))
+        self.styles.add(ParagraphStyle(
             name='SmallText',
             parent=self.styles['Normal'],
             fontSize=8,
@@ -724,9 +731,9 @@ class BrandedPDFGenerator:
                 status = 'OK'
             
             item_data.append([
-                str(item.get('code') or ''),
-                str(item.get('name') or ''),
-                str(item.get('category') or ''),
+                Paragraph(str(item.get('code') or ''), self.styles['TableText']),
+                Paragraph(str(item.get('name') or ''), self.styles['TableText']),
+                Paragraph(str(item.get('category') or ''), self.styles['TableText']),
                 self._format_number(qty),
                 self._format_number(min_qty),
                 str(item.get('unit') or 'pcs'),

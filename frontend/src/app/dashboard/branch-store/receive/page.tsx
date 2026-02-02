@@ -133,8 +133,8 @@ export default function BranchReceivePage() {
         </div>
 
         <Dialog open={isReceiveModalOpen} onOpenChange={setIsReceiveModalOpen}>
-          <DialogContent className="max-w-2xl h-[90vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
-            <div className="flex flex-col h-full bg-white">
+          <DialogContent className="w-[95vw] sm:w-full max-w-xl max-h-[80vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
+            <div className="flex flex-col flex-1 min-h-0 bg-white">
               {/* Sticky Header */}
               <div className="p-6 border-b border-stone-100 flex-none bg-white">
                 <DialogHeader>

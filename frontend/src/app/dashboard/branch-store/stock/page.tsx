@@ -27,14 +27,26 @@ export default function BranchStockPage() {
     setIsLoading(true);
     try {
       const response = await storeAPI.getBranchStock();
-      if (response.success) setItems(response.data || []);
+      if (response.success && response.data) {
+        // Map backend data to StockItem interface
+        const mappedItems: StockItem[] = response.data.map((record: any) => ({
+          id: record.id,
+          sku: record.item_sku,
+          name: record.item?.item_name || 'Unknown Item',
+          category: record.item?.category || 'Uncategorized',
+          quantity: record.quantity || 0,
+          min_quantity: record.reorder_level || 10,
+          unit: record.item?.unit_of_measure || 'units'
+        }));
+        setItems(mappedItems);
+      }
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
   }, []);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
-  const filteredItems = items.filter((i) => i.name?.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredItems = items.filter((i) => (i.name || '').toLowerCase().includes(searchQuery.toLowerCase()));
   const lowStockItems = items.filter(i => i.quantity <= i.min_quantity);
 
   const handleRequestStock = async (item: StockItem) => {

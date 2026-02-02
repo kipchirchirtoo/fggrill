@@ -78,12 +78,6 @@ export function ConsolidatedNav() {
   const { user } = useAuth();
   const { activeBranchId } = useBranch();
   const pathname = usePathname();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  // Close mobile menu when route changes
-  React.useEffect(() => {
-    setIsMobileMenuOpen(false);
-  }, [pathname]);
 
   if (!user) return null;
 
@@ -1399,39 +1393,8 @@ export function ConsolidatedNav() {
   };
 
   return (
-    <>
-      {/* Mobile Menu Button - Only visible on small screens */}
-      <button
-        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-lg shadow-lg border border-stone-200 hover:bg-stone-50 transition-colors"
-        aria-label="Toggle menu"
-      >
-        {isMobileMenuOpen ? (
-          <X className="h-5 w-5 text-stone-700" />
-        ) : (
-          <Menu className="h-5 w-5 text-stone-700" />
-        )}
-      </button>
-
-      {/* Mobile Overlay */}
-      {isMobileMenuOpen && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
-      )}
-
-      {/* Navigation Drawer */}
-      <div
-        className={cn(
-          "fixed lg:relative inset-y-0 left-0 z-40 w-64 bg-white border-r border-stone-200 transform transition-transform duration-300 ease-in-out overflow-y-auto",
-          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        )}
-      >
-        <div className="p-4 space-y-1">
-          {renderNavigation()}
-        </div>
-      </div>
-    </>
+    <div className="space-y-1">
+      {renderNavigation()}
+    </div>
   );
 }
