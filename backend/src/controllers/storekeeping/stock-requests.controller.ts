@@ -149,7 +149,7 @@ export const createStockRequest = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const {
+        let {
             requesting_branch_id,
             request_type,
             priority,
@@ -159,6 +159,11 @@ export const createStockRequest = async (
         } = req.body;
 
         const userId = req.user?.id;
+
+        // Fallback to user's branch if not provided
+        if (!requesting_branch_id && req.user?.branch_id) {
+            requesting_branch_id = req.user.branch_id;
+        }
 
         if (!requesting_branch_id || !items || items.length === 0) {
             throw new AppError('Branch ID and items are required', 400);

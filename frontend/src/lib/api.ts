@@ -249,6 +249,7 @@ export const storeAPI = {
 
   // Stock Requests
   createStockRequest: (data: {
+    requesting_branch_id?: number;
     items: Array<{
       item_sku: string;
       quantity?: number;

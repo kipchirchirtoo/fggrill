@@ -52,6 +52,7 @@ export default function BranchStockPage() {
   const handleRequestStock = async (item: StockItem) => {
     try {
       await storeAPI.createStockRequest({
+        requesting_branch_id: user?.branch_id || undefined,
         items: [{ item_sku: item.sku, requested_quantity: item.min_quantity * 2, current_branch_stock: item.quantity }],
         priority: item.quantity === 0 ? 'urgent' : 'normal',
         reason: 'Stock replenishment',
