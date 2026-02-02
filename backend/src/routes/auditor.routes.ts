@@ -13,7 +13,10 @@ import {
   getSalesVerification,
   getFinancialReconciliation,
   getRevenueOversight,
-  getExpenditureVerification
+  getExpenditureVerification,
+  getStockLevelsVerification,
+  getBranchOrdersVerification,
+  getSoldItemsAnalysis
 } from '../controllers/auditor.controller';
 import {
   getConsumptionConfigs,
@@ -127,5 +130,8 @@ router.get('/verify/sales', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]),
 router.get('/verify/finances', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getFinancialReconciliation);
 router.get('/verify/revenue', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getRevenueOversight);
 router.get('/verify/expenditure', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getExpenditureVerification);
+router.get('/verify/stock-levels', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getStockLevelsVerification);
+router.get('/verify/branch-orders', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getBranchOrdersVerification);
+router.get('/verify/sold-items', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getSoldItemsAnalysis);
 
 export default router;

@@ -143,52 +143,6 @@ export default function AuditReporting() {
                             </div>
                         ))}
                     </div>
-
-                    {/* Accountability Footer */}
-                    <div className="mt-20 card-elevated p-10 bg-stone-900 text-white rounded-[40px] relative overflow-hidden">
-                        <div className="absolute right-0 top-0 w-1/3 h-full bg-gradient-to-l from-white/5 to-transparent"></div>
-                        <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-10">
-                            <div className="max-w-md">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <UserCheck className="h-5 w-5 text-amber-400" />
-                                    <span className="text-[11px] font-black uppercase tracking-widest text-amber-400">Auditor Status</span>
-                                </div>
-                                <h3 className="text-[28px] font-black tracking-tight leading-none mb-4">Your Professional Accountability Score</h3>
-                                <p className="text-stone-400 text-sm font-medium">Monitoring your verification speed, report accuracy, and findings closure rate.</p>
-                            </div>
-
-                            <div className="flex items-center gap-12">
-                                <div className="text-center">
-                                    <p className="text-[36px] font-black leading-none mb-2">9.8</p>
-                                    <div className="flex items-center gap-0.5 justify-center mb-1 text-amber-400">
-                                        <Star className="h-3 w-3 fill-current" />
-                                        <Star className="h-3 w-3 fill-current" />
-                                        <Star className="h-3 w-3 fill-current" />
-                                        <Star className="h-3 w-3 fill-current" />
-                                        <Star className="h-3 w-3 fill-current" />
-                                    </div>
-                                    <p className="text-[10px] font-black uppercase text-stone-500 tracking-widest">Efficiency</p>
-                                </div>
-                                <div className="w-px h-16 bg-stone-800 hidden sm:block"></div>
-                                <div className="text-center">
-                                    <p className="text-[36px] font-black leading-none mb-2">12</p>
-                                    <p className="text-emerald-400 text-[11px] font-black mb-1">+2 vs avg</p>
-                                    <p className="text-[10px] font-black uppercase text-stone-500 tracking-widest">Audits / Mo</p>
-                                </div>
-                                <div className="w-px h-16 bg-stone-800 hidden sm:block"></div>
-                                <div className="text-center">
-                                    <p className="text-[36px] font-black leading-none mb-2">0</p>
-                                    <p className="text-stone-500 text-[11px] font-black mb-1">Errors</p>
-                                    <p className="text-[10px] font-black uppercase text-stone-500 tracking-widest">Integrity</p>
-                                </div>
-                            </div>
-
-                            <button className="h-[56px] px-8 bg-white text-stone-900 rounded-2xl font-black text-sm transition-transform active:scale-95 flex items-center gap-2 group whitespace-nowrap">
-                                View Full Profile
-                                <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                            </button>
-                        </div>
-                    </div>
                 </div>
             </DashboardLayout>
         </ProtectedRoute>
