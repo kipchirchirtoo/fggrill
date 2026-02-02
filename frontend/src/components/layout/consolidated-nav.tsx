@@ -574,95 +574,51 @@ export function ConsolidatedNav() {
         active={pathname === '/dashboard/auditor'}
       />
 
-      <NavGroup label="Procurement Verification" icon={ShieldCheck} defaultOpen>
+      <NavGroup label="Stock Management" icon={Package} defaultOpen>
         <NavItem
-          href="/dashboard/auditor/procurement/grn"
+          href="/dashboard/auditor/approvals"
           icon={CheckCircle}
-          label="GRN Approvals"
-          active={pathname.includes('/dashboard/auditor/procurement/grn')}
-        />
-        <NavItem
-          href="/dashboard/auditor/procurement/invoices"
-          icon={FileText}
-          label="Invoice Verification"
-          active={pathname.includes('/dashboard/auditor/procurement/invoices')}
-        />
-        <NavItem
-          href="/dashboard/auditor/procurement/payments"
-          icon={CreditCard}
-          label="Payment Approvals"
-          active={pathname.includes('/dashboard/auditor/procurement/payments')}
-        />
-        <NavItem
-          href="/dashboard/auditor/procurement/purchase-orders"
-          icon={ShoppingCart}
-          label="Purchase Orders"
-          active={pathname.includes('/dashboard/auditor/procurement/purchase-orders')}
+          label="Stock Request Approvals"
+          active={pathname === '/dashboard/auditor/approvals'}
         />
       </NavGroup>
 
-      <NavGroup label="Statutory Reports" icon={Scale} defaultOpen>
+      <NavGroup label="Financial Verification" icon={DollarSign}>
         <NavItem
-          href="/dashboard/auditor/reports/vat"
-          icon={FileSpreadsheet}
-          label="Input VAT Report"
-          active={pathname.includes('/dashboard/auditor/reports/vat')}
+          href="/dashboard/auditor/financial-verification"
+          icon={ShieldCheck}
+          label="Financial Control"
+          active={pathname === '/dashboard/auditor/financial-verification'}
         />
         <NavItem
-          href="/dashboard/auditor/reports/aging"
+          href="/dashboard/auditor/expenditure-verification"
+          icon={Receipt}
+          label="Expenditure Verification"
+          active={pathname === '/dashboard/auditor/expenditure-verification'}
+        />
+      </NavGroup>
+
+      <NavGroup label="Revenue & Sales" icon={TrendingUp}>
+        <NavItem
+          href="/dashboard/auditor/revenue-oversight"
           icon={BarChart3}
-          label="AP Aging Analysis"
-          active={pathname.includes('/dashboard/auditor/reports/aging')}
+          label="Revenue Oversight"
+          active={pathname === '/dashboard/auditor/revenue-oversight'}
         />
         <NavItem
-          href="/dashboard/auditor/reports/grni"
-          icon={PieChart}
-          label="GRNI Report"
-          active={pathname.includes('/dashboard/auditor/reports/grni')}
-        />
-        <NavItem
-          href="/dashboard/auditor/reports/audit-trail"
-          icon={Shield}
-          label="Procurement Audit Log"
-          active={pathname.includes('/dashboard/auditor/reports/audit-trail')}
+          href="/dashboard/auditor/sales-verification"
+          icon={ShoppingBag}
+          label="Sales Verification"
+          active={pathname === '/dashboard/auditor/sales-verification'}
         />
       </NavGroup>
 
-      <NavGroup label="Operational Audit" icon={ClipboardList}>
-        <NavItem
-          href="/dashboard/auditor/orders"
-          icon={CheckCircle}
-          label="Daily Sales Audit"
-          active={pathname === '/dashboard/auditor/orders'}
-        />
-        <NavItem
-          href="/dashboard/auditor/stock"
-          icon={Package}
-          label="Spot Checks"
-          active={pathname === '/dashboard/auditor/stock'}
-        />
-      </NavGroup>
-
-      <NavGroup label="Master Data Management" icon={Database} defaultOpen>
-        <NavItem
-          href="/dashboard/central-store/suppliers"
-          icon={Store}
-          label="Suppliers"
-          active={pathname === '/dashboard/central-store/suppliers'}
-        />
-        <NavItem
-          href="/dashboard/central-store/drivers"
-          icon={User}
-          label="Drivers"
-          active={pathname === '/dashboard/central-store/drivers'}
-        />
-        <NavItem
-          href="/dashboard/central-store/vehicles"
-          icon={Truck}
-          label="Vehicles"
-          active={pathname === '/dashboard/central-store/vehicles'}
-        />
-      </NavGroup>
+      <NavItem
+        href="/dashboard/auditor/audit-reports"
+        icon={FileCheck}
+        label="Audit Reports"
+        active={pathname === '/dashboard/auditor/audit-reports'}
+      />
     </>
   );
 
