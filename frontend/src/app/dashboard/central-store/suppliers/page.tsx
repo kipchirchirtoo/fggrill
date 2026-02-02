@@ -10,7 +10,7 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { storeAPI } from '@/lib/api';
-import { Building2, RefreshCw, Plus, Search, Phone, Mail, MapPin } from 'lucide-react';
+import { Building2, RefreshCw, Search, Phone, Mail, MapPin, Plus, Trash2, Edit2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -19,11 +19,14 @@ interface Supplier { id: string; name: string; contact_person?: string; email?: 
 
 export default function CentralSuppliersPage() {
   const { user } = useAuth();
+  const isManager = user?.role === UserRole.AUDITOR || user?.role === UserRole.SUPER_ADMIN;
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [formData, setFormData] = useState({ name: '', contact_person: '', email: '', phone: '', address: '' });
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [addModalOpen, setAddModalOpen] = useState(false);
-  const [formData, setFormData] = useState({ name: '', contact_person: '', email: '', phone: '', address: '' });
+
 
   const fetchSuppliers = useCallback(async () => {
     setIsLoading(true);
@@ -38,25 +41,55 @@ export default function CentralSuppliersPage() {
 
   const filteredSuppliers = suppliers.filter((s) => s.name?.toLowerCase().includes(searchQuery.toLowerCase()));
 
-  const handleAddSupplier = async () => {
+  const handleCreateOrUpdate = async () => {
     if (!formData.name) { toast.error('Name is required'); return; }
     try {
-      await storeAPI.createSupplier(formData);
-      toast.success('Supplier added');
+      if (editingId) {
+        await storeAPI.updateSupplier(editingId, formData);
+        toast.success('Supplier updated');
+      } else {
+        await storeAPI.createSupplier(formData);
+        toast.success('Supplier added');
+      }
       setAddModalOpen(false);
+      setEditingId(null);
+      setFormData({ name: '', contact_person: '', email: '', phone: '', address: '' });
       fetchSuppliers();
     } catch (error: any) { toast.error(error.message || 'Failed'); }
   };
 
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this supplier?')) return;
+    try {
+      await storeAPI.deleteSupplier(id);
+      toast.success('Supplier deleted');
+      fetchSuppliers();
+    } catch (error: any) { toast.error(error.message || 'Failed'); }
+  };
+
+  const startEdit = (supplier: Supplier) => {
+    setEditingId(supplier.id);
+    setFormData({
+      name: supplier.name,
+      contact_person: supplier.contact_person || '',
+      email: supplier.email || '',
+      phone: supplier.phone || '',
+      address: supplier.address || '',
+    });
+    setAddModalOpen(true);
+  };
+
+
+
   return (
-    <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
+    <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]}>
       <DashboardLayout>
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Suppliers</h1><p className="text-gray-500">Manage vendors</p></div>
             <div className="flex gap-2">
               <IOSButton variant="secondary" onClick={fetchSuppliers} leftIcon={<RefreshCw />}>Refresh</IOSButton>
-              <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>Add Supplier</IOSButton>
+              {isManager && <IOSButton onClick={() => { setEditingId(null); setFormData({ name: '', contact_person: '', email: '', phone: '', address: '' }); setAddModalOpen(true); }} leftIcon={<Plus />}>Add Supplier</IOSButton>}
             </div>
           </div>
 
@@ -76,8 +109,19 @@ export default function CentralSuppliersPage() {
               {filteredSuppliers.map((supplier) => (
                 <IOSCard key={supplier.id} className="p-4">
                   <div className="flex items-start justify-between mb-3">
-                    <div><p className="font-bold">{supplier.name}</p>{supplier.contact_person && <p className="text-sm text-gray-500">{supplier.contact_person}</p>}</div>
-                    <IOSBadge variant="light" color={supplier.status === 'active' ? 'success' : 'secondary'}>{supplier.status}</IOSBadge>
+                    <div>
+                      <p className="font-bold">{supplier.name}</p>
+                      {supplier.contact_person && <p className="text-sm text-gray-500">{supplier.contact_person}</p>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <IOSBadge variant="light" color={supplier.status === 'active' ? 'success' : 'secondary'}>{supplier.status}</IOSBadge>
+                      {isManager && (
+                        <div className="flex gap-1">
+                          <button onClick={() => startEdit(supplier)} className="p-1 hover:bg-stone-100 rounded text-stone-400 hover:text-[#007AFF] transition-colors"><Edit2 className="h-4 w-4" /></button>
+                          <button onClick={() => handleDelete(supplier.id)} className="p-1 hover:bg-red-50 rounded text-stone-400 hover:text-red-600 transition-colors"><Trash2 className="h-4 w-4" /></button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="space-y-1 text-sm text-gray-500">
                     {supplier.phone && <p className="flex items-center gap-2"><Phone className="h-3 w-3" /> {supplier.phone}</p>}
@@ -90,9 +134,10 @@ export default function CentralSuppliersPage() {
           )}
         </div>
 
+
         <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
           <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Add Supplier</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{editingId ? 'Edit Supplier' : 'Add Supplier'}</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-4">
               <div><label className="text-sm font-medium">Name *</label><Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} /></div>
               <div><label className="text-sm font-medium">Contact Person</label><Input value={formData.contact_person} onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })} /></div>
@@ -101,7 +146,7 @@ export default function CentralSuppliersPage() {
               <div><label className="text-sm font-medium">Address</label><Input value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} /></div>
               <div className="flex gap-3">
                 <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                <IOSButton onClick={handleAddSupplier} className="flex-1">Add</IOSButton>
+                <IOSButton onClick={handleCreateOrUpdate} className="flex-1">{editingId ? 'Save' : 'Add'}</IOSButton>
               </div>
             </div>
           </DialogContent>

@@ -19,8 +19,18 @@ export default function BarItemsPage() {
     const fetchItems = useCallback(async () => {
         setIsLoading(true);
         try {
-            const response = await storeAPI.getItems({ category: 'beverage' });
-            if (response.success) setItems(response.data || []);
+            // Fetching all items and filtering locally to ensure all "bar stuff" is captured
+            const response = await storeAPI.getItems();
+            if (response.success) {
+                const allItems = response.data || [];
+                const barRelated = allItems.filter((item: Item) =>
+                    item.category?.toLowerCase() === 'beverage' ||
+                    item.category?.toLowerCase() === 'bar' ||
+                    item.item_name?.toLowerCase().includes('bar') ||
+                    item.sku?.toLowerCase().includes('BAR')
+                );
+                setItems(barRelated);
+            }
         } catch (error) { console.error('Error:', error); }
         finally { setIsLoading(false); }
     }, []);

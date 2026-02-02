@@ -151,7 +151,7 @@ export default function NewPurchaseOrderPage() {
             const response = await api.procurement.createPurchaseOrder(payload);
             if (response.success) {
                 toast.success('Purchase Order created successfully');
-                router.push('/dashboard/procurement/purchase-orders');
+                router.push('/dashboard/auditor/procurement/purchase-orders');
             }
         } catch (error: any) {
             toast.error(error.message || 'Failed to create PO');
@@ -161,12 +161,12 @@ export default function NewPurchaseOrderPage() {
     };
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.PROCUREMENT, UserRole.CENTRAL_STOREKEEPER]}>
+        <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.PROCUREMENT, UserRole.CENTRAL_STOREKEEPER, UserRole.AUDITOR]}>
             <div className="p-6 max-w-6xl mx-auto space-y-6">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <Button variant="ghost" size="icon" asChild>
-                            <Link href="/dashboard/procurement/purchase-orders">
+                            <Link href="/dashboard/auditor/procurement/purchase-orders">
                                 <ArrowLeft className="h-5 w-5" />
                             </Link>
                         </Button>

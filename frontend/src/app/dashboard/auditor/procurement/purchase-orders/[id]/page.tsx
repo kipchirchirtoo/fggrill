@@ -129,7 +129,7 @@ export default function PODetailPage() {
                 <div className="p-6 text-center">
                     <h2 className="text-xl font-bold">Order Not Found</h2>
                     <Button asChild className="mt-4">
-                        <Link href="/dashboard/procurement/purchase-orders">Back to Orders</Link>
+                        <Link href="/dashboard/auditor/procurement/purchase-orders">Back to Orders</Link>
                     </Button>
                 </div>
             </DashboardLayout>
@@ -303,7 +303,7 @@ export default function PODetailPage() {
                                 <p className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-3">Quick Actions</p>
                                 <div className="space-y-2">
                                     <Button variant="outline" className="w-full justify-start bg-white/5 border-white/10 hover:bg-white/10 text-white" asChild>
-                                        <Link href={`/dashboard/procurement/suppliers/${order.supplier_id}`}>
+                                        <Link href={`/dashboard/central-store/suppliers`}>
                                             View Supplier File
                                         </Link>
                                     </Button>

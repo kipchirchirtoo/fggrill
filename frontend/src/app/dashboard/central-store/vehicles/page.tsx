@@ -10,7 +10,7 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { storeAPI } from '@/lib/api';
-import { Car, RefreshCw, Plus, Edit2 } from 'lucide-react';
+import { Car, RefreshCw, Plus, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -19,10 +19,12 @@ interface Vehicle { id: string; registration: string; make?: string; model?: str
 
 export default function CentralVehiclesPage() {
   const { user } = useAuth();
+  const isManager = user?.role === UserRole.AUDITOR || user?.role === UserRole.SUPER_ADMIN;
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [formData, setFormData] = useState({ registration: '', make: '', model: '', capacity: 0 });
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const fetchVehicles = useCallback(async () => {
     setIsLoading(true);
@@ -35,14 +37,41 @@ export default function CentralVehiclesPage() {
 
   useEffect(() => { fetchVehicles(); }, [fetchVehicles]);
 
-  const handleAddVehicle = async () => {
+  const handleCreateOrUpdate = async () => {
     if (!formData.registration) { toast.error('Registration is required'); return; }
     try {
-      await storeAPI.createVehicle(formData);
-      toast.success('Vehicle added');
+      if (editingId) {
+        await storeAPI.updateVehicle(editingId, formData);
+        toast.success('Vehicle updated');
+      } else {
+        await storeAPI.createVehicle(formData);
+        toast.success('Vehicle added');
+      }
       setAddModalOpen(false);
+      setEditingId(null);
+      setFormData({ registration: '', make: '', model: '', capacity: 0 });
       fetchVehicles();
     } catch (error: any) { toast.error(error.message || 'Failed'); }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this vehicle?')) return;
+    try {
+      await storeAPI.deleteVehicle(id);
+      toast.success('Vehicle deleted');
+      fetchVehicles();
+    } catch (error: any) { toast.error(error.message || 'Failed'); }
+  };
+
+  const startEdit = (vehicle: Vehicle) => {
+    setEditingId(vehicle.id);
+    setFormData({
+      registration: vehicle.registration,
+      make: vehicle.make || '',
+      model: vehicle.model || '',
+      capacity: vehicle.capacity || 0,
+    });
+    setAddModalOpen(true);
   };
 
   const statusConfig: Record<string, { color: string; bg: string }> = {
@@ -52,14 +81,14 @@ export default function CentralVehiclesPage() {
   };
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
+    <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]}>
       <DashboardLayout>
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div><h1 className="text-2xl font-bold text-gray-900">Vehicles</h1><p className="text-gray-500">Manage delivery vehicles</p></div>
             <div className="flex gap-2">
               <IOSButton variant="secondary" onClick={fetchVehicles} leftIcon={<RefreshCw />}>Refresh</IOSButton>
-              <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>Add Vehicle</IOSButton>
+              {isManager && <IOSButton onClick={() => { setEditingId(null); setFormData({ registration: '', make: '', model: '', capacity: 0 }); setAddModalOpen(true); }} leftIcon={<Plus />}>Add Vehicle</IOSButton>}
             </div>
           </div>
 
@@ -78,7 +107,15 @@ export default function CentralVehiclesPage() {
                         <div className="w-10 h-10 rounded-ios-lg bg-purple-100 flex items-center justify-center"><Car className="h-5 w-5 text-purple-600" /></div>
                         <div><p className="font-bold">{vehicle.registration}</p><p className="text-sm text-gray-500">{vehicle.make} {vehicle.model}</p></div>
                       </div>
-                      <IOSBadge className={`${status.bg} ${status.color}`}>{vehicle.status?.replace('_', ' ')}</IOSBadge>
+                      <div className="flex items-center gap-2">
+                        <IOSBadge className={`${status.bg} ${status.color}`}>{vehicle.status?.replace('_', ' ')}</IOSBadge>
+                        {isManager && (
+                          <div className="flex gap-1">
+                            <button onClick={() => startEdit(vehicle)} className="p-1 hover:bg-stone-100 rounded text-stone-400 hover:text-[#007AFF] transition-colors"><Edit2 className="h-4 w-4" /></button>
+                            <button onClick={() => handleDelete(vehicle.id)} className="p-1 hover:bg-red-50 rounded text-stone-400 hover:text-red-600 transition-colors"><Trash2 className="h-4 w-4" /></button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     {vehicle.capacity && <p className="text-sm text-gray-500">Capacity: {vehicle.capacity} kg</p>}
                   </IOSCard>
@@ -90,7 +127,7 @@ export default function CentralVehiclesPage() {
 
         <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
           <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Add Vehicle</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{editingId ? 'Edit Vehicle' : 'Add Vehicle'}</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-4">
               <div><label className="text-sm font-medium">Registration *</label><Input value={formData.registration} onChange={(e) => setFormData({ ...formData, registration: e.target.value })} /></div>
               <div><label className="text-sm font-medium">Make</label><Input value={formData.make} onChange={(e) => setFormData({ ...formData, make: e.target.value })} /></div>
@@ -98,7 +135,7 @@ export default function CentralVehiclesPage() {
               <div><label className="text-sm font-medium">Capacity (kg)</label><Input type="number" value={formData.capacity} onChange={(e) => setFormData({ ...formData, capacity: parseInt(e.target.value) || 0 })} /></div>
               <div className="flex gap-3">
                 <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                <IOSButton onClick={handleAddVehicle} className="flex-1">Add</IOSButton>
+                <IOSButton onClick={handleCreateOrUpdate} className="flex-1">{editingId ? 'Save' : 'Add'}</IOSButton>
               </div>
             </div>
           </DialogContent>

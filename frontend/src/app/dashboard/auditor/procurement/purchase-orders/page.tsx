@@ -134,9 +134,9 @@ export default function ProcurementPurchaseOrdersPage() {
                             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                             Refresh
                         </Button>
-                        {[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.PROCUREMENT].includes(user?.role!) && (
+                        {[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.PROCUREMENT, UserRole.AUDITOR].includes(user?.role!) && (
                             <Button asChild>
-                                <Link href="/dashboard/procurement/purchase-orders/new">
+                                <Link href="/dashboard/auditor/procurement/purchase-orders/new">
                                     <Plus className="h-4 w-4 mr-2" />
                                     New Order
                                 </Link>

@@ -2433,7 +2433,47 @@ export const reportsAPI = {
     const response = await fetch(`${REPORTS_SERVICE_URL}/api/kpi/summary?${params}`);
     return response.json();
   },
+
+  // Scheduling and History
+  getScheduledReports: async () => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/schedules`);
+    return response.json();
+  },
+  getReportHistory: async (limit: number = 50) => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/history?limit=${limit}`);
+    return response.json();
+  },
+  scheduleReport: async (data: any) => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/schedule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return response.json();
+  },
+  toggleScheduledReport: async (id: string) => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/schedules/${id}/toggle`, {
+      method: 'PUT'
+    });
+    return response.json();
+  },
+  deleteScheduledReport: async (id: string) => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/schedules/${id}`, {
+      method: 'DELETE'
+    });
+    return response.json();
+  },
+  runReportNow: async (scheduleId: string) => {
+    const response = await fetch(`${REPORTS_SERVICE_URL}/api/reports/run-now`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduleId })
+    });
+    return response.json();
+  },
 };
+
+export const reportsService = reportsAPI;
 
 
 // =====================================================
@@ -2726,21 +2766,7 @@ export const payrollAPI = {
 // REPORTS SERVICE (Python Service for Branded PDFs)
 // =====================================================
 
-export const reportsService = {
-  exportBrandedPdf: async (reportType: string, params: any) => {
-    const response = await fetch(`${PYTHON_API_URL}/api/reports/branded-pdf`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ reportType, ...params })
-    });
-
-    if (!response.ok) throw new Error('Export failed');
-    return response.blob();
-  }
-};
+// reportsService is now aliased to reportsAPI above for consolidation
 
 // =====================================================
 // NOTIFICATIONS API

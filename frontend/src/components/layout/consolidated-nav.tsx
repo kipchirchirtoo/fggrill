@@ -13,7 +13,7 @@ import {
   Home, ArrowDownUp, LifeBuoy, Calendar, Store, TrendingUp, TrendingDown, LineChart, Award,
   UserCheck, Utensils, Wine, Receipt, CreditCard, PieChart, FileText,
   BookOpen, ChefHat, ShoppingCart, Wallet, Scale, AlertCircle, UtensilsCrossed, Trash2, Clock, Shield, Menu, X,
-  Apple, Beer, Pencil
+  Apple, Beer, Pencil, Database, User
 } from 'lucide-react';
 
 interface NavItemProps {
@@ -510,12 +510,6 @@ export function ConsolidatedNav() {
 
       <NavGroup label="Purchasing" icon={ShoppingCart} defaultOpen>
         <NavItem
-          href="/dashboard/procurement/purchase-orders"
-          icon={FileText}
-          label="Purchase Orders"
-          active={pathname.includes('/dashboard/procurement/purchase-orders')}
-        />
-        <NavItem
           href="/dashboard/central-store/suppliers"
           icon={Users}
           label="Supplier Database"
@@ -599,6 +593,12 @@ export function ConsolidatedNav() {
           label="Payment Approvals"
           active={pathname.includes('/dashboard/auditor/procurement/payments')}
         />
+        <NavItem
+          href="/dashboard/auditor/procurement/purchase-orders"
+          icon={ShoppingCart}
+          label="Purchase Orders"
+          active={pathname.includes('/dashboard/auditor/procurement/purchase-orders')}
+        />
       </NavGroup>
 
       <NavGroup label="Statutory Reports" icon={Scale} defaultOpen>
@@ -640,6 +640,27 @@ export function ConsolidatedNav() {
           icon={Package}
           label="Spot Checks"
           active={pathname === '/dashboard/auditor/stock'}
+        />
+      </NavGroup>
+
+      <NavGroup label="Master Data Management" icon={Database} defaultOpen>
+        <NavItem
+          href="/dashboard/central-store/suppliers"
+          icon={Store}
+          label="Suppliers"
+          active={pathname === '/dashboard/central-store/suppliers'}
+        />
+        <NavItem
+          href="/dashboard/central-store/drivers"
+          icon={User}
+          label="Drivers"
+          active={pathname === '/dashboard/central-store/drivers'}
+        />
+        <NavItem
+          href="/dashboard/central-store/vehicles"
+          icon={Truck}
+          label="Vehicles"
+          active={pathname === '/dashboard/central-store/vehicles'}
         />
       </NavGroup>
     </>
@@ -769,12 +790,6 @@ export function ConsolidatedNav() {
 
       <NavGroup label="Purchasing & Compliance" icon={ShoppingCart} defaultOpen>
         <NavItem
-          href="/dashboard/procurement/purchase-orders"
-          icon={FileText}
-          label="Purchase Orders"
-          active={pathname.includes('/dashboard/procurement/purchase-orders')}
-        />
-        <NavItem
           href="/dashboard/central-store/suppliers"
           icon={Store}
           label="Supplier Database"
@@ -798,12 +813,7 @@ export function ConsolidatedNav() {
       </NavGroup>
 
       <NavGroup label="Controls & Reports" icon={ShieldCheck}>
-        <NavItem
-          href="/dashboard/central-store/stock-takes"
-          icon={ClipboardList}
-          label="Stock Takes"
-          active={pathname === '/dashboard/central-store/stock-takes'}
-        />
+
         <NavItem
           href="/dashboard/central-store/reports"
           icon={BarChart3}
