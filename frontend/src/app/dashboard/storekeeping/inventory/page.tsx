@@ -584,27 +584,27 @@ export default function InventoryPage() {
                   {filteredItems.map((item) => {
                     const isLowStock = (item.quantity || 0) <= (item.reorder_level || 10);
                     return (
-                      <tr key={item.sku} className="group hover:bg-stone-50/50 transition-colors">
+                      <tr key={String(item.sku)} className="group hover:bg-stone-50/50 transition-colors">
                         <td className="px-5 py-3.5">
-                          <p className="text-[13px] font-bold text-stone-900 leading-tight">{item.item_name}</p>
-                          <p className="text-[11px] text-stone-400 mt-0.5 font-medium line-clamp-1">{item.description || '-'}</p>
+                          <p className="text-[13px] font-bold text-stone-900 leading-tight">{String(item.item_name)}</p>
+                          <p className="text-[11px] text-stone-400 mt-0.5 font-medium line-clamp-1">{String(item.description || '-')}</p>
                         </td>
                         <td className="px-4 py-3.5">
-                          <code className="text-[11px] font-bold text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded-md">{item.sku}</code>
+                          <code className="text-[11px] font-bold text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded-md">{String(item.sku)}</code>
                         </td>
                         <td className="px-4 py-3.5">
                           <IOSBadge size="sm" className="bg-stone-50 text-stone-600 border-stone-200 text-[10px]">
-                            {item.category}
+                            {String(item.category || '')}
                           </IOSBadge>
                         </td>
                         <td className="px-4 py-3.5 text-center">
                           <div className={`inline-flex flex-col items-center ${isLowStock ? 'text-red-600' : 'text-stone-900'}`}>
                             <span className="text-[13px] font-bold">{item.quantity || 0}</span>
-                            <span className="text-[10px] font-bold opacity-50 uppercase">{item.unit_of_measure}</span>
+                            <span className="text-[10px] font-bold opacity-50 uppercase">{String(item.unit_of_measure || '')}</span>
                           </div>
                         </td>
                         <td className="px-4 py-3.5 text-right font-bold text-stone-900 text-[13px]">
-                          KES {(item.retail_price || 0).toLocaleString()}
+                          KES {(Number(item.retail_price) || 0).toLocaleString()}
                         </td>
                         {canEdit && (
                           <td className="px-5 py-3.5">

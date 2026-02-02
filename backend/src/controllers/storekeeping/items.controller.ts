@@ -49,8 +49,8 @@ export const getItems = async (
 
     // Pagination
     const page = parseInt(req.query.page as string) || 1;
-    // Default limit 25 to match reference records_per_page default
-    const limit = parseInt(req.query.limit as string) || 25;
+    // Default limit 200 to ensure all items are visible by default
+    const limit = parseInt(req.query.limit as string) || 200;
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 

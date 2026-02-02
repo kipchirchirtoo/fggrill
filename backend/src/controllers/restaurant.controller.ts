@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { supabase } from '../config/supabase';
+import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
 
 // @desc    Get all menu categories
@@ -30,6 +30,42 @@ export const getMenuCategories = async (
   }
 };
 
+export const createCategory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const {
+      name,
+      sort_order,
+      description,
+      is_bar // Added for bar differentiation
+    } = req.body;
+
+    const { data: category, error } = await supabase
+      .from('restaurant_menu_categories')
+      .insert([{
+        name,
+        sort_order,
+        description,
+        is_active: true,
+        is_bar: is_bar ?? false // Default to false if not specified
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    res.status(201).json({
+      success: true,
+      data: category
+    });
+
+    logger.info(`New menu category created: ${name} `);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Get all menu items
 // @route   GET /api/restaurant/menu/items
 // @access  Public
@@ -49,7 +85,7 @@ export const getMenuItems = async (
     }
     const branchId = req.user?.branch_id || req.query.branch_id;
     if (branchId) {
-      query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
+      query = query.or(`branch_id.eq.${branchId}, branch_id.is.null`);
     }
     if (req.query.available === 'true') {
       query = query.eq('is_available', true);
@@ -123,7 +159,7 @@ export const createMenuItem = async (
       data: item
     });
 
-    logger.info(`New menu item created: ${name}`);
+    logger.info(`New menu item created: ${name} `);
   } catch (error) {
     next(error);
   }
@@ -195,7 +231,7 @@ export const updateMenuItem = async (
       data: item
     });
 
-    logger.info(`Menu item updated: ${name || 'item'}`);
+    logger.info(`Menu item updated: ${name || 'item'} `);
   } catch (error) {
     next(error);
   }
@@ -226,7 +262,7 @@ export const deleteMenuItem = async (
       message: 'Menu item deleted successfully'
     });
 
-    logger.info(`Menu item deleted: ${id}`);
+    logger.info(`Menu item deleted: ${id} `);
   } catch (error) {
     next(error);
   }
@@ -270,7 +306,7 @@ export const toggleItemAvailability = async (
       data: updatedItem
     });
 
-    logger.info(`Menu item ${id} availability toggled to ${!item.is_available}`);
+    logger.info(`Menu item ${id} availability toggled to ${!item.is_available} `);
   } catch (error) {
     next(error);
   }
@@ -315,7 +351,7 @@ export const createOrder = async (
     }
 
     // Determine order number with fallback
-    const finalOrderNumber = orderNumber || `ORD${new Date().toISOString().replace(/[-:T]/g, '').slice(2, 12)}`;
+    const finalOrderNumber = orderNumber || `ORD${new Date().toISOString().replace(/[-:T]/g, '').slice(2, 12)} `;
     console.log('Final order number being used:', finalOrderNumber);
 
     // Create order
@@ -404,11 +440,11 @@ export const createOrder = async (
     const { data: updatedOrder, error: getError } = await supabase
       .from('restaurant_orders')
       .select(`
-        *,
-        items:restaurant_order_items(
+  *,
+  items: restaurant_order_items(
           *,
-          menu_item:restaurant_menu_items(*)
-        )
+    menu_item: restaurant_menu_items(*)
+  )
       `)
       .eq('id', order.id)
       .single();
@@ -422,7 +458,7 @@ export const createOrder = async (
       data: updatedOrder
     });
 
-    logger.info(`New order created: ${orderNumber}`);
+    logger.info(`New order created: ${orderNumber} `);
   } catch (error) {
     next(error);
   }
@@ -491,7 +527,7 @@ export const updateOrderStatus = async (
       data: updatedOrder
     });
 
-    logger.info(`Order ${order.order_number} status updated to ${status}`);
+    logger.info(`Order ${order.order_number} status updated to ${status} `);
   } catch (error) {
     next(error);
   }
@@ -509,12 +545,12 @@ export const getOrder = async (
     const { data: order, error } = await supabase
       .from('restaurant_orders')
       .select(`
-        *,
-        guest:users!guest_id(*),
-        items:restaurant_order_items(
+  *,
+  guest: users!guest_id(*),
+    items: restaurant_order_items(
           *,
-          menu_item:restaurant_menu_items(*)
-        )
+      menu_item: restaurant_menu_items(*)
+    )
       `)
       .eq('id', req.params.id)
       .single();
@@ -556,9 +592,9 @@ export const getOrders = async (
     let query = supabase
       .from('restaurant_orders')
       .select(`
-        *,
-        guest:users!guest_id(*),
-        items:restaurant_order_items(*)
+      *,
+      guest: users!guest_id(*),
+        items: restaurant_order_items(*)
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(startIndex, startIndex + limit - 1);
@@ -576,8 +612,8 @@ export const getOrders = async (
     }
     if (req.query.date) {
       const date = req.query.date as string;
-      const startDate = `${date}T00:00:00`;
-      const endDate = `${date}T23:59:59`;
+      const startDate = `${date} T00:00:00`;
+      const endDate = `${date} T23: 59: 59`;
       query = query.gte('created_at', startDate).lte('created_at', endDate);
     }
     if (req.query.startDate && req.query.endDate) {
@@ -797,7 +833,7 @@ export const createRoomServiceOrder = async (
       message: 'Room service order created successfully'
     });
 
-    logger.info(`Room service order created for room ${room_number}, total: ${totalAmount}`);
+    logger.info(`Room service order created for room ${room_number}, total: ${totalAmount} `);
   } catch (error) {
     next(error);
   }
@@ -860,7 +896,7 @@ export const updateRoomServiceOrderStatus = async (
     if (!validStatuses.includes(status)) {
       res.status(400).json({
         success: false,
-        message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
+        message: `Invalid status.Must be one of: ${validStatuses.join(', ')} `
       });
       return;
     }
@@ -885,10 +921,10 @@ export const updateRoomServiceOrderStatus = async (
     res.status(200).json({
       success: true,
       data: order,
-      message: `Order status updated to ${status}`
+      message: `Order status updated to ${status} `
     });
 
-    logger.info(`Room service order ${req.params.id} status updated to ${status}`);
+    logger.info(`Room service order ${req.params.id} status updated to ${status} `);
   } catch (error) {
     next(error);
   }
@@ -917,7 +953,7 @@ export const uploadMenuItemImage = async (
 
     // Generate unique filename
     const ext = contentType?.split('/')[1] || 'jpg';
-    const uniqueFileName = `menu-items/${id}/${Date.now()}.${ext}`;
+    const uniqueFileName = `menu - items / ${id}/${Date.now()}.${ext}`;
 
     // Upload to Supabase storage
     const { data: uploadData, error: uploadError } = await supabase.storage

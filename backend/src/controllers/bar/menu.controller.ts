@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { supabase } from '../../config/supabase';
+import { supabase } from '../../config/database';
 import { logger } from '../../utils/logger';
 
 // ==========================================
@@ -18,17 +18,12 @@ export const getCategories = async (req: Request, res: Response, next: NextFunct
       .from('restaurant_menu_categories')
       .select('*')
       .eq('is_active', true)
+      .eq('is_bar', true)
       .order('sort_order', { ascending: true });
 
     if (error) throw error;
 
-    // Filter categories to only include bar-related ones (Allow-list)
-    const data = (categories || []).filter(cat => {
-      const name = cat.name.toLowerCase();
-      return BAR_KEYWORDS.some(keyword => name.includes(keyword));
-    });
-
-    res.status(200).json({ success: true, data });
+    res.status(200).json({ success: true, data: categories || [] });
   } catch (error) {
     next(error);
   }
@@ -36,11 +31,17 @@ export const getCategories = async (req: Request, res: Response, next: NextFunct
 
 export const createCategory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { name, sort_order, description } = req.body;
+    const { name, sort_order, description, is_bar } = req.body;
 
     const { data, error } = await supabase
       .from('restaurant_menu_categories')
-      .insert([{ name, sort_order, description, is_active: true }])
+      .insert([{
+        name,
+        sort_order,
+        description,
+        is_active: true,
+        is_bar: is_bar ?? true // Default to bar if created via bar controller
+      }])
       .select()
       .single();
 
@@ -60,18 +61,19 @@ export const getDrinks = async (req: Request, res: Response, next: NextFunction)
   try {
     const { category_id, search } = req.query;
 
-    // First, get valid bar category IDs to ensure we only return drinks/bar items
+    // First, get valid bar category IDs
     const { data: categories } = await supabase
       .from('restaurant_menu_categories')
-      .select('id, name')
-      .eq('is_active', true);
+      .select('id')
+      .eq('is_active', true)
+      .eq('is_bar', true);
 
-    const barCategoryIds = (categories || [])
-      .filter(cat => {
-        const name = cat.name.toLowerCase();
-        return BAR_KEYWORDS.some(keyword => name.includes(keyword));
-      })
-      .map(cat => cat.id);
+    const barCategoryIds = (categories || []).map(cat => cat.id);
+
+    if (barCategoryIds.length === 0) {
+      res.status(200).json({ success: true, data: [] });
+      return;
+    }
 
     let query = supabase
       .from('restaurant_menu_items')
@@ -82,22 +84,16 @@ export const getDrinks = async (req: Request, res: Response, next: NextFunction)
       .eq('is_available', true);
 
     if (category_id) {
-      // If a specific category is requested, still ensure it's a bar category
+      // Ensure the category is a bar category
       if (barCategoryIds.includes(category_id as string)) {
         query = query.eq('category_id', category_id);
       } else {
-        // Requested category is not a bar category
         res.status(200).json({ success: true, data: [] });
         return;
       }
     } else {
-      // If no category_id, filter by all bar-related categories
-      if (barCategoryIds.length > 0) {
-        query = query.in('category_id', barCategoryIds);
-      } else {
-        res.status(200).json({ success: true, data: [] });
-        return;
-      }
+      // Filter by all bar categories
+      query = query.in('category_id', barCategoryIds);
     }
 
     if (search) {

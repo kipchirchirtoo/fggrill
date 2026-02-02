@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { supabase } from '../../config/supabase';
+import { supabase } from '../../config/database';
 import { logger } from '../../utils/logger';
 
 /**
