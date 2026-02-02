@@ -359,180 +359,168 @@ export default function StockLedgerPage() {
 
                     {/* Capture Ledger Modal */}
                     <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                        <DialogContent className="max-w-xl max-h-[80vh] flex flex-col p-0 overflow-hidden">
+                        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
                             <DialogHeader className="px-5 py-3 border-b border-stone-100 bg-stone-50/50">
-                                <DialogTitle className="flex items-center gap-2 text-[17px] font-semibold text-stone-900">
-                                    <BookOpen className="h-5 w-5 text-stone-500" />
+                                <DialogTitle className="flex items-center gap-2 text-[16px] font-semibold text-stone-900">
+                                    <BookOpen className="h-4 w-4 text-stone-500" />
                                     Capture Daily Entry
                                 </DialogTitle>
                             </DialogHeader>
 
-                            <div className="overflow-y-auto px-5 py-4 flex-1 space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-3">
-                                        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 border-b border-stone-100 pb-1">Item Details</h3>
-                                        <div>
-                                            <label className="input-label mb-1">Item Name</label>
-                                            <input
-                                                value={formData.item_name}
-                                                onChange={(e) => setFormData({ ...formData, item_name: e.target.value })}
-                                                placeholder="e.g., Prepared Chicken"
-                                                className="input-field py-1.5 text-sm"
+                            <div className="overflow-y-auto px-5 py-4 flex-1">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {/* LEFT COLUMN: Operations */}
+                                    <div className="space-y-4">
+                                        <div className="space-y-3">
+                                            <h3 className="text-[11px] font-bold uppercase tracking-wider text-stone-500 border-b border-stone-100 pb-1">Item Details</h3>
+                                            <div className="space-y-2">
+                                                <div>
+                                                    <label className="text-[11px] font-medium text-stone-700 block mb-0.5">Item Name</label>
+                                                    <input
+                                                        value={formData.item_name}
+                                                        onChange={(e) => setFormData({ ...formData, item_name: e.target.value })}
+                                                        placeholder="e.g. Chicken"
+                                                        className="w-full rounded-md border border-stone-200 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                                                    />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label className="text-[11px] font-medium text-stone-700 block mb-0.5">Date</label>
+                                                        <input
+                                                            type="date"
+                                                            value={formData.entry_date}
+                                                            onChange={(e) => setFormData({ ...formData, entry_date: e.target.value })}
+                                                            className="w-full rounded-md border border-stone-200 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[11px] font-medium text-stone-700 block mb-0.5">Unit</label>
+                                                        <input
+                                                            value={formData.unit_of_measure}
+                                                            onChange={(e) => setFormData({ ...formData, unit_of_measure: e.target.value })}
+                                                            placeholder="kg"
+                                                            className="w-full rounded-md border border-stone-200 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <h3 className="text-[11px] font-bold uppercase tracking-wider text-stone-500 border-b border-stone-100 pb-1">Stock Movement</h3>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="text-[11px] font-medium text-stone-500 block mb-0.5">Opening</label>
+                                                    <input
+                                                        type="number"
+                                                        value={formData.opening_balance}
+                                                        onChange={(e) => setFormData({ ...formData, opening_balance: Number(e.target.value) })}
+                                                        className="w-full rounded-md border border-stone-200 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[11px] font-medium text-green-600 block mb-0.5">Received (+)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={formData.received_quantity}
+                                                        onChange={(e) => setFormData({ ...formData, received_quantity: Number(e.target.value) })}
+                                                        className="w-full rounded-md border border-green-200 px-2.5 py-1.5 text-sm focus:border-green-500 focus:ring-2 focus:ring-green-500/20 outline-none"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[11px] font-medium text-blue-600 block mb-0.5">Used (-)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={formData.used_quantity}
+                                                        onChange={(e) => setFormData({ ...formData, used_quantity: Number(e.target.value) })}
+                                                        className="w-full rounded-md border border-blue-200 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[11px] font-medium text-red-600 block mb-0.5">Wastage (-)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={formData.wastage_quantity}
+                                                        onChange={(e) => setFormData({ ...formData, wastage_quantity: Number(e.target.value) })}
+                                                        className="w-full rounded-md border border-red-200 px-2.5 py-1.5 text-sm focus:border-red-500 focus:ring-2 focus:ring-red-500/20 outline-none"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="bg-stone-100 p-2 rounded-md flex justify-between items-center mt-1">
+                                                <span className="text-[11px] font-semibold text-stone-500 uppercase">Closing</span>
+                                                <span className="text-[14px] font-bold text-stone-900 font-mono">
+                                                    {(formData.opening_balance + formData.received_quantity - formData.used_quantity - formData.wastage_quantity).toFixed(2)}
+                                                    <span className="text-[10px] text-stone-500 ml-1 font-sans">{formData.unit_of_measure}</span>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* RIGHT COLUMN: Financials & Remarks */}
+                                    <div className="space-y-4">
+                                        <div className="space-y-3 bg-stone-50/50 p-3.5 rounded-xl border border-stone-100 h-fit">
+                                            <h3 className="text-[11px] font-bold uppercase tracking-wider text-stone-500 border-b border-stone-200 pb-1">Reconciliation</h3>
+                                            <div className="space-y-2">
+                                                <div>
+                                                    <label className="text-[11px] font-medium text-green-700 block mb-0.5">Expected Sales</label>
+                                                    <div className="flex items-center rounded-md border border-stone-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-green-500/20 focus-within:border-green-500">
+                                                        <span className="bg-stone-50 text-stone-500 px-2 py-1.5 text-[11px] font-bold border-r border-stone-100 w-10 text-center">KES</span>
+                                                        <input
+                                                            type="number"
+                                                            value={formData.expected_sales}
+                                                            onChange={(e) => setFormData({ ...formData, expected_sales: Number(e.target.value) })}
+                                                            className="w-full px-2 py-1.5 text-sm border-none focus:ring-0 outline-none"
+                                                            placeholder="0"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="text-[11px] font-medium text-blue-700 block mb-0.5">System Sales</label>
+                                                    <div className="flex items-center rounded-md border border-stone-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500">
+                                                        <span className="bg-stone-50 text-stone-500 px-2 py-1.5 text-[11px] font-bold border-r border-stone-100 w-10 text-center">KES</span>
+                                                        <input
+                                                            type="number"
+                                                            value={formData.system_sales}
+                                                            onChange={(e) => setFormData({ ...formData, system_sales: Number(e.target.value) })}
+                                                            className="w-full px-2 py-1.5 text-sm border-none focus:ring-0 outline-none"
+                                                            placeholder="0"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                {formData.expected_sales > 0 && formData.system_sales > 0 && (
+                                                    <div className={`px-2.5 py-2 rounded-md border flex justify-between items-center ${formData.expected_sales - formData.system_sales > 0 ? 'bg-red-50 border-red-100 text-red-700' : 'bg-green-50 border-green-100 text-green-700'}`}>
+                                                        <span className="text-[11px] font-medium">Variance</span>
+                                                        <span className="text-[13px] font-bold">
+                                                            {formData.expected_sales - formData.system_sales > 0 ? '-' : '+'} KES {Math.abs(formData.expected_sales - formData.system_sales).toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <label className="text-[11px] font-medium text-stone-700 block">Remarks</label>
+                                            <textarea
+                                                value={formData.remarks}
+                                                onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                                                className="w-full rounded-md border border-stone-200 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none min-h-[50px] resize-none"
+                                                placeholder="Explain variances..."
                                             />
                                         </div>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div>
-                                                <label className="input-label mb-1">Item ID</label>
-                                                <input
-                                                    value={formData.item_id}
-                                                    onChange={(e) => setFormData({ ...formData, item_id: e.target.value })}
-                                                    placeholder="Opt."
-                                                    className="input-field py-1.5 text-sm"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="input-label mb-1">Unit</label>
-                                                <input
-                                                    value={formData.unit_of_measure}
-                                                    onChange={(e) => setFormData({ ...formData, unit_of_measure: e.target.value })}
-                                                    className="input-field py-1.5 text-sm"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="input-label mb-1">Date</label>
-                                            <input
-                                                type="date"
-                                                value={formData.entry_date}
-                                                onChange={(e) => setFormData({ ...formData, entry_date: e.target.value })}
-                                                className="input-field py-1.5 text-sm"
-                                            />
-                                        </div>
                                     </div>
-
-                                    <div className="space-y-3">
-                                        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 border-b border-stone-100 pb-1">Usage & Balances</h3>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div>
-                                                <label className="input-label mb-1">Opening</label>
-                                                <input
-                                                    type="number"
-                                                    value={formData.opening_balance}
-                                                    onChange={(e) => setFormData({ ...formData, opening_balance: Number(e.target.value) })}
-                                                    className="input-field py-1.5 text-sm"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="input-label mb-1 text-green-600">Received</label>
-                                                <input
-                                                    type="number"
-                                                    value={formData.received_quantity}
-                                                    onChange={(e) => setFormData({ ...formData, received_quantity: Number(e.target.value) })}
-                                                    className="input-field py-1.5 text-sm border-green-200 focus:border-green-400 focus:ring-green-400/20"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div>
-                                                <label className="input-label mb-1 text-blue-600">Used</label>
-                                                <input
-                                                    type="number"
-                                                    value={formData.used_quantity}
-                                                    onChange={(e) => setFormData({ ...formData, used_quantity: Number(e.target.value) })}
-                                                    className="input-field py-1.5 text-sm border-blue-200 focus:border-blue-400 focus:ring-blue-400/20"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="input-label mb-1 text-red-600">Wastage</label>
-                                                <input
-                                                    type="number"
-                                                    value={formData.wastage_quantity}
-                                                    onChange={(e) => setFormData({ ...formData, wastage_quantity: Number(e.target.value) })}
-                                                    className="input-field py-1.5 text-sm border-red-200 focus:border-red-400 focus:ring-red-400/20"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="bg-stone-50 p-2 rounded-lg border border-stone-100 mt-1">
-                                            <div className="flex justify-between items-center">
-                                                <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">Closing Balance</p>
-                                                <p className="text-[14px] font-bold text-stone-900">
-                                                    {(formData.opening_balance + formData.received_quantity - formData.used_quantity - formData.wastage_quantity).toFixed(2)} {formData.unit_of_measure}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3 bg-stone-50/50 p-3 rounded-xl border border-stone-100">
-                                    <h3 className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 border-b border-stone-200 pb-1">Financial Reconciliation</h3>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="input-label mb-1 flex items-center gap-1.5 text-green-700">
-                                                Expected Sales
-                                            </label>
-                                            <div className="relative">
-                                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-medium text-stone-400">KES</span>
-                                                <input
-                                                    type="number"
-                                                    value={formData.expected_sales}
-                                                    onChange={(e) => setFormData({ ...formData, expected_sales: Number(e.target.value) })}
-                                                    className="input-field py-1.5 pl-9 text-sm"
-                                                    placeholder="0"
-                                                />
-                                            </div>
-                                            <p className="text-[9px] text-stone-400 mt-0.5 italic">Portions × Price</p>
-                                        </div>
-                                        <div>
-                                            <label className="input-label mb-1 flex items-center gap-1.5 text-blue-700">
-                                                System Sales
-                                            </label>
-                                            <div className="relative">
-                                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-medium text-stone-400">KES</span>
-                                                <input
-                                                    type="number"
-                                                    value={formData.system_sales}
-                                                    onChange={(e) => setFormData({ ...formData, system_sales: Number(e.target.value) })}
-                                                    className="input-field py-1.5 pl-9 text-sm"
-                                                    placeholder="0"
-                                                />
-                                            </div>
-                                            <p className="text-[9px] text-stone-400 mt-0.5 italic">From POS Report</p>
-                                        </div>
-                                    </div>
-                                    {formData.expected_sales > 0 && formData.system_sales > 0 && (
-                                        <div className={`p-2 rounded-lg flex items-start gap-2 ${formData.expected_sales - formData.system_sales > 0 ? 'bg-red-50 text-red-800 border border-red-100' : 'bg-green-50 text-green-800 border border-green-100'}`}>
-                                            <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                                            <div>
-                                                <p className="text-xs font-bold">
-                                                    Variance: KES {(formData.expected_sales - formData.system_sales).toLocaleString()}
-                                                    {formData.expected_sales - formData.system_sales > 0 ? ' (Shortfall)' : ' (Surplus)'}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div>
-                                    <label className="input-label mb-1">Remarks</label>
-                                    <textarea
-                                        value={formData.remarks}
-                                        onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
-                                        className="input-field min-h-[50px] text-sm py-1.5"
-                                        placeholder="Explain any variances..."
-                                    />
                                 </div>
                             </div>
 
-                            <div className="flex gap-3 px-5 py-3 border-t border-stone-100 bg-stone-50/50">
+                            <div className="flex gap-3 px-5 py-3 border-t border-stone-100 bg-stone-50/80 backdrop-blur-sm">
                                 <button
-                                    className="btn-secondary flex-1"
+                                    className="flex-1 py-2 px-3 bg-white border border-stone-200 rounded-lg text-stone-700 text-sm font-medium hover:bg-stone-50 hover:text-stone-900 transition-colors"
                                     onClick={() => setIsModalOpen(false)}
                                     disabled={isSubmitting}
                                 >
                                     Cancel
                                 </button>
                                 <button
-                                    className="btn-primary flex-1"
+                                    className="flex-1 py-2 px-3 bg-stone-900 rounded-lg text-white text-sm font-medium hover:bg-stone-800 transition-colors shadow-sm"
                                     onClick={handleCreateLedgerEntry}
                                     disabled={isSubmitting}
                                 >
