@@ -236,14 +236,14 @@ export async function createStockRequest(
   // Notify Central Storekeeper
   try {
     await notificationService.notifyRole(
-      'central_operations_manager', // Updated target role
+      'auditor',
       'New Stock Request',
       `Branch ${branchCode} has submitted a new stock request (${requestNumber}). Priority: ${priority}`,
       {
         type: 'info',
         category: 'stock',
         priority: priority === 'URGENT' ? 'urgent' : 'medium',
-        actionUrl: '/dashboard/central-store/requests', // Updated URL
+        actionUrl: '/dashboard/auditor/approvals',
         metadata: { request_id: request.id, branch_code: branchCode }
       }
     );

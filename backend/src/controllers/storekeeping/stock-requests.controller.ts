@@ -73,7 +73,7 @@ export const getStockRequests = async (
             'central_storekeeper',
             'central_operations_manager',
             'auditor'
-        ].includes(req.user?.role || '');
+        ].includes((req.user?.role || '').toLowerCase());
 
         if (branchId === null) {
             if (!isCentralRole) {
