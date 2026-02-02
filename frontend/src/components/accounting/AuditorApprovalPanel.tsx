@@ -191,147 +191,154 @@ export default function AuditorApprovalPanel() {
             )}
 
             <Dialog open={reviewModalOpen} onOpenChange={setReviewModalOpen}>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-xl">
-                            <Shield className="h-6 w-6 text-stone-900" />
-                            Auditor Review: {selectedRequest?.request_number}
-                        </DialogTitle>
-                    </DialogHeader>
+                <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
+                    <div className="p-6 border-b border-stone-100 flex-none bg-white">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2 text-xl">
+                                <Shield className="h-6 w-6 text-stone-900" />
+                                Auditor Review: {selectedRequest?.request_number}
+                            </DialogTitle>
+                        </DialogHeader>
+                    </div>
 
-                    {selectedRequest && (
-                        <div className="space-y-6 py-4">
-                            {/* Branch Performance Summary */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <IOSCard className="p-4 bg-stone-900 border-none">
-                                    <TrendingUp className="h-5 w-5 text-emerald-400 mb-2" />
-                                    <p className="text-xs font-bold text-stone-400 uppercase tracking-widest">Yesterday Sales</p>
-                                    <p className="text-lg font-bold text-white">KES {formatNumber(performance[selectedRequest.requesting_branch_id]?.totalSales || 0)}</p>
-                                </IOSCard>
-                                <IOSCard className="p-4 border-none shadow-sm bg-stone-50">
-                                    <Package className="h-5 w-5 text-blue-500 mb-2" />
-                                    <p className="text-xs font-bold text-stone-400 uppercase tracking-widest">Order Count</p>
-                                    <p className="text-lg font-bold text-stone-800">{performance[selectedRequest.requesting_branch_id]?.orderCount || 0}</p>
-                                </IOSCard>
-                                <IOSCard className="p-4 border-none shadow-sm bg-stone-50">
-                                    <TrendingUp className="h-5 w-5 text-stone-400 mb-2" />
-                                    <p className="text-xs font-bold text-stone-400 uppercase tracking-widest">Avg Ticket Size</p>
-                                    <p className="text-lg font-bold text-stone-800">KES {formatNumber(performance[selectedRequest.requesting_branch_id]?.averageOrder || 0)}</p>
-                                </IOSCard>
-                            </div>
-
-                            {/* Items Table */}
-                            <div className="border border-stone-100 rounded-ios-xl overflow-hidden shadow-sm">
-                                <table className="w-full text-sm">
-                                    <thead className="bg-stone-50">
-                                        <tr>
-                                            <th className="text-left p-4 font-semibold text-stone-600">Item Name</th>
-                                            <th className="text-left p-4 font-semibold text-stone-600">SKU</th>
-                                            <th className="text-center p-4 font-semibold text-stone-600">Branch Request</th>
-                                            <th className="text-right p-4 font-semibold text-stone-600 w-48">Approved Amount</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-stone-100">
-                                        {selectedRequest.items.map((item) => (
-                                            <tr key={item.id} className="hover:bg-stone-50/30">
-                                                <td className="p-4 font-medium text-stone-900">{item.item_name}</td>
-                                                <td className="p-4 text-stone-400 font-mono text-xs">{item.item_sku}</td>
-                                                <td className="p-4 text-center">
-                                                    <span className="bg-stone-100 px-3 py-1 rounded-full font-bold text-stone-800">
-                                                        {item.requested_quantity} {item.unit}
-                                                    </span>
-                                                </td>
-                                                <td className="p-4 text-right">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        <input
-                                                            type="number"
-                                                            value={approvedQuantities[item.id] ?? item.requested_quantity}
-                                                            onChange={(e) => handleQuantityChange(item.id, e.target.value)}
-                                                            className="w-24 px-3 py-1.5 bg-white border border-stone-200 rounded-lg text-right font-bold text-stone-900 focus:ring-2 focus:ring-stone-900 focus:outline-none transition-all"
-                                                            min="0"
-                                                            step="0.01"
-                                                        />
-                                                        <span className="text-[10px] font-bold text-stone-400 uppercase">{item.unit}</span>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-bold text-stone-400 uppercase tracking-widest px-1">Decision Notes (Optional)</label>
-                                <textarea
-                                    value={reviewNotes}
-                                    onChange={(e) => setReviewNotes(e.target.value)}
-                                    placeholder="Add any remarks or reasons for quantity adjustments..."
-                                    className="w-full px-4 py-3 bg-stone-50 border border-stone-100 rounded-ios-xl text-[13px] font-medium text-stone-900 focus:ring-2 focus:ring-stone-900 focus:outline-none transition-all min-h-[80px] resize-none"
-                                />
-                            </div>
-
-                            <div className="bg-amber-50 rounded-ios-xl p-4 border border-amber-100 flex items-start gap-4">
-                                <AlertTriangle className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
-                                <div>
-                                    <p className="text-sm font-bold text-amber-900 mb-1">Decision Rationale</p>
-                                    <p className="text-xs text-amber-800 leading-relaxed font-medium">
-                                        Your decision should be based on the branch's previous day sales data above.
-                                        You can adjust the quantities individual items based on their sales performance.
-                                    </p>
+                    <div className="p-6 overflow-y-auto flex-1 min-h-0 bg-white">
+                        {selectedRequest && (
+                            <div className="space-y-6">
+                                {/* Branch Performance Summary */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <IOSCard className="p-4 bg-stone-900 border-none">
+                                        <TrendingUp className="h-5 w-5 text-emerald-400 mb-2" />
+                                        <p className="text-xs font-bold text-stone-400 uppercase tracking-widest">Yesterday Sales</p>
+                                        <p className="text-lg font-bold text-white">KES {formatNumber(performance[selectedRequest.requesting_branch_id]?.totalSales || 0)}</p>
+                                    </IOSCard>
+                                    <IOSCard className="p-4 border-none shadow-sm bg-stone-50">
+                                        <Package className="h-5 w-5 text-blue-500 mb-2" />
+                                        <p className="text-xs font-bold text-stone-400 uppercase tracking-widest">Order Count</p>
+                                        <p className="text-lg font-bold text-stone-800">{performance[selectedRequest.requesting_branch_id]?.orderCount || 0}</p>
+                                    </IOSCard>
+                                    <IOSCard className="p-4 border-none shadow-sm bg-stone-50">
+                                        <TrendingUp className="h-5 w-5 text-stone-400 mb-2" />
+                                        <p className="text-xs font-bold text-stone-400 uppercase tracking-widest">Avg Ticket Size</p>
+                                        <p className="text-lg font-bold text-stone-800">KES {formatNumber(performance[selectedRequest.requesting_branch_id]?.averageOrder || 0)}</p>
+                                    </IOSCard>
                                 </div>
-                                <button
+
+                                {/* Items Table */}
+                                <div className="border border-stone-100 rounded-ios-xl overflow-hidden shadow-sm">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-stone-50">
+                                            <tr>
+                                                <th className="text-left p-4 font-semibold text-stone-600">Item Name</th>
+                                                <th className="text-left p-4 font-semibold text-stone-600">SKU</th>
+                                                <th className="text-center p-4 font-semibold text-stone-600">Branch Request</th>
+                                                <th className="text-right p-4 font-semibold text-stone-600 w-48">Approved Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-stone-100">
+                                            {selectedRequest.items.map((item) => (
+                                                <tr key={item.id} className="hover:bg-stone-50/30">
+                                                    <td className="p-4 font-medium text-stone-900">{item.item_name}</td>
+                                                    <td className="p-4 text-stone-400 font-mono text-xs">{item.item_sku}</td>
+                                                    <td className="p-4 text-center">
+                                                        <span className="bg-stone-100 px-3 py-1 rounded-full font-bold text-stone-800">
+                                                            {item.requested_quantity} {item.unit}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-4 text-right">
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            <input
+                                                                type="number"
+                                                                value={approvedQuantities[item.id] ?? item.requested_quantity}
+                                                                onChange={(e) => handleQuantityChange(item.id, e.target.value)}
+                                                                className="w-24 px-3 py-1.5 bg-white border border-stone-200 rounded-lg text-right font-bold text-stone-900 focus:ring-2 focus:ring-stone-900 focus:outline-none transition-all"
+                                                                min="0"
+                                                                step="0.01"
+                                                            />
+                                                            <span className="text-[10px] font-bold text-stone-400 uppercase">{item.unit}</span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-[11px] font-bold text-stone-400 uppercase tracking-widest px-1">Decision Notes (Optional)</label>
+                                    <textarea
+                                        value={reviewNotes}
+                                        onChange={(e) => setReviewNotes(e.target.value)}
+                                        placeholder="Add any remarks or reasons for quantity adjustments..."
+                                        className="w-full px-4 py-3 bg-stone-50 border border-stone-100 rounded-ios-xl text-[13px] font-medium text-stone-900 focus:ring-2 focus:ring-stone-900 focus:outline-none transition-all min-h-[80px] resize-none"
+                                    />
+                                </div>
+
+                                <div className="bg-amber-50 rounded-ios-xl p-4 border border-amber-100 flex items-start gap-4">
+                                    <AlertTriangle className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="text-sm font-bold text-amber-900 mb-1">Decision Rationale</p>
+                                        <p className="text-xs text-amber-800 leading-relaxed font-medium">
+                                            Your decision should be based on the branch's previous day sales data above.
+                                            You can adjust the quantities individual items based on their sales performance.
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            const fullApprovals: Record<string, number> = {};
+                                            selectedRequest.items.forEach(item => {
+                                                fullApprovals[item.id] = item.requested_quantity;
+                                            });
+                                            setApprovedQuantities(fullApprovals);
+                                            toast.success('Reset to full requested quantities');
+                                        }}
+                                        className="px-4 py-2 bg-white border border-stone-200 text-stone-600 text-xs font-bold rounded-lg hover:bg-stone-50 transition-all flex items-center gap-2"
+                                    >
+                                        <RefreshCw className="h-3.5 w-3.5" />
+                                        <span>Reset to Requested Quantities</span>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                    </div>
+
+                    <div className="p-6 border-t border-stone-100 flex-none bg-white">
+                        <DialogFooter className="gap-3 flex-col sm:flex-row">
+                            <IOSButton
+                                variant="secondary"
+                                onClick={() => handleDecision('REJECT')}
+                                disabled={isActionLoading}
+                                leftIcon={<XCircle className="h-4 w-4" />}
+                                className="bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100 font-bold sm:w-auto"
+                            >
+                                Decline Request
+                            </IOSButton>
+                            <div className="flex gap-2 flex-1">
+                                <IOSButton
                                     onClick={() => {
                                         const fullApprovals: Record<string, number> = {};
-                                        selectedRequest.items.forEach(item => {
+                                        selectedRequest?.items.forEach(item => {
                                             fullApprovals[item.id] = item.requested_quantity;
                                         });
                                         setApprovedQuantities(fullApprovals);
-                                        toast.success('Reset to full requested quantities');
+                                        handleDecision('APPROVE');
                                     }}
-                                    className="px-4 py-2 bg-white border border-stone-200 text-stone-600 text-xs font-bold rounded-lg hover:bg-stone-50 transition-all flex items-center gap-2"
+                                    disabled={isActionLoading}
+                                    className="bg-white border-2 border-stone-800 text-stone-900 flex-1 font-bold hover:bg-stone-50"
                                 >
-                                    <RefreshCw className="h-3.5 w-3.5" />
-                                    <span>Reset to Requested Quantities</span>
-                                </button>
+                                    Approve Fully
+                                </IOSButton>
+                                <IOSButton
+                                    onClick={() => handleDecision('APPROVE')}
+                                    disabled={isActionLoading}
+                                    leftIcon={<CheckCircle className="h-4 w-4" />}
+                                    className="bg-stone-900 text-white flex-1 font-bold"
+                                >
+                                    {isActionLoading ? 'Processing...' : 'Confirm Adjustments'}
+                                </IOSButton>
                             </div>
-                        </div>
-                    )}
-
-                    <DialogFooter className="gap-3 pt-6 border-t border-stone-100 flex-col sm:flex-row">
-                        <IOSButton
-                            variant="secondary"
-                            onClick={() => handleDecision('REJECT')}
-                            disabled={isActionLoading}
-                            leftIcon={<XCircle className="h-4 w-4" />}
-                            className="bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100 font-bold sm:w-auto"
-                        >
-                            Decline Request
-                        </IOSButton>
-                        <div className="flex gap-2 flex-1">
-                            <IOSButton
-                                onClick={() => {
-                                    const fullApprovals: Record<string, number> = {};
-                                    selectedRequest?.items.forEach(item => {
-                                        fullApprovals[item.id] = item.requested_quantity;
-                                    });
-                                    setApprovedQuantities(fullApprovals);
-                                    handleDecision('APPROVE');
-                                }}
-                                disabled={isActionLoading}
-                                className="bg-white border-2 border-stone-800 text-stone-900 flex-1 font-bold hover:bg-stone-50"
-                            >
-                                Approve Fully
-                            </IOSButton>
-                            <IOSButton
-                                onClick={() => handleDecision('APPROVE')}
-                                disabled={isActionLoading}
-                                leftIcon={<CheckCircle className="h-4 w-4" />}
-                                className="bg-stone-900 text-white flex-1 font-bold"
-                            >
-                                {isActionLoading ? 'Processing...' : 'Confirm Adjustments'}
-                            </IOSButton>
-                        </div>
-                    </DialogFooter>
+                        </DialogFooter>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>
