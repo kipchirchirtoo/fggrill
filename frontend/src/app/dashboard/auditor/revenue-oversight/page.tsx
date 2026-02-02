@@ -5,9 +5,9 @@ import {
     TrendingUp, BarChart3, PieChart, Layers,
     ArrowUpRight, ArrowDownRight, RefreshCw,
     Download, Calendar, Filter, MousePointer2,
-    Building2, Utensils, Beer, Users
+    Building2, Utensils, Beer, Users, FileDown
 } from 'lucide-react';
-import { auditAPI } from '@/lib/api';
+import { auditAPI, auditorReportsAPI } from '@/lib/api';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { BranchSelector, useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 export default function RevenueOversight() {
     const { activeBranchId, activeBranch } = useBranch();
     const [isLoading, setIsLoading] = useState(true);
+    const [isExporting, setIsExporting] = useState(false);
     const [data, setData] = useState<any>(null);
     const [dateRange, setDateRange] = useState({
         startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -44,6 +45,23 @@ export default function RevenueOversight() {
             setIsLoading(false);
         }
     }, [activeBranchId, dateRange]);
+
+    const handleExport = async () => {
+        setIsExporting(true);
+        try {
+            await auditorReportsAPI.exportBrandedPdf('revenue_reconciliation', {
+                branch_id: activeBranchId || 1,
+                start_date: dateRange.startDate,
+                end_date: dateRange.endDate
+            });
+            toast.success("Revenue report exported successfully");
+        } catch (e) {
+            console.error(e);
+            toast.error("Failed to export report");
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     useEffect(() => {
         fetchData();
@@ -87,6 +105,9 @@ export default function RevenueOversight() {
                                 />
                             </div>
                             <BranchSelector />
+                            <button onClick={handleExport} disabled={isExporting} className="btn-primary bg-blue-600 hover:bg-blue-700 h-[38px] px-4">
+                                <FileDown className={`h-4 w-4 ${isExporting ? 'animate-bounce' : ''}`} />
+                            </button>
                             <button onClick={fetchData} className="btn-primary h-[38px] px-4">
                                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                             </button>

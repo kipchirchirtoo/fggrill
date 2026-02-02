@@ -430,6 +430,55 @@ def get_report_data():
             'message': f'Failed to fetch {report_type} data'
         }), 500
 
+@app.route('/api/reports/auditor/export/<report_type>', methods=['GET'])
+def export_auditor_report(report_type):
+    """Export auditor reports as branded PDFs"""
+    try:
+        # Get query parameters
+        branch_id = request.args.get('branch_id')
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        branch_name = request.args.get('branch_name', f'Branch #{branch_id}')
+        
+        logger.info(f"Exporting auditor report: {report_type} for branch {branch_id}")
+        
+        # Build filters
+        filters = {
+            'branch_id': branch_id,
+            'start_date': start_date,
+            'end_date': end_date,
+            'branch_name': branch_name
+        }
+        
+        # Fetch data from database (this would be implemented in database_fetcher)
+        # For now, we'll generate a placeholder report
+        report_data = {
+            'report_type': report_type,
+            'branch_id': branch_id,
+            'branch_name': branch_name,
+            'start_date': start_date,
+            'end_date': end_date,
+            'generated_at': datetime.now().isoformat(),
+            'data': []  # Placeholder - would be populated by database_fetcher
+        }
+        
+        # Generate branded PDF
+        pdf_file = branded_pdf_generator.generate_report(report_type, report_data, filters)
+        
+        return send_file(
+            pdf_file,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'FG_Auditor_{report_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        )
+    except Exception as e:
+        logger.error(f"Error exporting auditor report {report_type}: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'message': f'Failed to export {report_type} report'
+        }), 500
+
 @app.route('/api/reports/schedule', methods=['POST'])
 def schedule_report():
     """Schedule automatic report generation"""

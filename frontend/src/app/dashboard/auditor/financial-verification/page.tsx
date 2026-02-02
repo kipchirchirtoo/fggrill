@@ -4,9 +4,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     DollarSign, CreditCard, Wallet, AlertCircle,
     RefreshCw, Filter, Download, ArrowUpRight,
-    TrendingUp, ShieldCheck, Search, Info
+    TrendingUp, ShieldCheck, Search, Info, Smartphone, FileDown
 } from 'lucide-react';
-import { auditAPI } from '@/lib/api';
+import { auditAPI, auditorReportsAPI } from '@/lib/api';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { BranchSelector, useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 export default function FinancialVerification() {
     const { activeBranchId, activeBranch } = useBranch();
     const [isLoading, setIsLoading] = useState(true);
+    const [isExporting, setIsExporting] = useState(false);
     const [data, setData] = useState<any>(null);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -39,6 +40,23 @@ export default function FinancialVerification() {
             setIsLoading(false);
         }
     }, [activeBranchId, selectedDate]);
+
+    const handleExport = async () => {
+        setIsExporting(true);
+        try {
+            await auditorReportsAPI.exportBrandedPdf('expenditure_audit', {
+                branch_id: activeBranchId || 1,
+                start_date: selectedDate,
+                end_date: selectedDate
+            });
+            toast.success("Financial report exported successfully");
+        } catch (e) {
+            console.error(e);
+            toast.error("Failed to export report");
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     useEffect(() => {
         fetchData();
@@ -73,6 +91,10 @@ export default function FinancialVerification() {
                                 className="bg-white border border-stone-200 rounded-xl px-4 py-2 text-sm font-bold text-stone-900 shadow-sm outline-none focus:ring-2 focus:ring-stone-900 transition-all"
                             />
                             <BranchSelector />
+                            <button onClick={handleExport} disabled={isExporting} className="btn-primary bg-blue-600 hover:bg-blue-700 h-[42px] px-6">
+                                <FileDown className={`h-4 w-4 mr-2 ${isExporting ? 'animate-bounce' : ''}`} />
+                                <span className="hidden sm:inline">{isExporting ? 'Exporting...' : 'Export PDF'}</span>
+                            </button>
                             <button onClick={fetchData} className="btn-primary h-[42px] px-6">
                                 <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                                 <span className="hidden sm:inline">Refresh Data</span>

@@ -2628,7 +2628,7 @@ export const auditorReportsAPI = {
   exportBrandedPdf: async (reportType: string, params: any) => {
     const query = new URLSearchParams();
     Object.keys(params).forEach(key => query.append(key, String(params[key])));
-    const response = await fetch(`${API_URL}/api/reports/auditor/export/${reportType}?${query}`, {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/reports/auditor/export/${reportType}?${query}`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`
       }
@@ -2641,6 +2641,7 @@ export const auditorReportsAPI = {
     a.download = `${reportType}_${new Date().getTime()}.pdf`;
     document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
     return true;
   }

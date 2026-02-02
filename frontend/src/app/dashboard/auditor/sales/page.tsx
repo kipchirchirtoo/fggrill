@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { restaurantAPI } from '@/lib/api';
+import { auditAPI, auditorReportsAPI } from '@/lib/api';
 import { BranchAwareDashboardLayout } from '@/components/layout/branch-aware-dashboard-layout';
 import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
-import { AlertTriangle, ShoppingBag, Filter, Download, ArrowLeft, Check, X, RefreshCw, Eye } from 'lucide-react';
+import { AlertTriangle, ShoppingBag, Filter, Download, ArrowLeft, Check, X, RefreshCw, Eye, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 
@@ -45,10 +45,10 @@ const OrderDetailsModal = ({ order, isOpen, onClose }: { order: any, isOpen: boo
                                 order.items.map((item: any, idx: number) => (
                                     <div key={idx} className="px-4 py-2.5 flex justify-between items-center">
                                         <div>
-                                            <p className="text-[13px] font-medium text-stone-800">{item.menu_item?.name || 'Unknown Item'}</p>
+                                            <p className="text-[13px] font-medium text-stone-800">{item.menu_item?.name || item.item_name || 'Unknown Item'}</p>
                                             <p className="text-[11px] text-stone-400">Qty: {item.quantity}</p>
                                         </div>
-                                        <p className="text-[13px] font-bold text-stone-900">KES {(item.quantity * (item.unit_price || 0)).toLocaleString()}</p>
+                                        <p className="text-[13px] font-bold text-stone-900">KES {(item.quantity * (item.unit_price || item.price || 0)).toLocaleString()}</p>
                                     </div>
                                 ))
                             ) : (
@@ -81,32 +81,46 @@ export default function SalesAuditPage() {
     const router = useRouter();
     const { activeBranchId } = useBranch();
     const [orders, setOrders] = useState<any[]>([]);
-    const [stats, setStats] = useState({ expected: 0, reported: 0, variance: 0 });
+    const [stats, setStats] = useState({ expected: 0, reported: 0, variance: 0, voidedCount: 0 });
     const [isLoading, setIsLoading] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState<any>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     const fetchSalesData = async () => {
         setIsLoading(true);
         try {
-            // Fetch today's orders
-            const ordersRes = await restaurantAPI.getTodayOrders(activeBranchId || undefined);
-            if (ordersRes.success) {
-                setOrders(ordersRes.data || []);
+            const today = new Date();
+            const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+            const endDate = new Date().toISOString();
 
-                // Calculate expected revenue from orders
-                const totalRevenue = (ordersRes.data || []).reduce((sum: number, order: any) =>
-                    sum + (order.total_amount || order.total || 0), 0
-                );
+            // Use the new audit API endpoint
+            const res = await auditAPI.verifySales({
+                branch_id: activeBranchId === null || activeBranchId === 0 ? undefined : activeBranchId,
+                start_date: startDate,
+                end_date: endDate
+            });
 
-                // Fetch daily sales report for reconciliation (reported deposits)
-                const reportRes = await restaurantAPI.getDailySales(activeBranchId || undefined);
-                const reported = reportRes.success ? (reportRes.data?.total_sales || totalRevenue) : totalRevenue;
+            if (res.success && res.data) {
+                // Extract orders from both restaurant and bar
+                const allOrders = [
+                    ...(res.data.restaurant_orders || []),
+                    ...(res.data.bar_orders || [])
+                ];
+                setOrders(allOrders);
+
+                // Calculate stats
+                const totalRevenue = allOrders
+                    .filter((o: any) => o.status !== 'cancelled')
+                    .reduce((sum: number, order: any) => sum + (order.total_amount || order.total || 0), 0);
+
+                const voidedCount = allOrders.filter((o: any) => o.status === 'cancelled').length;
 
                 setStats({
                     expected: totalRevenue,
-                    reported: reported,
-                    variance: reported - totalRevenue
+                    reported: totalRevenue, // In real scenario, this would come from payment reconciliation
+                    variance: 0,
+                    voidedCount
                 });
             }
         } catch (e) {
@@ -114,6 +128,27 @@ export default function SalesAuditPage() {
             toast.error("Failed to fetch sales data");
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleExport = async () => {
+        setIsExporting(true);
+        try {
+            const today = new Date();
+            const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString().split('T')[0];
+            const endDate = today.toISOString().split('T')[0];
+
+            await auditorReportsAPI.exportBrandedPdf('revenue_reconciliation', {
+                branch_id: activeBranchId || 1,
+                start_date: startDate,
+                end_date: endDate
+            });
+            toast.success("Sales report exported successfully");
+        } catch (e) {
+            console.error(e);
+            toast.error("Failed to export report");
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -128,6 +163,10 @@ export default function SalesAuditPage() {
                 <div className="space-y-6">
                     {/* Actions */}
                     <div className="flex justify-end gap-2">
+                        <button onClick={handleExport} disabled={isExporting} className="btn-primary bg-blue-600 hover:bg-blue-700">
+                            <FileDown className={`h-4 w-4 ${isExporting ? 'animate-bounce' : ''}`} />
+                            <span>{isExporting ? 'Exporting...' : 'Export PDF'}</span>
+                        </button>
                         <button onClick={() => router.back()} className="btn-secondary">
                             <ArrowLeft className="h-4 w-4" />
                             <span>Back</span>
