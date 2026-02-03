@@ -880,8 +880,8 @@ def export_supplier_statement_pdf():
                 .lt('transaction_date', start_date)\
                 .execute()
             
-            for entry in opening_res.data:
-                opening_balance += (float(entry.get('credit_amount', 0)) - float(entry.get('debit_amount', 0)))
+            for entry in opening_res.data or []:
+                opening_balance += (float(entry.get('credit_amount') or 0) - float(entry.get('debit_amount') or 0))
 
         # 3. Fetch Transactions in Period
         query = supabase.table('store_supplier_ledger')\
@@ -893,17 +893,17 @@ def export_supplier_statement_pdf():
         if end_date: query = query.lte('transaction_date', end_date)
         
         trans_res = query.execute()
-        transactions = trans_res.data
+        transactions = trans_res.data or []
 
         # Calculate entries totals for summary
-        total_invoiced = sum(float(t.get('credit_amount', 0)) for t in transactions if t['transaction_type'] == 'invoice')
-        total_paid = sum(float(t.get('debit_amount', 0)) for t in transactions if t['transaction_type'] == 'payment')
+        total_invoiced = sum(float(t.get('credit_amount') or 0) for t in transactions if t.get('transaction_type') == 'invoice')
+        total_paid = sum(float(t.get('debit_amount') or 0) for t in transactions if t.get('transaction_type') == 'payment')
 
         # Recalculate running balances for display starting from opening balance
         running_bal = opening_balance
         for t in transactions:
-            credit = float(t.get('credit_amount', 0))
-            debit = float(t.get('debit_amount', 0))
+            credit = float(t.get('credit_amount') or 0)
+            debit = float(t.get('debit_amount') or 0)
             running_bal += (credit - debit)
             t['running_balance'] = running_bal
 

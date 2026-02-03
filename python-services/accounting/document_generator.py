@@ -431,9 +431,9 @@ class AccountingDocumentGenerator:
         ])
         
         for trans in data.get('transactions', []):
-            debit = Decimal(str(trans.get('debit_amount', 0)))
-            credit = Decimal(str(trans.get('credit_amount', 0)))
-            balance = Decimal(str(trans.get('running_balance', 0)))
+            debit = Decimal(str(trans.get('debit_amount') or 0))
+            credit = Decimal(str(trans.get('credit_amount') or 0))
+            balance = Decimal(str(trans.get('running_balance') or 0))
             
             trans_data.append([
                 trans.get('transaction_date', ''),
