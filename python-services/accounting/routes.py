@@ -846,3 +846,102 @@ def export_stock_count_pdf():
         logger.error(f"Error exporting stock count PDF: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@accounting_bp.route('/suppliers/statement/export/pdf', methods=['GET'])
+def export_supplier_statement_pdf():
+    """Export Supplier Statement as PDF"""
+    try:
+        supplier_id = request.args.get('supplier_id')
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+
+        if not supplier_id:
+            return jsonify({'success': False, 'message': 'Supplier ID is required'}), 400
+
+        if not supabase:
+             return jsonify({'success': False, 'message': 'Service unavailable'}), 503
+
+        # 1. Fetch Supplier Details
+        supplier_res = supabase.table('store_suppliers').select('*').eq('id', supplier_id).single().execute()
+        if not supplier_res.data:
+            return jsonify({'success': False, 'message': 'Supplier not found'}), 404
+        supplier = supplier_res.data
+        
+        # Format Address
+        addr_parts = [supplier.get('address_line1'), supplier.get('address_line2'), supplier.get('city')]
+        supplier['address'] = ", ".join([p for p in addr_parts if p])
+
+        # 2. Calculate Opening Balance (Transactions < start_date)
+        # We can sum ledger entries before start_date
+        opening_balance = 0
+        if start_date:
+            opening_res = supabase.table('store_supplier_ledger')\
+                .select('debit_amount, credit_amount')\
+                .eq('supplier_id', supplier_id)\
+                .lt('transaction_date', start_date)\
+                .execute()
+            
+            for entry in opening_res.data:
+                opening_balance += (float(entry.get('credit_amount', 0)) - float(entry.get('debit_amount', 0)))
+
+        # 3. Fetch Transactions in Period
+        query = supabase.table('store_supplier_ledger')\
+            .select('*')\
+            .eq('supplier_id', supplier_id)\
+            .order('transaction_date', desc=False)
+            
+        if start_date: query = query.gte('transaction_date', start_date)
+        if end_date: query = query.lte('transaction_date', end_date)
+        
+        trans_res = query.execute()
+        transactions = trans_res.data
+
+        # Calculate entries totals for summary
+        total_invoiced = sum(float(t.get('credit_amount', 0)) for t in transactions if t['transaction_type'] == 'invoice')
+        total_paid = sum(float(t.get('debit_amount', 0)) for t in transactions if t['transaction_type'] == 'payment')
+
+        # Recalculate running balances for display starting from opening balance
+        running_bal = opening_balance
+        for t in transactions:
+            credit = float(t.get('credit_amount', 0))
+            debit = float(t.get('debit_amount', 0))
+            running_bal += (credit - debit)
+            t['running_balance'] = running_bal
+
+        closing_balance = running_bal
+
+        # 4. Fetch Current Aging (Real-time from balances table)
+        aging_res = supabase.table('store_supplier_balances')\
+            .select('*')\
+            .eq('supplier_id', supplier_id)\
+            .maybe_single()\
+            .execute()
+        
+        aging = aging_res.data if aging_res.data else {
+            'current_amount': 0, 'days_30_amount': 0, 'days_60_amount': 0, 'days_90_plus_amount': 0
+        }
+
+        # Prepare Data for PDF
+        pdf_data = {
+            'supplier': supplier,
+            'start_date': start_date or 'Beginning',
+            'end_date': end_date or datetime.now().strftime('%Y-%m-%d'),
+            'opening_balance': opening_balance,
+            'transactions': transactions,
+            'closing_balance': closing_balance,
+            'total_invoiced': total_invoiced,
+            'total_paid': total_paid,
+            'aging': aging
+        }
+
+        pdf_bytes = doc_generator.generate_supplier_statement_pdf(pdf_data)
+
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'statement_{supplier.get("supplier_code", "SUP")}_{end_date}.pdf'
+        )
+
+    except Exception as e:
+        logger.error(f"Error exporting supplier statement PDF: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500

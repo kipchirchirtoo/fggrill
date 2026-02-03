@@ -115,7 +115,6 @@ export const createPurchaseOrder = async (
     try {
         const {
             supplier_id,
-            receiving_branch_id,
             po_date,
             expected_delivery_date,
             special_instructions,
@@ -126,8 +125,8 @@ export const createPurchaseOrder = async (
 
         const userId = req.user?.id;
 
-        if (!supplier_id || !receiving_branch_id || !items || items.length === 0) {
-            throw new AppError('Supplier, receiving branch, and items are required', 400);
+        if (!supplier_id || !items || items.length === 0) {
+            throw new AppError('Supplier and items are required', 400);
         }
 
         // Generate PO number using database function
@@ -151,7 +150,6 @@ export const createPurchaseOrder = async (
             .insert({
                 po_number,
                 supplier_id,
-                receiving_branch_id,
                 created_by_id: userId,
                 po_date: po_date || new Date().toISOString().split('T')[0],
                 expected_delivery_date,

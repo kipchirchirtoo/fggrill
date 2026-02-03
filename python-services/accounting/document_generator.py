@@ -363,4 +363,129 @@ class AccountingDocumentGenerator:
         buffer = io.BytesIO()
         wb.save(buffer)
         buffer.seek(0)
+    
+    def generate_supplier_statement_pdf(self, data: Dict[str, Any]) -> bytes:
+        """Generate Supplier Statement PDF"""
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=1.5*inch, bottomMargin=inch)
+        story = []
+        
+        # 1. Header Information
+        supplier = data.get('supplier', {})
+        
+        # Statement Title
+        story.append(Paragraph("SUPPLIER STATEMENT", self.styles['CustomTitle']))
+        
+        # Supplier Details & Period
+        header_data = [
+            [
+                Paragraph(f"<b>To:</b><br/>{supplier.get('name', '')}<br/>{supplier.get('address', '')}<br/>{supplier.get('email', '')}", self.styles['Normal']),
+                Paragraph(f"<b>Statement Period:</b><br/>{data.get('start_date', '')} to {data.get('end_date', '')}<br/><br/><b>Currency:</b> KES", self.styles['Normal'])
+            ]
+        ]
+        
+        header_table = Table(header_data, colWidths=[4*inch, 3*inch])
+        header_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        story.append(header_table)
+        story.append(Spacer(1, 0.3*inch))
+        
+        # 2. Summary Section (Opening, Closing, Due)
+        summary_data = [
+            ['Opening Balance', 'Total Invoiced', 'Total Paid', 'Closing Balance'],
+            [
+                f"{data.get('opening_balance', 0):,.2f}",
+                f"{data.get('total_invoiced', 0):,.2f}",
+                f"{data.get('total_paid', 0):,.2f}",
+                f"{data.get('closing_balance', 0):,.2f}"
+            ]
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+            ('BOX', (0, 0), (-1, -1), 1, colors.grey),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#f8f9fa')),
+        ]))
+        story.append(summary_table)
+        story.append(Spacer(1, 0.3*inch))
+        
+        # 3. Transactions Table
+        trans_data = [['Date', 'Description', 'Ref', 'Debit', 'Credit', 'Balance']]
+        
+        # Add opening balance row
+        trans_data.append([
+            data.get('start_date', ''), 
+            'Opening Balance', 
+            '', 
+            '', 
+            '', 
+            f"{data.get('opening_balance', 0):,.2f}"
+        ])
+        
+        for trans in data.get('transactions', []):
+            debit = Decimal(str(trans.get('debit_amount', 0)))
+            credit = Decimal(str(trans.get('credit_amount', 0)))
+            balance = Decimal(str(trans.get('running_balance', 0)))
+            
+            trans_data.append([
+                trans.get('transaction_date', ''),
+                Paragraph(trans.get('description', ''), self.styles['Normal']),
+                trans.get('reference_number', ''),
+                f"{debit:,.2f}" if debit > 0 else '-',
+                f"{credit:,.2f}" if credit > 0 else '-',
+                f"{balance:,.2f}"
+            ])
+            
+        trans_table = Table(trans_data, colWidths=[1*inch, 2.5*inch, 1*inch, 0.9*inch, 0.9*inch, 1*inch])
+        trans_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#34495e')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('ALIGN', (3, 0), (5, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')])
+        ]))
+        story.append(trans_table)
+        story.append(Spacer(1, 0.3*inch))
+        
+        # 4. Aging Analysis
+        aging = data.get('aging', {})
+        story.append(Paragraph("Aging Analysis", self.styles['CustomHeading']))
+        aging_data = [
+            ['Current', '30 Days', '60 Days', '90+ Days', 'Total Due'],
+            [
+                f"{aging.get('current_amount', 0):,.2f}",
+                f"{aging.get('days_30_amount', 0):,.2f}",
+                f"{aging.get('days_60_amount', 0):,.2f}",
+                f"{aging.get('days_90_plus_amount', 0):,.2f}",
+                f"{data.get('closing_balance', 0):,.2f}"
+            ]
+        ]
+        
+        aging_table = Table(aging_data, colWidths=[1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch])
+        aging_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('LINEABOVE', (0, 0), (-1, 0), 1, colors.black),
+            ('LINEBELOW', (0, 1), (-1, 1), 1, colors.black),
+            ('TEXTCOLOR', (4, 1), (4, 1), colors.red),
+            ('FONTNAME', (4, 1), (4, 1), 'Helvetica-Bold'),
+        ]))
+        story.append(aging_table)
+        
+        # Build PDF
+        doc.build(story, onFirstPage=self._add_header, onLaterPages=self._add_header)
+        buffer.seek(0)
         return buffer.getvalue()

@@ -5,7 +5,14 @@ import { useParams } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { procurementAPI, storeAPI } from '@/lib/api';
+import { procurementAPI, storeAPI, accountingAPI } from '@/lib/api';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Trash2 } from 'lucide-react';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -65,6 +72,119 @@ export default function SupplierDetailPage() {
     const [ledger, setLedger] = useState<LedgerEntry[]>([]);
     const [performance, setPerformance] = useState<any>(null);
     const [auditLogs, setAuditLogs] = useState<any[]>([]);
+
+    // Modal States
+    const [poModalOpen, setPoModalOpen] = useState(false);
+    const [exportModalOpen, setExportModalOpen] = useState(false);
+
+    // PO Form Date
+    const [poItems, setPoItems] = useState<{ item_id: string; quantity: number; unit_price: number; name: string }[]>([]);
+    const [poFormData, setPoFormData] = useState({
+        expected_delivery_date: '',
+        special_instructions: '',
+        payment_terms: '30 Days',
+        delivery_terms: 'DDP'
+    });
+    const [availableItems, setAvailableItems] = useState<any[]>([]);
+    const [selectedItemId, setSelectedItemId] = useState('');
+
+    // Export Form Data
+    const [exportDates, setExportDates] = useState({
+        start_date: '',
+        end_date: new Date().toISOString().split('T')[0]
+    });
+
+    const fetchItems = async () => {
+        const res = await storeAPI.getItems({ limit: 1000 });
+        if (res.success && res.data) {
+            setAvailableItems(res.data);
+        }
+    };
+
+    useEffect(() => {
+        if (poModalOpen) {
+            fetchItems();
+        }
+    }, [poModalOpen]);
+
+    const handleCreatePO = async () => {
+        if (poItems.length === 0) {
+            toast.error('Please add at least one item');
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const res = await procurementAPI.createPurchaseOrder({
+                supplier_id: id,
+                items: poItems,
+                ...poFormData
+            });
+
+            if (res.success) {
+                toast.success('Purchase Order created successfully');
+                setPoModalOpen(false);
+                setPoItems([]);
+                setPoFormData({
+                    expected_delivery_date: '',
+                    special_instructions: '',
+                    payment_terms: '30 Days',
+                    delivery_terms: 'DDP'
+                });
+                fetchData(); // Refresh data
+            } else {
+                toast.error(res.message || 'Failed to create PO');
+            }
+        } catch (error) {
+            console.error('Create PO Error:', error);
+            toast.error('An error occurred');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleExportStatement = async () => {
+        try {
+            toast.info('Generating statement...');
+            await accountingAPI.exportSupplierStatement({
+                supplier_id: id as string,
+                start_date: exportDates.start_date,
+                end_date: exportDates.end_date
+            });
+            setExportModalOpen(false);
+            toast.success('Download started');
+        } catch (error) {
+            console.error('Export Error:', error);
+            toast.error('Failed to export statement');
+        }
+    };
+
+    const addItemToPO = () => {
+        if (!selectedItemId) return;
+        const item = availableItems.find(i => i.id === selectedItemId);
+        if (!item) return;
+
+        setPoItems([...poItems, {
+            item_id: item.id,
+            name: item.name,
+            quantity: 1,
+            unit_price: item.last_purchase_price || item.unit_cost || 0
+        }]);
+        setSelectedItemId('');
+    };
+
+    const removePOItem = (index: number) => {
+        const newItems = [...poItems];
+        newItems.splice(index, 1);
+        setPoItems(newItems);
+    };
+
+    const updatePOItem = (index: number, field: string, value: number) => {
+        const newItems = [...poItems];
+        if (field === 'quantity') newItems[index].quantity = value;
+        if (field === 'unit_price') newItems[index].unit_price = value;
+        setPoItems(newItems);
+    };
 
     const fetchData = useCallback(async () => {
         if (!id) return;
@@ -161,10 +281,10 @@ export default function SupplierDetailPage() {
                             <p className="text-stone-500 font-mono text-sm">{supplier.supplier_code}</p>
                         </div>
                         <div className="flex gap-2">
-                            <IOSButton variant="secondary" className="bg-white border-stone-200">
+                            <IOSButton variant="secondary" className="bg-white border-stone-200" onClick={() => setExportModalOpen(true)}>
                                 <Download className="h-4 w-4 mr-2" /> Export Statement
                             </IOSButton>
-                            <IOSButton className="shadow-lg shadow-emerald-500/20 bg-emerald-600 hover:bg-emerald-700">
+                            <IOSButton className="shadow-lg shadow-emerald-500/20 bg-emerald-600 hover:bg-emerald-700" onClick={() => setPoModalOpen(true)}>
                                 <Plus className="h-4 w-4 mr-2" /> New PO
                             </IOSButton>
                         </div>
@@ -534,6 +654,117 @@ export default function SupplierDetailPage() {
                             </IOSCard>
                         </TabsContent>
                     </Tabs>
+                    {/* NEW PO MODAL */}
+                    <Dialog open={poModalOpen} onOpenChange={setPoModalOpen}>
+                        <DialogContent className="max-w-3xl">
+                            <DialogHeader>
+                                <DialogTitle>Create Purchase Order - {supplier.name}</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label>Expected Delivery Date</Label>
+                                        <Input type="date" value={poFormData.expected_delivery_date} onChange={e => setPoFormData({ ...poFormData, expected_delivery_date: e.target.value })} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Payment Terms</Label>
+                                        <Select value={poFormData.payment_terms} onValueChange={v => setPoFormData({ ...poFormData, payment_terms: v })}>
+                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Immediate">Immediate</SelectItem>
+                                                <SelectItem value="7 Days">7 Days</SelectItem>
+                                                <SelectItem value="14 Days">14 Days</SelectItem>
+                                                <SelectItem value="30 Days">30 Days</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Special Instructions</Label>
+                                    <Textarea value={poFormData.special_instructions} onChange={e => setPoFormData({ ...poFormData, special_instructions: e.target.value })} placeholder="e.g., Deliver to rear entrance..." />
+                                </div>
+
+                                <div className="border-t pt-4">
+                                    <h4 className="font-semibold mb-2">Order Items</h4>
+                                    <div className="flex gap-2 mb-4">
+                                        <Select value={selectedItemId} onValueChange={setSelectedItemId}>
+                                            <SelectTrigger className="flex-1"><SelectValue placeholder="Select Item to Add" /></SelectTrigger>
+                                            <SelectContent>
+                                                {availableItems.map(item => (
+                                                    <SelectItem key={item.id} value={item.id}>{item.name} ({item.unit})</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <Button onClick={addItemToPO} disabled={!selectedItemId}>Add</Button>
+                                    </div>
+
+                                    <div className="max-h-[200px] overflow-y-auto border rounded-md">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-stone-50">
+                                                <tr>
+                                                    <th className="text-left p-2">Item</th>
+                                                    <th className="text-right p-2 w-[100px]">Qty</th>
+                                                    <th className="text-right p-2 w-[120px]">Price</th>
+                                                    <th className="text-right p-2 w-[120px]">Total</th>
+                                                    <th className="w-[50px]"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {poItems.length === 0 ? (
+                                                    <tr><td colSpan={5} className="p-4 text-center text-stone-400">No items added</td></tr>
+                                                ) : poItems.map((item, idx) => (
+                                                    <tr key={idx} className="border-b">
+                                                        <td className="p-2">{item.name}</td>
+                                                        <td className="p-2">
+                                                            <Input type="number" min="1" className="h-8 text-right" value={item.quantity} onChange={e => updatePOItem(idx, 'quantity', Number(e.target.value))} />
+                                                        </td>
+                                                        <td className="p-2">
+                                                            <Input type="number" min="0" className="h-8 text-right" value={item.unit_price} onChange={e => updatePOItem(idx, 'unit_price', Number(e.target.value))} />
+                                                        </td>
+                                                        <td className="p-2 text-right font-medium">{(item.quantity * item.unit_price).toLocaleString()}</td>
+                                                        <td className="p-2 text-center">
+                                                            <Button variant="ghost" size="sm" onClick={() => removePOItem(idx)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div className="mt-2 text-right font-bold text-lg">
+                                        Total: KES {poItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0).toLocaleString()}
+                                    </div>
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setPoModalOpen(false)}>Cancel</Button>
+                                <Button onClick={handleCreatePO} disabled={poItems.length === 0}>Create Purchase Order</Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+
+                    {/* EXPORT STATEMENT MODAL */}
+                    <Dialog open={exportModalOpen} onOpenChange={setExportModalOpen}>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Export Supplier Statement</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                                <div className="space-y-2">
+                                    <Label>Start Date (Optional)</Label>
+                                    <Input type="date" value={exportDates.start_date} onChange={e => setExportDates({ ...exportDates, start_date: e.target.value })} />
+                                    <p className="text-xs text-stone-500">Leave blank for all history</p>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>End Date</Label>
+                                    <Input type="date" value={exportDates.end_date} onChange={e => setExportDates({ ...exportDates, end_date: e.target.value })} />
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setExportModalOpen(false)}>Cancel</Button>
+                                <Button onClick={handleExportStatement}>Download PDF</Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </div>
             </DashboardLayout>
         </ProtectedRoute>
