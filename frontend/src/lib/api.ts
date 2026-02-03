@@ -2682,6 +2682,8 @@ export const auditAPI = {
   getRoleMigrations: () => fetchAPI<any>('/admin/role-migrations'),
   executeRoleMigration: (id: number) => fetchAPI<any>(`/admin/role-migrations/${id}/execute`, { method: 'POST' }),
   revertRoleMigration: (id: number) => fetchAPI<any>(`/admin/role-migrations/${id}/revert`, { method: 'POST' }),
+  createException: (data: any) => fetchAPI<any>('/auditor/exceptions', { method: 'POST', body: JSON.stringify(data) }),
+
 
   // Operational Audit (Advanced)
   getConsumptionConfigs: () => fetchAPI<any>('/auditor/consumption/configs'),
@@ -2815,6 +2817,70 @@ export const auditorReportsAPI = {
     const a = document.createElement('a');
     a.href = url;
     a.download = `${reportType}_${new Date().getTime()}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    return true;
+  },
+  // Comprehensive Audit Reports
+  exportComprehensiveSalesAudit: async (params: { branch_id?: number; start_date: string; end_date: string; branch_name?: string }) => {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/reports/auditor/comprehensive-sales-audit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify(params)
+    });
+    if (!response.ok) throw new Error('Export failed');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `comprehensive_sales_audit_${new Date().getTime()}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    return true;
+  },
+  exportComprehensiveFinancialAudit: async (params: { branch_id?: number; date: string; branch_name?: string }) => {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/reports/auditor/comprehensive-financial-audit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify(params)
+    });
+    if (!response.ok) throw new Error('Export failed');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `comprehensive_financial_audit_${new Date().getTime()}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    return true;
+  },
+  exportComprehensiveStockAudit: async (params: { branch_id?: number; branch_name?: string }) => {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/reports/auditor/comprehensive-stock-audit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify(params)
+    });
+    if (!response.ok) throw new Error('Export failed');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `comprehensive_stock_audit_${new Date().getTime()}.pdf`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

@@ -69,6 +69,7 @@ class DatabaseFetcher:
                 'kitchen_item_ledger': self._fetch_kitchen_item_ledger,
                 'vat_report': self._fetch_vat_report,
                 'procurement_intelligence': self._fetch_procurement_intelligence,
+                'revenue_reconciliation': self._fetch_revenue_reconciliation,
             }
             
             fetcher = fetchers.get(report_type)
@@ -120,6 +121,116 @@ class DatabaseFetcher:
             else:
                 return query.in_(column, branch_ids)
         return query
+    
+    def _fetch_revenue_reconciliation(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch comprehensive revenue reconciliation data"""
+        start_date, end_date = self._parse_dates(filters)
+        
+        data = {
+            'total_revenue': 0,
+            'departments': {
+                'restaurant': 0,
+                'bar': 0,
+                'accommodation': 0,
+                'events': 0,
+                'other': 0
+            },
+            'payment_modes': {
+                'cash': 0,
+                'mpesa': 0,
+                'card': 0,
+                'other': 0
+            },
+            'transactions': []
+        }
+        
+        if not self.client:
+            return data
+            
+        try:
+            # 1. Fetch ALL payments for the period (completed only)
+            payments_query = self.client.table('payments').select('*')\
+                .gte('created_at', f'{start_date}T00:00:00')\
+                .lte('created_at', f'{end_date}T23:59:59')\
+                .eq('status', 'completed')
+                
+            payments_response = payments_query.execute()
+            all_payments = payments_response.data or []
+            
+            # 2. Get Branch IDs to filter
+            branch_ids = self._parse_branch_ids(filters)
+            
+            # 3. Aggregation and Filtering (In-Memory Branch Filtering logic similar to backend)
+            # Since payments don't have branch_id, we infer from related tables or treat as global if missing
+            
+            # Fetch related IDs
+            booking_ids = list(set([p.get('booking_id') for p in all_payments if p.get('booking_id')]))
+            order_ids = list(set([p.get('restaurant_order_id') for p in all_payments if p.get('restaurant_order_id')]))
+            bar_ids = list(set([p.get('bar_order_id') for p in all_payments if p.get('bar_order_id')]))
+            
+            # Fetch mappings
+            map_data = {}
+            if booking_ids:
+                res = self.client.table('reservations').select('id, branch_id').in_('id', booking_ids).execute()
+                for item in (res.data or []): map_data[f"booking_{item['id']}"] = item.get('branch_id')
+                
+            if order_ids:
+                res = self.client.table('restaurant_orders').select('id, branch_id').in_('id', order_ids).execute()
+                for item in (res.data or []): map_data[f"rest_{item['id']}"] = item.get('branch_id')
+                
+            if bar_ids:
+                res = self.client.table('bar_orders').select('id, branch_id').in_('id', bar_ids).execute()
+                for item in (res.data or []): map_data[f"bar_{item['id']}"] = item.get('branch_id')
+                
+            # Filter and Aggregate
+            for payment in all_payments:
+                pid = payment.get('branch_id') # Usually None based on prior analysis
+                
+                # Infer branch if missing
+                if not pid:
+                    if payment.get('booking_id'):
+                        pid = map_data.get(f"booking_{payment.get('booking_id')}")
+                    elif payment.get('restaurant_order_id'):
+                        pid = map_data.get(f"rest_{payment.get('restaurant_order_id')}")
+                    elif payment.get('bar_order_id'):
+                        pid = map_data.get(f"bar_{payment.get('bar_order_id')}")
+                
+                # Apply Branch Filter
+                if branch_ids and (pid not in branch_ids):
+                    continue
+                    
+                amount = float(payment.get('amount', 0) or 0)
+                method = (payment.get('payment_method') or 'other').lower()
+                
+                # Add to totals
+                data['total_revenue'] += amount
+                
+                # Add to modes
+                if 'cash' in method: data['payment_modes']['cash'] += amount
+                elif 'mpesa' in method: data['payment_modes']['mpesa'] += amount
+                elif 'card' in method: data['payment_modes']['card'] += amount
+                else: data['payment_modes']['other'] += amount
+                
+                # Add to departments
+                if payment.get('booking_id'): data['departments']['accommodation'] += amount
+                elif payment.get('restaurant_order_id'): data['departments']['restaurant'] += amount
+                elif payment.get('bar_order_id'): data['departments']['bar'] += amount
+                else: data['departments']['other'] += amount
+                
+                # Add transaction (limit to top 100 for report)
+                if len(data['transactions']) < 100:
+                    data['transactions'].append({
+                        'date': payment.get('created_at'),
+                        'reference': payment.get('reference'),
+                        'amount': amount,
+                        'method': method,
+                        'type': 'Booking' if payment.get('booking_id') else 'Order' if payment.get('restaurant_order_id') else 'Bar' if payment.get('bar_order_id') else 'Other'
+                    })
+                    
+        except Exception as e:
+            logger.error(f"Error fetching revenue reconciliation: {e}")
+            
+        return data
 
     def _fetch_daily_sales(self, filters: Dict) -> Dict[str, Any]:
         """Fetch daily sales data from all revenue sources"""

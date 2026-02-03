@@ -120,8 +120,12 @@ export const calculatePayroll = async (
         .lte('attendance_date', payPeriodEnd)
         .eq('is_approved', true);
 
+
       if (attendance && attendance.length > 0) {
-        const baseRate = Number(attendance[0].staff?.hourly_base_rate || 0);
+        // Handle array or object return from Supabase relation
+        const staff: any = attendance[0].staff;
+        const baseRate = Number(Array.isArray(staff) ? staff[0]?.hourly_base_rate : staff?.hourly_base_rate || 0);
+
         finalOvertime = attendance.reduce((sum, rec) => {
           const weekdayVal = Number(rec.hours_ot_weekday || 0) * baseRate * 1.5;
           const restVal = Number(rec.hours_ot_rest || 0) * baseRate * 2.0;

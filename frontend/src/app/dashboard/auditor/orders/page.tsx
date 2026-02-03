@@ -20,6 +20,8 @@ export default function OrdersAuditPage() {
     const [auditData, setAuditData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedOrder, setSelectedOrder] = useState<any>(null);
+    const [isExporting, setIsExporting] = useState(false);
 
     const [dateRange, setDateRange] = useState({
         startDate: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
@@ -51,6 +53,43 @@ export default function OrdersAuditPage() {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    const handleViewOrder = async (orderId: string) => {
+        try {
+            // Fetch full order details from backend
+            const res = await auditAPI.verifyBranchOrders({
+                branch_id: (activeBranchId === 0 || activeBranchId === null) ? undefined : activeBranchId,
+                start_date: dateRange.startDate,
+                end_date: dateRange.endDate
+            });
+
+            if (res.success) {
+                const order = res.data.requests.find((r: any) => r.id === orderId);
+                setSelectedOrder(order);
+            }
+        } catch (e) {
+            console.error(e);
+            toast.error('Failed to load order details');
+        }
+    };
+
+    const handleExportPDF = async () => {
+        setIsExporting(true);
+        try {
+            const { auditorReportsAPI } = await import('@/lib/api');
+            await auditorReportsAPI.exportBrandedPdf('branch_orders', {
+                branch_id: activeBranchId === 0 ? undefined : activeBranchId,
+                start_date: dateRange.startDate,
+                end_date: dateRange.endDate
+            });
+            toast.success('PDF archive generated successfully');
+        } catch (e) {
+            console.error(e);
+            toast.error('Failed to generate PDF archive');
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     const filteredRequests = (auditData?.requests || []).filter((req: any) =>
         req.request_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -229,8 +268,17 @@ export default function OrdersAuditPage() {
                                     />
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <button className="btn-secondary h-12 px-6">
-                                        <FileDown className="h-4 w-4 mr-2" /> PDF Archive
+                                    <button
+                                        onClick={handleExportPDF}
+                                        disabled={isExporting}
+                                        className="btn-secondary h-12 px-6"
+                                    >
+                                        {isExporting ? (
+                                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : (
+                                            <FileDown className="h-4 w-4 mr-2" />
+                                        )}
+                                        {isExporting ? 'Generating...' : 'PDF Archive'}
                                     </button>
                                 </div>
                             </div>
@@ -281,7 +329,10 @@ export default function OrdersAuditPage() {
                                                         </span>
                                                     </td>
                                                     <td className="table-cell text-right">
-                                                        <button className="w-8 h-8 rounded-lg hover:bg-stone-900 hover:text-white transition-all flex items-center justify-center text-stone-300">
+                                                        <button
+                                                            onClick={() => handleViewOrder(req.id)}
+                                                            className="w-8 h-8 rounded-lg hover:bg-stone-900 hover:text-white transition-all flex items-center justify-center text-stone-300"
+                                                        >
                                                             <Eye className="h-4 w-4" />
                                                         </button>
                                                     </td>
@@ -306,6 +357,92 @@ export default function OrdersAuditPage() {
                         </div>
                     )}
                 </div>
+
+                {/* Order Details Modal */}
+                {selectedOrder && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedOrder(null)}>
+                        <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                            <div className="p-6 border-b border-stone-100 sticky top-0 bg-white z-10">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h2 className="text-xl font-bold text-gray-900">Requisition Details</h2>
+                                        <p className="text-sm text-gray-500 font-mono mt-1">{selectedOrder.request_number || `#${selectedOrder.id?.substr(0, 8)}`}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setSelectedOrder(null)}
+                                        className="w-10 h-10 rounded-lg hover:bg-stone-100 flex items-center justify-center transition-colors"
+                                    >
+                                        <X className="h-5 w-5 text-gray-500" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="p-6 space-y-6">
+                                {/* Order Info */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <p className="text-xs font-bold text-gray-400 uppercase mb-1">Department</p>
+                                        <p className="font-bold text-gray-900">{selectedOrder.department || 'General'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-bold text-gray-400 uppercase mb-1">Status</p>
+                                        <span className={
+                                            selectedOrder.status === 'pending' || selectedOrder.status === 'PENDING_AUDIT' ? 'badge-warning' :
+                                                selectedOrder.status === 'approved' || selectedOrder.status === 'APPROVED' ? 'badge-info' :
+                                                    selectedOrder.status === 'dispatched' || selectedOrder.status === 'SHIPPED' ? 'badge-success' :
+                                                        'badge-danger'
+                                        }>
+                                            {selectedOrder.status?.replace('_', ' ')}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-bold text-gray-400 uppercase mb-1">Created Date</p>
+                                        <p className="font-bold text-gray-900">{new Date(selectedOrder.created_at).toLocaleDateString()}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-bold text-gray-400 uppercase mb-1">Total Items</p>
+                                        <p className="font-bold text-gray-900">{selectedOrder.items?.length || 0}</p>
+                                    </div>
+                                </div>
+
+                                {/* Items List */}
+                                {selectedOrder.items && selectedOrder.items.length > 0 && (
+                                    <div>
+                                        <h3 className="font-bold text-gray-900 mb-3">Requested Items</h3>
+                                        <div className="border border-stone-100 rounded-lg overflow-hidden">
+                                            <table className="w-full">
+                                                <thead className="bg-stone-50">
+                                                    <tr>
+                                                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase">Item</th>
+                                                        <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase">Qty Requested</th>
+                                                        <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase">Qty Approved</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-stone-50">
+                                                    {selectedOrder.items.map((item: any, idx: number) => (
+                                                        <tr key={idx} className="hover:bg-stone-50">
+                                                            <td className="px-4 py-3 font-bold text-gray-900">{item.item_name || item.name || 'Unknown Item'}</td>
+                                                            <td className="px-4 py-3 text-right font-bold text-gray-900">{item.quantity_requested || item.quantity || 0}</td>
+                                                            <td className="px-4 py-3 text-right font-bold text-gray-900">{item.quantity_approved || item.quantity || 0}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Notes */}
+                                {selectedOrder.notes && (
+                                    <div>
+                                        <h3 className="font-bold text-gray-900 mb-2">Notes</h3>
+                                        <p className="text-sm text-gray-600 bg-stone-50 p-4 rounded-lg">{selectedOrder.notes}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
             </DashboardLayout>
         </ProtectedRoute>
     );

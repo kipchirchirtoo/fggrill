@@ -342,24 +342,39 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
     // 1. Fetch branches for names
     const { data: branches } = await supabase.from('branches').select('id, name');
 
-    // 2. Fetch orders
-    let restQuery = supabase.from('restaurant_orders').select('*');
-    let barQuery = supabase.from('bar_orders').select('*');
+    // 2. Fetch orders, payments, and POS transactions
+    let restQuery = supabase.from('restaurant_orders').select('*, items:restaurant_order_items(*, menu_item:menu_items(name))'); // Fetch items for details
+    let barQuery = supabase.from('bar_orders').select('*, items:bar_order_items(*, stock_item:bar_inventory(item_name))'); // Fetch items for details
+    let paymentsQuery = supabase.from('payments').select('*');
+    let posQuery = supabase.from('pos_transactions').select('*');
 
     if (branch_id && branch_id !== '0') {
       restQuery = restQuery.eq('branch_id', branch_id);
       barQuery = barQuery.eq('branch_id', branch_id);
+      // payments table doesn't have branch_id directly, inferred in frontend or handled by previous fix. 
+      // However, for this specific report, we might need to rely on the previously implemented getFinancialReconciliation logic if we want strict branch filtering on payments.
+      // But for "Sales Verification", orders are the primary source of truth for *Sales*. Payments are for *Collection*.
+      // We will include payments that match the orders found, or if possible filter by branch if columns were added (unlikely).
+      // Given previous context: Payments query was refactored in getFinancialReconciliation to infer branch. 
+      // Here we will fetch all and let frontend/summary logic attribute them, OR duplicates logic.
+      // To be safe and fast, let's fetch payments related to the date range.
+      posQuery = posQuery.eq('branch_id', branch_id);
     }
+
     if (start_date) {
       restQuery = restQuery.gte('created_at', start_date);
       barQuery = barQuery.gte('created_at', start_date);
+      paymentsQuery = paymentsQuery.gte('payment_date', start_date);
+      posQuery = posQuery.gte('transaction_date', start_date);
     }
     if (end_date) {
       restQuery = restQuery.lte('created_at', end_date);
       barQuery = barQuery.lte('created_at', end_date);
+      paymentsQuery = paymentsQuery.lte('payment_date', end_date);
+      posQuery = posQuery.lte('transaction_date', end_date);
     }
 
-    const [restRes, barRes] = await Promise.all([restQuery, barQuery]);
+    const [restRes, barRes, payRes, posRes] = await Promise.all([restQuery, barQuery, paymentsQuery, posQuery]);
 
     // 3. Group by branch if no specific branch requested
     const branchSummaries: Record<string, any> = {};
@@ -370,7 +385,9 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
           branch_name: b.name,
           restaurant: { total_orders: 0, total_value: 0, voided: 0 },
           bar: { total_orders: 0, total_value: 0, voided: 0 },
-          total_revenue: 0
+          pos: { total_transactions: 0, total_value: 0 },
+          total_revenue: 0,
+          total_collected: 0 // From payments/pos
         };
       });
 
@@ -395,6 +412,17 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
           } else {
             branchSummaries[o.branch_id].bar.voided++;
           }
+        }
+      });
+
+      // POS Transactions
+      posRes.data?.forEach(p => {
+        if (branchSummaries[p.branch_id]) {
+          branchSummaries[p.branch_id].pos.total_transactions++;
+          branchSummaries[p.branch_id].pos.total_value += Number(p.amount || 0);
+          // Assuming POS transactions are also "revenue" or "collections". Usually distinct from orders.
+          // If POS is used for retail, it's revenue.
+          branchSummaries[p.branch_id].total_revenue += Number(p.amount || 0);
         }
       });
     }
@@ -430,6 +458,10 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
         total_value: barRes.data?.filter(o => o.status !== 'cancelled').reduce((sum, o) => sum + Number(o.total || 0), 0) || 0,
         voided: barRes.data?.filter(o => o.status === 'cancelled').length || 0
       },
+      pos: {
+        total_transactions: posRes.data?.length || 0,
+        total_value: posRes.data?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0
+      },
       stock_reconciliation: {
         total_requests: stockReqRes.data?.length || 0,
         pending_requests: stockReqRes.data?.filter(r => r.status === 'PENDING').length || 0,
@@ -444,8 +476,11 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
       orders: {
         restaurant: restRes.data,
         bar: barRes.data
-      }
+      },
+      pos_transactions: posRes.data,
+      payments: payRes.data
     });
+
   } catch (error) {
     next(error);
   }
@@ -460,51 +495,109 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
     const { branch_id, date } = req.query;
     const targetDate = date || new Date().toISOString().split('T')[0];
 
-    // 1. Get all payments for the date
-    let paymentQuery = supabase.from('payments').select('*')
+    // 1. Get all payments for the date (remove branch_id filter as it doesn't exist on payments)
+    const { data: rawPayments, error: payError } = await supabase.from('payments').select('*')
       .gte('created_at', `${targetDate}T00:00:00`)
       .lte('created_at', `${targetDate}T23:59:59`);
 
-    if (branch_id && branch_id !== '0') {
-      paymentQuery = paymentQuery.eq('branch_id', branch_id);
-    }
-
-    const { data: rawPayments, error: payError } = await paymentQuery;
     if (payError) throw payError;
 
-    // Fetch related users and branches manually to avoid relationship issues
-    const userIds = [...new Set(rawPayments?.map(p => p.created_by).filter(Boolean))];
-    const branchIds = [...new Set(rawPayments?.map(p => p.branch_id).filter(Boolean))];
+    // 2. Collect IDs for related entities to infer branch and cashier
+    const bookingIds = [...new Set(rawPayments?.map(p => p.booking_id).filter(Boolean))];
+    const invoiceIds = [...new Set(rawPayments?.map(p => p.invoice_id).filter(Boolean))];
+    const restOrderIds = [...new Set(rawPayments?.map(p => p.restaurant_order_id).filter(Boolean))];
+    const barOrderIds = [...new Set(rawPayments?.map(p => p.bar_order_id).filter(Boolean))];
+    const posIds = [...new Set(rawPayments?.map(p => p.pos_transaction_id).filter(Boolean))];
+
+    // 3. Parallel fetch of related entities
+    const [
+      { data: bookings },
+      { data: invoices },
+      { data: restOrders },
+      { data: barOrders },
+      { data: posTxns }
+    ] = await Promise.all([
+      bookingIds.length ? supabase.from('reservations').select('id, branch_id, created_by').in('id', bookingIds) : { data: [] },
+      invoiceIds.length ? supabase.from('accounting_ar_invoices').select('id, created_by').in('id', invoiceIds) : { data: [] },
+      restOrderIds.length ? supabase.from('restaurant_orders').select('id, branch_id, staff_id').in('id', restOrderIds) : { data: [] },
+      barOrderIds.length ? supabase.from('bar_orders').select('id, branch_id, staff_id').in('id', barOrderIds) : { data: [] },
+      posIds.length ? supabase.from('pos_transactions').select('id, branch_id, cashier_id').in('id', posIds) : { data: [] }
+    ]);
+
+    // 4. Create lookup maps
+    const bookingMap = Object.fromEntries(bookings?.map(b => [b.id, b]) || []);
+    const invoiceMap = Object.fromEntries(invoices?.map(i => [i.id, i]) || []);
+    const restOrderMap = Object.fromEntries(restOrders?.map(o => [o.id, o]) || []);
+    const barOrderMap = Object.fromEntries(barOrders?.map(o => [o.id, o]) || []);
+    const posMap = Object.fromEntries(posTxns?.map(p => [p.id, p]) || []);
+
+    // 5. Enrich payments with inferred data
+    let enrichedPayments = rawPayments?.map(p => {
+      let inferredBranchId = null;
+      let inferredUserId = null;
+
+      if (p.booking_id && bookingMap[p.booking_id]) {
+        inferredBranchId = bookingMap[p.booking_id].branch_id;
+        inferredUserId = bookingMap[p.booking_id].created_by;
+      } else if (p.restaurant_order_id && restOrderMap[p.restaurant_order_id]) {
+        inferredBranchId = restOrderMap[p.restaurant_order_id].branch_id;
+        inferredUserId = restOrderMap[p.restaurant_order_id].staff_id;
+      } else if (p.bar_order_id && barOrderMap[p.bar_order_id]) {
+        inferredBranchId = barOrderMap[p.bar_order_id].branch_id;
+        inferredUserId = barOrderMap[p.bar_order_id].staff_id;
+      } else if (p.pos_transaction_id && posMap[p.pos_transaction_id]) {
+        inferredBranchId = posMap[p.pos_transaction_id].branch_id;
+        inferredUserId = posMap[p.pos_transaction_id].cashier_id;
+      } else if (p.invoice_id && invoiceMap[p.invoice_id]) {
+        // Invoices don't have branch_id usually, treat as null (Head Office) or derive from user if needed
+        inferredUserId = invoiceMap[p.invoice_id].created_by;
+      }
+
+      return {
+        ...p,
+        branch_id: inferredBranchId,
+        created_by: inferredUserId
+      };
+    }) || [];
+
+    // 6. Filter by requested branch
+    if (branch_id && branch_id !== '0') {
+      enrichedPayments = enrichedPayments.filter(p => String(p.branch_id) === String(branch_id));
+    }
+
+    // 7. Fetch user and branch details for display
+    const userIds = [...new Set(enrichedPayments.map(p => p.created_by).filter(Boolean))];
+    const branchIds = [...new Set(enrichedPayments.map(p => p.branch_id).filter(Boolean))];
 
     const [{ data: users }, { data: branches }] = await Promise.all([
-      supabase.from('users').select('id, first_name, last_name, role').in('id', userIds),
-      supabase.from('branches').select('id, name').in('id', branchIds)
+      userIds.length ? supabase.from('users').select('id, first_name, last_name, role').in('id', userIds) : { data: [] },
+      branchIds.length ? supabase.from('branches').select('id, name').in('id', branchIds) : { data: [] }
     ]);
 
     const userMap = Object.fromEntries(users?.map(u => [u.id, u]) || []);
     const branchMap = Object.fromEntries(branches?.map(b => [b.id, b]) || []);
 
-    const payments = rawPayments?.map(p => ({
+    const payments = enrichedPayments.map(p => ({
       ...p,
       cashier: userMap[p.created_by],
       branch: branchMap[p.branch_id]
-    })) || [];
+    }));
 
-    // 2. Breakdown by mode
+    // 8. Breakdown by mode
     const breakdown = {
-      cash: payments?.filter(p => p.payment_method === 'cash').reduce((sum, p) => sum + Number(p.amount), 0) || 0,
-      mpesa: payments?.filter(p => p.payment_method === 'mpesa' || p.payment_method === 'mpesa_manual').reduce((sum, p) => sum + Number(p.amount), 0) || 0,
-      card: payments?.filter(p => p.payment_method === 'card_manual').reduce((sum, p) => sum + Number(p.amount), 0) || 0,
-      other: payments?.filter(p => !['cash', 'mpesa', 'mpesa_manual', 'card_manual'].includes(p.payment_method)).reduce((sum, p) => sum + Number(p.amount), 0) || 0,
-      total: payments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0
+      cash: payments.filter(p => p.payment_method === 'cash').reduce((sum, p) => sum + Number(p.amount), 0),
+      mpesa: payments.filter(p => p.payment_method === 'mpesa' || p.payment_method === 'mpesa_manual').reduce((sum, p) => sum + Number(p.amount), 0),
+      card: payments.filter(p => p.payment_method === 'card_manual').reduce((sum, p) => sum + Number(p.amount), 0),
+      other: payments.filter(p => !['cash', 'mpesa', 'mpesa_manual', 'card_manual'].includes(p.payment_method)).reduce((sum, p) => sum + Number(p.amount), 0),
+      total: payments.reduce((sum, p) => sum + Number(p.amount), 0)
     };
 
-    // 3. Group by Cashier
+    // 9. Group by Cashier
     const cashierGroups: Record<string, any> = {};
-    payments?.forEach(p => {
+    payments.forEach(p => {
       const cashierId = p.created_by || 'system';
-      const cashierName = p.cashier ? `${p.cashier.first_name} ${p.cashier.last_name}` : 'System';
-      const branchName = p.branch?.name || 'Main';
+      const cashierName = p.cashier ? `${p.cashier.first_name} ${p.cashier.last_name}` : (p.created_by ? 'Unknown User' : 'System');
+      const branchName = p.branch?.name || (p.branch_id ? 'Unknown Branch' : 'Main / Global');
 
       if (!cashierGroups[cashierId]) {
         cashierGroups[cashierId] = {
@@ -524,7 +617,7 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
 
     const cashierSummaries = Object.values(cashierGroups);
 
-    // 4. Compare with total sales
+    // 10. Compare with total sales (Sales logic remains filtered by DB as those tables have branch_id)
     let restSalesQuery = supabase.from('restaurant_orders')
       .select('total_amount, branch_id')
       .eq('status', 'completed')
@@ -545,11 +638,11 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
     const { data: restSales } = await restSalesQuery;
     const { data: barSales } = await barSalesQuery;
 
-    const totalSales = (restSales?.reduce((sum, o) => sum + Number(o.total_amount), 0) || 0) +
-      (barSales?.reduce((sum, o) => sum + Number(o.total), 0) || 0);
+    const totalSales = (restSales?.reduce((sum, o) => sum + Number(o.total_amount || 0), 0) || 0) +
+      (barSales?.reduce((sum, o) => sum + Number(o.total || 0), 0) || 0);
 
-    // 5. Build recent transactions list (formatted for frontend)
-    const recentTransactions = payments?.map(p => ({
+    // 11. Build recent transactions list
+    const recentTransactions = payments.map(p => ({
       reference_number: p.reference,
       payment_method: p.payment_method,
       amount: p.amount,
@@ -563,7 +656,7 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
       success: true,
       data: {
         date: targetDate,
-        payments_by_mode: breakdown, // Match frontend naming convention
+        payments_by_mode: breakdown,
         total_payments: breakdown.total,
         sales: totalSales,
         variance: breakdown.total - totalSales,

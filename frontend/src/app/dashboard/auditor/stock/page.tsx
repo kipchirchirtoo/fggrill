@@ -13,6 +13,8 @@ import {
     Search, Boxes, Thermometer, TrendingDown, FileDown
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { auditorReportsAPI } from '@/lib/api'; // Added import for report export
+
 
 export default function StockAuditPage() {
     const { activeBranchId, setActiveBranch } = useBranch();
@@ -44,10 +46,63 @@ export default function StockAuditPage() {
         fetchData();
     }, [fetchData]);
 
-    const filteredInventory = (auditData?.inventory || []).filter((item: any) =>
+    const filteredInventory = (auditData?.stock_items || auditData?.inventory || []).filter((item: any) =>
+        item.item?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || // Check nested item.name
         item.item_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.item_sku?.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    const handleExport = async () => {
+        try {
+            toast.loading("Generating stock ledger...");
+            await auditorReportsAPI.exportBrandedPdf('inventory_status_report', {
+                branch_id: activeBranchId || 0,
+                start_date: new Date().toISOString().split('T')[0],
+                end_date: new Date().toISOString().split('T')[0]
+            });
+            toast.dismiss();
+            toast.success("Export completed successfully");
+        } catch (error) {
+            console.error(error);
+            toast.dismiss();
+            toast.error("Failed to export ledger");
+        }
+    };
+
+    const handleFlagVariance = async () => {
+        const inventory = auditData?.stock_items || auditData?.inventory || [];
+        const discrepancies = inventory.filter((i: any) => i.is_discrepancy || Math.abs(i.variance) > 0);
+
+        if (discrepancies.length === 0) {
+            toast.info("No variances to flag.");
+            return;
+        }
+
+        toast.loading(`Flagging ${discrepancies.length} variances...`);
+        let count = 0;
+
+        // Process top 20 to avoid timeout/spam
+        for (const item of discrepancies.slice(0, 20)) {
+            try {
+                await auditAPI.createException({
+                    audit_session_id: 'MANUAL_FLAG_' + new Date().getTime(),
+                    exception_type: 'STOCK_VARIANCE',
+                    severity: Math.abs(item.variance_percentage) > 20 ? 'critical' : 'medium',
+                    description: `Stock variance for ${item.item?.name || item.item_name}. System: ${item.current_quantity}, Theoretical: ${item.theoretical_quantity}`,
+                    amount: Math.abs(item.variance),
+                    reference_type: 'item',
+                    reference_id: item.item?.id || item.id,
+                });
+                count++;
+            } catch (e) {
+                console.error("Failed to flag item", item, e);
+            }
+        }
+
+        toast.dismiss();
+        if (count > 0) toast.success(`Successfully flagged ${count} items.`);
+        else toast.error("Failed to flag variances. Check console.");
+    };
 
     return (
         <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN]}>
@@ -174,10 +229,10 @@ export default function StockAuditPage() {
                                     />
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <button className="btn-secondary h-12 px-5">
+                                    <button onClick={handleFlagVariance} className="btn-secondary h-12 px-5">
                                         <Activity className="h-4 w-4 mr-2" /> Flag Variances
                                     </button>
-                                    <button className="btn-primary h-12 px-5 shadow-lg shadow-stone-900/10">
+                                    <button onClick={handleExport} className="btn-primary h-12 px-5 shadow-lg shadow-stone-900/10">
                                         <FileDown className="h-4 w-4 mr-2" /> Export Ledger
                                     </button>
                                 </div>
@@ -203,15 +258,15 @@ export default function StockAuditPage() {
                                                     <tr key={idx} className="table-row group">
                                                         <td className="table-cell">
                                                             <div className="flex flex-col">
-                                                                <span className="font-black text-stone-900 tracking-tight">{item.item_name}</span>
+                                                                <span className="font-black text-stone-900 tracking-tight">{item.item?.name || item.item_name}</span>
                                                                 <span className="text-[10px] text-stone-400 font-mono tracking-tighter uppercase mt-0.5">{item.item_sku}</span>
                                                             </div>
                                                         </td>
                                                         <td className="table-cell text-center font-mono font-bold text-stone-700">
-                                                            {item.quantity}
+                                                            {item.current_quantity ?? item.quantity}
                                                         </td>
                                                         <td className="table-cell text-center font-mono font-medium text-stone-400">
-                                                            {item.theoretical?.toFixed(1) || '0.0'}
+                                                            {item.theoretical_quantity?.toFixed(1) || item.theoretical?.toFixed(1) || '0.0'}
                                                         </td>
                                                         <td className="table-cell text-center">
                                                             <span className={`font-mono font-black py-1 px-2 rounded-lg ${hasDiscrepancy ? 'text-rose-600 bg-rose-50' : 'text-emerald-600 bg-emerald-50/50'}`}>
