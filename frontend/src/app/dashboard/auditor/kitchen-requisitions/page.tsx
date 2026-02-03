@@ -63,11 +63,17 @@ export default function AuditorKitchenRequisitionsPage() {
     const fetchRequisitions = async () => {
         try {
             setLoading(true);
-            // Assuming store.getKitchenRequisitions now supports fetching all for auditors
-            const data = await api.store.getKitchenRequisitions({
+            const res = await api.store.getKitchenRequisitions({
                 status: statusFilter !== 'all' ? statusFilter : undefined
             });
-            setRequisitions(data || []);
+            if (res.success && Array.isArray(res.data)) {
+                setRequisitions(res.data);
+            } else {
+                setRequisitions([]);
+                if (res.message) {
+                    console.error('API Error:', res.message);
+                }
+            }
         } catch (error) {
             console.error('Failed to fetch requisitions:', error);
         } finally {

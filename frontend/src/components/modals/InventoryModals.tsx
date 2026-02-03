@@ -173,7 +173,7 @@ export function NewItemModal({ isOpen, onClose, onSuccess }: NewItemModalProps) 
         initial={{ scale: 0.95, y: 20 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.95, y: 20 }}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] sm:max-h-[95vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -561,69 +561,71 @@ export function TransferModal({ isOpen, onClose, onSuccess, items, fromBranchId,
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
     >
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-5 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
           <h2 className="text-xl font-bold text-gray-900">Create Stock Transfer</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Select Items
-            </label>
-            <select
-              onChange={(e) => addItem(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
-              value=""
-            >
-              <option value="">Add Item</option>
-              {items
-                .filter(item => !selectedItems.find(si => si.itemId === item.id))
-                .map(item => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-            </select>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="p-5 flex-1 overflow-y-auto space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Select Items
+              </label>
+              <select
+                onChange={(e) => addItem(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                value=""
+              >
+                <option value="">Add Item</option>
+                {items
+                  .filter(item => !selectedItems.find(si => si.itemId === item.id))
+                  .map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              {selectedItems.map(selectedItem => {
+                const item = items.find(i => i.id === selectedItem.itemId);
+                return (
+                  <div key={selectedItem.itemId} className="flex items-center gap-4 p-3 border rounded-ios-lg">
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">{item?.name}</p>
+                      <p className="text-sm text-gray-500">{item?.unit}</p>
+                    </div>
+                    <div className="w-32">
+                      <input
+                        type="number"
+                        value={selectedItem.requestedQuantity}
+                        onChange={(e) =>
+                          updateQuantity(selectedItem.itemId, parseInt(e.target.value))
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                        min="1"
+                        required
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeItem(selectedItem.itemId)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-ios-lg"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="space-y-2">
-            {selectedItems.map(selectedItem => {
-              const item = items.find(i => i.id === selectedItem.itemId);
-              return (
-                <div key={selectedItem.itemId} className="flex items-center gap-4 p-3 border rounded-ios-lg">
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900">{item?.name}</p>
-                    <p className="text-sm text-gray-500">{item?.unit}</p>
-                  </div>
-                  <div className="w-32">
-                    <input
-                      type="number"
-                      value={selectedItem.requestedQuantity}
-                      onChange={(e) =>
-                        updateQuantity(selectedItem.itemId, parseInt(e.target.value))
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
-                      min="1"
-                      required
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeItem(selectedItem.itemId)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-ios-lg"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="flex justify-end gap-4 mt-6">
+          <div className="flex justify-end gap-4 p-5 bg-gray-50 border-t border-gray-100 shrink-0">
             <button
               type="button"
               onClick={onClose}
@@ -694,69 +696,71 @@ export function RequestModal({ isOpen, onClose, onSuccess, items, branchId }: Re
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
     >
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-5 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
           <h2 className="text-xl font-bold text-gray-900">Create Stock Request</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Select Items
-            </label>
-            <select
-              onChange={(e) => addItem(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
-              value=""
-            >
-              <option value="">Add Item</option>
-              {items
-                .filter(item => !selectedItems.find(si => si.itemId === item.id))
-                .map(item => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-            </select>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="p-5 flex-1 overflow-y-auto space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Select Items
+              </label>
+              <select
+                onChange={(e) => addItem(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                value=""
+              >
+                <option value="">Add Item</option>
+                {items
+                  .filter(item => !selectedItems.find(si => si.itemId === item.id))
+                  .map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              {selectedItems.map(selectedItem => {
+                const item = items.find(i => i.id === selectedItem.itemId);
+                return (
+                  <div key={selectedItem.itemId} className="flex items-center gap-4 p-3 border rounded-ios-lg">
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">{item?.name}</p>
+                      <p className="text-sm text-gray-500">{item?.unit}</p>
+                    </div>
+                    <div className="w-32">
+                      <input
+                        type="number"
+                        value={selectedItem.requestedQuantity}
+                        onChange={(e) =>
+                          updateQuantity(selectedItem.itemId, parseInt(e.target.value))
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                        min="1"
+                        required
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeItem(selectedItem.itemId)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-ios-lg"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="space-y-2">
-            {selectedItems.map(selectedItem => {
-              const item = items.find(i => i.id === selectedItem.itemId);
-              return (
-                <div key={selectedItem.itemId} className="flex items-center gap-4 p-3 border rounded-ios-lg">
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900">{item?.name}</p>
-                    <p className="text-sm text-gray-500">{item?.unit}</p>
-                  </div>
-                  <div className="w-32">
-                    <input
-                      type="number"
-                      value={selectedItem.requestedQuantity}
-                      onChange={(e) =>
-                        updateQuantity(selectedItem.itemId, parseInt(e.target.value))
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
-                      min="1"
-                      required
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeItem(selectedItem.itemId)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-ios-lg"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="flex justify-end gap-4 mt-6">
+          <div className="flex justify-end gap-4 p-5 bg-gray-50 border-t border-gray-100 shrink-0">
             <button
               type="button"
               onClick={onClose}

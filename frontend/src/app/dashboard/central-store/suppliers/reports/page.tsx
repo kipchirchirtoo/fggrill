@@ -48,7 +48,7 @@ export default function ProcurementReportsPage() {
             const today = new Date();
             const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
             const lastDay = today.toISOString().split('T')[0];
-            const response = await procurementAPI.getVATReport(firstDay, lastDay);
+            const response = await procurementAPI.getVATReport({ from_date: firstDay, to_date: lastDay });
             if (response.success) setVatSummary(response);
         } catch (error) { console.error('Error fetching VAT report:', error); }
         finally { setIsLoading(false); }
@@ -72,6 +72,28 @@ export default function ProcurementReportsPage() {
         finally { setIsLoading(false); }
     }, []);
 
+    const handleExportVAT = async () => {
+        const today = new Date();
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+        const lastDay = today.toISOString().split('T')[0];
+        toast.promise(procurementAPI.exportVATReportPDF({ from_date: firstDay, to_date: lastDay }), {
+            loading: 'Generating KRA VAT Report...',
+            success: 'Report downloaded successfully',
+            error: 'Failed to generate report'
+        });
+    };
+
+    const handleExportAll = async () => {
+        const today = new Date();
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+        const lastDay = today.toISOString().split('T')[0];
+        toast.promise(procurementAPI.exportProcurementIntelligencePDF({ from_date: firstDay, to_date: lastDay }), {
+            loading: 'Generating Procurement Intelligence Report...',
+            success: 'Comprehensive report downloaded',
+            error: 'Failed to generate report'
+        });
+    };
+
     useEffect(() => {
         if (activeTab === 'audit') fetchAuditLogs();
         else if (activeTab === 'vat') fetchVATReport();
@@ -89,7 +111,7 @@ export default function ProcurementReportsPage() {
                             <p className="text-gray-500">Compliance reports and immutable audit trails</p>
                         </div>
                         <div className="flex gap-2">
-                            <IOSButton variant="secondary" leftIcon={<Download size={16} />} onClick={() => toast.info('Generating PDF Report...')}>Export All</IOSButton>
+                            <IOSButton variant="secondary" leftIcon={<Download size={16} />} onClick={handleExportAll}>Export All</IOSButton>
                         </div>
                     </div>
 
@@ -142,7 +164,7 @@ export default function ProcurementReportsPage() {
                             <div className="p-6 space-y-6">
                                 <div className="flex items-center justify-between">
                                     <div><h3 className="text-lg font-bold">VAT Input Summary</h3><p className="text-sm text-stone-500 italic">Consolidated VAT for the current period</p></div>
-                                    <IOSButton variant="secondary" size="sm" leftIcon={<Download size={14} />}>Export KRA Format</IOSButton>
+                                    <IOSButton variant="secondary" size="sm" leftIcon={<Download size={14} />} onClick={handleExportVAT}>Export KRA Format</IOSButton>
                                 </div>
                                 {isLoading ? (
                                     <div className="flex justify-center py-12"><RefreshCw className="animate-spin text-stone-300" /></div>

@@ -37,7 +37,7 @@ const iosModalVariants = cva(
   }
 );
 
-export interface IOSModalProps extends React.HTMLAttributes<HTMLDivElement>, 
+export interface IOSModalProps extends React.HTMLAttributes<HTMLDivElement>,
   VariantProps<typeof iosModalVariants> {
   isOpen: boolean;
   onClose: () => void;
@@ -50,7 +50,7 @@ export interface IOSModalProps extends React.HTMLAttributes<HTMLDivElement>,
 }
 
 const IOSModal = React.forwardRef<HTMLDivElement, IOSModalProps>(
-  ({ 
+  ({
     className,
     variant,
     position,
@@ -73,7 +73,7 @@ const IOSModal = React.forwardRef<HTMLDivElement, IOSModalProps>(
           onClose();
         }
       };
-      
+
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, onClose, closeOnEsc]);
@@ -89,7 +89,7 @@ const IOSModal = React.forwardRef<HTMLDivElement, IOSModalProps>(
           document.body.style.paddingRight = '';
         }
       }
-      
+
       return () => {
         document.body.style.overflow = '';
         document.body.style.paddingRight = '';
@@ -103,12 +103,12 @@ const IOSModal = React.forwardRef<HTMLDivElement, IOSModalProps>(
     };
 
     const modalAnimation = {
-      hidden: { 
+      hidden: {
         opacity: 0,
         scale: 0.95,
         y: variant === 'sheet' ? 20 : 0
       },
-      visible: { 
+      visible: {
         opacity: 1,
         scale: 1,
         y: 0,
@@ -117,7 +117,7 @@ const IOSModal = React.forwardRef<HTMLDivElement, IOSModalProps>(
           ease: "easeOut"
         }
       },
-      exit: { 
+      exit: {
         opacity: 0,
         scale: variant === 'sheet' ? 1 : 0.95,
         y: variant === 'sheet' ? 20 : 0,
@@ -146,12 +146,12 @@ const IOSModal = React.forwardRef<HTMLDivElement, IOSModalProps>(
                 onClick={closeOnOutsideClick ? onClose : undefined}
               />
             )}
-            
+
             {/* Modal */}
             <motion.div
               ref={ref}
               className={cn(
-                "z-50 p-8 max-h-[90vh] sm:max-h-[95vh] w-[95vw] max-w-4xl",
+                "z-50 p-8 max-h-[90vh] sm:max-h-[95vh] w-[95vw] max-w-4xl overflow-y-auto",
                 position === 'bottom' && "mb-0 w-full",
                 position === 'top' && "mt-0 w-full",
                 variant === 'sheet' && "w-full max-w-none",
@@ -163,7 +163,7 @@ const IOSModal = React.forwardRef<HTMLDivElement, IOSModalProps>(
               variants={modalAnimation}
               onClick={(e) => e.stopPropagation()}
             >
-              <div 
+              <div
                 className={cn(
                   iosModalVariants({ variant, position, size }),
                   className
@@ -290,7 +290,7 @@ IOSModalFooter.displayName = 'IOSModalFooter';
 // Sheet Handle (for bottom sheets)
 const IOSSheetHandle = React.forwardRef<HTMLDivElement>(
   ({ }, ref) => (
-    <div 
+    <div
       ref={ref}
       className="flex justify-center w-full -mt-1 mb-4"
     >

@@ -52,10 +52,30 @@ const router = express.Router();
 router.use(protect);
 
 // Role abbreviations
-const procurementRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.PROCUREMENT, UserRole.PURCHASING_MANAGER];
-const storeRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.STOREKEEPER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER];
-const auditorRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR, UserRole.ACCOUNTANT];
-const allProcurementStaff = [...procurementRoles, ...storeRoles, ...auditorRoles];
+const procurementRoles = [
+    UserRole.SUPER_ADMIN,
+    UserRole.GENERAL_MANAGER,
+    UserRole.PROCUREMENT,
+    UserRole.PURCHASING_MANAGER,
+    UserRole.CENTRAL_STOREKEEPER,
+    UserRole.BRANCH_STOREKEEPER
+];
+const storeRoles = [
+    UserRole.SUPER_ADMIN,
+    UserRole.GENERAL_MANAGER,
+    UserRole.STOREKEEPER,
+    UserRole.CENTRAL_STOREKEEPER,
+    UserRole.BRANCH_STOREKEEPER
+];
+const auditorRoles = [
+    UserRole.SUPER_ADMIN,
+    UserRole.GENERAL_MANAGER,
+    UserRole.AUDITOR,
+    UserRole.ACCOUNTANT,
+    UserRole.FINANCE_MANAGER
+];
+const allProcurementStaff = [...new Set([...procurementRoles, ...storeRoles, ...auditorRoles])];
+
 
 // =====================================================
 // PURCHASE ORDERS

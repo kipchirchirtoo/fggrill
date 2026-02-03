@@ -125,7 +125,16 @@ def generate_branded_pdf_report():
         else:
             report_data = data_fetcher.fetch_report_data(report_type, filters)
         
+        # Ensure report_data is at least an empty dict
+        if report_data is None:
+            report_data = {}
+
         logger.info(f"Report data generated: {report_data}")
+        
+        # Check for error in report_data
+        if isinstance(report_data, dict) and report_data.get('error'):
+            logger.error(f"Error in fetched data: {report_data.get('error')}")
+            # We still proceed to generator, but it should handle empty data gracefully
         
         # Generate branded PDF
         pdf_file = branded_pdf_generator.generate_report(report_type, report_data, filters)

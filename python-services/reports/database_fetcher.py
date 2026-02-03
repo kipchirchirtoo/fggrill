@@ -67,6 +67,8 @@ class DatabaseFetcher:
                 'conference_summary': self._fetch_conference_reports,
                 'kitchen_ledger': self._fetch_kitchen_ledger,
                 'kitchen_item_ledger': self._fetch_kitchen_item_ledger,
+                'vat_report': self._fetch_vat_report,
+                'procurement_intelligence': self._fetch_procurement_intelligence,
             }
             
             fetcher = fetchers.get(report_type)
@@ -1973,5 +1975,85 @@ class DatabaseFetcher:
             
         except Exception as e:
             logger.error(f"Error fetching kitchen item ledger: {e}")
+            
+        return data
+
+    def _fetch_vat_report(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch VAT report data (Input VAT from supplier invoices)"""
+        start_date, end_date = self._parse_dates(filters)
+        supplier_id = filters.get('supplier_id')
+        
+        data = {
+            'data': [],
+            'summary': {
+                'total_subtotal': 0,
+                'total_vat': 0,
+                'total_withholding': 0,
+                'total_combined': 0
+            }
+        }
+        
+        if not self.client: return data
+        
+        try:
+            query = self.client.table('store_supplier_invoices')\
+                .select('*, supplier:store_suppliers(id, name, tax_id, vat_number)')\
+                .eq('status', 'approved')\
+                .gte('invoice_date', start_date)\
+                .lte('invoice_date', end_date)
+            
+            if supplier_id:
+                query = query.eq('supplier_id', supplier_id)
+                
+            res = query.execute()
+            report_data = res.data or []
+            data['data'] = report_data
+            
+            # Calculate totals
+            for inv in report_data:
+                sub = float(inv.get('subtotal') or 0)
+                vat = float(inv.get('vat_amount') or 0)
+                wvat = float(inv.get('withholding_vat_amount') or 0)
+                total = float(inv.get('total_amount') or 0)
+                
+                data['summary']['total_subtotal'] += sub
+                data['summary']['total_vat'] += vat
+                data['summary']['total_withholding'] += wvat
+                data['summary']['total_combined'] += total
+                
+        except Exception as e:
+            logger.error(f"Error fetching VAT report: {e}")
+            
+        return data
+
+    def _fetch_procurement_intelligence(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch comprehensive procurement intelligence (VAT, GRNI, Aging)"""
+        start_date, end_date = self._parse_dates(filters)
+        
+        data = {
+            'vat': self._fetch_vat_report(filters),
+            'grni': [],
+            'aging': []
+        }
+        
+        if not self.client: return data
+        
+        try:
+            # 1. Fetch GRNI
+            grni_res = self.client.table('store_grni_control_account')\
+                .select('*, supplier:store_suppliers(id, name, supplier_code), grn:store_grn(id, grn_number, grn_date)')\
+                .eq('status', 'open')\
+                .execute()
+            data['grni'] = grni_res.data or []
+            
+            # 2. Fetch Aging
+            aging_res = self.client.table('store_supplier_balances')\
+                .select('*, supplier:store_suppliers(id, name, supplier_code)')\
+                .order('current_balance', desc=True)\
+                .execute()
+            data['aging'] = aging_res.data or []
+            
+        except Exception as e:
+            logger.error(f"Error fetching procurement intelligence: {e}")
             
         return data

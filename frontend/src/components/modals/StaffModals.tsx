@@ -193,10 +193,10 @@ export function StaffModal({ isOpen, onClose, mode = 'create', initialData, onSu
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
-        className="bg-white rounded-xl p-5 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl max-w-4xl w-full flex flex-col max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
           <div>
             <h2 className="text-xl font-bold text-gray-900">
               {mode === 'create' ? 'Add Staff Member' : 'Edit Staff Member'}
@@ -208,212 +208,214 @@ export function StaffModal({ isOpen, onClose, mode = 'create', initialData, onSu
           </button>
         </div>
 
-        {isLoadingData ? (
-          <div className="flex items-center justify-center py-12">
-            <RefreshCw className="h-8 w-8 animate-spin text-indigo-600" />
-            <span className="ml-2 text-gray-600">Loading form data...</span>
-          </div>
-        ) : (
-          <>
+        <div className="flex-1 overflow-y-auto p-5">
+          {isLoadingData ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="h-8 w-8 animate-spin text-indigo-600" />
+              <span className="ml-2 text-gray-600">Loading form data...</span>
+            </div>
+          ) : (
+            <>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Personal Information */}
-              <div className="space-y-4">
-                <h3 className="font-semibold font-sf-pro-display text-gray-900 flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Personal Information
-                </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Personal Information */}
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      First Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="firstName"
-                      value={staffData.firstName}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Last Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="lastName"
-                      value={staffData.lastName}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Email <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="email"
-                      name="email"
-                      value={staffData.email}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Phone
-                    </label>
-                    <input
-                      type="tel"
-                      name="phoneNumber"
-                      value={staffData.phoneNumber}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    />
-                  </div>
-                  {mode === 'create' && (
+                  <h3 className="font-semibold font-sf-pro-display text-gray-900 flex items-center gap-2">
+                    <User className="h-5 w-5" />
+                    Personal Information
+                  </h3>
+                  <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Password <span className="text-red-500">*</span>
+                        First Name <span className="text-red-500">*</span>
                       </label>
-                      <div className="flex gap-2">
-                        <div className="relative flex-1">
-                          <input
-                            type={showPassword ? "text" : "password"}
-                            name="password"
-                            value={staffData.password}
-                            onChange={handleChange}
-                            className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                            required
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowPassword(!showPassword)}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded"
-                          >
-                            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                          </button>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={generatePassword}
-                          className="px-3 py-2 bg-indigo-100 text-indigo-700 rounded-ios-lg hover:bg-indigo-200 flex items-center gap-1"
-                        >
-                          <RefreshCw className="h-4 w-4" />
-                          Generate
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      National ID <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="nationalId"
-                      value={staffData.nationalId}
-                      onChange={handleChange}
-                      placeholder="Enter ID number"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Employment Details */}
-              <div className="space-y-4">
-                <h3 className="font-semibold font-sf-pro-display text-gray-900 flex items-center gap-2">
-                  <Building className="h-5 w-5" />
-                  Employment Details
-                </h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Role <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      name="role"
-                      value={staffData.role}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      required
-                    >
-                      <option value="">Select Role</option>
-                      {availableRoles.map(role => (
-                        <option key={role.value} value={role.value}>
-                          {role.label}
-                        </option>
-                      ))}
-                    </select>
-                    {staffData.role && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        {availableRoles.find(r => r.value === staffData.role)?.description}
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Terminal Access PIN <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                       <input
-                        type="password"
-                        name="pos_pin"
-                        value={staffData.pos_pin}
+                        type="text"
+                        name="firstName"
+                        value={staffData.firstName}
                         onChange={handleChange}
-                        maxLength={6}
-                        placeholder="4-6 digit PIN"
-                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                         required
                       />
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">Required for check-in terminal</p>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Last Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        name="lastName"
+                        value={staffData.lastName}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Email <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        name="email"
+                        value={staffData.email}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Phone
+                      </label>
+                      <input
+                        type="tel"
+                        name="phoneNumber"
+                        value={staffData.phoneNumber}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
+                    {mode === 'create' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Password <span className="text-red-500">*</span>
+                        </label>
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <input
+                              type={showPassword ? "text" : "password"}
+                              name="password"
+                              value={staffData.password}
+                              onChange={handleChange}
+                              className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                              required
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowPassword(!showPassword)}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded"
+                            >
+                              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={generatePassword}
+                            className="px-3 py-2 bg-indigo-100 text-indigo-700 rounded-ios-lg hover:bg-indigo-200 flex items-center gap-1"
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                            Generate
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        National ID <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        name="nationalId"
+                        value={staffData.nationalId}
+                        onChange={handleChange}
+                        placeholder="Enter ID number"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Staff ID
-                    </label>
-                    <input
-                      type="text"
-                      value={mode === 'create' ? 'Auto-generated on save' : (initialData?.id_number || 'N/A')}
-                      disabled
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-ios-lg text-gray-500 italic"
-                    />
+                </div>
+
+                {/* Employment Details */}
+                <div className="space-y-4">
+                  <h3 className="font-semibold font-sf-pro-display text-gray-900 flex items-center gap-2">
+                    <Building className="h-5 w-5" />
+                    Employment Details
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Role <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        name="role"
+                        value={staffData.role}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        required
+                      >
+                        <option value="">Select Role</option>
+                        {availableRoles.map(role => (
+                          <option key={role.value} value={role.value}>
+                            {role.label}
+                          </option>
+                        ))}
+                      </select>
+                      {staffData.role && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          {availableRoles.find(r => r.value === staffData.role)?.description}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Terminal Access PIN <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                          type="password"
+                          name="pos_pin"
+                          value={staffData.pos_pin}
+                          onChange={handleChange}
+                          maxLength={6}
+                          placeholder="4-6 digit PIN"
+                          className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Required for check-in terminal</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Staff ID
+                      </label>
+                      <input
+                        type="text"
+                        value={mode === 'create' ? 'Auto-generated on save' : (initialData?.id_number || 'N/A')}
+                        disabled
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-ios-lg text-gray-500 italic"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="flex justify-end gap-3 mt-6 pt-6 border-t">
-              <button
-                onClick={handleClose}
-                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-ios-lg hover:bg-gray-50"
-                disabled={isLoading}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={isLoading}
-                className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {isLoading ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                {isLoading ? 'Saving...' : (mode === 'create' ? 'Create Staff Member' : 'Update Staff Member')}
-              </button>
-            </div>
-          </>
-        )}
+              <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-gray-100 shrink-0 bg-gray-50 p-5 rounded-b-xl">
+                <button
+                  onClick={handleClose}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-ios-lg hover:bg-gray-50 bg-white"
+                  disabled={isLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={isLoading}
+                  className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isLoading ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  {isLoading ? 'Saving...' : (mode === 'create' ? 'Create Staff Member' : 'Update Staff Member')}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </motion.div>
     </motion.div>
   );
@@ -459,17 +461,17 @@ export function ScheduleModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
-        className="bg-white rounded-xl p-5 max-w-lg w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl max-w-lg w-full flex flex-col max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between p-5 shrink-0 border-b border-gray-100">
           <h2 className="text-xl font-bold text-gray-900">Schedule Staff</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="p-5 flex-1 overflow-y-auto space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Shift
@@ -538,10 +540,10 @@ export function ScheduleModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
           </div>
         </div>
 
-        <div className="flex justify-end mt-6 pt-6 border-t">
+        <div className="flex justify-end p-5 shrink-0 border-t border-gray-100 bg-gray-50">
           <button
             onClick={handleSubmit}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700"
+            className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700 font-bold"
           >
             <Clock className="inline h-4 w-4 mr-2" />
             Schedule Staff
@@ -592,17 +594,17 @@ export function PayrollModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
-        className="bg-white rounded-xl p-5 max-w-lg w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl max-w-lg w-full flex flex-col max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between p-5 shrink-0 border-b border-gray-100">
           <h2 className="text-xl font-bold text-gray-900">Process Payroll</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="p-5 flex-1 overflow-y-auto space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -684,10 +686,10 @@ export function PayrollModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
           </div>
         </div>
 
-        <div className="flex justify-end mt-6 pt-6 border-t">
+        <div className="flex justify-end p-5 shrink-0 border-t border-gray-100 bg-gray-50">
           <button
             onClick={handleSubmit}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700"
+            className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700 font-bold shadow-lg shadow-indigo-100"
           >
             <DollarSign className="inline h-4 w-4 mr-2" />
             Process Payroll
@@ -740,10 +742,10 @@ export function PerformanceModal({ isOpen, onClose, staff }: { isOpen: boolean; 
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
-        className="bg-white rounded-xl p-5 max-w-lg w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl max-w-lg w-full flex flex-col max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between p-5 shrink-0 border-b border-gray-100">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Performance Review</h2>
             {staff && (
@@ -755,7 +757,7 @@ export function PerformanceModal({ isOpen, onClose, staff }: { isOpen: boolean; 
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="p-5 flex-1 overflow-y-auto space-y-4">
           {['Rating', 'Attendance', 'Punctuality', 'Teamwork', 'Customer Service'].map((category) => (
             <div key={category}>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -798,12 +800,12 @@ export function PerformanceModal({ isOpen, onClose, staff }: { isOpen: boolean; 
           </div>
         </div>
 
-        <div className="flex justify-end mt-6 pt-6 border-t">
+        <div className="flex justify-end p-5 shrink-0 border-t border-gray-100 bg-gray-50">
           <button
             onClick={handleSubmit}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700"
+            className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700 font-bold shadow-lg shadow-indigo-100 flex items-center gap-2"
           >
-            <Award className="inline h-4 w-4 mr-2" />
+            <Award className="h-4 w-4" />
             Submit Review
           </button>
         </div>

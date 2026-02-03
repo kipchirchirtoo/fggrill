@@ -48,7 +48,7 @@ export function ReportIssueModal({ isOpen, onClose, roomNumber = '' }: any) {
       <motion.div
         initial={{ scale: 0.95, y: 20 }}
         animate={{ scale: 1, y: 0 }}
-        className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
+        className="bg-white rounded-2xl shadow-xl max-w-md w-full flex flex-col max-h-[90vh] overflow-hidden"
       >
         <div className="px-6 py-5 border-b border-gray-100">
           <div className="flex items-center justify-between">
@@ -66,7 +66,7 @@ export function ReportIssueModal({ isOpen, onClose, roomNumber = '' }: any) {
           </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 flex-1 overflow-y-auto">
           <AnimatePresence mode="wait">
             {step === 1 && (
               <motion.div
@@ -216,10 +216,10 @@ export function UpdateRoomStatusModal({ isOpen, onClose, room }: any) {
       <motion.div
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
-        className="bg-white rounded-xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl flex flex-col max-h-[90vh] max-w-md w-full overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between p-5 shrink-0 border-b border-gray-100">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Update Room Status</h2>
             <p className="text-sm text-gray-500">Room {room?.roomNumber}</p>
@@ -229,45 +229,47 @@ export function UpdateRoomStatusModal({ isOpen, onClose, room }: any) {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">New Status</label>
-            <div className="grid grid-cols-2 gap-3">
-              {['clean', 'dirty', 'inspected', 'in-progress'].map((statusOption) => (
-                <button
-                  key={statusOption}
-                  type="button"
-                  onClick={() => setStatus(statusOption)}
-                  className={'p-3 rounded-ios-lg border-2 capitalize transition-colors ' + (status === statusOption ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 hover:border-gray-300')}
-                >
-                  {statusOption.replace('-', ' ')}
-                </button>
-              ))}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="p-5 flex-1 overflow-y-auto space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">New Status</label>
+              <div className="grid grid-cols-2 gap-3">
+                {['clean', 'dirty', 'inspected', 'in-progress'].map((statusOption) => (
+                  <button
+                    key={statusOption}
+                    type="button"
+                    onClick={() => setStatus(statusOption)}
+                    className={'p-3 rounded-ios-lg border-2 capitalize transition-colors ' + (status === statusOption ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 hover:border-gray-300')}
+                  >
+                    {statusOption.replace('-', ' ')}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500"
+                rows={3}
+                placeholder="Any additional notes..."
+              />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500"
-              rows={3}
-              placeholder="Any additional notes..."
-            />
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex justify-end gap-3 p-5 shrink-0 border-t border-gray-100 bg-gray-50">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-gray-600 hover:text-gray-900"
+              className="px-4 py-2 text-gray-600 hover:text-gray-900 font-bold"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700 flex items-center gap-2"
+              className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700 flex items-center gap-2 font-bold shadow-lg shadow-indigo-100"
             >
               <CheckCircle className="h-4 w-4" />
               Update Status
@@ -518,10 +520,10 @@ export function TaskDetailsModal({ isOpen, onClose, task }: any) {
       <motion.div
         initial={{ scale: 0.95 }}
         animate={{ scale: 1 }}
-        className="bg-white rounded-xl p-5 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl flex flex-col max-h-[90vh] max-w-2xl w-full overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between p-5 shrink-0 border-b border-gray-100">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Task Details</h2>
             <p className="text-sm text-gray-500">Room {task.roomNumber}</p>
@@ -531,7 +533,7 @@ export function TaskDetailsModal({ isOpen, onClose, task }: any) {
           </button>
         </div>
 
-        <div className="space-y-6">
+        <div className="p-5 flex-1 overflow-y-auto space-y-6">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-sm text-gray-600">Task Type</p>
@@ -576,15 +578,15 @@ export function TaskDetailsModal({ isOpen, onClose, task }: any) {
               <p className="text-gray-700 bg-yellow-50 rounded-ios-lg p-3">{task.notes}</p>
             </div>
           )}
+        </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-ios-lg">
-              Close
-            </button>
-            <button className="px-4 py-2 bg-indigo-600 text-white rounded-ios-lg">
-              Edit Task
-            </button>
-          </div>
+        <div className="flex justify-end gap-3 p-5 shrink-0 border-t border-gray-100 bg-gray-50">
+          <button onClick={onClose} className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-ios-lg font-bold">
+            Close
+          </button>
+          <button className="px-4 py-2 bg-indigo-600 text-white rounded-ios-lg font-bold shadow-lg shadow-indigo-100">
+            Edit Task
+          </button>
         </div>
       </motion.div>
     </motion.div>

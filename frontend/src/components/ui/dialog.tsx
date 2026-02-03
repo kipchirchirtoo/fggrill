@@ -29,7 +29,7 @@ const DialogContent = React.forwardRef<
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
-      className="fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%] w-full max-w-lg p-6 bg-white backdrop-blur-sm shadow-lg rounded-xl border border-gray-200/50"
+      className="fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%] w-full max-w-lg bg-white backdrop-blur-sm shadow-lg rounded-xl border border-gray-200/50 max-h-[90vh] flex flex-col overflow-hidden"
       aria-describedby={undefined}
       {...props}
     >
@@ -43,7 +43,7 @@ const DialogHeader = ({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className="flex flex-col space-y-1.5 text-center sm:text-left" {...props} />
+  <div className="flex flex-col space-y-1.5 text-center sm:text-left p-6 pb-2 shrink-0" {...props} />
 );
 DialogHeader.displayName = "DialogHeader";
 
@@ -51,9 +51,17 @@ const DialogFooter = ({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2" {...props} />
+  <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 p-6 pt-2 shrink-0" {...props} />
 );
 DialogFooter.displayName = "DialogFooter";
+
+const DialogBody = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div className="flex-1 overflow-y-auto p-6 py-2" {...props} />
+);
+DialogBody.displayName = "DialogBody";
 
 const DialogTitle = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Title>,
@@ -87,4 +95,5 @@ export {
   DialogFooter,
   DialogTitle,
   DialogDescription,
+  DialogBody,
 };

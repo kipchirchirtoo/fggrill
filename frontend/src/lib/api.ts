@@ -293,15 +293,15 @@ export const storeAPI = {
     const query = new URLSearchParams();
     if (params?.branch_id) query.append('branch_id', String(params.branch_id));
     if (params?.status) query.append('status', params.status);
-    return fetchAPI<any>(`/store/kitchen-requisitions?${query}`);
+    return fetchAPI<any>(`/kitchen/requisitions?${query}`);
   },
   fulfillKitchenRequisition: (id: string | number, items: any[]) =>
-    fetchAPI<any>(`/store/kitchen-requisitions/${id}/fulfill`, {
+    fetchAPI<any>(`/kitchen/requisitions/${id}/fulfill`, {
       method: 'POST',
       body: JSON.stringify({ items })
     }),
   rejectKitchenRequisition: (id: string | number, reason: string) =>
-    fetchAPI<any>(`/store/kitchen-requisitions/${id}/reject`, {
+    fetchAPI<any>(`/kitchen/requisitions/${id}/reject`, {
       method: 'POST',
       body: JSON.stringify({ reason })
     }),
@@ -514,9 +514,119 @@ export const procurementAPI = {
   getSuppliers: () => fetchAPI<any>('/store/suppliers'),
   getSupplier: (id: string) => fetchAPI<any>(`/store/suppliers/${id}`),
 
+  // Invoices
+  getInvoices: (params?: { supplier_id?: string; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.supplier_id) query.append('supplier_id', params.supplier_id);
+    if (params?.status) query.append('status', params.status);
+    const qs = query.toString();
+    return fetchAPI<any>(`/procurement/invoices${qs ? `?${qs}` : ''}`);
+  },
+
+  // Payments
+  getPayments: (params?: { supplier_id?: string; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.supplier_id) query.append('supplier_id', params.supplier_id);
+    if (params?.status) query.append('status', params.status);
+    const qs = query.toString();
+    return fetchAPI<any>(`/procurement/payments${qs ? `?${qs}` : ''}`);
+  },
+
+  // Ledger & Performance
+  getSupplierLedger: (supplierId: string) => fetchAPI<any>(`/procurement/ledger/${supplierId}`),
+  getSupplierPerformance: (supplierId: string) => fetchAPI<any>(`/procurement/performance/${supplierId}`),
+
+
   // Reports
-  getVATReport: (params?: any) => fetchAPI<any>('/procurement/reports/vat'),
-  getAuditTrail: (params?: any) => fetchAPI<any>('/procurement/reports/audit-trail'),
+  getVATReport: (params: { from_date: string; to_date: string; supplier_id?: string }) => {
+    const query = new URLSearchParams();
+    if (params.from_date) query.append('from_date', params.from_date);
+    if (params.to_date) query.append('to_date', params.to_date);
+    if (params.supplier_id) query.append('supplier_id', params.supplier_id);
+    return fetchAPI<any>(`/procurement/reports/vat?${query.toString()}`);
+  },
+  getGRNIReport: (params?: { status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    return fetchAPI<any>(`/procurement/reports/grni${query.toString() ? `?${query.toString()}` : ''}`);
+  },
+  getAgingAnalysis: (params?: { supplier_id?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.supplier_id) query.append('supplier_id', params.supplier_id);
+    return fetchAPI<any>(`/procurement/reports/aging${query.toString() ? `?${query.toString()}` : ''}`);
+  },
+  getAuditTrail: (params?: { supplier_id?: string; entity_type?: string; entity_id?: string; from_date?: string; to_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.supplier_id) query.append('supplier_id', params.supplier_id);
+    if (params?.entity_type) query.append('entity_type', params.entity_type);
+    if (params?.entity_id) query.append('entity_id', params.entity_id);
+    if (params?.from_date) query.append('from_date', params.from_date);
+    if (params?.to_date) query.append('to_date', params.to_date);
+    const qs = query.toString();
+    return fetchAPI<any>(`/procurement/reports/audit-trail${qs ? `?${qs}` : ''}`);
+  },
+
+  // PDF Exports
+  exportVATReportPDF: async (filters: { from_date: string; to_date: string }) => {
+    try {
+      const response = await fetch(`${PYTHON_API_URL}/api/reports/generate/branded-pdf`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          reportType: 'vat_report',
+          filters,
+          useRealData: true
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to generate VAT PDF');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `VAT_Report_${filters.from_date}_to_${filters.to_date}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      return { success: true };
+    } catch (error) {
+      console.error('Error exporting VAT PDF:', error);
+      return { success: false, message: 'Export failed' };
+    }
+  },
+
+  exportProcurementIntelligencePDF: async (filters: { from_date: string; to_date: string }) => {
+    try {
+      const response = await fetch(`${PYTHON_API_URL}/api/reports/generate/branded-pdf`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          reportType: 'procurement_intelligence',
+          filters,
+          useRealData: true
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to generate Procurement Intelligence PDF');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Procurement_Intelligence_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      return { success: true };
+    } catch (error) {
+      console.error('Error exporting Intelligence PDF:', error);
+      return { success: false, message: 'Export failed' };
+    }
+  },
+
 };
 
 

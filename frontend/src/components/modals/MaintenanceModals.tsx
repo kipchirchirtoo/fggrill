@@ -397,10 +397,10 @@ export function ViewWorkOrderModal({ isOpen, onClose, workOrder, onUpdateStatus 
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+            className="relative bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]"
           >
             {/* Header */}
-            <div className="px-6 py-4 border-b border-stone-100">
+            <div className="px-6 py-4 border-b border-stone-100 shrink-0">
               <div className="flex items-start justify-between">
                 <div className="flex-1 pr-4">
                   <h2 className="text-lg font-semibold text-stone-900">{workOrder.title}</h2>
@@ -413,7 +413,7 @@ export function ViewWorkOrderModal({ isOpen, onClose, workOrder, onUpdateStatus 
             </div>
 
             {/* Content */}
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 flex-1 overflow-y-auto">
               {/* Badges */}
               <div className="flex gap-2">
                 <span className={cn('px-3 py-1 rounded-full text-xs font-medium capitalize', priorityColors[workOrder.priority] || priorityColors.normal)}>
@@ -464,7 +464,7 @@ export function ViewWorkOrderModal({ isOpen, onClose, workOrder, onUpdateStatus 
 
             {/* Actions */}
             {onUpdateStatus && workOrder.status !== 'completed' && (
-              <div className="flex gap-3 px-6 py-4 border-t border-stone-100 bg-stone-50">
+              <div className="flex gap-3 px-6 py-4 border-t border-stone-100 bg-stone-50 shrink-0">
                 {workOrder.status === 'pending' && (
                   <IOSButton
                     variant="primary"

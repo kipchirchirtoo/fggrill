@@ -85,7 +85,7 @@ export function MenuItemModal({ isOpen, onClose, mode = 'create', initialData }:
         initial={{ scale: 0.95, y: 20 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.95, y: 20 }}
-        className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden"
+        className="bg-white rounded-2xl shadow-2xl max-w-lg w-full flex flex-col max-h-[90vh] overflow-hidden"
       >
         <div className="px-6 py-5 border-b border-gray-100">
           <div className="flex items-center justify-between">
@@ -105,7 +105,7 @@ export function MenuItemModal({ isOpen, onClose, mode = 'create', initialData }:
           </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 flex-1 overflow-y-auto">
           <AnimatePresence mode="wait">
             {step === 1 && (
               <motion.div
@@ -355,7 +355,7 @@ export function OrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =
         initial={{ scale: 0.95, y: 20 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.95, y: 20 }}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -379,7 +379,7 @@ export function OrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =
         </div>
 
         {/* Body */}
-        <div className="p-0 overflow-y-auto flex-1">
+        <div className="p-0 overflow-y-auto flex-1 h-full">
           <AnimatePresence mode="wait">
             {step === 1 && (
               <motion.div

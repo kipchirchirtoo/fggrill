@@ -861,39 +861,50 @@ def export_supplier_statement_pdf():
              return jsonify({'success': False, 'message': 'Service unavailable'}), 503
 
         # 1. Fetch Supplier Details
-        supplier_res = supabase.table('store_suppliers').select('*').eq('id', supplier_id).single().execute()
-        if not supplier_res.data:
-            return jsonify({'success': False, 'message': 'Supplier not found'}), 404
-        supplier = supplier_res.data
+        try:
+            supplier_res = supabase.table('store_suppliers').select('*').eq('id', supplier_id).maybe_single().execute()
+            if not supplier_res.data:
+                return jsonify({'success': False, 'message': 'Supplier not found'}), 404
+            supplier = supplier_res.data
+        except Exception as e:
+            logger.error(f"Error fetching supplier {supplier_id}: {e}")
+            return jsonify({'success': False, 'message': f"Error fetching supplier details: {str(e)}"}), 500
         
         # Format Address
         addr_parts = [supplier.get('address_line1'), supplier.get('address_line2'), supplier.get('city')]
         supplier['address'] = ", ".join([p for p in addr_parts if p])
 
         # 2. Calculate Opening Balance (Transactions < start_date)
-        # We can sum ledger entries before start_date
         opening_balance = 0
-        if start_date:
-            opening_res = supabase.table('store_supplier_ledger')\
-                .select('debit_amount, credit_amount')\
-                .eq('supplier_id', supplier_id)\
-                .lt('transaction_date', start_date)\
-                .execute()
-            
-            for entry in opening_res.data or []:
-                opening_balance += (float(entry.get('credit_amount') or 0) - float(entry.get('debit_amount') or 0))
+        try:
+            if start_date:
+                opening_res = supabase.table('store_supplier_ledger')\
+                    .select('debit_amount, credit_amount')\
+                    .eq('supplier_id', supplier_id)\
+                    .lt('transaction_date', start_date)\
+                    .execute()
+                
+                for entry in opening_res.data or []:
+                    opening_balance += (float(entry.get('credit_amount') or 0) - float(entry.get('debit_amount') or 0))
+        except Exception as e:
+            logger.warning(f"Error calculating opening balance for supplier {supplier_id}: {e}")
+            # Continue with 0 balance if opening fails
 
         # 3. Fetch Transactions in Period
-        query = supabase.table('store_supplier_ledger')\
-            .select('*')\
-            .eq('supplier_id', supplier_id)\
-            .order('transaction_date', desc=False)
+        try:
+            query = supabase.table('store_supplier_ledger')\
+                .select('*')\
+                .eq('supplier_id', supplier_id)\
+                .order('transaction_date', desc=False)
+                
+            if start_date: query = query.gte('transaction_date', start_date)
+            if end_date: query = query.lte('transaction_date', end_date)
             
-        if start_date: query = query.gte('transaction_date', start_date)
-        if end_date: query = query.lte('transaction_date', end_date)
-        
-        trans_res = query.execute()
-        transactions = trans_res.data or []
+            trans_res = query.execute()
+            transactions = trans_res.data or []
+        except Exception as e:
+            logger.error(f"Error fetching ledger transactions for supplier {supplier_id}: {e}")
+            transactions = []
 
         # Calculate entries totals for summary
         total_invoiced = sum(float(t.get('credit_amount') or 0) for t in transactions if t.get('transaction_type') == 'invoice')
@@ -910,15 +921,20 @@ def export_supplier_statement_pdf():
         closing_balance = running_bal
 
         # 4. Fetch Current Aging (Real-time from balances table)
-        aging_res = supabase.table('store_supplier_balances')\
-            .select('*')\
-            .eq('supplier_id', supplier_id)\
-            .maybe_single()\
-            .execute()
-        
-        aging = aging_res.data if aging_res.data else {
+        aging = {
             'current_amount': 0, 'days_30_amount': 0, 'days_60_amount': 0, 'days_90_plus_amount': 0
         }
+        try:
+            aging_res = supabase.table('store_supplier_balances')\
+                .select('*')\
+                .eq('supplier_id', supplier_id)\
+                .maybe_single()\
+                .execute()
+            
+            if aging_res.data:
+                aging = aging_res.data
+        except Exception as e:
+            logger.warning(f"Error fetching aging for supplier {supplier_id}: {e}")
 
         # Prepare Data for PDF
         pdf_data = {
@@ -935,11 +951,12 @@ def export_supplier_statement_pdf():
 
         pdf_bytes = doc_generator.generate_supplier_statement_pdf(pdf_data)
 
+        filename = f'statement_{supplier.get("supplier_code", "SUP")}_{end_date or datetime.now().strftime("%Y-%m-%d")}.pdf'
         return send_file(
             io.BytesIO(pdf_bytes),
             mimetype='application/pdf',
             as_attachment=True,
-            download_name=f'statement_{supplier.get("supplier_code", "SUP")}_{end_date}.pdf'
+            download_name=filename
         )
 
     except Exception as e:

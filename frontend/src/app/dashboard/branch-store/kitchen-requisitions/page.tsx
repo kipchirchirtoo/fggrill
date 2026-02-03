@@ -85,10 +85,14 @@ export default function KitchenRequisitionsPage() {
     const fetchRequisitions = async () => {
         try {
             setLoading(true);
-            const data = await api.store.getKitchenRequisitions({
+            const res = await api.store.getKitchenRequisitions({
                 status: statusFilter !== 'all' ? statusFilter : undefined
             });
-            setRequisitions(data || []);
+            if (res.success && Array.isArray(res.data)) {
+                setRequisitions(res.data);
+            } else {
+                setRequisitions([]);
+            }
 
             // Fetch recipes for purpose selection
             const recipesRes = await api.kitchen.getRecipes();

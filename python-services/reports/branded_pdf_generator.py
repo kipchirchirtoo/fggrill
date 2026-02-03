@@ -297,6 +297,8 @@ class BrandedPDFGenerator:
             'dispatch_note': self._generate_dispatch_note,
             'kitchen_ledger': self._generate_kitchen_ledger_report,
             'kitchen_item_ledger': self._generate_kitchen_item_ledger_report,
+            'vat_report': self._generate_vat_report,
+            'procurement_intelligence': self._generate_procurement_intelligence_report,
         }
         
         # Normalize report type - handle common variations and cases
@@ -2137,10 +2139,10 @@ class BrandedPDFGenerator:
         This report compares different branches based on revenue, occupancy, or staff count metrics
         """
         # Extract data
-        title = data.get('title', 'Branch Comparison Report')
-        period = data.get('period', 'month')
-        metric = data.get('metric', 'revenue')
-        branches = data.get('branches', [])
+        title = data.get('title', 'Branch Comparison Report') or 'Branch Comparison Report'
+        period = data.get('period', 'month') or 'month'
+        metric = data.get('metric', 'revenue') or 'revenue'
+        branches = data.get('branches', []) or []
         
         # Build elements list for the PDF
         elements = []
@@ -2844,8 +2846,8 @@ class BrandedPDFGenerator:
         # Finance Summary
         elements.append(Paragraph("<b>FINANCIAL SUMMARY</b>", self.styles['SectionHeader']))
         
-        sales = data.get('sales', {})
-        expenses = data.get('expenses', {})
+        sales = data.get('sales', {}) or {}
+        expenses = data.get('expenses', {}) or {}
         
         summary_data = [
             ['METRIC', 'AMOUNT', '% OF REVENUE'],
@@ -3104,9 +3106,11 @@ class BrandedPDFGenerator:
         ]
         
         # Add current balance to info if available
-        transactions = data.get('transactions', [])
-        if transactions:
-            info_data.append(['Current Balance:', f"{transactions[-1].get('closing_balance', 0):.2f} {transactions[-1].get('unit_of_measure', '')}"])
+        transactions = data.get('transactions', []) or []
+        if transactions and isinstance(transactions, list):
+            last_trans = transactions[-1] if transactions else {}
+            if isinstance(last_trans, dict):
+                info_data.append(['Current Balance:', f"{last_trans.get('closing_balance', 0):.2f} {last_trans.get('unit_of_measure', '')}"])
         
         info_table = Table(info_data, colWidths=[1.5*inch, 5.5*inch])
         info_table.setStyle(TableStyle([
@@ -3163,5 +3167,112 @@ class BrandedPDFGenerator:
         ]))
         
         elements.append(trans_table)
+        
+        return self._create_pdf(elements)
+
+    def _generate_vat_report(self, data: Dict, filters: Dict) -> str:
+        """KRA Format VAT Input Report"""
+        date_range = f"{filters.get('from_date', 'N/A')} to {filters.get('to_date', 'N/A')}"
+        elements = []
+        elements.extend(self._create_header("VAT INPUT REPORT", date_range))
+        
+        summary = data.get('summary', {}) or {}
+        
+        # Summary Grid
+        summary_content = [
+            [
+                Paragraph(f"<font size='8' color='gray'>TOTAL VATABLE</font><br/><font size='14'><b>KES {summary.get('total_subtotal', 0):,.2f}</b></font>", self.styles['Normal']),
+                Paragraph(f"<font size='8' color='gray'>INPUT VAT (16%)</font><br/><font size='14'><b>KES {summary.get('total_vat', 0):,.2f}</b></font>", self.styles['Normal']),
+                Paragraph(f"<font size='8' color='gray'>WH VAT</font><br/><font size='14'><b>KES {summary.get('total_withholding', 0):,.2f}</b></font>", self.styles['Normal'])
+            ]
+        ]
+        summary_table = Table(summary_content, colWidths=[2.3*inch]*3)
+        summary_table.setStyle(TableStyle([('BOX', (0,0), (-1,-1), 0.5, colors.grey), ('VALIGN', (0,0), (-1,-1), 'TOP'), ('TOPPADDING', (0,0), (-1,-1), 10), ('BOTTOMPADDING', (0,0), (-1,-1), 10)]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # Details Table
+        table_data = [['Invoice #', 'Date', 'Supplier', 'PIN/VAT #', 'Taxable Amt', 'VAT Amount']]
+        for inv in (data.get('data', []) or []):
+            supplier = inv.get('supplier', {}) or {}
+            table_data.append([
+                inv.get('invoice_number', ''),
+                inv.get('invoice_date', ''),
+                supplier.get('name', ''),
+                f"{supplier.get('tax_id', '')}/{supplier.get('vat_number', '')}",
+                f"{float(inv.get('subtotal') or 0):,.2f}",
+                f"{float(inv.get('vat_amount') or 0):,.2f}"
+            ])
+            
+        t = Table(table_data, colWidths=[1*inch, 1*inch, 2*inch, 1.2*inch, 0.9*inch, 0.9*inch])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (4, 1), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+        ]))
+        elements.append(t)
+        
+        return self._create_pdf(elements)
+
+    def _generate_procurement_intelligence_report(self, data: Dict, filters: Dict) -> str:
+        """Comprehensive Procurement Report (Export All)"""
+        date_range = f"{filters.get('from_date', 'N/A')} to {filters.get('to_date', 'N/A')}"
+        elements = []
+        elements.extend(self._create_header("PROCUREMENT INTELLIGENCE REPORT", date_range))
+        
+        # 1. VAT Section
+        elements.append(Paragraph("<b>1. VAT INPUT SUMMARY</b>", self.styles['SectionHeader']))
+        vat = data.get('vat', {}) or {}
+        summary = vat.get('summary', {}) or {}
+        vat_text = f"Total Vatable Purchases: KES {summary.get('total_subtotal', 0):,.2f} | Total Input VAT: KES {summary.get('total_vat', 0):,.2f}"
+        elements.append(Paragraph(vat_text, self.styles['Normal']))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # 2. GRNI Section
+        elements.append(Paragraph("<b>2. OUTSTANDING GRNI (LIABILITIES)</b>", self.styles['SectionHeader']))
+        grni_data = [['GRN #', 'Date', 'Supplier', 'Estimated Amount']]
+        for g in (data.get('grni', []) or []):
+            grni_data.append([
+                (g.get('grn') or {}).get('grn_number', ''),
+                (g.get('grn') or {}).get('grn_date', ''),
+                (g.get('supplier') or {}).get('name', ''),
+                f"{float(g.get('estimated_amount') or 0):,.2f}"
+            ])
+        if len(grni_data) > 1:
+            t_grni = Table(grni_data, colWidths=[1*inch, 1*inch, 3.5*inch, 1.5*inch])
+            t_grni.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7f8c8d')),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                ('GRID', (0,0), (-1,-1), 0.5, FG_GRAY)
+            ]))
+            elements.append(t_grni)
+        else:
+            elements.append(Paragraph("No outstanding GRN items.", self.styles['Italic']))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # 3. Aging Section
+        elements.append(Paragraph("<b>3. ACCOUNTS PAYABLE AGING</b>", self.styles['SectionHeader']))
+        aging_data = [['Supplier', '0-30 days', '31-60 days', '61-90 days', '90+ days', 'Total']]
+        for a in (data.get('aging', []) or []):
+            aging_data.append([
+                (a.get('supplier') or {}).get('name', ''),
+                f"{float(a.get('current_amount') or 0):,.2f}",
+                f"{float(a.get('days_30_amount') or 0):,.2f}",
+                f"{float(a.get('days_60_amount') or 0):,.2f}",
+                f"{float(a.get('days_90_plus_amount') or 0):,.2f}",
+                f"{float(a.get('current_balance') or 0):,.2f}"
+            ])
+        if len(aging_data) > 1:
+            t_age = Table(aging_data, colWidths=[1.8*inch, 1*inch, 1*inch, 1*inch, 1*inch, 1.2*inch])
+            t_age.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                ('ALIGN', (1,1), (-1,-1), 'RIGHT'),
+                ('GRID', (0,0), (-1,-1), 0.5, FG_GRAY),
+                ('FONTSIZE', (0,0), (-1,-1), 7)
+            ]))
+            elements.append(t_age)
         
         return self._create_pdf(elements)

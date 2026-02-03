@@ -381,7 +381,7 @@ class AccountingDocumentGenerator:
         # Supplier Details & Period
         header_data = [
             [
-                Paragraph(f"<b>To:</b><br/>{escape(supplier.get('name', ''))}<br/>{escape(supplier.get('address', ''))}<br/>{escape(supplier.get('email', ''))}", self.styles['Normal']),
+                Paragraph(f"<b>To:</b><br/>{escape(str(supplier.get('name') or ''))}<br/>{escape(str(supplier.get('address') or ''))}<br/>{escape(str(supplier.get('email') or ''))}", self.styles['Normal']),
                 Paragraph(f"<b>Statement Period:</b><br/>{escape(str(data.get('start_date', '')))} to {escape(str(data.get('end_date', '')))}<br/><br/><b>Currency:</b> KES", self.styles['Normal'])
             ]
         ]
@@ -528,7 +528,7 @@ class AccountingDocumentGenerator:
                 Paragraph("<b>SHIP TO:</b>", self.styles['Normal'])
             ],
             [
-                Paragraph(f"{escape(supplier.get('name', 'N/A'))}<br/>{escape(supplier.get('address', 'N/A'))}<br/>Email: {escape(supplier.get('email', 'N/A'))}<br/>PIN: {escape(supplier.get('supplier_pin', 'N/A'))}", self.styles['Normal']),
+                Paragraph(f"{escape(str(supplier.get('name') or 'N/A'))}<br/>{escape(str(supplier.get('address') or 'N/A'))}<br/>Email: {escape(str(supplier.get('email') or 'N/A'))}<br/>PIN: {escape(str(supplier.get('supplier_pin') or 'N/A'))}", self.styles['Normal']),
                 Paragraph("<b>Central Stores</b><br/>Famous Gate Grill<br/>Main Branch<br/>Attn: Receiving Department", self.styles['Normal'])
             ]
         ]
