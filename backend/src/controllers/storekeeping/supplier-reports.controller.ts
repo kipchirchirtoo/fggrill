@@ -59,7 +59,7 @@ export const getVATReport = async (
             .select(`
                 invoice_number,
                 invoice_date,
-                supplier:store_suppliers(id, name, pin, vat_number),
+                supplier:store_suppliers(id, name, tax_id, vat_number),
                 subtotal,
                 vat_amount,
                 withholding_vat_amount,
@@ -216,7 +216,7 @@ export const getSupplierPerformance = async (
             .from('store_supplier_balances')
             .select('*')
             .eq('supplier_id', supplierId)
-            .single();
+            .maybeSingle();
 
         if (error) throw error;
 
@@ -225,7 +225,16 @@ export const getSupplierPerformance = async (
 
         res.status(200).json({
             success: true,
-            data: performance
+            data: performance || {
+                supplier_id: supplierId,
+                current_balance: 0,
+                total_invoices: 0,
+                total_payments: 0,
+                current_amount: 0,
+                days_30_amount: 0,
+                days_60_amount: 0,
+                days_90_plus_amount: 0
+            }
         });
     } catch (error) {
         logger.error('Error fetching supplier performance:', error);

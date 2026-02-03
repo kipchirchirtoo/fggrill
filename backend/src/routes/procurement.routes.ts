@@ -114,10 +114,10 @@ router.put('/payments/:id/process', authorize(auditorRoles), processPayment);
 // =====================================================
 // REPORTS & COMPLIANCE
 // =====================================================
-router.get('/reports/aging', authorize(auditorRoles), getAgingAnalysis);
-router.get('/reports/vat', authorize(auditorRoles), getVATReport);
-router.get('/reports/grni', authorize(auditorRoles), getGRNIReport);
-router.get('/reports/audit-trail', authorize(auditorRoles), getAuditTrail);
+router.get('/reports/aging', authorize(allProcurementStaff), getAgingAnalysis);
+router.get('/reports/vat', authorize(allProcurementStaff), getVATReport);
+router.get('/reports/grni', authorize(allProcurementStaff), getGRNIReport);
+router.get('/reports/audit-trail', authorize(allProcurementStaff), getAuditTrail);
 router.get('/ledger/:supplierId', authorize(allProcurementStaff), getSupplierLedger);
 router.get('/performance/:supplierId', authorize(allProcurementStaff), getSupplierPerformance);
 

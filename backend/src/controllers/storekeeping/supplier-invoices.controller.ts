@@ -18,7 +18,7 @@ export const getInvoices = async (
             .from('store_supplier_invoices')
             .select(`
                 *,
-                supplier:store_suppliers(id, name, pin, supplier_code),
+                supplier:store_suppliers(id, name, tax_id, supplier_code),
                 po:store_purchase_orders(id, po_number),
                 grn:store_grn(id, grn_number)
             `)
@@ -116,7 +116,7 @@ export const createInvoice = async (
         // 1. Get supplier details for VAT validation
         const { data: supplier, error: supplierError } = await supabase
             .from('store_suppliers')
-            .select('pin, vat_registered, vat_number')
+            .select('tax_id, vat_registered, vat_number')
             .eq('id', supplier_id)
             .single();
 
@@ -147,7 +147,7 @@ export const createInvoice = async (
                 po_id,
                 invoice_date,
                 due_date,
-                supplier_pin: supplier.pin,
+                supplier_pin: supplier.tax_id,
                 supplier_vat_registered: supplier.vat_registered,
                 supplier_vat_number: supplier.vat_number,
                 subtotal,
