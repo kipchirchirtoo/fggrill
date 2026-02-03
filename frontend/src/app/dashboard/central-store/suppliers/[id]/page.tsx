@@ -184,14 +184,14 @@ export default function SupplierDetailPage() {
 
     const addItemToPO = () => {
         if (!selectedItemId) return;
-        const item = availableItems.find(i => i.id === selectedItemId);
+        const item = availableItems.find(i => (i.id || i.sku) === selectedItemId);
         if (!item) return;
 
         setPoItems([...poItems, {
-            item_id: item.id,
-            name: item.name,
+            item_id: item.id || item.sku,
+            name: item.name || item.item_name,
             quantity: 1,
-            unit_price: item.last_purchase_price || item.unit_cost || 0
+            unit_price: item.last_purchase_price || item.cost_price || item.unit_cost || 0
         }]);
         setSelectedItemId('');
     };
@@ -731,7 +731,9 @@ export default function SupplierDetailPage() {
                                             <SelectTrigger className="flex-1"><SelectValue placeholder="Select Item to Add" /></SelectTrigger>
                                             <SelectContent>
                                                 {availableItems.map(item => (
-                                                    <SelectItem key={item.id} value={item.id}>{item.name} ({item.unit})</SelectItem>
+                                                    <SelectItem key={item.id || item.sku} value={item.id || item.sku}>
+                                                        {item.name || item.item_name} ({item.unit || item.unit_of_measure})
+                                                    </SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
