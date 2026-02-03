@@ -155,7 +155,7 @@ export default function SupplierDetailPage() {
                             <div className="flex items-center gap-3">
                                 <h1 className="text-2xl font-bold text-stone-900">{supplier.name}</h1>
                                 <IOSBadge variant="light" color={supplier.status === 'active' ? 'success' : 'secondary'}>
-                                    {supplier.status.toUpperCase()}
+                                    {(supplier.status || 'UNKNOWN').toUpperCase()}
                                 </IOSBadge>
                             </div>
                             <p className="text-stone-500 font-mono text-sm">{supplier.supplier_code}</p>
@@ -524,7 +524,7 @@ export default function SupplierDetailPage() {
                                                         {log.entity_reference && <span className="text-[#007AFF] font-mono">[{log.entity_reference}]</span>}
                                                     </div>
                                                     <div className="text-right">
-                                                        <IOSBadge variant="light" className="text-[9px] py-0 px-1">{log.action.toUpperCase()}</IOSBadge>
+                                                        <IOSBadge variant="light" className="text-[9px] py-0 px-1">{(log.action || '').toUpperCase()}</IOSBadge>
                                                     </div>
                                                 </div>
                                             ))}
