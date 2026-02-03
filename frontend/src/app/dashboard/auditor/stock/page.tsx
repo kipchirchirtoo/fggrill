@@ -54,58 +54,62 @@ export default function StockAuditPage() {
             <DashboardLayout>
                 <div className="space-y-8 pb-12">
                     {/* Header */}
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div>
-                            <div className="flex items-center gap-2 mb-1">
-                                <Boxes className="h-4 w-4 text-stone-400" />
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Inventory Health</span>
+                    <div className="page-header flex flex-col md:flex-row md:items-end justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-stone-900 flex items-center justify-center text-white shadow-lg">
+                                <Boxes className="h-6 w-6" />
                             </div>
-                            <h1 className="text-2xl font-black text-stone-900 tracking-tight leading-none">
-                                {activeBranchId !== 0 ? `Inventory Health Audit` : `System Stock Oversight`}
-                            </h1>
-                            <p className="text-stone-500 text-sm mt-2 font-medium italic">Monitor stock integrity, variances, and operational health across all nodes</p>
+                            <div>
+                                <h1 className="page-title text-stone-900">
+                                    {activeBranchId !== 0 ? `Inventory Health: Branch Audit` : `System Stock Oversight`}
+                                </h1>
+                                <p className="page-subtitle">Monitor stock integrity, variances, and operational health across nodes</p>
+                            </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
+                            <div className="hidden md:flex items-center gap-2 bg-stone-100/50 border border-stone-200 rounded-xl px-3 py-1.5 shadow-sm h-[42px]">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">Live Audit Mode</span>
+                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            </div>
                             <BranchSelector />
-                            <button className="flex items-center gap-2 h-10 px-4 py-2.5 bg-stone-900 text-white rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-stone-800 shadow-xl shadow-stone-900/10 transition-all">
-                                <FileDown className="h-4 w-4" /> Export Global Health
+                            <button className="btn-secondary h-[42px]">
+                                <FileDown className="h-4 w-4" />
                             </button>
-                            <button onClick={fetchData} className="p-2.5 bg-white border border-stone-200 rounded-xl hover:bg-stone-50 transition-colors shadow-sm">
-                                <RefreshCw className={`h-4 w-4 text-stone-600 ${isLoading ? 'animate-spin' : ''}`} />
+                            <button onClick={fetchData} className="btn-primary h-[42px] shadow-lg shadow-stone-900/10">
+                                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                                <span className="ml-2">Sync</span>
                             </button>
                         </div>
                     </div>
 
                     {/* High-level Scorecards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="card-elevated p-8 border border-stone-100 bg-white shadow-xl shadow-stone-200/20">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-2">Critical Variances</p>
-                            <h3 className={`text-3xl font-black tracking-tighter ${(auditData?.summary?.total_discrepancies || 0) > 0 ? 'text-rose-600' : 'text-stone-900'}`}>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="stat-card bg-stone-900 text-white border-none shadow-xl shadow-stone-900/10 relative overflow-hidden group">
+                            <Activity className="absolute -right-4 -bottom-4 w-24 h-24 opacity-10 group-hover:scale-110 transition-transform" />
+                            <div className="relative z-10">
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="stat-label text-stone-400">System Integrity</p>
+                                    <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                                </div>
+                                <p className="stat-value text-white text-4xl">98.4%</p>
+                                <p className="text-[10px] text-stone-400 mt-2 font-medium">Weighted score across all active nodes</p>
+                            </div>
+                        </div>
+                        <div className="stat-card">
+                            <div className={`stat-icon ${(auditData?.summary?.total_discrepancies || 0) > 0 ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-500'}`}>
+                                <AlertTriangle className="h-5 w-5" />
+                            </div>
+                            <p className={`stat-value ${(auditData?.summary?.total_discrepancies || 0) > 0 ? 'text-rose-600' : ''}`}>
                                 {auditData?.summary?.total_discrepancies || 0}
-                            </h3>
-                            <div className="flex items-center gap-1.5 mt-3">
-                                <AlertTriangle className={`h-3 w-3 ${(auditData?.summary?.total_discrepancies || 0) > 0 ? 'text-rose-500' : 'text-stone-300'}`} />
-                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Items with count mismatch</p>
-                            </div>
+                            </p>
+                            <p className="stat-label">Critical Variances</p>
                         </div>
-                        <div className="card-elevated p-8 border border-stone-100 bg-white shadow-xl shadow-stone-200/20">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-2">Low Stock Points</p>
-                            <h3 className="text-3xl font-black text-stone-900 tracking-tighter">{auditData?.summary?.total_low_stock || 0}</h3>
-                            <div className="flex items-center gap-1.5 mt-3">
-                                <TrendingDown className="h-3 w-3 text-amber-500" />
-                                <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">Requires replenishment</p>
+                        <div className="stat-card">
+                            <div className="stat-icon bg-amber-50 text-amber-500">
+                                <TrendingDown className="h-5 w-5" />
                             </div>
-                        </div>
-                        <div className="card-elevated p-8 border border-stone-100 bg-white shadow-xl shadow-stone-200/20">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-2">System Integrity</p>
-                            <div className="flex items-center gap-2">
-                                <h3 className="text-3xl font-black text-stone-900 tracking-tighter">98.4%</h3>
-                                <ShieldCheck className="h-6 w-6 text-emerald-500" />
-                            </div>
-                            <div className="flex items-center gap-1.5 mt-3">
-                                <Check className="h-3 w-3 text-emerald-500" />
-                                <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Tracking accuracy score</p>
-                            </div>
+                            <p className="stat-value">{auditData?.summary?.total_low_stock || 0}</p>
+                            <p className="stat-label">Low Stock Points</p>
                         </div>
                     </div>
 
@@ -157,75 +161,72 @@ export default function StockAuditPage() {
                             ))}
                         </div>
                     ) : (
-                        /* DETAILED STOCK LIST */
                         <div className="space-y-6 animate-in slide-in-from-right duration-300">
                             <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-                                <div className="relative w-full md:w-96">
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-300" />
+                                <div className="flex items-center gap-3 bg-white border border-stone-100 rounded-xl px-4 h-12 w-full md:w-96 shadow-sm group focus-within:ring-2 focus-within:ring-stone-900/5 transition-all">
+                                    <Search className="h-4 w-4 text-stone-300 group-focus-within:text-stone-900 transition-colors" />
                                     <input
                                         type="text"
                                         placeholder="Search inventory by name or SKU..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full pl-11 pr-4 py-3 bg-stone-50 border border-stone-200/60 rounded-2xl text-[13px] font-bold text-stone-700 outline-none focus:border-stone-400 focus:bg-white transition-all shadow-sm"
+                                        className="text-sm font-bold text-stone-900 outline-none w-full placeholder:text-stone-300 placeholder:font-semibold"
                                     />
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <button className="flex items-center gap-2 px-5 py-2.5 bg-white border border-stone-200 rounded-xl text-[11px] font-black uppercase tracking-widest text-stone-600 hover:bg-stone-50 transition-all shadow-sm">
-                                        <Activity className="h-4 w-4" /> Flag Variances
+                                    <button className="btn-secondary h-12 px-5">
+                                        <Activity className="h-4 w-4 mr-2" /> Flag Variances
                                     </button>
-                                    <button className="flex items-center gap-2 px-5 py-2.5 bg-stone-900 text-white rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-stone-800 shadow-xl shadow-stone-900/10 transition-all">
-                                        <FileDown className="h-4 w-4" /> Export Ledger
+                                    <button className="btn-primary h-12 px-5 shadow-lg shadow-stone-900/10">
+                                        <FileDown className="h-4 w-4 mr-2" /> Export Ledger
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="card-elevated border border-stone-100 bg-white overflow-hidden shadow-2xl shadow-stone-200/30">
-                                <div className="overflow-x-auto">
+                            <div className="table-container shadow-sm border border-stone-100">
+                                <div className="table-responsive">
                                     <table className="w-full text-left">
                                         <thead>
-                                            <tr className="bg-stone-50/30 border-b border-stone-100 text-[10px] font-black text-stone-400 uppercase tracking-widest">
-                                                <th className="px-6 py-4">Inventory Item</th>
-                                                <th className="px-6 py-4 text-center">System Stock</th>
-                                                <th className="px-6 py-4 text-center">Theoretical</th>
-                                                <th className="px-6 py-4 text-center">Variance</th>
-                                                <th className="px-6 py-4 text-center">Audit Status</th>
-                                                <th className="px-6 py-4"></th>
+                                            <tr className="table-header">
+                                                <th className="table-header-cell">Inventory Item</th>
+                                                <th className="table-header-cell text-center">System Stock</th>
+                                                <th className="table-header-cell text-center">Theoretical</th>
+                                                <th className="table-header-cell text-center">Variance</th>
+                                                <th className="table-header-cell text-center">Audit Status</th>
+                                                <th className="table-header-cell"></th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-stone-50">
                                             {filteredInventory.map((item: any, idx: number) => {
                                                 const hasDiscrepancy = item.variance !== 0;
                                                 return (
-                                                    <tr key={idx} className="hover:bg-stone-50/50 transition-colors group">
-                                                        <td className="px-6 py-4">
+                                                    <tr key={idx} className="table-row group">
+                                                        <td className="table-cell">
                                                             <div className="flex flex-col">
-                                                                <span className="text-[14px] font-black text-stone-900">{item.item_name}</span>
-                                                                <span className="text-[10px] font-extrabold text-stone-400 uppercase tracking-widest font-mono italic">{item.item_sku}</span>
+                                                                <span className="font-black text-stone-900 tracking-tight">{item.item_name}</span>
+                                                                <span className="text-[10px] text-stone-400 font-mono tracking-tighter uppercase mt-0.5">{item.item_sku}</span>
                                                             </div>
                                                         </td>
-                                                        <td className="px-6 py-4 text-center font-mono font-bold text-[14px] text-stone-700">
+                                                        <td className="table-cell text-center font-mono font-bold text-stone-700">
                                                             {item.quantity}
                                                         </td>
-                                                        <td className="px-6 py-4 text-center font-mono font-bold text-[14px] text-stone-400">
+                                                        <td className="table-cell text-center font-mono font-medium text-stone-400">
                                                             {item.theoretical?.toFixed(1) || '0.0'}
                                                         </td>
-                                                        <td className={`px-6 py-4 text-center font-mono font-black text-[15px] ${hasDiscrepancy ? 'text-rose-600 bg-rose-50/30' : 'text-emerald-600'}`}>
-                                                            {item.variance > 0 ? '+' : ''}{item.variance?.toFixed(1) || '0.0'}
+                                                        <td className="table-cell text-center">
+                                                            <span className={`font-mono font-black py-1 px-2 rounded-lg ${hasDiscrepancy ? 'text-rose-600 bg-rose-50' : 'text-emerald-600 bg-emerald-50/50'}`}>
+                                                                {item.variance > 0 ? '+' : ''}{item.variance?.toFixed(1) || '0.0'}
+                                                            </span>
                                                         </td>
-                                                        <td className="px-6 py-4 text-center">
+                                                        <td className="table-cell text-center">
                                                             {hasDiscrepancy ? (
-                                                                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-100 text-rose-700 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all shadow-sm">
-                                                                    <AlertTriangle className="h-3.5 w-3.5" /> Flagged
-                                                                </span>
+                                                                <span className="badge-danger">Flagged</span>
                                                             ) : (
-                                                                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all shadow-sm">
-                                                                    <Check className="h-3.5 w-3.5" /> Balanced
-                                                                </span>
+                                                                <span className="badge-success">Balanced</span>
                                                             )}
                                                         </td>
-                                                        <td className="px-6 py-4 text-right">
-                                                            <button className="p-2 hover:bg-stone-900 hover:text-white rounded-xl transition-all text-stone-300 opacity-0 group-hover:opacity-100">
+                                                        <td className="table-cell text-right">
+                                                            <button className="w-8 h-8 rounded-lg hover:bg-stone-900 hover:text-white transition-all flex items-center justify-center text-stone-300">
                                                                 <Eye className="h-4 w-4" />
                                                             </button>
                                                         </td>
@@ -234,13 +235,13 @@ export default function StockAuditPage() {
                                             })}
                                             {filteredInventory.length === 0 && (
                                                 <tr>
-                                                    <td colSpan={6} className="px-6 py-20 text-center text-stone-300 font-bold uppercase tracking-widest text-[11px]">
-                                                        {isLoading ? (
-                                                            <div className="flex flex-col items-center gap-2 opacity-50">
-                                                                <RefreshCw className="h-6 w-6 animate-spin text-stone-300" />
-                                                                <span className="text-[11px] font-black uppercase tracking-widest text-stone-400">Syncing health...</span>
-                                                            </div>
-                                                        ) : "No inventory data found"}
+                                                    <td colSpan={6} className="px-6 py-20 text-center">
+                                                        <div className="flex flex-col items-center gap-2 opacity-30">
+                                                            <Boxes className="h-10 w-10 mb-2" />
+                                                            <p className="text-[11px] font-black uppercase tracking-widest text-stone-300">
+                                                                {isLoading ? "Auditing stock..." : "No inventory data found"}
+                                                            </p>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             )}

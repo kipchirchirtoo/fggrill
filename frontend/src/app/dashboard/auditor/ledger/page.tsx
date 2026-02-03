@@ -121,30 +121,31 @@ export default function AuditorLedgerPage() {
             <DashboardLayout>
                 <div className="space-y-8 pb-10">
                     {/* Header */}
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div>
-                            <div className="flex items-center gap-2 mb-1">
-                                <Activity className="h-4 w-4 text-stone-400" />
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Inventory Audit</span>
+                    <div className="page-header flex flex-col md:flex-row md:items-end justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-stone-900 flex items-center justify-center text-white shadow-lg">
+                                <Activity className="h-6 w-6" />
                             </div>
-                            <h1 className="text-2xl font-black text-stone-900 tracking-tight leading-none">Kitchen Ledger Audit</h1>
-                            <p className="text-stone-500 text-sm mt-2 font-medium">Reconcile usage vs. sales for production accountability</p>
+                            <div>
+                                <h1 className="page-title text-stone-900">Kitchen Ledger Audit</h1>
+                                <p className="page-subtitle">Reconcile usage vs. sales for production accountability</p>
+                            </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
-                            <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-xl px-4 py-2 shadow-sm">
-                                <Search className="h-4 w-4 text-stone-400" />
+                            <div className="flex items-center gap-2 bg-stone-100/50 border border-stone-200 rounded-xl px-3 py-1.5 shadow-sm h-10">
+                                <Search className="h-3.5 w-3.5 text-stone-400" />
                                 <input
                                     type="text"
                                     placeholder="Search entries..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="text-sm font-bold text-stone-700 outline-none w-40"
+                                    className="text-[12px] font-semibold text-stone-700 bg-transparent outline-none w-40"
                                 />
                             </div>
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
-                                className="bg-white border border-stone-200 rounded-xl px-4 py-2 text-sm font-bold text-stone-700 shadow-sm outline-none"
+                                className="bg-stone-100/50 border border-stone-200 rounded-xl px-3 py-1.5 text-[12px] font-semibold text-stone-700 shadow-sm outline-none h-10"
                             >
                                 <option value="all">All Status</option>
                                 <option value="submitted">Submitted</option>
@@ -152,154 +153,150 @@ export default function AuditorLedgerPage() {
                                 <option value="draft">Draft</option>
                             </select>
                             <BranchSelector />
-                            <button onClick={handleDownloadReport} disabled={isExporting} className="p-2.5 bg-white border border-stone-200 rounded-xl hover:bg-stone-50 transition-colors shadow-sm">
-                                <FileDown className={`h-4 w-4 text-stone-600 ${isExporting ? 'animate-bounce' : ''}`} />
+                            <button onClick={handleDownloadReport} disabled={isExporting} className="btn-secondary">
+                                <FileDown className={`h-4 w-4 ${isExporting ? 'animate-bounce' : ''}`} />
                             </button>
-                            <button onClick={fetchEntries} className="p-2.5 bg-stone-900 rounded-xl hover:bg-stone-800 transition-colors shadow-sm">
-                                <RefreshCw className={`h-4 w-4 text-white ${isLoading ? 'animate-spin' : ''}`} />
+                            <button onClick={fetchEntries} className="btn-primary">
+                                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                             </button>
                         </div>
                     </div>
 
                     {/* Stats Highlights */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="card-elevated p-6 bg-stone-900 text-white shadow-xl shadow-stone-200/50">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-1">Revenue Variance</p>
-                            <h3 className={`text-2xl font-black italic ${totalVariance > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                                {totalVariance > 0 ? '-' : '+'} KES {Math.abs(totalVariance).toLocaleString()}
-                            </h3>
-                            <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
-                                <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">System Reconciliation</span>
-                                <ShieldCheck className="h-4 w-4 text-stone-400" />
+                        <div className={`stat-card ${totalVariance > 0 ? 'bg-rose-900 text-white shadow-rose-900/10' : 'bg-stone-900 text-white shadow-stone-900/10'} border-none shadow-xl`}>
+                            <div className="stat-icon bg-white/10 text-white border-none">
+                                <AlertTriangle className="h-5 w-5" />
                             </div>
+                            <p className="stat-value text-white">KES {Math.abs(totalVariance).toLocaleString()}</p>
+                            <p className="stat-label text-stone-400">Total Revenue Variance</p>
                         </div>
-                        <div className="card-elevated p-6 bg-white border border-stone-100 flex flex-col justify-between">
-                            <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-1">Verified Entries</p>
-                                <h3 className="text-2xl font-black text-stone-900">
-                                    {entries.filter(e => e.status === 'verified').length} <span className="text-xs font-bold text-stone-400">records</span>
-                                </h3>
+                        <div className="stat-card">
+                            <div className="stat-icon bg-emerald-50 text-emerald-500">
+                                <CheckCircle className="h-5 w-5" />
                             </div>
-                            <p className="text-[11px] text-stone-400 font-medium">Total finalized and audited entries</p>
+                            <p className="stat-value">{entries.filter(e => e.status === 'verified').length}</p>
+                            <p className="stat-label">Verified Records</p>
                         </div>
-                        <div className="card-elevated p-6 bg-white border border-stone-100 flex flex-col justify-between">
-                            <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-1">Pending Review</p>
-                                <h3 className={`text-2xl font-black ${entries.filter(e => e.status === 'submitted').length > 0 ? 'text-blue-600' : 'text-stone-300'}`}>
-                                    {entries.filter(e => e.status === 'submitted').length}
-                                </h3>
+                        <div className="stat-card">
+                            <div className="stat-icon bg-blue-50 text-blue-500">
+                                <Clock className="h-5 w-5" />
                             </div>
-                            <p className="text-[11px] text-stone-400 font-medium leading-tight">Submitted entries awaiting auditor verification</p>
+                            <p className="stat-value">{entries.filter(e => e.status === 'submitted').length}</p>
+                            <p className="stat-label">Pending Verification</p>
                         </div>
                     </div>
 
                     {/* Main Table */}
-                    <div className="card-elevated p-0 bg-white shadow-xl shadow-stone-200/50 overflow-hidden border border-stone-100/50">
-                        <div className="p-6 border-b border-stone-50 bg-stone-50/20 flex items-center justify-between">
-                            <h3 className="text-[16px] font-black text-stone-900 flex items-center gap-2">
-                                <BookOpen className="h-4 w-4 text-stone-400" />
-                                Accountability Ledger
-                            </h3>
-                            <div className="flex items-center gap-4">
-                                <div className="flex items-center gap-1.5">
-                                    <div className="w-2 h-2 rounded-full bg-blue-500" />
-                                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-tighter">Submitted</span>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-tighter">Verified</span>
-                                </div>
+                    <div className="table-container shadow-sm border border-stone-100">
+                        <div className="section-header p-5 border-b border-stone-100">
+                            <div>
+                                <h2 className="section-title">Accountability Ledger</h2>
+                                <p className="section-subtitle">Real-time reconciliation of production usage vs. system sales</p>
                             </div>
                         </div>
-                        <div className="overflow-x-auto">
+                        <div className="table-responsive">
                             <table className="w-full text-left">
-                                <thead className="bg-stone-50/50 text-[10px] font-black uppercase tracking-widest text-stone-400 border-b border-stone-100">
-                                    <tr>
-                                        <th className="px-6 py-4">Entry / Shift</th>
-                                        <th className="px-6 py-4">Kitchen Item</th>
-                                        <th className="px-6 py-4 text-right">Opening</th>
-                                        <th className="px-6 py-4 text-right">In/Out/Waste</th>
-                                        <th className="px-6 py-4 text-right">Closing</th>
-                                        <th className="px-6 py-4 text-right">Variance</th>
-                                        <th className="px-6 py-4 text-center">Status</th>
-                                        <th className="px-6 py-4">Action</th>
+                                <thead>
+                                    <tr className="table-header">
+                                        <th className="table-header-cell">Entry / Shift</th>
+                                        <th className="table-header-cell">Kitchen Item</th>
+                                        <th className="table-header-cell text-right">Opening</th>
+                                        <th className="table-header-cell text-right">In/Out/Waste</th>
+                                        <th className="table-header-cell text-right">Closing</th>
+                                        <th className="table-header-cell text-right">Variance</th>
+                                        <th className="table-header-cell text-center">Status</th>
+                                        <th className="table-header-cell"></th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-stone-50">
                                     {isLoading ? (
                                         <tr>
                                             <td colSpan={8} className="px-6 py-20 text-center">
-                                                <RefreshCw className="h-8 w-8 animate-spin text-stone-200 mx-auto" />
+                                                <div className="flex flex-col items-center gap-2 opacity-50">
+                                                    <RefreshCw className="h-6 w-6 animate-spin text-stone-300" />
+                                                    <span className="text-[11px] font-black uppercase tracking-widest text-stone-400">Syncing ledger records...</span>
+                                                </div>
                                             </td>
                                         </tr>
                                     ) : filteredEntries.length === 0 ? (
                                         <tr>
-                                            <td colSpan={8} className="px-6 py-20 text-center text-stone-300 text-sm italic">
-                                                No ledger records found for this criteria
+                                            <td colSpan={8} className="px-6 py-20 text-center">
+                                                <span className="text-[11px] font-black uppercase tracking-widest text-stone-300">No records found</span>
                                             </td>
                                         </tr>
                                     ) : (
                                         filteredEntries.map((entry) => {
                                             const variance = entry.expected_sales - entry.system_sales;
                                             return (
-                                                <tr key={entry.id} className="hover:bg-stone-50/30 transition-colors group">
-                                                    <td className="px-6 py-4">
+                                                <tr key={entry.id} className="table-row group">
+                                                    <td className="table-cell">
                                                         <div className="flex flex-col">
-                                                            <span className="text-[13px] font-bold text-stone-900">{format(new Date(entry.entry_date), 'MMM dd, yyyy')}</span>
-                                                            <span className="text-[10px] text-stone-400 flex items-center gap-1 font-medium capitalize">
+                                                            <span className="font-bold text-stone-900">{format(new Date(entry.entry_date), 'MMM dd, yyyy')}</span>
+                                                            <span className="text-[10px] text-stone-400 flex items-center gap-1 font-semibold capitalize tracking-tight">
                                                                 {entry.shift} Shift • {entry.entry_number}
                                                             </span>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4">
-                                                        <p className="text-[14px] font-black text-stone-900">{entry.item_name}</p>
-                                                        <p className="text-[10px] text-stone-400 font-bold uppercase tracking-tighter">{entry.unit_of_measure}</p>
+                                                    <td className="table-cell">
+                                                        <p className="font-bold text-stone-900">{entry.item_name}</p>
+                                                        <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">{entry.unit_of_measure}</p>
                                                     </td>
-                                                    <td className="px-6 py-4 text-right font-bold text-stone-600">
+                                                    <td className="table-cell text-right font-semibold text-stone-600">
                                                         {entry.opening_balance.toFixed(2)}
                                                     </td>
-                                                    <td className="px-6 py-4 text-right">
+                                                    <td className="table-cell text-right">
                                                         <div className="flex flex-col items-end gap-0.5">
-                                                            <div className="flex items-center gap-1 text-emerald-600 text-[11px] font-bold">
+                                                            <div className="flex items-center gap-1 text-emerald-600 text-[10px] font-bold">
                                                                 <ArrowDownLeft className="w-3 h-3" />
                                                                 +{entry.received_quantity.toFixed(1)}
                                                             </div>
-                                                            <div className="flex items-center gap-1 text-stone-600 text-[11px] font-bold">
+                                                            <div className="flex items-center gap-1 text-stone-600 text-[10px] font-bold">
                                                                 <ArrowUpRight className="w-3 h-3" />
                                                                 -{entry.used_quantity.toFixed(1)}
                                                             </div>
-                                                            <div className="flex items-center gap-1 text-rose-500 text-[10px] font-black">
+                                                            <div className="flex items-center gap-1 text-rose-500 text-[9px] font-black tracking-tighter">
                                                                 <AlertTriangle className="w-2.5 h-2.5" />
                                                                 {entry.wastage_quantity.toFixed(1)}
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4 text-right font-black text-stone-900 border-x border-stone-50">
+                                                    <td className="table-cell text-right font-bold text-stone-900">
                                                         {entry.closing_balance.toFixed(2)}
                                                     </td>
-                                                    <td className="px-6 py-4 text-right">
+                                                    <td className="table-cell text-right">
                                                         <div className="flex flex-col items-end">
-                                                            <span className={`text-[13px] font-black ${variance === 0 ? 'text-stone-300' : variance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                            <span className={`font-bold ${variance === 0 ? 'text-stone-300' : variance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                                                                 {variance > 0 ? '-' : variance < 0 ? '+' : ''} KES {Math.abs(variance).toLocaleString()}
                                                             </span>
-                                                            <span className="text-[9px] font-bold text-stone-400 uppercase tracking-tighter">Exp: {entry.expected_sales.toLocaleString()}</span>
+                                                            <span className="text-[9px] font-bold text-stone-400 uppercase tracking-widest opacity-60">Exp: {entry.expected_sales.toLocaleString()}</span>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        {getStatusBadge(entry.status)}
+                                                    <td className="table-cell text-center">
+                                                        <span className={
+                                                            entry.status === 'verified' ? 'badge-success' :
+                                                                entry.status === 'submitted' ? 'badge-info' :
+                                                                    'badge-warning'
+                                                        }>
+                                                            {entry.status}
+                                                        </span>
                                                     </td>
-                                                    <td className="px-6 py-4">
-                                                        {entry.status === 'submitted' && (
-                                                            <button
-                                                                onClick={() => handleVerifyEntry(entry)}
-                                                                className="opacity-0 group-hover:opacity-100 transition-opacity bg-stone-900 text-white text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest hover:bg-stone-800"
-                                                            >
-                                                                Verify
-                                                            </button>
-                                                        )}
-                                                        {entry.status === 'verified' && (
-                                                            <ShieldCheck className="w-5 h-5 text-emerald-500 mx-auto" />
-                                                        )}
+                                                    <td className="table-cell text-right">
+                                                        <div className="flex justify-end pr-2">
+                                                            {entry.status === 'submitted' && (
+                                                                <button
+                                                                    onClick={() => handleVerifyEntry(entry)}
+                                                                    className="opacity-0 group-hover:opacity-100 transition-opacity bg-stone-900 text-white text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest hover:bg-stone-800 shadow-lg shadow-stone-900/10"
+                                                                >
+                                                                    Verify
+                                                                </button>
+                                                            )}
+                                                            {entry.status === 'verified' && (
+                                                                <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500">
+                                                                    <ShieldCheck className="w-4 h-4" />
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             );
@@ -311,23 +308,27 @@ export default function AuditorLedgerPage() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="card-elevated p-6 bg-amber-50 border border-amber-100 rounded-2xl flex items-start gap-4">
-                            <div className="p-3 bg-amber-100 rounded-xl text-amber-600">
+                        <div className="card-elevated p-6 bg-amber-50/50 border border-amber-100 flex items-start gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
                                 <Info className="h-6 w-6" />
                             </div>
                             <div>
-                                <h4 className="text-sm font-black text-amber-900 uppercase tracking-tight mb-1">Auditor Guidance</h4>
-                                <p className="text-xs text-amber-800 font-medium leading-relaxed">
+                                <h4 className="text-sm font-bold text-stone-900 uppercase tracking-tight mb-1">Auditor Guidance</h4>
+                                <p className="text-xs text-stone-600 font-medium leading-relaxed">
                                     Compare "Closing Balance" against physical count documents if available. Discrepancies in revenue (Variance) should be cross-referenced with "Exception Logs" to identify unauthorized voids or cancellations.
                                 </p>
                             </div>
                         </div>
-                        <div className="card-elevated p-6 bg-white border border-stone-100 rounded-2xl flex items-center justify-between">
-                            <div>
-                                <h4 className="text-sm font-black text-stone-900 uppercase tracking-tight mb-1">System Integrity</h4>
-                                <p className="text-xs text-stone-400 font-medium">All ledger calculations are double-verified via blockchain hash.</p>
+                        <div className="card-elevated p-6 bg-white border border-stone-100 flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-xl bg-stone-100 flex items-center justify-center text-stone-500 shrink-0">
+                                    <ShieldCheck className="h-6 w-6" />
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-bold text-stone-900 uppercase tracking-tight mb-1">System Integrity</h4>
+                                    <p className="text-xs text-stone-400 font-medium">All ledger calculations are double-verified via system production logs.</p>
+                                </div>
                             </div>
-                            <ShieldCheck className="h-10 w-10 text-stone-100" />
                         </div>
                     </div>
                 </div>

@@ -10,7 +10,8 @@ import {
     Package, Filter, Download,
     ArrowLeft, Check, X, RefreshCw, Eye,
     Building2, ChevronRight,
-    Search, Calendar, Clock, CheckCircle2, XCircle, Truck, FileDown
+    Search, Calendar, Clock, CheckCircle2, XCircle, Truck, FileDown,
+    Loader2, Info
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -61,101 +62,99 @@ export default function OrdersAuditPage() {
             <DashboardLayout>
                 <div className="space-y-8 pb-12">
                     {/* Header */}
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div>
-                            <div className="flex items-center gap-2 mb-1">
-                                <Package className="h-4 w-4 text-stone-400" />
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Order Monitoring</span>
+                    <div className="page-header flex flex-col md:flex-row md:items-end justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-stone-900 flex items-center justify-center text-white shadow-lg">
+                                <Package className="h-6 w-6" />
                             </div>
-                            <h1 className="text-2xl font-black text-stone-900 tracking-tight leading-none">
-                                {activeBranchId !== 0 ? `Branch Requisition History` : `System Requisitions`}
-                            </h1>
-                            <p className="text-stone-500 text-sm mt-2 font-medium italic">Audit and verify stock movement requests from all operational nodes</p>
+                            <div>
+                                <h1 className="page-title text-stone-900">
+                                    {activeBranchId !== 0 ? `Branch Requisition History` : `System Requisitions`}
+                                </h1>
+                                <p className="page-subtitle">Verify and audit stock movement requests across operational nodes</p>
+                            </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
-                            <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-xl px-3 py-2 shadow-sm h-10">
+                            <div className="flex items-center gap-2 bg-stone-100/50 border border-stone-200 rounded-xl px-3 h-[42px] shadow-sm">
                                 <Calendar className="h-3.5 w-3.5 text-stone-400" />
                                 <input
                                     type="date"
                                     value={dateRange.startDate}
                                     onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-                                    className="text-[12px] font-black text-stone-700 outline-none w-28"
+                                    className="text-[12px] font-bold text-stone-700 bg-transparent outline-none w-28"
                                 />
-                                <span className="text-stone-200 mx-1">→</span>
+                                <span className="text-stone-300 mx-1">→</span>
                                 <input
                                     type="date"
                                     value={dateRange.endDate}
                                     onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-                                    className="text-[12px] font-black text-stone-700 outline-none w-28"
+                                    className="text-[12px] font-bold text-stone-700 bg-transparent outline-none w-28"
                                 />
                             </div>
                             <BranchSelector />
-                            <button onClick={fetchData} className="p-2.5 bg-stone-900 rounded-xl hover:bg-stone-800 transition-colors shadow-sm">
-                                <RefreshCw className={`h-4 w-4 text-white ${isLoading ? 'animate-spin' : ''}`} />
+                            <button onClick={fetchData} className="btn-primary h-[42px] shadow-lg shadow-stone-900/10">
+                                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                                <span className="ml-2">Sync</span>
                             </button>
                         </div>
                     </div>
 
                     {/* Stats Overview */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div className="card-elevated p-6 border border-stone-100 bg-white shadow-xl shadow-stone-200/20">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600">
-                                    <Clock className="h-4 w-4" />
-                                </div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Pending Approval</p>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div className="stat-card">
+                            <div className="stat-icon text-amber-500 bg-amber-50">
+                                <Clock className="h-5 w-5" />
                             </div>
-                            <h3 className="text-3xl font-black text-stone-900 tracking-tighter">{auditData?.summary?.overview?.pending || 0}</h3>
+                            <p className="stat-value">{auditData?.summary?.overview?.pending || 0}</p>
+                            <p className="stat-label">Pending Approval</p>
                         </div>
-                        <div className="card-elevated p-6 border border-stone-100 bg-white shadow-xl shadow-stone-200/20">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600">
-                                    <CheckCircle2 className="h-4 w-4" />
-                                </div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Approved</p>
+                        <div className="stat-card">
+                            <div className="stat-icon text-blue-500 bg-blue-50">
+                                <CheckCircle2 className="h-5 w-5" />
                             </div>
-                            <h3 className="text-3xl font-black text-stone-900 tracking-tighter">{auditData?.summary?.overview?.approved || 0}</h3>
+                            <p className="stat-value">{auditData?.summary?.overview?.approved || 0}</p>
+                            <p className="stat-label">Verified Orders</p>
                         </div>
-                        <div className="card-elevated p-6 border border-stone-100 bg-white shadow-xl shadow-stone-200/20">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600">
-                                    <Truck className="h-4 w-4" />
-                                </div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Dispatched</p>
+                        <div className="stat-card bg-stone-900 border-none shadow-xl shadow-stone-900/10">
+                            <div className="stat-icon text-white bg-white/10 border-none">
+                                <Truck className="h-5 w-5" />
                             </div>
-                            <h3 className="text-3xl font-black text-stone-900 tracking-tighter">{auditData?.summary?.overview?.dispatched || 0}</h3>
+                            <p className="stat-value text-white">{auditData?.summary?.overview?.dispatched || 0}</p>
+                            <p className="stat-label text-stone-400">Total Dispatched</p>
                         </div>
-                        <div className="card-elevated p-6 border border-stone-100 bg-white shadow-xl shadow-stone-200/20">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600">
-                                    <XCircle className="h-4 w-4" />
-                                </div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Rejected</p>
+                        <div className="stat-card">
+                            <div className="stat-icon text-rose-500 bg-rose-50">
+                                <XCircle className="h-5 w-5" />
                             </div>
-                            <h3 className="text-3xl font-black text-stone-900 tracking-tighter">{auditData?.summary?.overview?.rejected || 0}</h3>
+                            <p className="stat-value">{auditData?.summary?.overview?.rejected || 0}</p>
+                            <p className="stat-label">Stock Rejections</p>
                         </div>
                     </div>
 
                     {activeBranchId === 0 ? (
-                        /* BRANCH SUMMARIES VIEW */
-                        <div className="card-elevated border border-stone-100 bg-white overflow-hidden shadow-2xl shadow-stone-200/30">
-                            <div className="px-6 py-5 border-b border-stone-100 bg-stone-50/30 flex items-center justify-between">
-                                <h3 className="text-[14px] font-black text-stone-900 uppercase tracking-tight flex items-center gap-2">
-                                    <Building2 className="h-4 w-4 text-stone-400" />
-                                    Requisitions by Branch
-                                </h3>
-                                <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Global Aggregate</span>
+                        <div className="table-container shadow-sm border border-stone-100">
+                            <div className="section-header p-5 border-b border-stone-100 bg-stone-50/30">
+                                <div className="flex items-center justify-between w-full">
+                                    <div>
+                                        <h2 className="section-title">Requisitions by Branch</h2>
+                                        <p className="section-subtitle">Aggregate stock movement and fulfillment distribution</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-stone-400 mb-1">Audit Mode</p>
+                                        <span className="badge-info">System Consolidated</span>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="overflow-x-auto">
+                            <div className="table-responsive">
                                 <table className="w-full text-left">
                                     <thead>
-                                        <tr className="bg-stone-50/30 border-b border-stone-100 text-[10px] font-black text-stone-400 uppercase tracking-widest">
-                                            <th className="px-6 py-4">Branch</th>
-                                            <th className="px-6 py-4 text-center">Pending</th>
-                                            <th className="px-6 py-4 text-center">Approved</th>
-                                            <th className="px-6 py-4 text-center">Dispatched</th>
-                                            <th className="px-6 py-4 text-center">Rejected</th>
-                                            <th className="px-6 py-4"></th>
+                                        <tr className="table-header">
+                                            <th className="table-header-cell">Branch Node</th>
+                                            <th className="table-header-cell text-center">Pending</th>
+                                            <th className="table-header-cell text-center">Approved</th>
+                                            <th className="table-header-cell text-center">Dispatched</th>
+                                            <th className="table-header-cell text-center">Rejected</th>
+                                            <th className="table-header-cell"></th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-stone-50">
@@ -163,30 +162,34 @@ export default function OrdersAuditPage() {
                                             <tr
                                                 key={branch.branch_id}
                                                 onClick={() => setActiveBranch(branch.branch_id)}
-                                                className="hover:bg-stone-50 transition-colors group cursor-pointer"
+                                                className="table-row group cursor-pointer"
                                             >
-                                                <td className="px-6 py-4">
+                                                <td className="table-cell">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="p-2 rounded-xl bg-stone-100 text-stone-600 group-hover:bg-stone-900 group-hover:text-white transition-all">
-                                                            <Building2 className="h-4 w-4" />
+                                                        <div className="w-10 h-10 rounded-xl bg-stone-50 border border-stone-100 flex items-center justify-center text-stone-400 group-hover:bg-stone-900 group-hover:text-white group-hover:border-stone-900 transition-all">
+                                                            <Building2 className="h-5 w-5" />
                                                         </div>
-                                                        <span className="text-[14px] font-black text-stone-900">{branch.branch_name}</span>
+                                                        <span className="font-black text-stone-900 tracking-tight">{branch.branch_name}</span>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <span className={`text-[13px] font-bold ${branch.pending > 0 ? 'text-amber-600' : 'text-stone-400'}`}>{branch.pending}</span>
+                                                <td className="table-cell text-center">
+                                                    <span className={`font-black ${branch.pending > 0 ? 'text-amber-500' : 'text-stone-300'}`}>{branch.pending}</span>
                                                 </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <span className="text-[13px] font-bold text-blue-600">{branch.approved}</span>
+                                                <td className="table-cell text-center font-black text-blue-600">
+                                                    {branch.approved}
                                                 </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <span className="text-[13px] font-bold text-emerald-600">{branch.dispatched}</span>
+                                                <td className="table-cell text-center font-black text-stone-900">
+                                                    {branch.dispatched}
                                                 </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <span className="text-[13px] font-bold text-rose-400">{branch.rejected}</span>
+                                                <td className="table-cell text-center font-black text-rose-400">
+                                                    {branch.rejected}
                                                 </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    <ChevronRight className="h-4 w-4 text-stone-300 group-hover:text-stone-900 transition-all group-hover:translate-x-1" />
+                                                <td className="table-cell text-right">
+                                                    <div className="flex justify-end">
+                                                        <div className="w-8 h-8 rounded-full bg-stone-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
+                                                            <ChevronRight className="h-4 w-4 text-stone-900" />
+                                                        </div>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -194,12 +197,15 @@ export default function OrdersAuditPage() {
                                             <tr>
                                                 <td colSpan={6} className="px-6 py-20 text-center">
                                                     {isLoading ? (
-                                                        <div className="flex flex-col items-center gap-2 opacity-50">
-                                                            <RefreshCw className="h-6 w-6 animate-spin text-stone-300" />
-                                                            <span className="text-[11px] font-black uppercase tracking-widest text-stone-400">Syncing branch data...</span>
+                                                        <div className="flex flex-col items-center gap-4">
+                                                            <Loader2 className="h-10 w-10 animate-spin text-stone-200" />
+                                                            <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Streaming ledger data...</p>
                                                         </div>
                                                     ) : (
-                                                        <span className="text-[11px] font-black uppercase tracking-widest text-stone-300">No requisitions recorded</span>
+                                                        <div className="flex flex-col items-center gap-2">
+                                                            <Info className="h-10 w-10 text-stone-100" />
+                                                            <p className="text-[11px] font-black uppercase tracking-widest text-stone-300">Zero requisitions found</p>
+                                                        </div>
                                                     )}
                                                 </td>
                                             </tr>
@@ -212,64 +218,70 @@ export default function OrdersAuditPage() {
                         /* DETAILED REQUISITIONS LIST */
                         <div className="space-y-6 animate-in slide-in-from-right duration-300">
                             <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-                                <div className="relative w-full md:w-96">
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-300" />
+                                <div className="flex items-center gap-3 bg-white border border-stone-100 rounded-xl px-4 h-12 w-full md:w-96 shadow-sm group focus-within:ring-2 focus-within:ring-stone-900/5 transition-all">
+                                    <Search className="h-4 w-4 text-stone-300 group-focus-within:text-stone-900 transition-colors" />
                                     <input
                                         type="text"
-                                        placeholder="Search by request number..."
+                                        placeholder="Search requisition #..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full pl-11 pr-4 py-3 bg-stone-50 border border-stone-200/60 rounded-2xl text-[13px] font-bold text-stone-700 outline-none focus:border-stone-400 focus:bg-white transition-all shadow-sm"
+                                        className="text-sm font-bold text-stone-900 outline-none w-full placeholder:text-stone-300 placeholder:font-semibold"
                                     />
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <button className="flex items-center gap-2 px-5 py-2.5 bg-stone-900 text-white rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-stone-800 shadow-xl shadow-stone-900/10 transition-all">
-                                        <FileDown className="h-4 w-4" /> Export Report
+                                    <button className="btn-secondary h-12 px-6">
+                                        <FileDown className="h-4 w-4 mr-2" /> PDF Archive
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="card-elevated border border-stone-100 bg-white overflow-hidden shadow-2xl shadow-stone-200/30">
-                                <div className="overflow-x-auto">
+                            <div className="table-container shadow-sm border border-stone-100">
+                                <div className="table-responsive">
                                     <table className="w-full text-left">
                                         <thead>
-                                            <tr className="bg-stone-50/30 border-b border-stone-100 text-[10px] font-black text-stone-400 uppercase tracking-widest">
-                                                <th className="px-6 py-4">Request #</th>
-                                                <th className="px-6 py-4">Department</th>
-                                                <th className="px-6 py-4">Date Requested</th>
-                                                <th className="px-6 py-4 text-center">Items</th>
-                                                <th className="px-6 py-4 text-center">Status</th>
-                                                <th className="px-6 py-4"></th>
+                                            <tr className="table-header">
+                                                <th className="table-header-cell">Protocol Identifier</th>
+                                                <th className="table-header-cell">Department Node</th>
+                                                <th className="table-header-cell">Execution Date</th>
+                                                <th className="table-header-cell text-center">Unit Count</th>
+                                                <th className="table-header-cell text-center">Node Status</th>
+                                                <th className="table-header-cell"></th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-stone-50">
                                             {filteredRequests.map((req: any) => (
-                                                <tr key={req.id} className="hover:bg-stone-50/50 transition-colors group">
-                                                    <td className="px-6 py-4">
-                                                        <span className="text-[13px] font-black text-stone-900 font-mono tracking-tighter">
+                                                <tr key={req.id} className="table-row group">
+                                                    <td className="table-cell">
+                                                        <span className="font-mono font-black text-stone-900 tracking-tighter">
                                                             {req.request_number || `#${req.id?.substr(0, 8)}`}
                                                         </span>
                                                     </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest px-2 py-0.5 bg-stone-100 rounded">{req.department || 'General'}</span>
+                                                    <td className="table-cell">
+                                                        <span className="badge-neutral bg-stone-100 text-stone-600 border-none uppercase text-[10px] py-1">
+                                                            {req.department || 'General'}
+                                                        </span>
                                                     </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="text-[13px] font-bold text-stone-700">{new Date(req.created_at).toLocaleDateString()}</span>
+                                                    <td className="table-cell">
+                                                        <div className="flex items-center gap-2 text-stone-600 font-bold">
+                                                            <Calendar className="w-3.5 h-3.5 text-stone-300" />
+                                                            {new Date(req.created_at).toLocaleDateString()}
+                                                        </div>
                                                     </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <span className="text-[13px] font-black text-stone-900">{req.items?.length || 0}</span>
+                                                    <td className="table-cell text-center">
+                                                        <span className="font-black text-stone-900">{req.items?.length || 0}</span>
                                                     </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <span className={`text-[10px] font-black px-3 py-1 rounded-lg uppercase tracking-widest ${req.status === 'pending' || req.status === 'PENDING_AUDIT' ? 'bg-amber-100 text-amber-700' :
-                                                            req.status === 'approved' || req.status === 'APPROVED' ? 'bg-blue-100 text-blue-700' :
-                                                                req.status === 'dispatched' || req.status === 'SHIPPED' ? 'bg-emerald-100 text-emerald-700' :
-                                                                    'bg-rose-100 text-rose-700'
-                                                            }`}>
+                                                    <td className="table-cell text-center">
+                                                        <span className={
+                                                            req.status === 'pending' || req.status === 'PENDING_AUDIT' ? 'badge-warning' :
+                                                                req.status === 'approved' || req.status === 'APPROVED' ? 'badge-info' :
+                                                                    req.status === 'dispatched' || req.status === 'SHIPPED' ? 'badge-success' :
+                                                                        'badge-danger'
+                                                        }>
                                                             {req.status?.replace('_', ' ')}
                                                         </span>
                                                     </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <button className="p-2 hover:bg-stone-900 hover:text-white rounded-xl transition-all text-stone-300 opacity-0 group-hover:opacity-100">
+                                                    <td className="table-cell text-right">
+                                                        <button className="w-8 h-8 rounded-lg hover:bg-stone-900 hover:text-white transition-all flex items-center justify-center text-stone-300">
                                                             <Eye className="h-4 w-4" />
                                                         </button>
                                                     </td>
@@ -277,8 +289,13 @@ export default function OrdersAuditPage() {
                                             ))}
                                             {filteredRequests.length === 0 && (
                                                 <tr>
-                                                    <td colSpan={6} className="px-6 py-20 text-center text-stone-300 font-bold uppercase tracking-widest text-[11px]">
-                                                        {isLoading ? "Fetching data..." : "No matching requisitions found"}
+                                                    <td colSpan={6} className="px-6 py-20 text-center">
+                                                        <div className="flex flex-col items-center gap-2 opacity-30">
+                                                            <Package className="h-10 w-10 mb-2" />
+                                                            <p className="text-[11px] font-black uppercase tracking-widest">
+                                                                {isLoading ? "Synchronizing..." : "Zero matching records"}
+                                                            </p>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             )}

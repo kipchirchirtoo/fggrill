@@ -16,6 +16,8 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useBranch, BranchSelector } from '@/lib/branch-context';
+import { toast } from 'sonner';
 
 export default function AuditorDashboard() {
     const [isLoading, setIsLoading] = useState(true);
@@ -29,22 +31,25 @@ export default function AuditorDashboard() {
 
     const [recentLogs, setRecentLogs] = useState<any[]>([]);
     const router = useRouter();
+    const { activeBranchId } = useBranch();
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
+            const branchId = activeBranchId === 0 ? undefined : activeBranchId;
             const [logsRes, requestsRes, ordersRes] = await Promise.all([
-                auditAPI.getAuditLogs({}),
-                storeAPI.getBranchRequests('PENDING_AUDIT'),
-                restaurantAPI.getOrders({ status: 'cancelled' })
+                auditAPI.getAuditLogs({ branchId: activeBranchId || undefined }),
+                storeAPI.getBranchRequests('PENDING_AUDIT', activeBranchId || undefined),
+                restaurantAPI.getOrders({ status: 'cancelled', branchId: activeBranchId || undefined })
             ]);
 
             if (logsRes.success) {
                 const logs = logsRes.data || [];
                 const pendingRequests = requestsRes.success ? (requestsRes.data || []).length : 0;
                 const voidedCount = ordersRes.success ? (ordersRes.data || []).length : 0;
-                const highRisks = logs.filter((l: any) => l.severity === 'high').length;
 
+                // Calculate actual metrics based on branch data
+                const highRisks = logs.filter((l: any) => l.severity === 'high').length;
                 const score = logs.length > 0
                     ? Math.max(60, 100 - (highRisks * 10) - (logs.filter((l: any) => l.severity === 'medium').length * 2))
                     : 100;
@@ -61,10 +66,11 @@ export default function AuditorDashboard() {
             }
         } catch (e) {
             console.error("Auditor fetch failed:", e);
+            toast.error("Failed to refresh dashboard metrics");
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [activeBranchId]);
 
     useEffect(() => {
         fetchData();
@@ -116,81 +122,90 @@ export default function AuditorDashboard() {
             <DashboardLayout>
                 <div className="space-y-8 pb-12">
                     {/* Header */}
-                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                        <div>
-                            <h1 className="text-3xl font-black text-stone-900 tracking-tight">Audit Control</h1>
-                            <p className="text-stone-500 text-sm font-medium italic">High-integrity verification and system compliance oversight</p>
+                    <div className="page-header flex flex-col md:flex-row md:items-end justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-stone-900 flex items-center justify-center text-white shadow-lg">
+                                <ShieldCheck className="h-6 w-6" />
+                            </div>
+                            <div>
+                                <h1 className="page-title text-stone-900">Audit Control</h1>
+                                <p className="page-subtitle">High-integrity verification and system compliance oversight</p>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-3">
+                            <BranchSelector />
                             <button
                                 onClick={fetchData}
                                 disabled={isLoading}
-                                className="p-2.5 bg-stone-900 text-white rounded-xl hover:bg-stone-800 shadow-sm transition-colors"
+                                className="btn-secondary"
+                                title="Refresh Dashboard"
                             >
                                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                                <span className="hidden sm:inline">Refresh</span>
                             </button>
                         </div>
                     </div>
 
                     {/* Elite Stats Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div className="card-elevated p-6 border border-stone-100 bg-white">
-                            <div className="flex items-center gap-3 mb-2">
-                                <ShieldCheck className="h-4 w-4 text-stone-400" />
-                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Compliance</p>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="stat-card">
+                            <div className="stat-icon">
+                                <PieChart className="h-5 w-5" />
                             </div>
-                            <h3 className="text-3xl font-black text-stone-900">{stats.complianceScore}%</h3>
+                            <p className="stat-value">{stats.complianceScore}%</p>
+                            <p className="stat-label">Compliance Score</p>
                         </div>
-                        <div className="card-elevated p-6 border border-stone-100 bg-white">
-                            <div className="flex items-center gap-3 mb-2">
-                                <AlertTriangle className="h-4 w-4 text-rose-500" />
-                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">High Risk</p>
+
+                        <div className="stat-card">
+                            <div className="stat-icon text-rose-500 bg-rose-50">
+                                <AlertTriangle className="h-5 w-5" />
                             </div>
-                            <h3 className={`text-3xl font-black ${stats.highRiskFindings > 0 ? 'text-rose-600' : 'text-stone-900'}`}>
+                            <p className={`stat-value ${stats.highRiskFindings > 0 ? 'text-rose-600' : ''}`}>
                                 {stats.highRiskFindings}
-                            </h3>
+                            </p>
+                            <p className="stat-label">High Risk Findings</p>
                         </div>
-                        <div className="card-elevated p-6 border border-stone-100 bg-white">
-                            <div className="flex items-center gap-3 mb-2">
-                                <Clock className="h-4 w-4 text-amber-500" />
-                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Pending Actions</p>
+
+                        <div className="stat-card">
+                            <div className="stat-icon text-amber-500 bg-amber-50">
+                                <Clock className="h-5 w-5" />
                             </div>
-                            <h3 className="text-3xl font-black text-stone-900">{stats.pendingReviews}</h3>
+                            <p className="stat-value">{stats.pendingReviews}</p>
+                            <p className="stat-label">Pending Reviews</p>
                         </div>
-                        <div className="card-elevated p-6 border border-stone-100 bg-white">
-                            <div className="flex items-center gap-3 mb-2">
-                                <Activity className="h-4 w-4 text-blue-500" />
-                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Voids & Vetoes</p>
+
+                        <div className="stat-card">
+                            <div className="stat-icon text-blue-500 bg-blue-50">
+                                <Trash2 className="h-5 w-5" />
                             </div>
-                            <h3 className="text-3xl font-black text-stone-900">{stats.voidedOrders}</h3>
+                            <p className="stat-value">{stats.voidedOrders}</p>
+                            <p className="stat-label">Voided Orders</p>
                         </div>
                     </div>
 
                     <div className="grid lg:grid-cols-3 gap-8">
                         {/* Audit Modules Grid */}
                         <div className="lg:col-span-2 space-y-6">
-                            <h3 className="text-[14px] font-black text-stone-900 uppercase tracking-tight">Audit Modules</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="section-header">
+                                <div>
+                                    <h2 className="section-title">Audit Modules</h2>
+                                    <p className="section-subtitle">System verification and oversight modules</p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                 {auditModules.map((module, i) => (
                                     <Link key={i} href={module.href}>
-                                        <div className="group p-5 bg-white border border-stone-100 rounded-2xl hover:border-stone-900 hover:shadow-xl hover:shadow-stone-900/5 transition-all flex items-center justify-between cursor-pointer">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-12 h-12 rounded-xl bg-stone-50 flex items-center justify-center text-stone-600 group-hover:bg-stone-900 group-hover:text-white transition-colors">
-                                                    <module.icon className="h-5 w-5" />
-                                                </div>
-                                                <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <h4 className="text-[15px] font-black text-stone-900 tracking-tight">{module.title}</h4>
-                                                        {module.badge && (
-                                                            <span className="text-[8px] font-black px-1.5 py-0.5 bg-stone-100 text-stone-500 rounded uppercase tracking-widest">
-                                                                {module.badge}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <p className="text-[12px] font-medium text-stone-400">{module.desc}</p>
-                                                </div>
+                                        <div className="action-card group">
+                                            <div className="action-card-icon group-hover:bg-stone-900 group-hover:text-white transition-colors">
+                                                <module.icon className="h-5 w-5" />
                                             </div>
-                                            <ChevronRight className="h-4 w-4 text-stone-200 group-hover:text-stone-900 group-hover:translate-x-1 transition-all" />
+                                            <p className="action-card-label">{module.title}</p>
+                                            <p className="text-[11px] text-stone-400 mt-0.5">{module.desc}</p>
+                                            {module.badge && (
+                                                <span className="mt-2 text-[8px] font-black px-1.5 py-0.5 bg-stone-100 text-stone-500 rounded uppercase tracking-widest">
+                                                    {module.badge}
+                                                </span>
+                                            )}
                                         </div>
                                     </Link>
                                 ))}
@@ -198,35 +213,44 @@ export default function AuditorDashboard() {
                         </div>
 
                         {/* Recent Activity / Exception Feed */}
-                        <div className="space-y-6 text-right">
-                            <h3 className="text-[14px] font-black text-stone-900 uppercase tracking-tight">Recent Exceptions</h3>
+                        <div className="card-elevated p-6 space-y-6">
+                            <div className="section-header">
+                                <div>
+                                    <h2 className="section-title">Recent Exceptions</h2>
+                                    <p className="section-subtitle">Latest critical system flags</p>
+                                </div>
+                            </div>
                             <div className="space-y-4">
                                 {recentLogs.length > 0 ? (
                                     recentLogs.map((log: any, i: number) => (
-                                        <div key={i} className="flex gap-4 items-start group">
-                                            <div className="flex-1 text-right">
-                                                <p className="text-[13px] font-black text-stone-900 leading-tight group-hover:text-stone-600 transition-colors">
+                                        <div key={i} className="flex gap-4 items-start group pb-4 border-b border-stone-50 last:border-0 last:pb-0">
+                                            <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0 bg-stone-200 group-hover:scale-125 transition-transform"
+                                                style={{ backgroundColor: log.severity === 'high' ? '#ef4444' : log.severity === 'medium' ? '#f59e0b' : '#d6d3d1' }} />
+                                            <div className="flex-1">
+                                                <p className="text-[13px] font-medium text-stone-900">
                                                     {log.action}
                                                 </p>
-                                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">
+                                                <p className="text-[11px] text-stone-400 mt-1">
                                                     {log.module} • {new Date(log.performed_at).toLocaleDateString()}
                                                 </p>
                                             </div>
-                                            <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${log.severity === 'high' ? 'bg-rose-500 shadow-lg shadow-rose-200' :
-                                                log.severity === 'medium' ? 'bg-amber-500 shadow-lg shadow-amber-200' :
-                                                    'bg-stone-200'
-                                                }`} />
+                                            <ChevronRight className="h-4 w-4 text-stone-200 group-hover:text-stone-400 transition-colors" />
                                         </div>
                                     ))
                                 ) : (
-                                    <p className="text-[12px] text-stone-400 italic font-medium">No critical findings recorded</p>
+                                    <div className="empty-state py-8">
+                                        <div className="empty-state-icon">
+                                            <ShieldCheck className="h-5 w-5 text-stone-400" />
+                                        </div>
+                                        <p className="empty-state-title">No critical findings</p>
+                                        <p className="empty-state-description">The system is currently operating within normal parameters.</p>
+                                    </div>
                                 )}
                             </div>
-                            <div className="pt-4 border-t border-stone-100">
-                                <Link href="/dashboard/auditor/audit-reports">
-                                    <button className="text-[11px] font-black text-stone-900 uppercase tracking-widest flex items-center gap-2 ml-auto hover:gap-3 transition-all">
-                                        All Reports <ArrowRight className="h-3 w-3" />
-                                    </button>
+                            <div className="pt-2">
+                                <Link href="/dashboard/auditor/audit-reports" className="btn-ghost w-full justify-between">
+                                    <span>View All Reports</span>
+                                    <ArrowRight className="h-4 w-4" />
                                 </Link>
                             </div>
                         </div>

@@ -1,14 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Shield, Clock, CheckCircle, XCircle, FileText, AlertTriangle, Eye, ArrowRight, User, TrendingUp, Package, RefreshCw } from 'lucide-react';
+import { Shield, Clock, CheckCircle, XCircle, FileText, AlertTriangle, Eye, ArrowRight, User, TrendingUp, Package, RefreshCw, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { storeAPI } from '@/lib/api';
-import { IOSBadge } from '@/components/ui/ios-badge';
-import { IOSButton } from '@/components/ui/ios-button';
-import { IOSCard } from '@/components/ui/ios-card';
 import { formatNumber } from '@/lib/utils';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 
 interface RequestItem { id: string; item_name: string; item_sku: string; requested_quantity: number; approved_quantity?: number; unit: string; }
 interface StockRequest {
@@ -119,23 +116,31 @@ export default function AuditorApprovalPanel() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h2 className="text-xl font-bold text-stone-900 flex items-center gap-2">
-                        <Shield className="h-6 w-6 text-stone-900" />
-                        Stock Request Approvals
-                    </h2>
-                    <p className="text-sm text-stone-500">Auditor review based on branch sales performance</p>
+            <div className="page-header flex flex-col md:flex-row md:items-end justify-between gap-4">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-stone-900 flex items-center justify-center text-white shadow-lg">
+                        <Shield className="h-6 w-6" />
+                    </div>
+                    <div>
+                        <h1 className="page-title text-stone-900">Stock Request Approvals</h1>
+                        <p className="page-subtitle">Auditor review based on branch sales performance</p>
+                    </div>
                 </div>
-                <IOSButton variant="secondary" onClick={fetchRequests} leftIcon={<RefreshCw className={isLoading ? 'animate-spin' : ''} />}>
-                    Sync Requests
-                </IOSButton>
+                <button onClick={fetchRequests} className="btn-secondary">
+                    <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                    <span className="ml-2">Sync Requests</span>
+                </button>
             </div>
 
             {isLoading ? (
-                <div className="flex items-center justify-center py-20"><RefreshCw className="h-10 w-10 animate-spin text-stone-200" /></div>
+                <div className="flex items-center justify-center py-20 px-6">
+                    <div className="flex flex-col items-center gap-2 opacity-50">
+                        <RefreshCw className="h-6 w-6 animate-spin text-stone-300" />
+                        <span className="text-[11px] font-black uppercase tracking-widest text-stone-400">Loading requests...</span>
+                    </div>
+                </div>
             ) : requests.length === 0 ? (
-                <div className="bg-stone-50 rounded-2xl py-20 flex flex-col items-center text-center border border-stone-100">
+                <div className="table-container py-20 flex flex-col items-center text-center">
                     <div className="h-16 w-16 rounded-full bg-emerald-50 flex items-center justify-center mb-4">
                         <CheckCircle className="h-8 w-8 text-emerald-500" />
                     </div>
@@ -147,114 +152,135 @@ export default function AuditorApprovalPanel() {
                     {requests.map((request) => {
                         const perf = performance[request.requesting_branch_id];
                         return (
-                            <IOSCard key={request.id} className="p-0 overflow-hidden border-none shadow-sm group">
+                            <div key={request.id} className="card-elevated p-0 overflow-hidden border border-stone-100 group">
                                 <div className="flex flex-col md:flex-row">
-                                    <div className="p-5 flex-1">
-                                        <div className="flex items-center gap-3 mb-3">
-                                            <span className="font-bold text-stone-900">{request.request_number}</span>
-                                            <IOSBadge color={request.priority === 'URGENT' ? 'danger' : 'warning'}>{request.priority || 'NORMAL'}</IOSBadge>
-                                            <IOSBadge color="info">PENDING AUDIT</IOSBadge>
-                                            <span className="text-xs text-stone-400 font-medium ml-auto">{new Date(request.created_at).toLocaleDateString()}</span>
+                                    <div className="p-6 flex-1">
+                                        <div className="flex items-center gap-3 mb-4">
+                                            <span className="font-mono font-bold text-stone-900 tracking-tight">{request.request_number}</span>
+                                            <span className={request.priority === 'URGENT' ? 'badge-danger' : 'badge-warning'}>{request.priority || 'NORMAL'}</span>
+                                            <span className="badge-info">PENDING AUDIT</span>
+                                            <span className="text-[11px] text-stone-400 font-bold uppercase tracking-widest ml-auto">{new Date(request.created_at).toLocaleDateString()}</span>
                                         </div>
 
-                                        <div className="flex items-center gap-2 text-stone-700 font-semibold mb-4">
-                                            <Package className="h-4 w-4 text-stone-400" />
+                                        <div className="flex items-center gap-2 text-stone-900 font-bold mb-4">
+                                            <div className="w-8 h-8 rounded-lg bg-stone-100 flex items-center justify-center text-stone-500">
+                                                <Package className="h-4 w-4" />
+                                            </div>
                                             From: {request.branch_name}
                                         </div>
 
-                                        <p className="text-sm text-stone-500 line-clamp-2 italic mb-4">"{request.reason || 'No reason provided'}"</p>
+                                        <div className="bg-stone-50 p-4 rounded-xl border border-stone-100 mb-6">
+                                            <p className="text-[13px] text-stone-600 font-medium italic">"{request.reason || 'No specific operational reason provided.'}"</p>
+                                        </div>
 
-                                        <div className="flex flex-wrap gap-4 mt-auto">
-                                            <div className="bg-stone-50 rounded-ios-lg px-3 py-2 border border-stone-100">
-                                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Items</p>
-                                                <p className="font-bold text-stone-700">{request.items?.length || 0}</p>
+                                        <div className="flex flex-wrap gap-4">
+                                            <div className="bg-stone-50 rounded-xl px-4 py-2 border border-stone-100 min-w-[80px]">
+                                                <p className="caption uppercase tracking-widest text-[10px]">SKUs</p>
+                                                <p className="font-bold text-stone-900">{request.items?.length || 0}</p>
                                             </div>
                                             {perf && (
-                                                <div className="bg-emerald-50 rounded-ios-lg px-3 py-2 border border-emerald-100">
-                                                    <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Yesterday Sales</p>
+                                                <div className="bg-emerald-50/50 rounded-xl px-4 py-2 border border-emerald-100 min-w-[120px]">
+                                                    <p className="caption uppercase tracking-widest text-[10px] text-emerald-600">Daily Sales</p>
                                                     <p className="font-bold text-emerald-700">KES {formatNumber(perf.totalSales)}</p>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
 
-                                    <div className="bg-stone-50/50 p-5 md:w-64 flex flex-col justify-center gap-3 border-t md:border-t-0 md:border-l border-stone-100">
-                                        <IOSButton className="w-full" onClick={() => handleOpenReview(request)} rightIcon={<ArrowRight className="h-4 w-4" />}>
-                                            Review Request
-                                        </IOSButton>
+                                    <div className="bg-stone-50/50 p-6 md:w-64 flex flex-col justify-center gap-3 border-t md:border-t-0 md:border-l border-stone-100">
+                                        <button className="btn-primary w-full shadow-lg shadow-stone-900/10" onClick={() => handleOpenReview(request)}>
+                                            Review & Sign-off
+                                            <ArrowRight className="h-4 w-4 ml-2" />
+                                        </button>
                                     </div>
                                 </div>
-                            </IOSCard>
+                            </div>
                         );
                     })}
                 </div>
             )}
 
             <Dialog open={reviewModalOpen} onOpenChange={setReviewModalOpen}>
-                <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col p-0 overflow-hidden">
-                    <div className="p-4 border-b border-stone-100 flex-none bg-white">
+                <DialogContent className="max-w-3xl bg-white rounded-3xl border-none shadow-2xl p-0 overflow-hidden">
+                    <div className="bg-stone-900 p-8 text-white relative">
                         <DialogHeader>
-                            <DialogTitle className="flex items-center gap-2 text-base font-bold">
-                                <Shield className="h-5 w-5 text-stone-900" />
-                                Review: {selectedRequest?.request_number}
-                            </DialogTitle>
+                            <div className="flex items-center gap-4 mb-2">
+                                <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-white shrink-0 border border-white/5">
+                                    <Shield className="h-6 w-6" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">Security Review</span>
+                                    <DialogTitle className="text-2xl font-black tracking-tight">{selectedRequest?.request_number || 'Review Request'}</DialogTitle>
+                                </div>
+                            </div>
+                            <DialogDescription className="text-stone-400 font-semibold mt-1">
+                                Evaluating inventory movement for {selectedRequest?.branch_name}
+                            </DialogDescription>
                         </DialogHeader>
                     </div>
 
-                    <div className="p-4 overflow-y-auto flex-1 min-h-0 bg-white">
+                    <div className="p-8 space-y-8">
                         {selectedRequest && (
-                            <div className="space-y-3">
+                            <>
                                 {/* Branch Performance Summary */}
-                                <div className="grid grid-cols-3 gap-2">
-                                    <IOSCard className="p-2 bg-stone-900 border-none">
-                                        <TrendingUp className="h-4 w-4 text-emerald-400 mb-1" />
-                                        <p className="text-[10px] font-bold text-stone-400 uppercase">Sales</p>
-                                        <p className="text-sm font-bold text-white">KES {formatNumber(performance[selectedRequest.requesting_branch_id]?.totalSales || 0)}</p>
-                                    </IOSCard>
-                                    <IOSCard className="p-2 border-none shadow-sm bg-stone-50">
-                                        <Package className="h-4 w-4 text-blue-500 mb-1" />
-                                        <p className="text-[10px] font-bold text-stone-400 uppercase">Orders</p>
-                                        <p className="text-sm font-bold text-stone-800">{performance[selectedRequest.requesting_branch_id]?.orderCount || 0}</p>
-                                    </IOSCard>
-                                    <IOSCard className="p-2 border-none shadow-sm bg-stone-50">
-                                        <TrendingUp className="h-4 w-4 text-stone-400 mb-1" />
-                                        <p className="text-[10px] font-bold text-stone-400 uppercase">Avg</p>
-                                        <p className="text-sm font-bold text-stone-800">KES {formatNumber(performance[selectedRequest.requesting_branch_id]?.averageOrder || 0)}</p>
-                                    </IOSCard>
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div className="stat-card bg-stone-50 border-stone-100">
+                                        <div className="stat-icon bg-white text-emerald-500 shadow-sm border border-stone-100">
+                                            <TrendingUp className="h-4 w-4" />
+                                        </div>
+                                        <p className="stat-value text-lg">KES {formatNumber(performance[selectedRequest.requesting_branch_id]?.totalSales || 0)}</p>
+                                        <p className="stat-label">Daily Sales</p>
+                                    </div>
+                                    <div className="stat-card bg-stone-50 border-stone-100">
+                                        <div className="stat-icon bg-white text-blue-500 shadow-sm border border-stone-100">
+                                            <Package className="h-4 w-4" />
+                                        </div>
+                                        <p className="stat-value text-lg">{performance[selectedRequest.requesting_branch_id]?.orderCount || 0}</p>
+                                        <p className="stat-label">Daily Orders</p>
+                                    </div>
+                                    <div className="stat-card bg-stone-50 border-stone-100">
+                                        <div className="stat-icon bg-white text-stone-400 shadow-sm border border-stone-100">
+                                            <RefreshCw className="h-4 w-4" />
+                                        </div>
+                                        <p className="stat-value text-lg">KES {formatNumber(performance[selectedRequest.requesting_branch_id]?.averageOrder || 0)}</p>
+                                        <p className="stat-label">Order Average</p>
+                                    </div>
                                 </div>
 
                                 {/* Items Table */}
-                                <div className="border border-stone-100 rounded-lg overflow-hidden">
-                                    <table className="w-full text-xs">
-                                        <thead className="bg-stone-50">
-                                            <tr>
-                                                <th className="text-left p-2 font-semibold text-stone-600">Item</th>
-                                                <th className="text-left p-2 font-semibold text-stone-600">SKU</th>
-                                                <th className="text-center p-2 font-semibold text-stone-600">Requested</th>
-                                                <th className="text-right p-2 font-semibold text-stone-600">Approve</th>
+                                <div className="table-container shadow-sm border border-stone-100 overflow-hidden">
+                                    <table className="w-full text-left">
+                                        <thead>
+                                            <tr className="table-header">
+                                                <th className="table-header-cell">Stock Item</th>
+                                                <th className="table-header-cell">SKU</th>
+                                                <th className="table-header-cell text-center">Requested</th>
+                                                <th className="table-header-cell text-right">Approval</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-stone-100">
+                                        <tbody className="divide-y divide-stone-50">
                                             {selectedRequest.items.map((item) => (
-                                                <tr key={item.id} className="hover:bg-stone-50/30">
-                                                    <td className="p-2 font-medium text-stone-900">{item.item_name}</td>
-                                                    <td className="p-2 text-stone-400 font-mono text-[10px]">{item.item_sku}</td>
-                                                    <td className="p-2 text-center">
-                                                        <span className="bg-stone-100 px-2 py-0.5 rounded-full text-xs font-semibold text-stone-800">
+                                                <tr key={item.id} className="table-row">
+                                                    <td className="table-cell font-bold text-stone-900">{item.item_name}</td>
+                                                    <td className="table-cell">
+                                                        <span className="text-[10px] font-mono text-stone-400 font-bold uppercase tracking-wider">{item.item_sku}</span>
+                                                    </td>
+                                                    <td className="table-cell text-center">
+                                                        <span className="badge-warning">
                                                             {item.requested_quantity} {item.unit}
                                                         </span>
                                                     </td>
-                                                    <td className="p-2 text-right">
-                                                        <div className="flex items-center justify-end gap-1">
+                                                    <td className="table-cell text-right">
+                                                        <div className="flex items-center justify-end gap-2">
                                                             <input
                                                                 type="number"
                                                                 value={approvedQuantities[item.id] ?? item.requested_quantity}
                                                                 onChange={(e) => handleQuantityChange(item.id, e.target.value)}
-                                                                className="w-20 px-2 py-1 text-xs bg-white border border-stone-200 rounded text-right font-semibold text-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                                                                className="w-24 px-3 py-1.5 text-xs bg-stone-50 border border-stone-200 rounded-lg text-right font-black text-stone-900 focus:ring-2 focus:ring-stone-900 focus:bg-white outline-none transition-all"
                                                                 min="0"
                                                                 step="0.01"
                                                             />
-                                                            <span className="text-[10px] font-semibold text-stone-400">{item.unit}</span>
+                                                            <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest w-8">{item.unit}</span>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -263,21 +289,25 @@ export default function AuditorApprovalPanel() {
                                     </table>
                                 </div>
 
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-stone-400 uppercase">Notes</label>
+                                <div className="space-y-2">
+                                    <p className="caption uppercase tracking-[0.2em]">Audit Decision Notes</p>
                                     <textarea
                                         value={reviewNotes}
                                         onChange={(e) => setReviewNotes(e.target.value)}
-                                        placeholder="Add remarks..."
-                                        className="w-full px-2 py-2 text-xs bg-stone-50 border border-stone-100 rounded-lg text-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none min-h-[50px] resize-none"
+                                        placeholder="Add operational remarks justification for adjustments..."
+                                        className="w-full px-4 py-3 text-sm bg-stone-50 border border-stone-100 rounded-2xl text-stone-900 focus:ring-2 focus:ring-stone-900 focus:bg-white outline-none min-h-[80px] transition-all resize-none shadow-inner"
                                     />
                                 </div>
 
-                                <div className="bg-amber-50 rounded-lg p-2 border border-amber-100 flex items-center gap-2">
-                                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-                                    <p className="text-[10px] text-amber-800 flex-1">
-                                        Base decision on sales data. Adjust quantities as needed.
-                                    </p>
+                                <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-100/50 flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                                            <AlertTriangle className="h-5 w-5" />
+                                        </div>
+                                        <p className="text-[11px] text-stone-600 font-bold leading-tight">
+                                            Base decisions on branch sales velocity. <br /><span className="text-amber-700">Audit adjust quantities as necessary.</span>
+                                        </p>
+                                    </div>
                                     <button
                                         onClick={() => {
                                             const fullApprovals: Record<string, number> = {};
@@ -285,32 +315,30 @@ export default function AuditorApprovalPanel() {
                                                 fullApprovals[item.id] = item.requested_quantity;
                                             });
                                             setApprovedQuantities(fullApprovals);
-                                            toast.success('Reset to requested');
+                                            toast.success('Reset to requested levels');
                                         }}
-                                        className="px-2 py-1 bg-white border border-stone-200 text-stone-600 text-[10px] font-bold rounded hover:bg-stone-50 flex items-center gap-1 whitespace-nowrap"
+                                        className="h-10 px-4 bg-white border border-stone-200 text-stone-600 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-stone-50 transition-colors shadow-sm flex items-center gap-2"
                                     >
                                         <RefreshCw className="h-3 w-3" />
-                                        Reset
+                                        Full Reset
                                     </button>
                                 </div>
-                            </div>
+                            </>
                         )}
-
                     </div>
 
-                    <div className="p-3 border-t border-stone-100 flex-none bg-white">
-                        <DialogFooter className="gap-3 flex-col sm:flex-row">
-                            <IOSButton
-                                variant="secondary"
+                    <div className="p-8 pt-0 mt-2">
+                        <div className="flex flex-col sm:flex-row gap-3 pt-8 border-t border-stone-100">
+                            <button
                                 onClick={() => handleDecision('REJECT')}
                                 disabled={isActionLoading}
-                                leftIcon={<XCircle className="h-4 w-4" />}
-                                className="bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100 font-bold sm:w-auto"
+                                className="flex-1 h-12 bg-rose-50 text-rose-600 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-rose-100 transition-colors flex items-center justify-center gap-2 border border-rose-100/50"
                             >
-                                Decline Request
-                            </IOSButton>
-                            <div className="flex gap-2 flex-1">
-                                <IOSButton
+                                <XCircle className="h-4 w-4" />
+                                Terminate Request
+                            </button>
+                            <div className="flex gap-3 flex-[2]">
+                                <button
                                     onClick={() => {
                                         const fullApprovals: Record<string, number> = {};
                                         selectedRequest?.items.forEach(item => {
@@ -320,20 +348,20 @@ export default function AuditorApprovalPanel() {
                                         handleDecision('APPROVE');
                                     }}
                                     disabled={isActionLoading}
-                                    className="bg-white border-2 border-stone-800 text-stone-900 flex-1 font-bold hover:bg-stone-50"
+                                    className="flex-1 h-12 bg-white border-2 border-stone-900 text-stone-900 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-stone-50 transition-colors shadow-sm"
                                 >
-                                    Approve Fully
-                                </IOSButton>
-                                <IOSButton
+                                    Approve Maximum
+                                </button>
+                                <button
                                     onClick={() => handleDecision('APPROVE')}
                                     disabled={isActionLoading}
-                                    leftIcon={<CheckCircle className="h-4 w-4" />}
-                                    className="bg-stone-900 text-white flex-1 font-bold"
+                                    className="flex-[1.5] h-12 bg-stone-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-stone-800 transition-all shadow-lg shadow-stone-900/20 flex items-center justify-center gap-2"
                                 >
-                                    {isActionLoading ? 'Processing...' : 'Confirm Adjustments'}
-                                </IOSButton>
+                                    {isActionLoading ? <RefreshCw className="h-4 w-4 animate-spin text-white" /> : <ShieldCheck className="h-4 w-4" />}
+                                    Finalize Audit
+                                </button>
                             </div>
-                        </DialogFooter>
+                        </div>
                     </div>
                 </DialogContent>
             </Dialog>

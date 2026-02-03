@@ -76,10 +76,7 @@ export const getNightAudits = async (req: Request, res: Response, next: NextFunc
 
     let query = supabase
       .from('audit_night_sessions')
-      .select(`
-        *,
-        performer:users!performed_by(*)
-      `)
+      .select('*')
       .order('audit_date', { ascending: false });
 
     if (start_date) query = query.gte('audit_date', start_date);
@@ -156,10 +153,7 @@ export const getExceptions = async (req: Request, res: Response, next: NextFunct
 
     let query = supabase
       .from('audit_exceptions')
-      .select(`
-        *,
-        resolver:users!resolved_by(*)
-      `)
+      .select('*')
       .order('detected_at', { ascending: false });
 
     if (audit_session_id) query = query.eq('audit_session_id', audit_session_id);
@@ -209,10 +203,7 @@ export const getAuditTrail = async (req: Request, res: Response, next: NextFunct
 
     let query = supabase
       .from('audit_trail')
-      .select(`
-        *,
-        user:users(*)
-      `)
+      .select('*')
       .order('performed_at', { ascending: false })
       .limit(100);
 
@@ -305,19 +296,33 @@ export const getFindings = async (req: Request, res: Response, next: NextFunctio
 
     let query = supabase
       .from('audit_findings')
-      .select(`
-        *,
-        audit_plan:audit_plans(*),
-        responsible:users!responsible_person(*)
-      `)
+      .select('*')
       .order('created_at', { ascending: false });
 
     if (audit_plan_id) query = query.eq('audit_plan_id', audit_plan_id);
     if (status) query = query.eq('status', status);
     if (severity) query = query.eq('severity', severity);
 
-    const { data, error } = await query;
+    const { data: rawData, error } = await query;
     if (error) throw error;
+
+    // Manual join users and audit plans
+    const userIds = [...new Set(rawData?.map(d => d.responsible_person).filter(Boolean))];
+    const planIds = [...new Set(rawData?.map(d => d.audit_plan_id).filter(Boolean))];
+
+    const [{ data: users }, { data: plans }] = await Promise.all([
+      supabase.from('users').select('*').in('id', userIds),
+      supabase.from('audit_plans').select('*').in('id', planIds)
+    ]);
+
+    const userMap = Object.fromEntries(users?.map(u => [u.id, u]) || []);
+    const planMap = Object.fromEntries(plans?.map(p => [p.id, p]) || []);
+
+    const data = rawData?.map(d => ({
+      ...d,
+      responsible: userMap[d.responsible_person],
+      audit_plan: planMap[d.audit_plan_id]
+    })) || [];
 
     res.status(200).json({ success: true, count: data?.length || 0, data });
   } catch (error) {
@@ -395,11 +400,24 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
     }
 
     // 4. Fetch branch stock requests for reconciliation
-    let stockReqQuery = supabase.from('stock_requests').select('*, items:stock_request_items(*)');
+    let stockReqQuery = supabase.from('stock_requests').select('*');
     if (branch_id && branch_id !== '0') stockReqQuery = stockReqQuery.eq('requesting_branch_id', branch_id);
     if (start_date) stockReqQuery = stockReqQuery.gte('created_at', start_date);
 
-    const stockReqRes = await stockReqQuery;
+    const rawStockReqs = await stockReqQuery;
+    const reqIds = rawStockReqs.data?.map(r => r.id) || [];
+    const { data: reqItems } = await supabase.from('stock_request_items').select('*').in('request_id', reqIds);
+
+    const itemsByReq = (reqItems || []).reduce((acc: any, item) => {
+      if (!acc[item.request_id]) acc[item.request_id] = [];
+      acc[item.request_id].push(item);
+      return acc;
+    }, {});
+
+    const stockReqRes = {
+      ...rawStockReqs,
+      data: rawStockReqs.data?.map(r => ({ ...r, items: itemsByReq[r.id] || [] }))
+    };
 
     const summary = {
       restaurant: {
@@ -442,12 +460,8 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
     const { branch_id, date } = req.query;
     const targetDate = date || new Date().toISOString().split('T')[0];
 
-    // 1. Get all payments for the date with cashier and branch info
-    let paymentQuery = supabase.from('payments').select(`
-      *,
-      cashier:users!created_by(id, first_name, last_name, role),
-      branch:branches(id, name)
-    `)
+    // 1. Get all payments for the date
+    let paymentQuery = supabase.from('payments').select('*')
       .gte('created_at', `${targetDate}T00:00:00`)
       .lte('created_at', `${targetDate}T23:59:59`);
 
@@ -455,8 +469,26 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
       paymentQuery = paymentQuery.eq('branch_id', branch_id);
     }
 
-    const { data: payments, error: payError } = await paymentQuery;
+    const { data: rawPayments, error: payError } = await paymentQuery;
     if (payError) throw payError;
+
+    // Fetch related users and branches manually to avoid relationship issues
+    const userIds = [...new Set(rawPayments?.map(p => p.created_by).filter(Boolean))];
+    const branchIds = [...new Set(rawPayments?.map(p => p.branch_id).filter(Boolean))];
+
+    const [{ data: users }, { data: branches }] = await Promise.all([
+      supabase.from('users').select('id, first_name, last_name, role').in('id', userIds),
+      supabase.from('branches').select('id, name').in('id', branchIds)
+    ]);
+
+    const userMap = Object.fromEntries(users?.map(u => [u.id, u]) || []);
+    const branchMap = Object.fromEntries(branches?.map(b => [b.id, b]) || []);
+
+    const payments = rawPayments?.map(p => ({
+      ...p,
+      cashier: userMap[p.created_by],
+      branch: branchMap[p.branch_id]
+    })) || [];
 
     // 2. Breakdown by mode
     const breakdown = {
@@ -660,11 +692,7 @@ export const getExpenditureVerification = async (req: Request, res: Response, ne
   try {
     const { branch_id, status } = req.query;
 
-    let query = supabase.from('expenses').select(`
-      *,
-      creator:users!created_by(id, first_name, last_name),
-      approver:users!approved_by(id, first_name, last_name)
-    `).order('expense_date', { ascending: false });
+    let query = supabase.from('expenses').select('*').order('expense_date', { ascending: false });
 
     if (branch_id) query = query.eq('branch_id', branch_id);
     if (status) query = query.eq('status', status);
@@ -690,19 +718,24 @@ export const getStockLevelsVerification = async (req: Request, res: Response, ne
     const { data: branches } = await supabase.from('branches').select('id, name');
 
     // 2. Fetch current stock levels
-    let stockQuery = supabase
-      .from('branch_stock')
-      .select(`
-        *,
-        item:items(id, name, sku, unit, category)
-      `);
+    let stockQuery = supabase.from('branch_stock').select('*');
 
     if (branch_id && branch_id !== '0') {
       stockQuery = stockQuery.eq('branch_id', branch_id);
     }
 
-    const { data: currentStock, error: stockError } = await stockQuery;
+    const { data: rawStock, error: stockError } = await stockQuery;
     if (stockError) throw stockError;
+
+    // Fetch related items manually
+    const itemSkus = [...new Set(rawStock?.map(s => s.item_sku).filter(Boolean))];
+    const { data: items } = await supabase.from('items').select('id, name, sku, unit, category').in('sku', itemSkus);
+    const itemMap = Object.fromEntries(items?.map(i => [i.sku, i]) || []);
+
+    const currentStock = rawStock?.map(s => ({
+      ...s,
+      item: itemMap[s.item_sku]
+    })) || [];
 
     // 3. Fetch recent stock movements for variance analysis
     const sevenDaysAgo = new Date();
@@ -797,14 +830,7 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
 
     let query = supabase
       .from('stock_requests')
-      .select(`
-        *,
-        items:stock_request_items(*),
-        requesting_branch:branches!requesting_branch_id(id, name),
-        created_by_user:users!created_by(id, first_name, last_name),
-        reviewed_by_user:users!reviewed_by(id, first_name, last_name),
-        approved_by_user:users!approved_by(id, first_name, last_name)
-      `)
+      .select('*')
       .order('created_at', { ascending: false });
 
     if (branch_id && branch_id !== '0') query = query.eq('requesting_branch_id', branch_id);
@@ -812,8 +838,44 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
     if (start_date) query = query.gte('created_at', start_date);
     if (end_date) query = query.lte('created_at', end_date);
 
-    const { data: requests, error } = await query;
+    const { data: rawRequests, error } = await query;
     if (error) throw error;
+
+    // Fetch related data manually to avoid schema cache relationship issues
+    const requestIds = rawRequests?.map(r => r.id) || [];
+    const userIds = [...new Set([
+      ...rawRequests?.map(r => r.created_by),
+      ...rawRequests?.map(r => r.reviewed_by),
+      ...rawRequests?.map(r => r.approved_by)
+    ].filter(Boolean))];
+    const branchIds = [...new Set(rawRequests?.map(r => r.requesting_branch_id).filter(Boolean))];
+
+    const [
+      { data: reqItems },
+      { data: users },
+      { data: branchesData }
+    ] = await Promise.all([
+      supabase.from('stock_request_items').select('*').in('request_id', requestIds),
+      supabase.from('users').select('id, first_name, last_name').in('id', userIds),
+      supabase.from('branches').select('id, name').in('id', branchIds)
+    ]);
+
+    const itemsMap = (reqItems || []).reduce((acc: any, item) => {
+      if (!acc[item.request_id]) acc[item.request_id] = [];
+      acc[item.request_id].push(item);
+      return acc;
+    }, {});
+    const userMap = Object.fromEntries(users?.map(u => [u.id, u]) || []);
+    const branchMap = Object.fromEntries(branchesData?.map(b => [b.id, b]) || []);
+
+    const requests = rawRequests?.map(r => ({
+      ...r,
+      items: itemsMap[r.id] || [],
+      requesting_branch: branchMap[r.requesting_branch_id],
+      created_by_user: userMap[r.created_by],
+      reviewed_by_user: userMap[r.reviewed_by],
+      approved_by_user: userMap[r.approved_by]
+    })) || [];
 
     // 2. Group by branch if no specific branch requested
     const branchSummaries: Record<string, any> = {};
@@ -871,9 +933,9 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
     const endDateStr = end_date as string || new Date().toISOString();
 
     // 2. Fetch orders and stock requests
-    let restQuery = supabase.from('restaurant_orders').select('*, items:restaurant_order_items(*)').eq('status', 'completed').gte('created_at', startDateStr).lte('created_at', endDateStr);
-    let barQuery = supabase.from('bar_orders').select('*, items:bar_order_items(*)').eq('status', 'completed').gte('created_at', startDateStr).lte('created_at', endDateStr);
-    let stockReqQuery = supabase.from('stock_requests').select('*, items:stock_request_items(*)').gte('created_at', startDateStr).lte('created_at', endDateStr);
+    let restQuery = supabase.from('restaurant_orders').select('*').eq('status', 'completed').gte('created_at', startDateStr).lte('created_at', endDateStr);
+    let barQuery = supabase.from('bar_orders').select('*').eq('status', 'completed').gte('created_at', startDateStr).lte('created_at', endDateStr);
+    let stockReqQuery = supabase.from('stock_requests').select('*').gte('created_at', startDateStr).lte('created_at', endDateStr);
 
     if (branch_id && branch_id !== '0') {
       restQuery = restQuery.eq('branch_id', branch_id);
@@ -881,7 +943,38 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
       stockReqQuery = stockReqQuery.eq('requesting_branch_id', branch_id);
     }
 
-    const [restRes, barRes, stockRes] = await Promise.all([restQuery, barQuery, stockReqQuery]);
+    const [rawRest, rawBar, rawStock] = await Promise.all([restQuery, barQuery, stockReqQuery]);
+
+    // Fetch items separately for manual joining
+    const restIds = rawRest.data?.map(o => o.id) || [];
+    const barIds = rawBar.data?.map(o => o.id) || [];
+    const stockIds = rawStock.data?.map(o => o.id) || [];
+
+    const [restItemsRes, barItemsRes, stockItemsRes] = await Promise.all([
+      supabase.from('restaurant_order_items').select('*').in('order_id', restIds),
+      supabase.from('bar_order_items').select('*').in('order_id', barIds),
+      supabase.from('stock_request_items').select('*').in('request_id', stockIds)
+    ]);
+
+    const itemsByRestId = (restItemsRes.data || []).reduce((acc: any, i) => {
+      if (!acc[i.order_id]) acc[i.order_id] = [];
+      acc[i.order_id].push(i);
+      return acc;
+    }, {});
+    const itemsByBarId = (barItemsRes.data || []).reduce((acc: any, i) => {
+      if (!acc[i.order_id]) acc[i.order_id] = [];
+      acc[i.order_id].push(i);
+      return acc;
+    }, {});
+    const itemsByStockId = (stockItemsRes.data || []).reduce((acc: any, i) => {
+      if (!acc[i.request_id]) acc[i.request_id] = [];
+      acc[i.request_id].push(i);
+      return acc;
+    }, {});
+
+    const restRes = { ...rawRest, data: rawRest.data?.map(o => ({ ...o, items: itemsByRestId[o.id] || [] })) };
+    const barRes = { ...rawBar, data: rawBar.data?.map(o => ({ ...o, items: itemsByBarId[o.id] || [] })) };
+    const stockRes = { ...rawStock, data: rawStock.data?.map(o => ({ ...o, items: itemsByStockId[o.id] || [] })) };
 
     // 3. Process data by branch
     const branchSummaries: Record<string, any> = {};
@@ -918,8 +1011,8 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
       });
     };
 
-    processOrders(restRes.data);
-    processOrders(barRes.data);
+    processOrders(restRes.data || null);
+    processOrders(barRes.data || null);
 
     // 4. Create comparison analysis
     const requestedItemsMap: Record<string, number> = {};
