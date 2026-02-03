@@ -13,14 +13,78 @@ import {
     Search, Boxes, Thermometer, TrendingDown, FileDown
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { auditorReportsAPI } from '@/lib/api'; // Added import for report export
+import { auditorReportsAPI } from '@/lib/api';
 
+const StockItemDetailsModal = ({ item, isOpen, onClose }: { item: any, isOpen: boolean, onClose: () => void }) => {
+    if (!isOpen || !item) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm" onClick={onClose}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-stone-100 flex flex-col animate-in fade-in zoom-in duration-200" onClick={(e) => e.stopPropagation()}>
+                <div className="px-6 py-5 border-b border-stone-100 flex justify-between items-center bg-stone-50/50">
+                    <div>
+                        <h3 className="text-lg font-bold text-stone-900 tracking-tight">Stock Item Detail</h3>
+                        <p className="text-[11px] font-semibold text-stone-400 uppercase tracking-widest">{item.item_sku || 'No SKU'}</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-stone-200 rounded-full transition-colors text-stone-400">
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+
+                <div className="p-6 space-y-6">
+                    <div className="bg-stone-50 rounded-xl p-4 border border-stone-100">
+                        <h4 className="text-sm font-bold text-stone-900 mb-1">{item.item?.name || item.item_name}</h4>
+                        <div className="flex gap-2 text-xs text-stone-500">
+                            <span className="bg-white px-2 py-0.5 rounded border border-stone-200">{item.item?.category || item.item_category || 'General'}</span>
+                            <span className="bg-white px-2 py-0.5 rounded border border-stone-200">{item.item?.unit || item.item_unit || 'Unit'}</span>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className="p-3 bg-stone-50 rounded-lg text-center border border-stone-100">
+                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">System</p>
+                            <p className="text-xl font-black text-stone-800">{item.current_quantity ?? item.quantity}</p>
+                        </div>
+                        <div className="p-3 bg-stone-50 rounded-lg text-center border border-stone-100">
+                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Theoretical</p>
+                            <p className="text-xl font-black text-stone-500">{item.theoretical_quantity?.toFixed(1) || '0.0'}</p>
+                        </div>
+                        <div className={`p-3 rounded-lg text-center border ${item.variance !== 0 ? 'bg-rose-50 border-rose-100' : 'bg-emerald-50 border-emerald-100'}`}>
+                            <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${item.variance !== 0 ? 'text-rose-400' : 'text-emerald-400'}`}>Variance</p>
+                            <p className={`text-xl font-black ${item.variance !== 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                {item.variance > 0 ? '+' : ''}{item.variance?.toFixed(1) || '0.0'}
+                            </p>
+                        </div>
+                    </div>
+
+                    {Math.abs(item.variance) > 0 && (
+                        <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 flex gap-3 text-amber-800 text-sm">
+                            <AlertTriangle className="h-5 w-5 shrink-0" />
+                            <div>
+                                <p className="font-bold mb-1">Discrepancy Detected</p>
+                                <p className="text-xs opacity-90">
+                                    There is a {item.variance_percentage?.toFixed(1)}% variance between system records and theoretical usage.
+                                    This requires investigation.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="px-6 py-5 bg-stone-50/50 flex justify-end gap-3 border-t border-stone-100">
+                    <button onClick={onClose} className="btn-secondary">Close</button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 export default function StockAuditPage() {
     const { activeBranchId, setActiveBranch } = useBranch();
     const [auditData, setAuditData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedItem, setSelectedItem] = useState<any>(null);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -281,7 +345,10 @@ export default function StockAuditPage() {
                                                             )}
                                                         </td>
                                                         <td className="table-cell text-right">
-                                                            <button className="w-8 h-8 rounded-lg hover:bg-stone-900 hover:text-white transition-all flex items-center justify-center text-stone-300">
+                                                            <button
+                                                                onClick={() => setSelectedItem(item)}
+                                                                className="w-8 h-8 rounded-lg hover:bg-stone-900 hover:text-white transition-all flex items-center justify-center text-stone-300"
+                                                            >
                                                                 <Eye className="h-4 w-4" />
                                                             </button>
                                                         </td>
@@ -307,6 +374,13 @@ export default function StockAuditPage() {
                         </div>
                     )}
                 </div>
+                {selectedItem && (
+                    <StockItemDetailsModal
+                        item={selectedItem}
+                        isOpen={!!selectedItem}
+                        onClose={() => setSelectedItem(null)}
+                    />
+                )}
             </DashboardLayout>
         </ProtectedRoute>
     );

@@ -377,6 +377,7 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
     const [restRes, barRes, payRes, posRes] = await Promise.all([restQuery, barQuery, paymentsQuery, posQuery]);
 
     // 3. Group by branch if no specific branch requested
+    // 3. Group by branch if no specific branch requested
     const branchSummaries: Record<string, any> = {};
     if (!branch_id || branch_id === '0') {
       branches?.forEach(b => {
@@ -386,43 +387,56 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
           restaurant: { total_orders: 0, total_value: 0, voided: 0 },
           bar: { total_orders: 0, total_value: 0, voided: 0 },
           pos: { total_transactions: 0, total_value: 0 },
-          total_revenue: 0,
-          total_collected: 0 // From payments/pos
+          total_revenue: 0, // Sales (Orders)
+          total_collected: 0 // Collections (Payments + POS)
         };
       });
 
       restRes.data?.forEach(o => {
-        if (branchSummaries[o.branch_id]) {
-          branchSummaries[o.branch_id].restaurant.total_orders++;
+        const bSummary = branchSummaries[o.branch_id];
+        if (bSummary) {
+          bSummary.restaurant.total_orders++;
           if (o.status !== 'cancelled') {
-            branchSummaries[o.branch_id].restaurant.total_value += Number(o.total_amount || 0);
-            branchSummaries[o.branch_id].total_revenue += Number(o.total_amount || 0);
+            bSummary.restaurant.total_value += Number(o.total_amount || 0);
+            bSummary.total_revenue += Number(o.total_amount || 0);
           } else {
-            branchSummaries[o.branch_id].restaurant.voided++;
+            bSummary.restaurant.voided++;
           }
         }
       });
 
       barRes.data?.forEach(o => {
-        if (branchSummaries[o.branch_id]) {
-          branchSummaries[o.branch_id].bar.total_orders++;
+        const bSummary = branchSummaries[o.branch_id];
+        if (bSummary) {
+          bSummary.bar.total_orders++;
           if (o.status !== 'cancelled') {
-            branchSummaries[o.branch_id].bar.total_value += Number(o.total || 0);
-            branchSummaries[o.branch_id].total_revenue += Number(o.total || 0);
+            bSummary.bar.total_value += Number(o.total || 0);
+            bSummary.total_revenue += Number(o.total || 0);
           } else {
-            branchSummaries[o.branch_id].bar.voided++;
+            bSummary.bar.voided++;
           }
         }
       });
 
-      // POS Transactions
+      // POS Transactions - Track as collection, not sales revenue (unless strict retail)
       posRes.data?.forEach(p => {
-        if (branchSummaries[p.branch_id]) {
-          branchSummaries[p.branch_id].pos.total_transactions++;
-          branchSummaries[p.branch_id].pos.total_value += Number(p.amount || 0);
-          // Assuming POS transactions are also "revenue" or "collections". Usually distinct from orders.
-          // If POS is used for retail, it's revenue.
-          branchSummaries[p.branch_id].total_revenue += Number(p.amount || 0);
+        const bSummary = branchSummaries[p.branch_id];
+        if (bSummary) {
+          bSummary.pos.total_transactions++;
+          bSummary.pos.total_value += Number(p.amount || 0);
+          // Do NOT add to total_revenue (Sales) to avoid double counting if POS is used for order payments
+          bSummary.total_collected += Number(p.amount || 0);
+        }
+      });
+
+      // Payments - Track as collection
+      payRes.data?.forEach(p => {
+        // Payments might not have branch_id directly, or it might be inferred.
+        // If query included branch_id filter, these are valid.
+        // If not, we check if payment has branch_id or if we can link it.
+        // Assuming updated schema has branch_id or we rely on what we have.
+        if (p.branch_id && branchSummaries[p.branch_id]) {
+          branchSummaries[p.branch_id].total_collected += Number(p.amount || 0);
         }
       });
     }
@@ -652,6 +666,42 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
       created_at: p.created_at
     })).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 50);
 
+    // 12. Group by branch if no specific branch requested
+    let branchSummaries: any[] = [];
+    if (!branch_id || branch_id === '0') {
+      const branchGroups: Record<string, any> = {};
+
+      payments.forEach(p => {
+        const branchId = p.branch_id || 'main';
+        const branchName = p.branch?.name || 'Main Office';
+
+        if (!branchGroups[branchId]) {
+          branchGroups[branchId] = {
+            branch_id: branchId,
+            branch_name: branchName,
+            total_payments: 0,
+            payment_count: 0,
+            cash: 0,
+            mpesa: 0,
+            card: 0
+          };
+        }
+
+        branchGroups[branchId].total_payments += Number(p.amount);
+        branchGroups[branchId].payment_count += 1;
+
+        if (p.payment_method === 'cash') {
+          branchGroups[branchId].cash += Number(p.amount);
+        } else if (p.payment_method === 'mpesa' || p.payment_method === 'mpesa_manual') {
+          branchGroups[branchId].mpesa += Number(p.amount);
+        } else if (p.payment_method === 'card_manual') {
+          branchGroups[branchId].card += Number(p.amount);
+        }
+      });
+
+      branchSummaries = Object.values(branchGroups);
+    }
+
     res.status(200).json({
       success: true,
       data: {
@@ -661,7 +711,8 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
         sales: totalSales,
         variance: breakdown.total - totalSales,
         cashier_summaries: cashierSummaries,
-        recent_transactions: recentTransactions
+        recent_transactions: recentTransactions,
+        branch_summaries: branchSummaries
       }
     });
   } catch (error) {
@@ -953,13 +1004,27 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
       supabase.from('branches').select('id, name').in('id', branchIds)
     ]);
 
-    const itemsMap = (reqItems || []).reduce((acc: any, item) => {
+    // Fetch item details for all requested items
+    const itemSkus = [...new Set(reqItems?.map(i => i.item_sku).filter(Boolean))];
+    const { data: itemsData } = await supabase.from('items').select('sku, name, unit, category').in('sku', itemSkus);
+    const itemDetailsMap = Object.fromEntries(itemsData?.map(i => [i.sku, i]) || []);
+
+    // Enrich request items with item details
+    const enrichedReqItems = reqItems?.map(item => ({
+      ...item,
+      item_name: itemDetailsMap[item.item_sku]?.name || 'Unknown Item',
+      item_unit: itemDetailsMap[item.item_sku]?.unit || '',
+      item_category: itemDetailsMap[item.item_sku]?.category || ''
+    })) || [];
+
+    const itemsMap = enrichedReqItems.reduce((acc: any, item) => {
       if (!acc[item.request_id]) acc[item.request_id] = [];
       acc[item.request_id].push(item);
       return acc;
     }, {});
     const userMap = Object.fromEntries(users?.map(u => [u.id, u]) || []);
     const branchMap = Object.fromEntries(branchesData?.map(b => [b.id, b]) || []);
+
 
     const requests = rawRequests?.map(r => ({
       ...r,
@@ -1044,8 +1109,8 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
     const stockIds = rawStock.data?.map(o => o.id) || [];
 
     const [restItemsRes, barItemsRes, stockItemsRes] = await Promise.all([
-      supabase.from('restaurant_order_items').select('*').in('order_id', restIds),
-      supabase.from('bar_order_items').select('*').in('order_id', barIds),
+      supabase.from('restaurant_order_items').select('*, menu_item:menu_items(name)').in('order_id', restIds),
+      supabase.from('bar_order_items').select('*, stock_item:bar_inventory(product_name)').in('order_id', barIds), // Check proper column for bar items
       supabase.from('stock_request_items').select('*').in('request_id', stockIds)
     ]);
 
@@ -1083,29 +1148,39 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
       });
     }
 
-    const soldItemsMap: Record<string, { name: string; quantity: number; revenue: number; branch_id: string }> = {};
-    const processOrders = (orders: any[] | null) => {
+    const soldItemsMap: Record<string, { name: string; quantity: number; revenue: number; branch_id: string; category: string }> = {};
+    const processOrders = (orders: any[] | null, type: 'restaurant' | 'bar') => {
       orders?.forEach(order => {
         order.items?.forEach((item: any) => {
-          const key = `${order.branch_id}_${item.menu_item_id || item.item_name}`;
+          // Determine name
+          let name = item.item_name;
+          if (type === 'restaurant') name = item.menu_item?.name || item.item_name || 'Unknown Item';
+          else name = item.stock_item?.product_name || item.item_name || 'Unknown Item';
+
+          const key = `${order.branch_id}_${name}`; // Aggregate by name + branch
           if (!soldItemsMap[key]) {
-            soldItemsMap[key] = { name: item.item_name, quantity: 0, revenue: 0, branch_id: order.branch_id };
+            soldItemsMap[key] = { name: name, quantity: 0, revenue: 0, branch_id: order.branch_id, category: type };
           }
           const qty = item.quantity || 0;
-          const rev = Number(item.price || 0) * qty;
+          const rev = Number(item.price || item.unit_price || 0) * qty; // Handle price differences
+
+          // Fix: Ensure we don't add NaN
+          if (!isNaN(rev)) {
+            soldItemsMap[key].revenue += rev;
+          }
           soldItemsMap[key].quantity += qty;
-          soldItemsMap[key].revenue += rev;
 
           if (branchSummaries[order.branch_id]) {
-            branchSummaries[order.branch_id].total_revenue += rev;
+            if (!isNaN(rev)) branchSummaries[order.branch_id].total_revenue += rev;
             branchSummaries[order.branch_id].total_quantity += qty;
+            branchSummaries[order.branch_id].total_items_sold += 1; // Count distinct items or transactions? Users might expect qty. Let's keep it as is.
           }
         });
       });
     };
 
-    processOrders(restRes.data || null);
-    processOrders(barRes.data || null);
+    processOrders(restRes.data || null, 'restaurant');
+    processOrders(barRes.data || null, 'bar');
 
     // 4. Create comparison analysis
     const requestedItemsMap: Record<string, number> = {};
