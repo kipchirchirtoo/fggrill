@@ -8,7 +8,8 @@ import { UserRole } from '@/lib/auth-context';
 import {
     AlertTriangle, ShoppingBag, Filter, Download,
     ArrowLeft, Check, X, RefreshCw, Eye, FileDown,
-    Building2, TrendingUp, BarChart3, ChevronRight
+    Building2, TrendingUp, BarChart3, ChevronRight,
+    Utensils, Beer
 } from 'lucide-react';
 import { toast } from 'sonner';
 
