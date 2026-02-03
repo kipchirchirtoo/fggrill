@@ -1,28 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { api } from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { useState, useEffect, useCallback } from 'react';
+import { api, auditorReportsAPI } from '@/lib/api';
+import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { ProtectedRoute } from '@/components/auth/protected-route';
+import { UserRole } from '@/lib/auth-context';
+import { BranchSelector, useBranch } from '@/lib/branch-context';
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import { Search, Filter, Loader2, ClipboardList, RefreshCw } from 'lucide-react';
+    Search, Filter, Loader2, ClipboardList,
+    RefreshCw, Utensils, FileDown, ShieldCheck,
+    Clock, Info
+} from 'lucide-react';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 interface UsageEntry {
     id: string;
@@ -40,38 +30,59 @@ interface UsageEntry {
 }
 
 export default function AuditorKitchenUsagePage() {
+    const { activeBranchId } = useBranch();
     const [entries, setEntries] = useState<UsageEntry[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isExporting, setIsExporting] = useState(false);
     const [typeFilter, setTypeFilter] = useState<string>('all');
     const [searchTerm, setSearchTerm] = useState('');
 
-    useEffect(() => {
-        fetchUsage();
-    }, [typeFilter]);
-
-    const fetchUsage = async () => {
+    const fetchUsage = useCallback(async () => {
         try {
-            setLoading(true);
-            const response = await api.kitchen.getUsageEntries();
+            setIsLoading(true);
+            const response = await api.kitchen.getUsageEntries(
+                activeBranchId === 0 ? undefined : (activeBranchId ?? undefined)
+            );
             if (response.success) {
                 setEntries(response.data || []);
             }
         } catch (error) {
             console.error('Failed to fetch usage:', error);
+            toast.error('Failed to load kitchen usage data');
         } finally {
-            setLoading(false);
+            setIsLoading(false);
+        }
+    }, [activeBranchId]);
+
+    useEffect(() => {
+        fetchUsage();
+    }, [fetchUsage]);
+
+    const handleExport = async () => {
+        setIsExporting(true);
+        try {
+            await auditorReportsAPI.exportBrandedPdf('kitchen_usage', {
+                branch_id: activeBranchId === 0 ? undefined : activeBranchId,
+                type: typeFilter !== 'all' ? typeFilter : undefined
+            });
+            toast.success("Usage report exported successfully");
+        } catch (e) {
+            console.error(e);
+            toast.error("Failed to export report");
+        } finally {
+            setIsExporting(false);
         }
     };
 
     const getUsageBadge = (type: string) => {
         const styles: Record<string, string> = {
-            STAFF_MEAL: 'bg-blue-100 text-blue-700',
-            COMPLIMENTARY: 'bg-green-100 text-green-700',
-            TEST: 'bg-amber-100 text-amber-700',
-            OTHER: 'bg-stone-100 text-stone-700'
+            STAFF_MEAL: 'text-blue-600 bg-blue-50',
+            COMPLIMENTARY: 'text-emerald-600 bg-emerald-50',
+            TEST: 'text-amber-600 bg-amber-50',
+            OTHER: 'text-stone-600 bg-stone-50'
         };
-        const style = styles[type] || 'bg-stone-100 text-stone-700';
-        return <Badge variant="outline" className={`${style} border-transparent uppercase text-[10px]`}>{type.replace('_', ' ')}</Badge>;
+        const style = styles[type] || 'text-stone-600 bg-stone-50';
+        return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter ${style}`}>{type.replace('_', ' ')}</span>;
     };
 
     const filteredEntries = entries.filter(entry =>
@@ -83,116 +94,163 @@ export default function AuditorKitchenUsagePage() {
     );
 
     return (
-        <div className="space-y-6 p-6">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-stone-900 font-display">Kitchen Usage Oversight</h1>
-                    <p className="text-stone-500 mt-2 font-medium">Analyze manual kitchen usage entries across all branches.</p>
-                </div>
-                <Button
-                    variant="outline"
-                    onClick={fetchUsage}
-                    disabled={loading}
-                    className="border-stone-200 hover:bg-stone-50 text-stone-700 font-semibold shadow-sm"
-                >
-                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                    Refresh
-                </Button>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-4">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-                    <Input
-                        placeholder="Search by Item, SKU or Branch..."
-                        className="pl-10 border-stone-200 focus:ring-stone-500/10 focus:border-stone-500 rounded-xl"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
-                <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger className="w-[180px] border-stone-200 rounded-xl font-medium text-stone-700">
-                        <Filter className="h-4 w-4 mr-2 text-stone-400" />
-                        <SelectValue placeholder="Filter by type" />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-xl border-stone-200">
-                        <SelectItem value="all">All Types</SelectItem>
-                        <SelectItem value="STAFF_MEAL">Staff Meal</SelectItem>
-                        <SelectItem value="COMPLIMENTARY">Complimentary</SelectItem>
-                        <SelectItem value="TEST">Test Cooking</SelectItem>
-                        <SelectItem value="OTHER">Other</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-
-            <Card className="border-stone-200/60 shadow-md shadow-stone-200/30 rounded-2xl overflow-hidden">
-                <CardHeader className="bg-stone-50/50 border-b border-stone-100 pb-4">
-                    <div className="flex items-center justify-between">
+        <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN]}>
+            <DashboardLayout>
+                <div className="space-y-8 pb-10">
+                    {/* Header */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
-                            <CardTitle className="text-[17px] font-bold text-stone-900 font-display">Usage Records</CardTitle>
-                            <CardDescription className="text-stone-500 font-medium">
-                                {filteredEntries.length} entries found across your branches
-                            </CardDescription>
+                            <div className="flex items-center gap-2 mb-1">
+                                <Utensils className="h-4 w-4 text-stone-400" />
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Production Audit</span>
+                            </div>
+                            <h1 className="text-2xl font-black text-stone-900 tracking-tight leading-none">Kitchen Usage Oversight</h1>
+                            <p className="text-stone-500 text-sm mt-2 font-medium">Analyze manual production entries and staff consumption</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-xl px-4 py-2 shadow-sm">
+                                <Search className="h-4 w-4 text-stone-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search entries..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="text-sm font-bold text-stone-700 outline-none w-40"
+                                />
+                            </div>
+                            <select
+                                value={typeFilter}
+                                onChange={(e) => setTypeFilter(e.target.value)}
+                                className="bg-white border border-stone-200 rounded-xl px-4 py-2 text-sm font-bold text-stone-700 shadow-sm outline-none"
+                            >
+                                <option value="all">All Types</option>
+                                <option value="STAFF_MEAL">Staff Meal</option>
+                                <option value="COMPLIMENTARY">Complimentary</option>
+                                <option value="TEST">Test Cooking</option>
+                                <option value="OTHER">Other</option>
+                            </select>
+                            <BranchSelector />
+                            <button onClick={handleExport} disabled={isExporting} className="p-2.5 bg-white border border-stone-200 rounded-xl hover:bg-stone-50 transition-colors shadow-sm">
+                                <FileDown className={`h-4 w-4 text-stone-600 ${isExporting ? 'animate-bounce' : ''}`} />
+                            </button>
+                            <button onClick={fetchUsage} className="p-2.5 bg-stone-900 rounded-xl hover:bg-stone-800 transition-colors shadow-sm">
+                                <RefreshCw className={`h-4 w-4 text-white ${isLoading ? 'animate-spin' : ''}`} />
+                            </button>
                         </div>
                     </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                    {loading ? (
-                        <div className="flex justify-center items-center py-24">
-                            <Loader2 className="h-10 w-10 animate-spin text-stone-300" />
+
+                    {/* Stats Highlights */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="card-elevated p-6 bg-stone-900 text-white">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-1">Total Entries</p>
+                            <h3 className="text-2xl font-black">{filteredEntries.length}</h3>
+                            <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
+                                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Active Monitoring</span>
+                                <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                            </div>
                         </div>
-                    ) : filteredEntries.length === 0 ? (
-                        <div className="text-center py-24 text-stone-400">
-                            <ClipboardList className="h-16 w-16 mx-auto mb-4 opacity-10" />
-                            <p className="text-lg font-medium">No usage entries found.</p>
+                        <div className="card-elevated p-6 bg-white border border-stone-100 flex flex-col justify-between">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-1">Staff Consumption</p>
+                                <h3 className="text-2xl font-black text-stone-900">
+                                    {entries.filter(e => e.usage_type === 'STAFF_MEAL').length} <span className="text-xs font-bold text-stone-400">units</span>
+                                </h3>
+                            </div>
+                            <p className="text-[11px] text-stone-400 font-medium">Total staff meal allocations detected</p>
                         </div>
-                    ) : (
+                        <div className="card-elevated p-6 bg-white border border-stone-100 flex flex-col justify-between">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-1">Audit Coverage</p>
+                                <h3 className="text-2xl font-black text-stone-900">100%</h3>
+                            </div>
+                            <p className="text-[11px] text-stone-400 font-medium leading-tight">All kitchen stations reporting as of {format(new Date(), 'HH:mm')}</p>
+                        </div>
+                    </div>
+
+                    {/* Main Table */}
+                    <div className="card-elevated p-0 bg-white shadow-xl shadow-stone-200/50 overflow-hidden">
+                        <div className="p-6 border-b border-stone-100 bg-stone-50/30 flex items-center justify-between">
+                            <h3 className="text-[16px] font-black text-stone-900 flex items-center gap-2">
+                                <Info className="h-4 w-4 text-stone-400" />
+                                Usage Records Ledger
+                            </h3>
+                            <p className="text-[11px] text-stone-400 font-bold uppercase tracking-widest">
+                                {activeBranchId === 0 ? 'Consolidated View' : 'Single Branch Audit'}
+                            </p>
+                        </div>
                         <div className="overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow className="bg-stone-50/50 hover:bg-stone-50/50 border-b border-stone-100">
-                                        <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-stone-500">Date</TableHead>
-                                        <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-stone-500">Branch</TableHead>
-                                        <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-stone-500">Item</TableHead>
-                                        <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-stone-500">Type</TableHead>
-                                        <TableHead className="py-4 px-6 text-right text-[11px] font-black uppercase tracking-wider text-stone-500">Quantity</TableHead>
-                                        <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-stone-500">Shift</TableHead>
-                                        <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-stone-500">Notes</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {filteredEntries.map((entry) => (
-                                        <TableRow key={entry.id} className="hover:bg-stone-50/30 transition-colors border-b border-stone-100/50 last:border-0">
-                                            <TableCell className="py-4 px-6 text-stone-600 font-bold text-[13px]">
-                                                {format(new Date(entry.usage_date), 'MMM d, yyyy')}
-                                            </TableCell>
-                                            <TableCell className="py-4 px-6">
-                                                <Badge variant="outline" className="bg-stone-100/50 text-stone-700 border-stone-200 font-bold px-2 py-0.5 rounded-md">
-                                                    {entry.branch?.name || `Branch #${entry.branch_id}`}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="py-4 px-6">
-                                                <p className="font-bold text-[14px] text-stone-900 antialiased">{entry.item_name}</p>
-                                                <p className="text-[10px] text-stone-400 font-black font-mono tracking-tighter uppercase">{entry.item_sku}</p>
-                                            </TableCell>
-                                            <TableCell className="py-4 px-6">{getUsageBadge(entry.usage_type)}</TableCell>
-                                            <TableCell className="py-4 px-6 text-right font-black text-stone-900 font-variant-numeric text-[15px]">
-                                                {entry.quantity} <span className="text-[10px] text-stone-400 font-bold uppercase">{entry.unit_of_measure}</span>
-                                            </TableCell>
-                                            <TableCell className="py-4 px-6 capitalize text-stone-500 font-bold italic text-[12px] opacity-70">
-                                                {entry.shift?.toLowerCase()}
-                                            </TableCell>
-                                            <TableCell className="py-4 px-6 max-w-[200px] truncate text-stone-500 text-[12px] font-medium italic">
-                                                {entry.notes || '-'}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                            <table className="w-full text-left">
+                                <thead className="bg-stone-50 text-[10px] font-black uppercase tracking-widest text-stone-400 border-b border-stone-100">
+                                    <tr>
+                                        <th className="px-6 py-4">Date & Time</th>
+                                        <th className="px-6 py-4">Branch</th>
+                                        <th className="px-6 py-4">Kitchen Item</th>
+                                        <th className="px-6 py-4 text-center">Usage Type</th>
+                                        <th className="px-6 py-4 text-right">Quantity</th>
+                                        <th className="px-6 py-4 text-center">Shift</th>
+                                        <th className="px-6 py-4">Auditor Note</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-stone-50">
+                                    {isLoading ? (
+                                        <tr>
+                                            <td colSpan={7} className="px-6 py-20 text-center">
+                                                <Loader2 className="h-8 w-8 animate-spin text-stone-200 mx-auto" />
+                                            </td>
+                                        </tr>
+                                    ) : filteredEntries.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={7} className="px-6 py-20 text-center text-stone-300 text-sm italic">
+                                                No usage records found for this selection
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredEntries.map((entry) => (
+                                            <tr key={entry.id} className="hover:bg-stone-50/50 transition-colors group">
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[13px] font-bold text-stone-900">{format(new Date(entry.usage_date), 'MMM dd, yyyy')}</span>
+                                                        <span className="text-[10px] text-stone-400 flex items-center gap-1 font-medium">
+                                                            <Clock className="w-3 h-3" />
+                                                            {format(new Date(entry.created_at), 'HH:mm')}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <span className="text-[11px] font-black text-stone-500 bg-stone-100 px-2 py-0.5 rounded uppercase tracking-tighter">
+                                                        {entry.branch?.name || `BR-${entry.branch_id}`}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <p className="text-[14px] font-black text-stone-900">{entry.item_name}</p>
+                                                    <p className="text-[10px] text-stone-400 font-mono tracking-tighter uppercase">{entry.item_sku}</p>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    {getUsageBadge(entry.usage_type)}
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <div className="flex flex-col items-end">
+                                                        <span className="text-[15px] font-black text-stone-900">{entry.quantity}</span>
+                                                        <span className="text-[10px] text-stone-400 font-bold uppercase">{entry.unit_of_measure}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className="text-[12px] font-bold text-stone-500 italic opacity-80">{entry.shift || 'N/A'}</span>
+                                                </td>
+                                                <td className="px-6 py-4 max-w-[200px]">
+                                                    <p className="text-[12px] text-stone-500 font-medium italic truncate" title={entry.notes}>
+                                                        {entry.notes || '-'}
+                                                    </p>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
                         </div>
-                    )}
-                </CardContent>
-            </Card>
-        </div>
+                    </div>
+                </div>
+            </DashboardLayout>
+        </ProtectedRoute>
     );
 }

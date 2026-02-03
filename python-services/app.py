@@ -444,16 +444,33 @@ def export_auditor_report(report_type):
     """Export auditor reports as branded PDFs"""
     try:
         # Get query parameters
+        branch_ids_str = request.args.get('branch_ids')
         branch_id = request.args.get('branch_id')
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
-        branch_name = request.args.get('branch_name', f'Branch #{branch_id}')
         
-        logger.info(f"Exporting auditor report: {report_type} for branch {branch_id}")
+        # Determine branch IDs (prioritize multiple if provided)
+        branch_ids = []
+        if branch_ids_str:
+            try:
+                branch_ids = [int(bid.strip()) for bid in branch_ids_str.split(',') if bid.strip()]
+            except ValueError:
+                logger.warning(f"Invalid branch_ids format: {branch_ids_str}")
+                
+        if not branch_ids and branch_id:
+            try:
+                branch_ids = [int(branch_id)]
+            except ValueError:
+                pass
+                
+        branch_name = request.args.get('branch_name', f'Branch {branch_id}' if branch_id else 'All Branches')
+        
+        logger.info(f"Exporting auditor report: {report_type} for branches {branch_ids}")
         
         # Build filters
         filters = {
-            'branch_id': branch_id,
+            'branch_id': branch_ids[0] if len(branch_ids) == 1 else None,
+            'branch_ids': branch_ids,
             'start_date': start_date,
             'end_date': end_date,
             'branch_name': branch_name

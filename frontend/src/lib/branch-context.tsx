@@ -61,6 +61,9 @@ export function BranchProvider({ children }: { children: ReactNode }) {
         setActiveBranchId(0);
       } else if (storedBranchId && isBranchAvailable(parseInt(storedBranchId))) {
         setActiveBranchId(parseInt(storedBranchId));
+      } else if (canAccessAllBranches(user)) {
+        // Default to "All Branches" for privileged roles (Auditor, Super Admin, etc.)
+        setActiveBranchId(0);
       } else if (user.branch_id && isBranchAvailable(user.branch_id)) {
         setActiveBranchId(user.branch_id);
       } else if (userBranches.length > 0) {

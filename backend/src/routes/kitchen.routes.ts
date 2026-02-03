@@ -95,14 +95,14 @@ const storekeepers = [
 // STOCK & LEDGER ROUTES
 // =====================================================
 
-router.get('/stock', authorize(kitchenStaff), getKitchenStock);
-router.get('/stock/ledger', authorize(kitchenStaff), getKitchenLedger);
-router.get('/stock/:sku/history', authorize(kitchenStaff), getItemHistory);
-router.get('/dashboard/stats', authorize(kitchenStaff), getKitchenDashboardStats);
+router.get('/stock', authorize([...kitchenStaff, UserRole.AUDITOR]), getKitchenStock);
+router.get('/stock/ledger', authorize([...kitchenStaff, UserRole.AUDITOR]), getKitchenLedger);
+router.get('/stock/:sku/history', authorize([...kitchenStaff, UserRole.AUDITOR]), getItemHistory);
+router.get('/dashboard/stats', authorize([...kitchenStaff, UserRole.AUDITOR]), getKitchenDashboardStats);
 
 // Portion Stock Routes
-router.get('/portion-stock', authorize(kitchenStaff), getPortionStock);
-router.get('/portion-ledger', authorize(kitchenStaff), getPortionLedger);
+router.get('/portion-stock', authorize([...kitchenStaff, UserRole.AUDITOR]), getPortionStock);
+router.get('/portion-ledger', authorize([...kitchenStaff, UserRole.AUDITOR]), getPortionLedger);
 
 // =====================================================
 // REQUISITION ROUTES
@@ -133,14 +133,14 @@ router.post('/recipes/auto-deduct', authorize([...kitchenStaff, UserRole.RECEPTI
 // =====================================================
 
 router.post('/usage', authorize(kitchenStaff), recordUsage);
-router.get('/usage', authorize([...kitchenStaff, ...kitchenManagers]), getUsageEntries);
+router.get('/usage', authorize([...kitchenStaff, ...kitchenManagers, UserRole.AUDITOR]), getUsageEntries);
 
 // =====================================================
 // WASTAGE ROUTES
 // =====================================================
 
 router.post('/wastage', authorize(kitchenStaff), recordWastage);
-router.get('/wastage', authorize([...kitchenStaff, ...kitchenManagers]), getWastageRecords);
+router.get('/wastage', authorize([...kitchenStaff, ...kitchenManagers, UserRole.AUDITOR]), getWastageRecords);
 router.put('/wastage/:id', authorize(kitchenStaff), updateWastage);
 router.delete('/wastage/:id', authorize(kitchenManagers), deleteWastage);
 

@@ -7,18 +7,17 @@ import {
     ChevronRight, Calendar as CalendarIcon,
     ShieldCheck, DollarSign, PieChart, TrendingUp,
     FileCheck, Activity, Search, Filter,
-    CreditCard, ShoppingCart, FileText, Scale, Trash2
+    CreditCard, ShoppingCart, FileText, Scale, Trash2,
+    Building2, ArrowRight
 } from 'lucide-react';
 import { auditAPI, storeAPI, restaurantAPI } from '@/lib/api';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { BranchSelector, useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 export default function AuditorDashboard() {
-    const { activeBranchId, activeBranch } = useBranch();
     const [isLoading, setIsLoading] = useState(true);
     const [stats, setStats] = useState({
         totalAudits: 0,
@@ -29,21 +28,15 @@ export default function AuditorDashboard() {
     });
 
     const [recentLogs, setRecentLogs] = useState<any[]>([]);
-    const [dateRange, setDateRange] = useState({
-        startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        endDate: new Date().toISOString().split('T')[0]
-    });
     const router = useRouter();
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const effectiveBranchId = activeBranchId === 0 ? undefined : (activeBranchId || undefined);
-
             const [logsRes, requestsRes, ordersRes] = await Promise.all([
-                auditAPI.getAuditLogs({ branchId: effectiveBranchId }),
-                storeAPI.getBranchRequests('PENDING_AUDIT', effectiveBranchId),
-                restaurantAPI.getOrders({ status: 'cancelled', branchId: effectiveBranchId })
+                auditAPI.getAuditLogs({}),
+                storeAPI.getBranchRequests('PENDING_AUDIT'),
+                restaurantAPI.getOrders({ status: 'cancelled' })
             ]);
 
             if (logsRes.success) {
@@ -71,230 +64,170 @@ export default function AuditorDashboard() {
         } finally {
             setIsLoading(false);
         }
-    }, [activeBranchId, dateRange]);
+    }, []);
 
     useEffect(() => {
         fetchData();
     }, [fetchData]);
 
-    const mvpModules = [
+    const auditModules = [
         {
-            title: 'Approve Stock Requests',
-            desc: 'Review and approve/reject stock replenishment requests from branches.',
-            icon: CheckCircle,
-            href: '/dashboard/auditor/approvals',
-            color: 'bg-stone-900 text-white border-stone-800',
-            stats: `${stats.pendingReviews} pending requests`
-        },
-        {
-            title: 'Confirm Sales',
-            desc: 'Verify daily transactions and reconcile POS records with physical collections.',
-            icon: CreditCard,
-            href: '/dashboard/auditor/sales',
-            color: 'bg-blue-50 text-blue-600 border-blue-100',
-            stats: `${stats.voidedOrders} voided orders`
-        },
-        {
-            title: 'Confirm Stock Levels',
-            desc: 'Perform spot checks and verify physical stock movements against theoretical use.',
+            title: 'Inventory Flow',
+            desc: 'Physical vs theoretical audit',
             icon: Package,
             href: '/dashboard/auditor/stock',
-            color: 'bg-amber-50 text-amber-600 border-amber-100',
-            stats: 'Inventory variance audit'
+            badge: 'Critical'
         },
         {
-            title: 'Confirm Branch Orders',
-            desc: 'Match orders from branches against actual sales and consumption data.',
+            title: 'Revenue Audit',
+            desc: 'Transaction verification',
+            icon: DollarSign,
+            href: '/dashboard/auditor/sales',
+            badge: 'Live'
+        },
+        {
+            title: 'Order Tracking',
+            desc: 'Branch requisition audit',
             icon: ShoppingCart,
             href: '/dashboard/auditor/orders',
-            color: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-            stats: 'Order reconciliation'
         },
         {
-            title: 'View Items Sold',
-            desc: 'Detailed analytics of item performance and sales across all branches.',
-            icon: FileText,
+            title: 'Item Analytics',
+            desc: 'Volume & performance',
+            icon: BarChart3,
             href: '/dashboard/auditor/sold-items',
-            color: 'bg-purple-50 text-purple-600 border-purple-100',
-            stats: 'Sales performance view'
         },
         {
-            title: 'Kitchen Requisitions',
-            desc: 'Monitor and review kitchen-to-store requisition activity.',
-            icon: ShoppingBag,
-            href: '/dashboard/auditor/kitchen-requisitions',
-            color: 'bg-orange-50 text-orange-600 border-orange-100',
-            stats: 'Requisition oversight'
-        },
-        {
-            title: 'Compare items sold against requisitions',
-            desc: 'Compare items sold against requisitions to detect leakage or stock errors.',
+            title: 'Leakage Control',
+            desc: 'Wastage & usage oversight',
             icon: Scale,
             href: '/dashboard/auditor/audit-reports',
-            color: 'bg-rose-50 text-rose-600 border-rose-100',
-            stats: 'Reconciliation report'
         },
         {
-            title: 'Kitchen Usage Oversight',
-            desc: 'Analyze manual usage entries and staff meal consumption.',
-            icon: ClipboardList,
-            href: '/dashboard/auditor/kitchen-usage',
-            color: 'bg-indigo-50 text-indigo-600 border-indigo-100',
-            stats: 'Usage analysis'
-        },
-        {
-            title: 'Kitchen Wastage Oversight',
-            desc: 'Monitor kitchen spoilage and wastage reports across branches.',
-            icon: Trash2,
-            href: '/dashboard/auditor/kitchen-wastage',
-            color: 'bg-red-50 text-red-600 border-red-100',
-            stats: 'Wastage analysis'
+            title: 'Kitchen Flow',
+            desc: 'Back-of-house requests',
+            icon: ShoppingBag,
+            href: '/dashboard/auditor/kitchen-requisitions',
         }
     ];
 
     return (
         <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
             <DashboardLayout>
-                <div className="space-y-6">
+                <div className="space-y-8 pb-12">
                     {/* Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                         <div>
-                            <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Auditor Dashboard</h1>
-                            <p className="text-stone-500 mt-0.5">Internal audit and verification oversight</p>
+                            <h1 className="text-3xl font-black text-stone-900 tracking-tight">Audit Control</h1>
+                            <p className="text-stone-500 text-sm font-medium italic">High-integrity verification and system compliance oversight</p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <BranchSelector />
                             <button
                                 onClick={fetchData}
                                 disabled={isLoading}
-                                className="btn-secondary"
+                                className="p-2.5 bg-stone-900 text-white rounded-xl hover:bg-stone-800 shadow-sm transition-colors"
                             >
                                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                                <span>Refresh</span>
                             </button>
                         </div>
                     </div>
 
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="stat-card">
-                            <div className="stat-icon"><CheckCircle className="h-5 w-5" /></div>
-                            <p className="stat-value">{stats.complianceScore}%</p>
-                            <p className="stat-label mt-1">Compliance Score</p>
+                    {/* Elite Stats Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="card-elevated p-6 border border-stone-100 bg-white">
+                            <div className="flex items-center gap-3 mb-2">
+                                <ShieldCheck className="h-4 w-4 text-stone-400" />
+                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Compliance</p>
+                            </div>
+                            <h3 className="text-3xl font-black text-stone-900">{stats.complianceScore}%</h3>
                         </div>
-                        <div className="stat-card">
-                            <div className="stat-icon"><AlertTriangle className="h-5 w-5" /></div>
-                            <p className="stat-value">{stats.highRiskFindings}</p>
-                            <p className="stat-label mt-1">High Risk Findings</p>
+                        <div className="card-elevated p-6 border border-stone-100 bg-white">
+                            <div className="flex items-center gap-3 mb-2">
+                                <AlertTriangle className="h-4 w-4 text-rose-500" />
+                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">High Risk</p>
+                            </div>
+                            <h3 className={`text-3xl font-black ${stats.highRiskFindings > 0 ? 'text-rose-600' : 'text-stone-900'}`}>
+                                {stats.highRiskFindings}
+                            </h3>
                         </div>
-                        <div className="stat-card">
-                            <div className="stat-icon"><Clock className="h-5 w-5" /></div>
-                            <p className="stat-value">{stats.pendingReviews}</p>
-                            <p className="stat-label mt-1">Pending Stock Approvals</p>
+                        <div className="card-elevated p-6 border border-stone-100 bg-white">
+                            <div className="flex items-center gap-3 mb-2">
+                                <Clock className="h-4 w-4 text-amber-500" />
+                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Pending Actions</p>
+                            </div>
+                            <h3 className="text-3xl font-black text-stone-900">{stats.pendingReviews}</h3>
                         </div>
-                        <div className="stat-card">
-                            <div className="stat-icon"><Activity className="h-5 w-5" /></div>
-                            <p className="stat-value">{stats.voidedOrders}</p>
-                            <p className="stat-label mt-1">Voided Transactions</p>
+                        <div className="card-elevated p-6 border border-stone-100 bg-white">
+                            <div className="flex items-center gap-3 mb-2">
+                                <Activity className="h-4 w-4 text-blue-500" />
+                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Voids & Vetoes</p>
+                            </div>
+                            <h3 className="text-3xl font-black text-stone-900">{stats.voidedOrders}</h3>
                         </div>
                     </div>
 
-                    {/* Quick Access / Modules */}
-                    <div className="card-elevated p-6">
-                        <div className="section-header">
-                            <div>
-                                <h2 className="section-title">Core Modules</h2>
-                                <p className="section-subtitle">Primary verification and approval tools</p>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                            {mvpModules.map((module, i) => (
-                                <Link key={i} href={module.href}>
-                                    <div className="action-card group h-full">
-                                        <div className="action-card-icon">
-                                            <module.icon className="h-5 w-5" />
+                    <div className="grid lg:grid-cols-3 gap-8">
+                        {/* Audit Modules Grid */}
+                        <div className="lg:col-span-2 space-y-6">
+                            <h3 className="text-[14px] font-black text-stone-900 uppercase tracking-tight">Audit Modules</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {auditModules.map((module, i) => (
+                                    <Link key={i} href={module.href}>
+                                        <div className="group p-5 bg-white border border-stone-100 rounded-2xl hover:border-stone-900 hover:shadow-xl hover:shadow-stone-900/5 transition-all flex items-center justify-between cursor-pointer">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-12 rounded-xl bg-stone-50 flex items-center justify-center text-stone-600 group-hover:bg-stone-900 group-hover:text-white transition-colors">
+                                                    <module.icon className="h-5 w-5" />
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <h4 className="text-[15px] font-black text-stone-900 tracking-tight">{module.title}</h4>
+                                                        {module.badge && (
+                                                            <span className="text-[8px] font-black px-1.5 py-0.5 bg-stone-100 text-stone-500 rounded uppercase tracking-widest">
+                                                                {module.badge}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-[12px] font-medium text-stone-400">{module.desc}</p>
+                                                </div>
+                                            </div>
+                                            <ChevronRight className="h-4 w-4 text-stone-200 group-hover:text-stone-900 group-hover:translate-x-1 transition-all" />
                                         </div>
-                                        <p className="action-card-label">{module.title}</p>
-                                        <p className="text-[11px] text-stone-400 mt-1 leading-tight">{module.stats}</p>
-                                    </div>
+                                    </Link>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Recent Activity / Exception Feed */}
+                        <div className="space-y-6 text-right">
+                            <h3 className="text-[14px] font-black text-stone-900 uppercase tracking-tight">Recent Exceptions</h3>
+                            <div className="space-y-4">
+                                {recentLogs.length > 0 ? (
+                                    recentLogs.map((log: any, i: number) => (
+                                        <div key={i} className="flex gap-4 items-start group">
+                                            <div className="flex-1 text-right">
+                                                <p className="text-[13px] font-black text-stone-900 leading-tight group-hover:text-stone-600 transition-colors">
+                                                    {log.action}
+                                                </p>
+                                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">
+                                                    {log.module} • {new Date(log.performed_at).toLocaleDateString()}
+                                                </p>
+                                            </div>
+                                            <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${log.severity === 'high' ? 'bg-rose-500 shadow-lg shadow-rose-200' :
+                                                log.severity === 'medium' ? 'bg-amber-500 shadow-lg shadow-amber-200' :
+                                                    'bg-stone-200'
+                                                }`} />
+                                        </div>
+                                    ))
+                                ) : (
+                                    <p className="text-[12px] text-stone-400 italic font-medium">No critical findings recorded</p>
+                                )}
+                            </div>
+                            <div className="pt-4 border-t border-stone-100">
+                                <Link href="/dashboard/auditor/audit-reports">
+                                    <button className="text-[11px] font-black text-stone-900 uppercase tracking-widest flex items-center gap-2 ml-auto hover:gap-3 transition-all">
+                                        All Reports <ArrowRight className="h-3 w-3" />
+                                    </button>
                                 </Link>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Recent Exceptions & Audit Tools */}
-                    <div className="grid lg:grid-cols-3 gap-6">
-                        {/* Recent Exceptions Table */}
-                        <div className="lg:col-span-2 card-elevated p-6">
-                            <div className="section-header">
-                                <div>
-                                    <h3 className="section-title">Recent Audit Exceptions</h3>
-                                    <p className="section-subtitle">Flagged activities requiring attention</p>
-                                </div>
-                                <Link href="/dashboard/auditor/audit-reports" className="text-[13px] font-medium text-stone-400 hover:text-stone-800 transition-colors">View All</Link>
-                            </div>
-
-                            <div className="overflow-x-auto -mx-6">
-                                <table className="w-full text-left">
-                                    <thead className="bg-stone-50 border-y border-stone-100">
-                                        <tr>
-                                            <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-stone-400">Activity / Finding</th>
-                                            <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-stone-400">Dept</th>
-                                            <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-stone-400">Severity</th>
-                                            <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-stone-400"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-stone-50">
-                                        {recentLogs.length > 0 ? (
-                                            recentLogs.map((log: any, i: number) => (
-                                                <tr key={i} className="hover:bg-stone-50/50 transition-colors group cursor-pointer">
-                                                    <td className="px-6 py-4">
-                                                        <p className="text-[13px] font-medium text-stone-900">{log.action}</p>
-                                                        <p className="text-[11px] text-stone-400 mt-0.5">{new Date(log.performed_at).toLocaleDateString()}</p>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="text-[11px] font-semibold text-stone-500 uppercase">{log.module}</span>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className={`w-2 h-2 rounded-full ${log.severity === 'high' ? 'bg-rose-500' : log.severity === 'medium' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                                                    </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <ChevronRight className="h-4 w-4 text-stone-300 group-hover:text-stone-900 transition-colors inline" />
-                                                    </td>
-                                                </tr>
-                                            ))
-                                        ) : (
-                                            <tr>
-                                                <td colSpan={4} className="px-6 py-12 text-center text-stone-400 text-[13px] italic">
-                                                    No recent findings recorded
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        {/* Audit Health Summary */}
-                        {/* System Status */}
-                        <div className="card-elevated p-6">
-                            <h3 className="section-title mb-4">System Status</h3>
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between p-3 bg-stone-50 rounded-lg">
-                                    <span className="text-[13px] text-stone-600">Active Audits</span>
-                                    <span className="text-[14px] font-semibold text-stone-900">{stats.totalAudits}</span>
-                                </div>
-                                <div className="flex items-center justify-between p-3 bg-stone-50 rounded-lg">
-                                    <span className="text-[13px] text-stone-600">Pending Reviews</span>
-                                    <span className="text-[14px] font-semibold text-stone-900">{stats.pendingReviews}</span>
-                                </div>
-                                <div className="flex items-center justify-between p-3 bg-stone-50 rounded-lg">
-                                    <span className="text-[13px] text-stone-600">Audit System</span>
-                                    <span className="flex items-center gap-1.5 text-[13px] font-semibold text-stone-700">
-                                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                                        Operational
-                                    </span>
-                                </div>
                             </div>
                         </div>
                     </div>

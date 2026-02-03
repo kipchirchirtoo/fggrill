@@ -323,7 +323,17 @@ class BrandedPDFGenerator:
             'audit_performance': 'reconciliation_audit',
             'compliance_report': 'compliance',
             'attendance_report': 'employee_attendance',
-            'dispatch_note_report': 'dispatch_note'
+            'dispatch_note_report': 'dispatch_note',
+            # Auditor specific aliases
+            'exception_summary': 'exception_logs',
+            'compliance_audit': 'compliance',
+            'void_analytics': 'exception_logs',
+            'revenue_reconciliation': 'financial_summary',
+            'leakage_report': 'reconciliation_audit',
+            'expenditure_audit': 'expense',
+            'variance_report': 'financial_variance',
+            'consumption_audit': 'inventory_discrepancy',
+            'grn_audit': 'procurement_analysis'
         }
         
         report_type = aliases.get(report_type, report_type)
@@ -2810,25 +2820,77 @@ class BrandedPDFGenerator:
     def _generate_exception_logs_report(self, data: Dict, filters: Dict) -> str:
         """Generate Exception Logs Report PDF"""
         elements = []
-        elements.extend(self._create_header("AUDIT EXCEPTION LOGS", "Confidential Audit Intelligence"))
         
-        elements.append(Paragraph(f"Total High-Risk Activity Value: {self._format_currency(data.get('total_exception_value', 0))}", self.styles['Heading2']))
-        elements.append(Spacer(1, 0.2*inch))
+        start_date = filters.get('start_date', 'N/A')
+        end_date = filters.get('end_date', 'N/A')
+        date_range = f"{start_date} to {end_date}"
+        branch_name = filters.get('branch_name', 'System-Wide')
+        
+        elements.extend(self._create_header("AUDIT EXCEPTION & RISK REPORT", date_range, branch_name))
+        
+        # Summary Section
+        summary_data = [
+            ['RISK SUMMARY', '', '', ''],
+            ['Total Exception Value:', self._format_currency(data.get('total_exception_value', 0)),
+             'Voided Orders:', str(len(data.get('voided_orders', [])))],
+            ['Cancelled Bookings:', str(len(data.get('cancelled_bookings', []))),
+             'Risk Level:', 'HIGH' if data.get('total_exception_value', 0) > 10000 else 'MEDIUM'],
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
+        summary_table.setStyle(TableStyle([
+            ('SPAN', (0, 0), (-1, 0)),
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GRAY),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 1), (2, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 0.3*inch))
         
         # Voided Orders
-        elements.append(Paragraph("Voided & Cancelled Orders", self.styles['SectionHeader']))
-        void_data = [[Paragraph("<b>ID</b>", self.styles['TableHeader']), Paragraph("<b>Reason</b>", self.styles['TableHeader']), Paragraph("<b>Amount</b>", self.styles['TableHeader'])]]
+        elements.append(Paragraph("<b>VOIDED & CANCELLED ORDERS</b>", self.styles['SectionHeader']))
+        void_headers = ['ID', 'Type', 'Reason', 'Amount', 'Timestamp']
+        void_data = [void_headers]
         for v in data.get('voided_orders', []):
-            void_data.append([v.get('id'), v.get('reason'), self._format_currency(v.get('amount', 0))])
-        elements.append(Table(void_data, colWidths=[1.5*inch, 3*inch, 2*inch], style=self._get_table_style()))
+            void_data.append([
+                str(v.get('id', '')),
+                v.get('type', ''),
+                Paragraph(v.get('reason', 'N/A'), self.styles['TableText']),
+                self._format_currency(v.get('amount', 0)),
+                v.get('timestamp', '')[:16]
+            ])
+        
+        if len(void_data) == 1:
+            void_data.append(['No voids found', '-', '-', '-', '-'])
+            
+        void_table = Table(void_data, colWidths=[1*inch, 1*inch, 2.7*inch, 1.3*inch, 1.5*inch])
+        void_table.setStyle(self._get_table_style())
+        elements.append(void_table)
         elements.append(Spacer(1, 0.3*inch))
         
         # Cancelled Bookings
-        elements.append(Paragraph("Cancelled Bookings", self.styles['SectionHeader']))
-        cancel_data = [[Paragraph("<b>ID</b>", self.styles['TableHeader']), Paragraph("<b>Guest</b>", self.styles['TableHeader']), Paragraph("<b>Amount</b>", self.styles['TableHeader'])]]
+        elements.append(Paragraph("<b>CANCELLED BOOKINGS</b>", self.styles['SectionHeader']))
+        cancel_headers = ['ID', 'Guest Name', 'Amount', 'Cancellation Date']
+        cancel_data = [cancel_headers]
         for c in data.get('cancelled_bookings', []):
-            cancel_data.append([c.get('id'), c.get('guest'), self._format_currency(c.get('amount', 0))])
-        elements.append(Table(cancel_data, colWidths=[1.5*inch, 3.5*inch, 1.5*inch], style=self._get_table_style()))
+            cancel_data.append([
+                str(c.get('id', '')),
+                c.get('guest', ''),
+                self._format_currency(c.get('amount', 0)),
+                c.get('date', '')[:10]
+            ])
+            
+        if len(cancel_data) == 1:
+            cancel_data.append(['No cancellations', '-', '-', '-'])
+            
+        cancel_table = Table(cancel_data, colWidths=[1.2*inch, 2.5*inch, 1.8*inch, 2*inch])
+        cancel_table.setStyle(self._get_table_style())
+        elements.append(cancel_table)
         
         return self._create_pdf(elements)
 

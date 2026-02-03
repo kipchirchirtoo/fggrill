@@ -93,6 +93,34 @@ class DatabaseFetcher:
         logger.info(f"Parsing dates - start: {start_date}, end: {end_date}, branch_id: {filters.get('branch_id')}")
         return start_date, end_date
 
+    def _parse_branch_ids(self, filters: Dict) -> List[int]:
+        """Extract branch IDs from filters"""
+        branch_ids = filters.get('branch_ids', [])
+        if not branch_ids and filters.get('branch_id'):
+            try:
+                branch_ids = [int(filters.get('branch_id'))]
+            except (ValueError, TypeError):
+                pass
+        
+        # If string comma separated, split it
+        if isinstance(branch_ids, str):
+            try:
+                branch_ids = [int(b.strip()) for b in branch_ids.split(',') if b.strip()]
+            except ValueError:
+                branch_ids = []
+                
+        return branch_ids
+
+    def _apply_branch_filter(self, query, filters: Dict, column: str = 'branch_id'):
+        """Apply single or multiple branch filter to a query"""
+        branch_ids = self._parse_branch_ids(filters)
+        if branch_ids:
+            if len(branch_ids) == 1:
+                return query.eq(column, branch_ids[0])
+            else:
+                return query.in_(column, branch_ids)
+        return query
+
     def _fetch_daily_sales(self, filters: Dict) -> Dict[str, Any]:
         """Fetch daily sales data from all revenue sources"""
         start_date, end_date = self._parse_dates(filters)
@@ -118,8 +146,7 @@ class DatabaseFetcher:
             query = query.gte('created_at', f'{start_date}T00:00:00')
             query = query.lte('created_at', f'{end_date}T23:59:59')
             query = query.in_('payment_status', ['paid', 'partial'])
-            if branch_id:
-                query = query.eq('branch_id', int(branch_id))
+            query = self._apply_branch_filter(query, filters)
             
             restaurant_orders = query.execute()
             
@@ -128,8 +155,7 @@ class DatabaseFetcher:
             bar_query = bar_query.gte('created_at', f'{start_date}T00:00:00')
             bar_query = bar_query.lte('created_at', f'{end_date}T23:59:59')
             bar_query = bar_query.in_('payment_status', ['paid', 'partial'])
-            if branch_id:
-                bar_query = bar_query.eq('branch_id', int(branch_id))
+            bar_query = self._apply_branch_filter(bar_query, filters)
             
             bar_orders = bar_query.execute()
             
@@ -138,8 +164,7 @@ class DatabaseFetcher:
             booking_query = booking_query.gte('created_at', f'{start_date}T00:00:00')
             booking_query = booking_query.lte('created_at', f'{end_date}T23:59:59')
             booking_query = booking_query.in_('payment_status', ['paid', 'partial'])
-            if branch_id:
-                booking_query = booking_query.eq('branch_id', int(branch_id))
+            booking_query = self._apply_branch_filter(booking_query, filters)
             
             bookings = booking_query.execute()
             
@@ -229,8 +254,7 @@ class DatabaseFetcher:
         try:
             # Fetch all rooms
             rooms_query = self.client.table('rooms').select('*')
-            if branch_id:
-                rooms_query = rooms_query.eq('branch_id', branch_id)
+            rooms_query = self._apply_branch_filter(rooms_query, filters)
             rooms = rooms_query.execute()
             
             # Fetch active bookings
@@ -238,6 +262,7 @@ class DatabaseFetcher:
             bookings_query = bookings_query.lte('check_in', end_date)
             bookings_query = bookings_query.gte('check_out', start_date)
             bookings_query = bookings_query.in_('status', ['confirmed', 'checked_in'])
+            bookings_query = self._apply_branch_filter(bookings_query, filters)
             
             bookings = bookings_query.execute()
             
@@ -320,8 +345,7 @@ class DatabaseFetcher:
             bookings_query = self.client.table('bookings').select('total_amount')\
                 .gte('created_at', f'{start_date}T00:00:00')\
                 .lte('created_at', f'{end_date}T23:59:59')
-            if branch_id:
-                bookings_query = bookings_query.eq('branch_id', branch_id)
+            bookings_query = self._apply_branch_filter(bookings_query, filters)
             bookings = bookings_query.execute()
             data['room_revenue'] = sum(b.get('total_amount', 0) or 0 for b in (bookings.data or []))
             
@@ -329,8 +353,7 @@ class DatabaseFetcher:
             restaurant_query = self.client.table('restaurant_orders').select('total_amount')\
                 .gte('created_at', f'{start_date}T00:00:00')\
                 .lte('created_at', f'{end_date}T23:59:59')
-            if branch_id:
-                restaurant_query = restaurant_query.eq('branch_id', branch_id)
+            restaurant_query = self._apply_branch_filter(restaurant_query, filters)
             restaurant = restaurant_query.execute()
             data['restaurant_revenue'] = sum(o.get('total_amount', 0) or 0 for o in (restaurant.data or []))
             
@@ -338,8 +361,7 @@ class DatabaseFetcher:
             bar_query = self.client.table('bar_orders').select('total_amount')\
                 .gte('created_at', f'{start_date}T00:00:00')\
                 .lte('created_at', f'{end_date}T23:59:59')
-            if branch_id:
-                bar_query = bar_query.eq('branch_id', branch_id)
+            bar_query = self._apply_branch_filter(bar_query, filters)
             bar = bar_query.execute()
             data['bar_revenue'] = sum(o.get('total_amount', 0) or 0 for o in (bar.data or []))
             
@@ -355,8 +377,7 @@ class DatabaseFetcher:
             expenses_query = self.client.table('expenses').select('*')\
                 .gte('date', start_date)\
                 .lte('date', end_date)
-            if branch_id:
-                expenses_query = expenses_query.eq('branch_id', branch_id)
+            expenses_query = self._apply_branch_filter(expenses_query, filters)
             expenses = expenses_query.execute()
             
             for exp in (expenses.data or []):
@@ -1267,19 +1288,19 @@ class DatabaseFetcher:
             # Restaurant
             rest_q = self.client.table('restaurant_orders').select('total_amount')\
                 .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
-            if branch_id: rest_q = rest_q.eq('branch_id', branch_id)
+            rest_q = self._apply_branch_filter(rest_q, filters)
             rest_rev = sum(o.get('total_amount', 0) or 0 for o in (rest_q.execute().data or []))
             
             # Bar
             bar_q = self.client.table('bar_orders').select('total_amount')\
                 .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
-            if branch_id: bar_q = bar_q.eq('branch_id', branch_id)
+            bar_q = self._apply_branch_filter(bar_q, filters)
             bar_rev = sum(o.get('total_amount', 0) or 0 for o in (bar_q.execute().data or []))
             
             # Bookings
             book_q = self.client.table('bookings').select('total_amount')\
                 .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
-            if branch_id: book_q = book_q.eq('branch_id', branch_id)
+            book_q = self._apply_branch_filter(book_q, filters)
             book_rev = sum(o.get('total_amount', 0) or 0 for o in (book_q.execute().data or []))
             
             data['expected_revenue'] = rest_rev + bar_rev + book_rev
@@ -1320,8 +1341,7 @@ class DatabaseFetcher:
         try:
             # Fetch consumption variances (from the new tables)
             query = self.client.table('audit_config_consumption').select('*, item:inventory_items(name, unit_cost)')
-            if branch_id:
-                query = query.eq('branch_id', branch_id)
+            query = self._apply_branch_filter(query, filters)
             
             variances = query.execute()
             
@@ -1420,7 +1440,7 @@ class DatabaseFetcher:
             rest_q = self.client.table('restaurant_orders').select('*')\
                 .in_('status', ['voided', 'cancelled'])\
                 .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
-            if branch_id: rest_q = rest_q.eq('branch_id', branch_id)
+            rest_q = self._apply_branch_filter(rest_q, filters)
             
             voids = rest_q.execute()
             for v in (voids.data or []):
@@ -1438,7 +1458,7 @@ class DatabaseFetcher:
             book_q = self.client.table('bookings').select('*')\
                 .eq('status', 'cancelled')\
                 .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
-            if branch_id: book_q = book_q.eq('branch_id', branch_id)
+            book_q = self._apply_branch_filter(book_q, filters)
             
             cancels = book_q.execute()
             for c in (cancels.data or []):
@@ -1480,7 +1500,7 @@ class DatabaseFetcher:
                 .select('*')\
                 .in_('movement_type', ['dispatch', 'transfer'])\
                 .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
-            if branch_id: dispatch_q = dispatch_q.eq('to_branch_id', branch_id)
+            dispatch_q = self._apply_branch_filter(dispatch_q, filters, 'to_branch_id')
             
             dispatches = dispatch_q.execute()
             
@@ -1498,7 +1518,7 @@ class DatabaseFetcher:
             # Restaurant
             rest_q = self.client.table('restaurant_orders').select('id, items:restaurant_order_items(quantity, menu_item:restaurant_menu_items(name))')\
                 .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
-            if branch_id: rest_q = rest_q.eq('branch_id', branch_id)
+            rest_q = self._apply_branch_filter(rest_q, filters)
             
             rest_sales = rest_q.execute()
             for order in (rest_sales.data or []):
@@ -1553,8 +1573,17 @@ class DatabaseFetcher:
             query = self.client.table('restaurant_order_items').select('*, order:restaurant_orders(branch_id, branch_name), menu_item:restaurant_menu_items(name, category_id)')\
                 .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
             
-            if branch_id:
-                query = query.filter('order.branch_id', 'eq', branch_id)
+            # Note: We use filter with dot notation for joins in PostgREST/Supabase
+            branch_ids = self._parse_branch_ids(filters)
+            if branch_ids:
+                if len(branch_ids) == 1:
+                    query = query.filter('order.branch_id', 'eq', branch_ids[0])
+                else:
+                    # Supabase python client doesn't support .in_ on joined columns easily with the higher level API
+                    # but we can try to use a filter string if needed, or stick to simple filter for now.
+                    # Actually, .filter('column', 'in', '(val1,val2)') works in PostgREST
+                    branch_ids_str = f"({','.join(map(str, branch_ids))})"
+                    query = query.filter('order.branch_id', 'in', branch_ids_str)
                 
             result = query.execute()
             

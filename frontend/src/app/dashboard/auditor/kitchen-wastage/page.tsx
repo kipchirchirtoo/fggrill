@@ -1,28 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { api } from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { useState, useEffect, useCallback } from 'react';
+import { api, auditorReportsAPI } from '@/lib/api';
+import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { ProtectedRoute } from '@/components/auth/protected-route';
+import { UserRole } from '@/lib/auth-context';
+import { BranchSelector, useBranch } from '@/lib/branch-context';
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import { Search, Filter, Loader2, Trash2, RefreshCw } from 'lucide-react';
+    Search, Filter, Loader2, Trash2,
+    RefreshCw, AlertTriangle, FileDown, ShieldAlert,
+    Clock, Info
+} from 'lucide-react';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 interface WastageEntry {
     id: string;
@@ -41,40 +31,61 @@ interface WastageEntry {
 }
 
 export default function AuditorKitchenWastagePage() {
+    const { activeBranchId } = useBranch();
     const [entries, setEntries] = useState<WastageEntry[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isExporting, setIsExporting] = useState(false);
     const [reasonFilter, setReasonFilter] = useState<string>('all');
     const [searchTerm, setSearchTerm] = useState('');
 
-    useEffect(() => {
-        fetchWastage();
-    }, [reasonFilter]);
-
-    const fetchWastage = async () => {
+    const fetchWastage = useCallback(async () => {
         try {
-            setLoading(true);
-            const response = await api.kitchen.getWastageRecords();
+            setIsLoading(true);
+            const response = await api.kitchen.getWastageRecords({
+                branch_id: activeBranchId === 0 ? undefined : activeBranchId
+            } as any); // Type cast as API might need branch_id
             if (response.success) {
                 setEntries(response.data || []);
             }
         } catch (error) {
             console.error('Failed to fetch wastage:', error);
+            toast.error('Failed to load wastage data');
         } finally {
-            setLoading(false);
+            setIsLoading(false);
+        }
+    }, [activeBranchId]);
+
+    useEffect(() => {
+        fetchWastage();
+    }, [fetchWastage]);
+
+    const handleExport = async () => {
+        setIsExporting(true);
+        try {
+            await auditorReportsAPI.exportBrandedPdf('kitchen_wastage', {
+                branch_id: activeBranchId === 0 ? undefined : (activeBranchId ?? undefined),
+                reason: reasonFilter !== 'all' ? reasonFilter : undefined
+            });
+            toast.success("Wastage report exported successfully");
+        } catch (e) {
+            console.error(e);
+            toast.error("Failed to export report");
+        } finally {
+            setIsExporting(false);
         }
     };
 
     const getReasonBadge = (reason: string) => {
         const styles: Record<string, string> = {
-            SPOILAGE: 'bg-red-100 text-red-700',
-            OVERCOOKING: 'bg-orange-100 text-orange-700',
-            CONTAMINATION: 'bg-purple-100 text-purple-700',
-            EXPIRED: 'bg-amber-100 text-amber-700',
-            DROPPED: 'bg-blue-100 text-blue-700',
-            OTHER: 'bg-stone-100 text-stone-700'
+            SPOILAGE: 'text-rose-600 bg-rose-50',
+            OVERCOOKING: 'text-orange-600 bg-orange-50',
+            CONTAMINATION: 'text-purple-600 bg-purple-50',
+            EXPIRED: 'text-amber-600 bg-amber-50',
+            DROPPED: 'text-blue-600 bg-blue-50',
+            OTHER: 'text-stone-600 bg-stone-50'
         };
-        const style = styles[reason] || 'bg-stone-100 text-stone-700';
-        return <Badge variant="outline" className={`${style} border-transparent uppercase text-[10px]`}>{reason.replace('_', ' ')}</Badge>;
+        const style = styles[reason] || 'text-stone-600 bg-stone-50';
+        return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter ${style}`}>{reason.replace('_', ' ')}</span>;
     };
 
     const filteredEntries = entries.filter(entry =>
@@ -85,118 +96,164 @@ export default function AuditorKitchenWastagePage() {
         reasonFilter === 'all' || entry.reason === reasonFilter
     );
 
+    const totalValue = filteredEntries.reduce((sum, e) => sum + (e.estimated_value || 0), 0);
+
     return (
-        <div className="space-y-6 p-6">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-stone-900 font-display">Kitchen Wastage Oversight</h1>
-                    <p className="text-stone-500 mt-2 font-medium">Monitor kitchen wastage and spoilage across all branches.</p>
-                </div>
-                <Button
-                    variant="outline"
-                    onClick={fetchWastage}
-                    disabled={loading}
-                    className="border-stone-200 hover:bg-stone-50 text-stone-700 font-semibold shadow-sm"
-                >
-                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                    Refresh
-                </Button>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-4">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-                    <Input
-                        placeholder="Search by Item, SKU or Branch..."
-                        className="pl-10 border-stone-200 focus:ring-stone-500/10 focus:border-stone-500 rounded-xl"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
-                <Select value={reasonFilter} onValueChange={setReasonFilter}>
-                    <SelectTrigger className="w-[180px] border-stone-200 rounded-xl font-medium text-stone-700">
-                        <Filter className="h-4 w-4 mr-2 text-stone-400" />
-                        <SelectValue placeholder="Filter by reason" />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-xl border-stone-200">
-                        <SelectItem value="all">All Reasons</SelectItem>
-                        <SelectItem value="SPOILAGE">Spoilage</SelectItem>
-                        <SelectItem value="OVERCOOKING">Overcooking</SelectItem>
-                        <SelectItem value="CONTAMINATION">Contamination</SelectItem>
-                        <SelectItem value="EXPIRED">Expired</SelectItem>
-                        <SelectItem value="DROPPED">Dropped</SelectItem>
-                        <SelectItem value="OTHER">Other</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-
-            <Card className="border-stone-200/60 shadow-md shadow-stone-200/30 rounded-2xl overflow-hidden">
-                <CardHeader className="bg-stone-50/50 border-b border-stone-100 pb-4">
-                    <div className="flex items-center justify-between">
+        <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN]}>
+            <DashboardLayout>
+                <div className="space-y-8 pb-10">
+                    {/* Header */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
-                            <CardTitle className="text-[17px] font-bold text-stone-900 font-display">Wastage Records</CardTitle>
-                            <CardDescription className="text-stone-500 font-medium">
-                                {filteredEntries.length} records found across your branches
-                            </CardDescription>
+                            <div className="flex items-center gap-2 mb-1">
+                                <Trash2 className="h-4 w-4 text-stone-400" />
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Loss Prevention</span>
+                            </div>
+                            <h1 className="text-2xl font-black text-stone-900 tracking-tight leading-none">Kitchen Wastage Oversight</h1>
+                            <p className="text-stone-500 text-sm mt-2 font-medium">Monitor and analyze kitchen spoilage and wastage loss</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-xl px-4 py-2 shadow-sm">
+                                <Search className="h-4 w-4 text-stone-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search records..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="text-sm font-bold text-stone-700 outline-none w-40"
+                                />
+                            </div>
+                            <select
+                                value={reasonFilter}
+                                onChange={(e) => setReasonFilter(e.target.value)}
+                                className="bg-white border border-stone-200 rounded-xl px-4 py-2 text-sm font-bold text-stone-700 shadow-sm outline-none"
+                            >
+                                <option value="all">All Reasons</option>
+                                <option value="SPOILAGE">Spoilage</option>
+                                <option value="OVERCOOKING">Overcooking</option>
+                                <option value="CONTAMINATION">Contamination</option>
+                                <option value="EXPIRED">Expired</option>
+                                <option value="DROPPED">Dropped</option>
+                                <option value="OTHER">Other</option>
+                            </select>
+                            <BranchSelector />
+                            <button onClick={handleExport} disabled={isExporting} className="p-2.5 bg-white border border-stone-200 rounded-xl hover:bg-stone-50 transition-colors shadow-sm">
+                                <FileDown className={`h-4 w-4 text-stone-600 ${isExporting ? 'animate-bounce' : ''}`} />
+                            </button>
+                            <button onClick={fetchWastage} className="p-2.5 bg-stone-900 rounded-xl hover:bg-stone-800 transition-colors shadow-sm">
+                                <RefreshCw className={`h-4 w-4 text-white ${isLoading ? 'animate-spin' : ''}`} />
+                            </button>
                         </div>
                     </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                    {loading ? (
-                        <div className="flex justify-center items-center py-24">
-                            <Loader2 className="h-10 w-10 animate-spin text-stone-300" />
+
+                    {/* Stats Highlights */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="card-elevated p-6 bg-rose-600 text-white shadow-rose-200/50">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-rose-200 mb-1">Total Loss Value</p>
+                            <h3 className="text-2xl font-black italic">KES {totalValue.toLocaleString()}</h3>
+                            <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
+                                <span className="text-[10px] font-bold text-rose-200 uppercase tracking-widest">Wastage Impact</span>
+                                <AlertTriangle className="h-4 w-4 text-rose-200" />
+                            </div>
                         </div>
-                    ) : filteredEntries.length === 0 ? (
-                        <div className="text-center py-24 text-stone-400">
-                            <Trash2 className="h-16 w-16 mx-auto mb-4 opacity-10" />
-                            <p className="text-lg font-medium">No wastage records found.</p>
+                        <div className="card-elevated p-6 bg-white border border-stone-100 flex flex-col justify-between">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-1">Spoilage Incidents</p>
+                                <h3 className="text-2xl font-black text-stone-900">
+                                    {entries.filter(e => e.reason === 'SPOILAGE').length} <span className="text-xs font-bold text-stone-400">cases</span>
+                                </h3>
+                            </div>
+                            <p className="text-[11px] text-stone-400 font-medium">Critical storage or handling issues</p>
                         </div>
-                    ) : (
+                        <div className="card-elevated p-6 bg-white border border-stone-100 flex flex-col justify-between">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-1">Oversight Status</p>
+                                <h3 className="text-2xl font-black text-stone-900 flex items-center gap-2">
+                                    Secure <ShieldAlert className="h-5 w-5 text-emerald-500" />
+                                </h3>
+                            </div>
+                            <p className="text-[11px] text-stone-400 font-medium leading-tight">All waste accurately logged for {format(new Date(), 'MMM yyyy')}</p>
+                        </div>
+                    </div>
+
+                    {/* Main Table */}
+                    <div className="card-elevated p-0 bg-white shadow-xl shadow-stone-200/50 overflow-hidden">
+                        <div className="p-6 border-b border-stone-100 bg-stone-50/30 flex items-center justify-between">
+                            <h3 className="text-[16px] font-black text-stone-900 flex items-center gap-2">
+                                <Info className="h-4 w-4 text-stone-400" />
+                                Spoilage & Wastage Log
+                            </h3>
+                            <p className="text-[11px] text-stone-400 font-bold uppercase tracking-widest">
+                                {activeBranchId === 0 ? 'Consolidated View' : 'Branch Specific Audit'}
+                            </p>
+                        </div>
                         <div className="overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow className="bg-stone-50/50 hover:bg-stone-50/50 border-b border-stone-100">
-                                        <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-stone-500">Date</TableHead>
-                                        <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-stone-500">Branch</TableHead>
-                                        <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-stone-500">Item</TableHead>
-                                        <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-stone-500">Reason</TableHead>
-                                        <TableHead className="py-4 px-6 text-right text-[11px] font-black uppercase tracking-wider text-stone-500">Qty / Value</TableHead>
-                                        <TableHead className="py-4 px-6 text-[11px] font-black uppercase tracking-wider text-stone-500">Shift</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {filteredEntries.map((entry) => (
-                                        <TableRow key={entry.id} className="hover:bg-stone-50/30 transition-colors border-b border-stone-100/50 last:border-0">
-                                            <TableCell className="py-4 px-6 text-stone-600 font-bold text-[13px]">
-                                                {format(new Date(entry.wastage_date || entry.created_at), 'MMM d, yyyy')}
-                                            </TableCell>
-                                            <TableCell className="py-4 px-6">
-                                                <Badge variant="outline" className="bg-stone-100/50 text-stone-700 border-stone-200 font-bold px-2 py-0.5 rounded-md">
-                                                    {entry.branch?.name || `Branch #${entry.branch_id}`}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="py-4 px-6">
-                                                <p className="font-bold text-[14px] text-stone-900 antialiased">{entry.item_name}</p>
-                                                <p className="text-[10px] text-stone-400 font-black font-mono tracking-tighter uppercase">{entry.item_sku}</p>
-                                            </TableCell>
-                                            <TableCell className="py-4 px-6">{getReasonBadge(entry.reason)}</TableCell>
-                                            <TableCell className="py-4 px-6 text-right">
-                                                <p className="font-black text-stone-900 font-variant-numeric text-[15px]">
-                                                    {entry.quantity} <span className="text-[10px] text-stone-400 font-bold uppercase">{entry.unit_of_measure}</span>
-                                                </p>
-                                                <p className="text-[12px] text-red-600 font-bold">KES {entry.estimated_value?.toLocaleString()}</p>
-                                            </TableCell>
-                                            <TableCell className="py-4 px-6 capitalize text-stone-500 font-bold italic text-[12px] opacity-70">
-                                                {entry.shift?.toLowerCase()}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                            <table className="w-full text-left">
+                                <thead className="bg-stone-50 text-[10px] font-black uppercase tracking-widest text-stone-400 border-b border-stone-100">
+                                    <tr>
+                                        <th className="px-6 py-4">Date & Time</th>
+                                        <th className="px-6 py-4">Branch</th>
+                                        <th className="px-6 py-4">Item Details</th>
+                                        <th className="px-6 py-4 text-center">Reason</th>
+                                        <th className="px-6 py-4 text-right">Quantity / Value</th>
+                                        <th className="px-6 py-4 text-center">Shift</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-stone-50">
+                                    {isLoading ? (
+                                        <tr>
+                                            <td colSpan={6} className="px-6 py-20 text-center">
+                                                <Loader2 className="h-8 w-8 animate-spin text-stone-200 mx-auto" />
+                                            </td>
+                                        </tr>
+                                    ) : filteredEntries.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6} className="px-6 py-20 text-center text-stone-300 text-sm italic">
+                                                No wastage records found for this selection
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredEntries.map((entry) => (
+                                            <tr key={entry.id} className="hover:bg-stone-50/50 transition-colors group">
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[13px] font-bold text-stone-900">{format(new Date(entry.wastage_date || entry.created_at), 'MMM dd, yyyy')}</span>
+                                                        <span className="text-[10px] text-stone-400 flex items-center gap-1 font-medium">
+                                                            <Clock className="w-3 h-3" />
+                                                            {format(new Date(entry.created_at), 'HH:mm')}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <span className="text-[11px] font-black text-stone-500 bg-stone-100 px-2 py-0.5 rounded uppercase tracking-tighter">
+                                                        {entry.branch?.name || `BR-${entry.branch_id}`}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <p className="text-[14px] font-black text-stone-900">{entry.item_name}</p>
+                                                    <p className="text-[10px] text-stone-400 font-mono tracking-tighter uppercase">{entry.item_sku}</p>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    {getReasonBadge(entry.reason)}
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <div className="flex flex-col items-end">
+                                                        <span className="text-[15px] font-black text-stone-900">{entry.quantity} <span className="text-[10px] text-stone-400 uppercase">{entry.unit_of_measure}</span></span>
+                                                        <span className="text-[11px] text-rose-600 font-bold bg-rose-50 px-1.5 rounded tracking-tighter">KES {entry.estimated_value?.toLocaleString()}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className="text-[12px] font-bold text-stone-500 italic opacity-80">{entry.shift || 'N/A'}</span>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
                         </div>
-                    )}
-                </CardContent>
-            </Card>
-        </div>
+                    </div>
+                </div>
+            </DashboardLayout>
+        </ProtectedRoute>
     );
 }

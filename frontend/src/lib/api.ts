@@ -2761,9 +2761,9 @@ export const auditAPI = {
     if (params.status) query.append('status', params.status);
     return fetchAPI<any>(`/auditor/verify/expenditure?${query}`);
   },
-  verifyStockLevels: (params: { branch_id: number }) => {
+  verifyStockLevels: (params: { branch_id?: number }) => {
     const query = new URLSearchParams();
-    query.append('branch_id', String(params.branch_id));
+    if (params.branch_id) query.append('branch_id', String(params.branch_id));
     return fetchAPI<any>(`/auditor/verify/stock-levels?${query}`);
   },
   verifyBranchOrders: (params: { branch_id?: number; status?: string; start_date?: string; end_date?: string }) => {
@@ -2774,9 +2774,9 @@ export const auditAPI = {
     if (params.end_date) query.append('end_date', params.end_date);
     return fetchAPI<any>(`/auditor/verify/branch-orders?${query}`);
   },
-  verifySoldItems: (params: { branch_id: number; start_date?: string; end_date?: string }) => {
+  verifySoldItems: (params: { branch_id?: number; start_date?: string; end_date?: string }) => {
     const query = new URLSearchParams();
-    query.append('branch_id', String(params.branch_id));
+    if (params.branch_id) query.append('branch_id', String(params.branch_id));
     if (params.start_date) query.append('start_date', params.start_date);
     if (params.end_date) query.append('end_date', params.end_date);
     return fetchAPI<any>(`/auditor/verify/sold-items?${query}`);

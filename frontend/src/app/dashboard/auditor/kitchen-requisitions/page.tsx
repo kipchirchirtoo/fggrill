@@ -1,29 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import { Search, Filter, Loader2, Package, Eye } from 'lucide-react';
+    Search, Filter, RefreshCw, Package, Eye,
+    ArrowRight, ClipboardList, Clock, CheckCircle2,
+    XCircle, AlertCircle, Trash2, FileText,
+    Activity, ShieldCheck, ChevronRight
+} from 'lucide-react';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { ProtectedRoute } from '@/components/auth/protected-route';
+import { BranchSelector, useBranch } from '@/lib/branch-context';
+import { UserRole } from '@/lib/auth-context';
+import { toast } from 'sonner';
 
 interface RequisitionItem {
     id: string;
@@ -49,6 +41,7 @@ interface Requisition {
 }
 
 export default function AuditorKitchenRequisitionsPage() {
+    const { activeBranchId } = useBranch();
     const [requisitions, setRequisitions] = useState<Requisition[]>([]);
     const [loading, setLoading] = useState(true);
     const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -56,30 +49,29 @@ export default function AuditorKitchenRequisitionsPage() {
     const [selectedRequisition, setSelectedRequisition] = useState<Requisition | null>(null);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
-    useEffect(() => {
-        fetchRequisitions();
-    }, [statusFilter]);
-
-    const fetchRequisitions = async () => {
+    const fetchRequisitions = useCallback(async () => {
         try {
             setLoading(true);
             const res = await api.store.getKitchenRequisitions({
+                branch_id: activeBranchId === 0 ? undefined : (activeBranchId ?? undefined),
                 status: statusFilter !== 'all' ? statusFilter : undefined
             });
             if (res.success && Array.isArray(res.data)) {
                 setRequisitions(res.data);
             } else {
                 setRequisitions([]);
-                if (res.message) {
-                    console.error('API Error:', res.message);
-                }
             }
         } catch (error) {
             console.error('Failed to fetch requisitions:', error);
+            toast.error('Failed to load requisitions');
         } finally {
             setLoading(false);
         }
-    };
+    }, [activeBranchId, statusFilter]);
+
+    useEffect(() => {
+        fetchRequisitions();
+    }, [fetchRequisitions]);
 
     const handleViewDetails = (req: Requisition) => {
         setSelectedRequisition(req);
@@ -87,156 +79,285 @@ export default function AuditorKitchenRequisitionsPage() {
     };
 
     const getStatusBadge = (status: string) => {
-        switch (status) {
-            case 'PENDING': return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Pending</Badge>;
-            case 'APPROVED': return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Approved</Badge>;
-            case 'FULFILLED': return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Fulfilled</Badge>;
-            case 'PARTIALLY_FULFILLED': return <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200">Partially Fulfilled</Badge>;
-            case 'REJECTED': return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Rejected</Badge>;
-            default: return <Badge variant="outline">{status}</Badge>;
-        }
+        const styles: Record<string, string> = {
+            PENDING: 'bg-amber-50 text-amber-600 border-amber-100',
+            APPROVED: 'bg-blue-50 text-blue-600 border-blue-100',
+            REJECTED: 'bg-rose-50 text-rose-600 border-rose-100',
+            FULFILLED: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+            PARTIALLY_FULFILLED: 'bg-teal-50 text-teal-600 border-teal-100'
+        };
+        const style = styles[status] || 'bg-stone-50 text-stone-600 border-stone-100';
+        return (
+            <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg border uppercase tracking-wider ${style}`}>
+                {status.replace('_', ' ')}
+            </span>
+        );
     };
 
     const filteredRequisitions = requisitions.filter(req =>
-        req.requisition_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (req.requisition_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (req.branch?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     return (
-        <div className="space-y-6 p-6">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Kitchen Requisitions Oversight</h1>
-                    <p className="text-muted-foreground mt-2">Monitor all kitchen requisition activity across branches.</p>
-                </div>
-                <Button variant="outline" onClick={fetchRequisitions} disabled={loading}>
-                    {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Loader2 className="h-4 w-4 mr-2" />}
-                    Refresh
-                </Button>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-4">
-                <div className="relative flex-1">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Search by ID or Branch..."
-                        className="pl-8"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[180px]">
-                        <Filter className="h-4 w-4 mr-2" />
-                        <SelectValue placeholder="Filter by status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Statuses</SelectItem>
-                        <SelectItem value="PENDING">Pending</SelectItem>
-                        <SelectItem value="APPROVED">Approved</SelectItem>
-                        <SelectItem value="FULFILLED">Fulfilled</SelectItem>
-                        <SelectItem value="REJECTED">Rejected</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle>Requisition Activity</CardTitle>
-                    <CardDescription>
-                        {filteredRequisitions.length} requests found
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {loading ? (
-                        <div className="flex justify-center items-center py-8">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN]}>
+            <DashboardLayout>
+                <div className="space-y-8 pb-10">
+                    {/* Header */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <Activity className="h-4 w-4 text-stone-400" />
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Stock Requisitions</span>
+                            </div>
+                            <h1 className="text-2xl font-black text-stone-900 tracking-tight leading-none">Kitchen Requisitions</h1>
+                            <p className="text-stone-500 text-sm mt-2 font-medium">Monitoring inventory movement and replenishment requests</p>
                         </div>
-                    ) : filteredRequisitions.length === 0 ? (
-                        <div className="text-center py-12 text-muted-foreground">
-                            <Package className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                            <p>No requisitions found.</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-xl px-4 py-2 shadow-sm">
+                                <Search className="h-4 w-4 text-stone-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search requisitions..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="text-sm font-bold text-stone-700 outline-none w-40"
+                                />
+                            </div>
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value)}
+                                className="bg-white border border-stone-200 rounded-xl px-4 py-2 text-sm font-bold text-stone-700 shadow-sm outline-none"
+                            >
+                                <option value="all">All Status</option>
+                                <option value="PENDING">Pending</option>
+                                <option value="APPROVED">Approved</option>
+                                <option value="FULFILLED">Fulfilled</option>
+                                <option value="REJECTED">Rejected</option>
+                            </select>
+                            <BranchSelector />
+                            <button onClick={fetchRequisitions} className="p-2.5 bg-stone-900 rounded-xl hover:bg-stone-800 transition-colors shadow-sm">
+                                <RefreshCw className={`h-4 w-4 text-white ${loading ? 'animate-spin' : ''}`} />
+                            </button>
                         </div>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Req ID</TableHead>
-                                    <TableHead>Branch</TableHead>
-                                    <TableHead>Date</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Items</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredRequisitions.map((req) => (
-                                    <TableRow key={req.id}>
-                                        <TableCell className="font-medium">{req.requisition_number}</TableCell>
-                                        <TableCell>{req.branch?.name || `Branch #${req.branch_id}`}</TableCell>
-                                        <TableCell>{format(new Date(req.request_date), 'MMM d, yyyy')}</TableCell>
-                                        <TableCell>{getStatusBadge(req.status)}</TableCell>
-                                        <TableCell>{req.items.length} items</TableCell>
-                                        <TableCell className="text-right">
-                                            <Button size="sm" variant="ghost" onClick={() => handleViewDetails(req)}>
-                                                <Eye className="h-4 w-4 mr-2" />
-                                                View
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-                </CardContent>
-            </Card>
+                    </div>
 
-            <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-                <DialogContent className="max-w-3xl">
-                    <DialogHeader>
-                        <DialogTitle>Requisition Details: {selectedRequisition?.requisition_number}</DialogTitle>
-                        <DialogDescription>
-                            Branch: {selectedRequisition?.branch?.name} | Requested By: {selectedRequisition?.requested_by_name}
-                        </DialogDescription>
-                    </DialogHeader>
+                    {/* Quick Stats */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="card-elevated p-6 bg-stone-900 text-white shadow-xl shadow-stone-200/50 flex flex-col justify-between min-h-[140px]">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-1">Total Requests</p>
+                                <h3 className="text-2xl font-black italic">{requisitions.length} <span className="text-xs font-bold text-stone-400">entries</span></h3>
+                            </div>
+                            <div className="pt-4 border-t border-white/10 flex items-center justify-between">
+                                <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest text-opacity-50">Branch Aggregates</span>
+                                <ShieldCheck className="h-4 w-4 text-stone-400" />
+                            </div>
+                        </div>
+                        <div className="card-elevated p-6 bg-white border border-stone-100 flex flex-col justify-between min-h-[140px]">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-1">Pending Review</p>
+                                <h3 className={`text-2xl font-black ${requisitions.filter(r => r.status === 'PENDING').length > 0 ? 'text-amber-500' : 'text-stone-300'}`}>
+                                    {requisitions.filter(r => r.status === 'PENDING').length}
+                                </h3>
+                            </div>
+                            <p className="text-[11px] text-stone-400 font-medium">Awaiting auditor or store approval</p>
+                        </div>
+                        <div className="card-elevated p-6 bg-white border border-stone-100 flex flex-col justify-between min-h-[140px]">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-1">Active Branches</p>
+                                <h3 className="text-2xl font-black text-stone-900">
+                                    {new Set(requisitions.map(r => r.branch_id)).size}
+                                </h3>
+                            </div>
+                            <p className="text-[11px] text-stone-400 font-medium leading-tight">Requesting units across the organization</p>
+                        </div>
+                    </div>
 
-                    {selectedRequisition && (
-                        <div className="mt-4">
-                            <div className="bg-muted/50 p-4 rounded-lg mb-4 text-sm grid grid-cols-2 gap-4">
-                                <div>
-                                    <p className="font-semibold text-muted-foreground">Reason</p>
-                                    <p>{selectedRequisition.reason || 'N/A'}</p>
+                    {/* Main Content */}
+                    <div className="card-elevated p-0 bg-white shadow-xl shadow-stone-200/50 overflow-hidden border border-stone-100/50">
+                        <div className="p-6 border-b border-stone-50 bg-stone-50/20 flex items-center justify-between">
+                            <h3 className="text-[16px] font-black text-stone-900 flex items-center gap-2">
+                                <Package className="h-4 w-4 text-stone-400" />
+                                Requisition Registry
+                            </h3>
+                            <div className="flex items-center gap-1.5 bg-stone-100 rounded-lg px-3 py-1">
+                                <Clock className="h-3 w-3 text-stone-400" />
+                                <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Real-time Feed</span>
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead className="bg-stone-50/50 text-[10px] font-black uppercase tracking-widest text-stone-400 border-b border-stone-100">
+                                    <tr>
+                                        <th className="px-6 py-4">Requisition ID</th>
+                                        <th className="px-6 py-4">Branch Unit</th>
+                                        <th className="px-6 py-4">Request Date</th>
+                                        <th className="px-6 py-4">Items Count</th>
+                                        <th className="px-6 py-4">Priority</th>
+                                        <th className="px-6 py-4 text-center">Status</th>
+                                        <th className="px-6 py-4 text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-stone-50">
+                                    {loading ? (
+                                        <tr>
+                                            <td colSpan={7} className="px-6 py-20 text-center">
+                                                <RefreshCw className="h-8 w-8 animate-spin text-stone-200 mx-auto" />
+                                            </td>
+                                        </tr>
+                                    ) : filteredRequisitions.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={7} className="px-6 py-32 text-center text-stone-300">
+                                                <div className="flex flex-col items-center gap-4">
+                                                    <ClipboardList className="h-12 w-12 opacity-10" />
+                                                    <span className="text-sm italic">No requisition records found</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredRequisitions.map((req) => (
+                                            <tr key={req.id} className="hover:bg-stone-50/30 transition-colors group">
+                                                <td className="px-6 py-4">
+                                                    <span className="text-[13px] font-black text-stone-900 font-mono tracking-tighter">{req.requisition_number}</span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[13px] font-bold text-stone-900">{req.branch?.name || `Branch #${req.branch_id}`}</span>
+                                                        <span className="text-[10px] text-stone-400 font-medium uppercase tracking-tighter">By {req.requested_by_name}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className="text-[12px] font-bold text-stone-600">{format(new Date(req.request_date), 'MMM dd, yyyy')}</span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className="text-[12px] font-black text-stone-400 uppercase tracking-widest bg-stone-50 px-2 py-1 rounded">
+                                                        {req.items.length} SKUs
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`text-[10px] font-black uppercase tracking-tight ${req.priority === 'URGENT' ? 'text-rose-600 animate-pulse' :
+                                                            req.priority === 'HIGH' ? 'text-amber-600' : 'text-stone-400'
+                                                        }`}>
+                                                        {req.priority}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    {getStatusBadge(req.status)}
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <button
+                                                        onClick={() => handleViewDetails(req)}
+                                                        className="p-2 text-stone-300 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-all"
+                                                    >
+                                                        <ChevronRight className="h-4 w-4" />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        )
+                                        ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+                    <DialogContent className="max-w-3xl bg-white rounded-3xl border-none shadow-2xl p-0 overflow-hidden">
+                        <div className="bg-stone-900 p-8 text-white relative">
+                            <DialogHeader>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="p-2 bg-white/10 rounded-xl">
+                                        <ClipboardList className="h-5 w-5 text-stone-300" />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-500">Inventory Request</span>
+                                        <DialogTitle className="text-2xl font-black tracking-tight">{selectedRequisition?.requisition_number}</DialogTitle>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="font-semibold text-muted-foreground">Priority</p>
-                                    <p>{selectedRequisition.priority}</p>
+                                <DialogDescription className="text-stone-400 font-medium mt-1">
+                                    Unit: {selectedRequisition?.branch?.name} • Issued By: {selectedRequisition?.requested_by_name}
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="absolute top-8 right-8">
+                                {selectedRequisition && getStatusBadge(selectedRequisition.status)}
+                            </div>
+                        </div>
+
+                        <div className="p-8">
+                            <div className="grid grid-cols-2 gap-8 mb-8">
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-1">Reason for Request</p>
+                                    <p className="text-sm font-bold text-stone-700 leading-relaxed bg-stone-50 p-4 rounded-2xl border border-stone-100">
+                                        {selectedRequisition?.reason || 'No specific reason provided for this stock call.'}
+                                    </p>
+                                </div>
+                                <div className="space-y-4">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-2">Priority Level</p>
+                                        <span className="text-xs font-black text-stone-900 bg-stone-100 px-3 py-1.5 rounded-lg uppercase tracking-widest border border-stone-200/50">
+                                            {selectedRequisition?.priority}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-2">Needed By</p>
+                                        <span className="text-xs font-bold text-stone-600 flex items-center gap-2">
+                                            <Clock className="h-3 w-3" />
+                                            {selectedRequisition?.needed_by_date ? format(new Date(selectedRequisition.needed_by_date), 'MMM dd, yyyy') : 'No specific deadline'}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
 
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Item</TableHead>
-                                        <TableHead>Unit</TableHead>
-                                        <TableHead className="text-right">Requested</TableHead>
-                                        <TableHead className="text-right">Fulfilled</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {selectedRequisition.items.map((item) => (
-                                        <TableRow key={item.id}>
-                                            <TableCell className="font-medium">{item.item_name}</TableCell>
-                                            <TableCell>{item.unit}</TableCell>
-                                            <TableCell className="text-right">{item.quantity_requested}</TableCell>
-                                            <TableCell className="text-right">{item.quantity_fulfilled || 0}</TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                            <div className="card-elevated p-0 border border-stone-100 bg-stone-50/30 overflow-hidden">
+                                <table className="w-full text-left">
+                                    <thead className="bg-stone-50 text-[10px] font-black uppercase tracking-widest text-stone-400 border-b border-stone-100">
+                                        <tr>
+                                            <th className="px-6 py-4">Product Descriptor</th>
+                                            <th className="px-6 py-4 text-center">Unit</th>
+                                            <th className="px-6 py-4 text-right">Requested</th>
+                                            <th className="px-6 py-4 text-right">Fullfilled</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-stone-100 bg-white">
+                                        {selectedRequisition?.items.map((item) => (
+                                            <tr key={item.id} className="hover:bg-stone-50/50 transition-colors">
+                                                <td className="px-6 py-4 font-black text-stone-800 tracking-tight">{item.item_name}</td>
+                                                <td className="px-6 py-4 text-center text-[10px] font-black text-stone-400 uppercase tracking-widest">{item.unit}</td>
+                                                <td className="px-6 py-4 text-right font-bold text-stone-900">{item.quantity_requested}</td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <span className={`font-black ${item.quantity_fulfilled && item.quantity_fulfilled >= item.quantity_requested ? 'text-emerald-600' : 'text-stone-300'}`}>
+                                                        {item.quantity_fulfilled || 0}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="mt-8 flex justify-end gap-3">
+                                <button
+                                    onClick={() => setIsDetailsOpen(false)}
+                                    className="px-6 py-2.5 bg-stone-100 text-stone-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-stone-200 transition-colors"
+                                >
+                                    Close View
+                                </button>
+                                {selectedRequisition?.status === 'PENDING' && (
+                                    <button
+                                        onClick={() => {
+                                            toast.info("Audit approval function pending integration");
+                                        }}
+                                        className="px-6 py-2.5 bg-stone-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-stone-800 transition-all flex items-center gap-2"
+                                    >
+                                        Auditor Sign-off <ArrowRight className="h-3 w-3" />
+                                    </button>
+                                )}
+                            </div>
                         </div>
-                    )}
-                </DialogContent>
-            </Dialog>
-        </div>
+                    </DialogContent>
+                </Dialog>
+            </DashboardLayout>
+        </ProtectedRoute>
     );
 }
