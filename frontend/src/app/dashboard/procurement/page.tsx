@@ -62,7 +62,7 @@ export default function ProcurementDashboard() {
                 </div>
                 <div className="flex gap-3">
                     <Button asChild>
-                        <Link href="/dashboard/procurement/purchase-orders/new">
+                        <Link href="/dashboard/central-store/suppliers/purchase-orders">
                             <Plus className="h-4 w-4 mr-2" />
                             New Purchase Order
                         </Link>
@@ -152,7 +152,7 @@ export default function ProcurementDashboard() {
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="ghost" size="sm" asChild>
-                                                <Link href={`/dashboard/procurement/purchase-orders/${po.id}`}>View</Link>
+                                                <Link href="/dashboard/central-store/suppliers/purchase-orders">View</Link>
                                             </Button>
                                         </TableCell>
                                     </TableRow>

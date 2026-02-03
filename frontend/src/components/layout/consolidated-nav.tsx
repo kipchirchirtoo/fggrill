@@ -504,10 +504,10 @@ export function ConsolidatedNav() {
 
       <NavGroup label="Purchasing" icon={ShoppingCart} defaultOpen>
         <NavItem
-          href="/dashboard/central-store/procurement/purchase-orders"
+          href="/dashboard/central-store/suppliers/purchase-orders"
           icon={FileText}
           label="Purchase Orders"
-          active={pathname.includes('/dashboard/central-store/procurement/purchase-orders')}
+          active={pathname.includes('/dashboard/central-store/suppliers/purchase-orders')}
         />
         <NavItem
           href="/dashboard/central-store/procurement/grn"
@@ -760,10 +760,10 @@ export function ConsolidatedNav() {
 
       <NavGroup label="Purchasing & Compliance" icon={ShoppingCart} defaultOpen>
         <NavItem
-          href="/dashboard/central-store/procurement/purchase-orders"
+          href="/dashboard/central-store/suppliers/purchase-orders"
           icon={FileText}
           label="Purchase Orders"
-          active={pathname.includes('/dashboard/central-store/procurement/purchase-orders')}
+          active={pathname.includes('/dashboard/central-store/suppliers/purchase-orders')}
         />
         <NavItem
           href="/dashboard/central-store/procurement/grn"
