@@ -177,33 +177,49 @@ export const getSuppliers = async (req: Request, res: Response) => {
 
 export const createSupplier = async (req: Request, res: Response) => {
   try {
-    const { name, code, contact_person, email, phone, address, city, payment_terms, status, trading_name, supplier_pin, vat_registered, vat_registration_number, withholding_vat_applicable, withholding_vat_rate, vat_category, contract_start_date, contract_end_date } = req.body;
+    const { name, supplier_code, legal_name, contact_person, email, phone, alternate_phone, website,
+      address_line1, address_line2, city, state, country, postal_code,
+      tax_id, vat_number, registration_number, payment_terms, credit_limit,
+      bank_name, bank_account_number, bank_branch, lead_time_days,
+      status, is_preferred, notes } = req.body;
 
     if (!name) {
       return res.status(400).json({ success: false, message: 'Supplier name is required' });
+    }
+
+    if (!supplier_code) {
+      return res.status(400).json({ success: false, message: 'Supplier code is required' });
     }
 
     const { data, error } = await supabase
       .from('store_suppliers')
       .insert([{
         name,
-        code,
+        supplier_code,
+        legal_name,
         contact_person,
         email,
         phone,
-        address,
+        alternate_phone,
+        website,
+        address_line1,
+        address_line2,
         city,
+        state,
+        country: country || 'Kenya',
+        postal_code,
+        tax_id,
+        vat_number,
+        registration_number,
         payment_terms,
+        credit_limit,
+        bank_name,
+        bank_account_number,
+        bank_branch,
+        lead_time_days,
         status,
-        trading_name,
-        supplier_pin,
-        vat_registered,
-        vat_registration_number,
-        withholding_vat_applicable,
-        withholding_vat_rate,
-        vat_category,
-        contract_start_date,
-        contract_end_date
+        is_preferred,
+        notes
       }])
       .select()
       .single();
