@@ -9,7 +9,7 @@ import {
     AlertTriangle, ShoppingBag, Filter, Download,
     ArrowLeft, Check, X, RefreshCw, Eye, FileDown,
     Building2, TrendingUp, BarChart3, ChevronRight,
-    Utensils, Beer
+    Utensils, Beer, ShieldCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 
