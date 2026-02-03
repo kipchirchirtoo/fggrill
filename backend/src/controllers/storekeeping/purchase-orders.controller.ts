@@ -52,10 +52,17 @@ export const getPurchaseOrders = async (
 
         if (error) throw error;
 
+        // Flatten labels for frontend
+        const flattenedOrders = (orders || []).map(order => ({
+            ...order,
+            supplier_name: order.supplier?.name || 'N/A',
+            created_by_name: order.created_by_user ? `${order.created_by_user.first_name} ${order.created_by_user.last_name}`.trim() : 'System'
+        }));
+
         res.status(200).json({
             success: true,
-            count: orders?.length || 0,
-            data: orders || []
+            count: flattenedOrders.length,
+            data: flattenedOrders
         });
     } catch (error) {
         logger.error('Error fetching purchase orders:', error);
@@ -79,7 +86,6 @@ export const getPurchaseOrder = async (
             .select(`
         *,
         supplier:store_suppliers(*),
-        receiving_branch:branches!receiving_branch_id(id, name, code, contact_person),
         created_by_user:users!created_by_id(id, first_name, last_name, email),
         approved_by_user:users!approved_by_id(id, first_name, last_name, email),
         received_by_user:users!received_by_id(id, first_name, last_name, email),
@@ -95,9 +101,21 @@ export const getPurchaseOrder = async (
             throw new AppError('Purchase order not found', 404);
         }
 
+        // Flatten data for frontend
+        const flattenedOrder = {
+            ...order,
+            supplier_name: order.supplier?.name || 'N/A',
+            created_by_name: order.created_by_user ? `${order.created_by_user.first_name} ${order.created_by_user.last_name}`.trim() : 'System',
+            receiving_branch_name: 'Central Stores', // Fallback as column is missing
+            items: (order.items || []).map((item: any) => ({
+                ...item,
+                item_name: item.item?.name || 'Unknown Item'
+            }))
+        };
+
         res.status(200).json({
             success: true,
-            data: order
+            data: flattenedOrder
         });
     } catch (error) {
         next(error);
