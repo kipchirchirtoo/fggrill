@@ -233,7 +233,7 @@ export default function SupplierDetailPage() {
 
     if (loading) {
         return (
-            <DashboardLayout title="Supplier Details">
+            <DashboardLayout>
                 <div className="p-8 flex items-center justify-center h-[60vh]">
                     <div className="text-stone-400 flex flex-col items-center gap-2">
                         <RefreshCw className="h-8 w-8 animate-spin" />
@@ -246,7 +246,7 @@ export default function SupplierDetailPage() {
 
     if (!supplier) {
         return (
-            <DashboardLayout title="Error">
+            <DashboardLayout>
                 <div className="p-8 text-center">
                     <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
                     <h2 className="text-xl font-bold text-stone-800">Supplier Not Found</h2>
@@ -259,8 +259,8 @@ export default function SupplierDetailPage() {
     }
 
     return (
-        <ProtectedRoute roles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.PROCUREMENT, UserRole.CENTRAL_STOREKEEPER, UserRole.AUDITOR]}>
-            <DashboardLayout title={`Supplier: ${supplier.name}`}>
+        <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.PROCUREMENT, UserRole.CENTRAL_STOREKEEPER, UserRole.AUDITOR]}>
+            <DashboardLayout>
                 <div className="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6">
 
                     {/* Header & Quick Actions */}

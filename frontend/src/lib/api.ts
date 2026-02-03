@@ -3029,13 +3029,7 @@ export const accountingAPI = {
     window.URL.revokeObjectURL(url);
     return true;
   },
-  const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/journal-entries/${id}/review`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(review)
-  });
-  return response.json();
-},
+
 
   postJournalEntry: async (id: string, user?: string) => {
     const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/journal-entries/${id}/post`, {
@@ -3046,101 +3040,101 @@ export const accountingAPI = {
     return response.json();
   },
 
-    getReconciliations: async () => {
-      const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/reconciliations`);
-      return response.json();
-    },
+  getReconciliations: async () => {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/reconciliations`);
+    return response.json();
+  },
 
-      getFiscalPeriods: async (branchId?: number) => {
-        const params = new URLSearchParams();
-        if (branchId) params.append('branch_id', String(branchId));
-        return fetchPythonAPI<any>(`/accounting/fiscal-periods?${params.toString()}`);
-      },
+  getFiscalPeriods: async (branchId?: number) => {
+    const params = new URLSearchParams();
+    if (branchId) params.append('branch_id', String(branchId));
+    return fetchPythonAPI<any>(`/accounting/fiscal-periods?${params.toString()}`);
+  },
 
-        updatePeriodStatus: async (periodId: string, status: string) => {
-          return fetchPythonAPI<any>(`/accounting/fiscal-periods/${periodId}/status`, {
-            method: 'PUT',
-            body: JSON.stringify({ status })
-          });
-        },
+  updatePeriodStatus: async (periodId: string, status: string) => {
+    return fetchPythonAPI<any>(`/accounting/fiscal-periods/${periodId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status })
+    });
+  },
 
-          closePeriod: async (periodId: string, data: any) => {
-            return fetchPythonAPI<any>(`/accounting/fiscal-periods/${periodId}/close`, {
-              method: 'POST',
-              body: JSON.stringify(data)
-            });
-          },
+  closePeriod: async (periodId: string, data: any) => {
+    return fetchPythonAPI<any>(`/accounting/fiscal-periods/${periodId}/close`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
 
-            getTrialBalance: async (filters?: any) => {
-              const params = new URLSearchParams();
-              if (filters?.start_date) params.append('start_date', filters.start_date);
-              if (filters?.end_date) params.append('end_date', filters.end_date);
-              if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
+  getTrialBalance: async (filters?: any) => {
+    const params = new URLSearchParams();
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
 
-              return fetchPythonAPI<any>(`/accounting/reports/trial-balance?${params.toString()}`);
-            },
+    return fetchPythonAPI<any>(`/accounting/reports/trial-balance?${params.toString()}`);
+  },
 
-              getProfitAndLoss: async (filters?: any) => {
-                const params = new URLSearchParams();
-                if (filters?.start_date) params.append('start_date', filters.start_date);
-                if (filters?.end_date) params.append('end_date', filters.end_date);
-                if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
+  getProfitAndLoss: async (filters?: any) => {
+    const params = new URLSearchParams();
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
 
-                return fetchPythonAPI<any>(`/accounting/reports/p-and-l?${params.toString()}`);
-              },
+    return fetchPythonAPI<any>(`/accounting/reports/p-and-l?${params.toString()}`);
+  },
 
-                getAgingAnalysis: async (filters?: any) => {
-                  const params = new URLSearchParams();
-                  if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
-                  if (filters?.as_of_date) params.append('as_of_date', filters.as_of_date);
+  getAgingAnalysis: async (filters?: any) => {
+    const params = new URLSearchParams();
+    if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
+    if (filters?.as_of_date) params.append('as_of_date', filters.as_of_date);
 
-                  return fetchPythonAPI<any>(`/accounting/reports/aging-analysis?${params.toString()}`);
-                },
+    return fetchPythonAPI<any>(`/accounting/reports/aging-analysis?${params.toString()}`);
+  },
 
-                  getFinancialStatements: async (type: string, filters?: any) => {
-                    const params = new URLSearchParams();
-                    params.append('type', type);
-                    if (filters?.start_date) params.append('start_date', filters.start_date);
-                    if (filters?.end_date) params.append('end_date', filters.end_date);
-                    if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
+  getFinancialStatements: async (type: string, filters?: any) => {
+    const params = new URLSearchParams();
+    params.append('type', type);
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
 
-                    return fetchPythonAPI<any>(`/accounting/reports/financial-statements?${params.toString()}`);
-                  },
+    return fetchPythonAPI<any>(`/accounting/reports/financial-statements?${params.toString()}`);
+  },
 
-                    getAuditTrail: async (filters?: any) => {
-                      const params = new URLSearchParams();
-                      if (filters?.start_date) params.append('start_date', filters.start_date);
-                      if (filters?.end_date) params.append('end_date', filters.end_date);
-                      if (filters?.user) params.append('user', filters.user);
-                      if (filters?.action) params.append('action', filters.action);
+  getAuditTrail: async (filters?: any) => {
+    const params = new URLSearchParams();
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.user) params.append('user', filters.user);
+    if (filters?.action) params.append('action', filters.action);
 
-                      return fetchPythonAPI<any>(`/audit/trail?${params.toString()}`);
-                    },
+    return fetchPythonAPI<any>(`/audit/trail?${params.toString()}`);
+  },
 
-                      getWorkpapers: async (filters?: any) => {
-                        const params = new URLSearchParams();
-                        if (filters?.status) params.append('status', filters.status);
-                        if (filters?.period) params.append('period', filters.period);
+  getWorkpapers: async (filters?: any) => {
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.period) params.append('period', filters.period);
 
-                        return fetchPythonAPI<any>(`/audit/workpapers?${params.toString()}`);
-                      },
+    return fetchPythonAPI<any>(`/audit/workpapers?${params.toString()}`);
+  },
 
-                        // Banking Extended
-                        createDeposit: (data: any) => fetchAPI<any>('/accounting/deposits', { method: 'POST', body: JSON.stringify(data) }),
+  // Banking Extended
+  createDeposit: (data: any) => fetchAPI<any>('/accounting/deposits', { method: 'POST', body: JSON.stringify(data) }),
 
-                          getBankDeposits: (branchId: number | string) => fetchAPI<any>(`/accounting/deposits?branch_id=${branchId}`),
+  getBankDeposits: (branchId: number | string) => fetchAPI<any>(`/accounting/deposits?branch_id=${branchId}`),
 
-                            getReconciliationData: (branchId: number | string, accountId?: string) => {
-                              const query = new URLSearchParams({ branch_id: String(branchId) });
-                              if (accountId) query.append('account_id', accountId);
-                              return fetchAPI<any>(`/accounting/reconciliation/data?${query}`);
-                            },
+  getReconciliationData: (branchId: number | string, accountId?: string) => {
+    const query = new URLSearchParams({ branch_id: String(branchId) });
+    if (accountId) query.append('account_id', accountId);
+    return fetchAPI<any>(`/accounting/reconciliation/data?${query}`);
+  },
 
-                              matchTransactions: (data: { transactionIds: string[]; matchType: string }) =>
-                                fetchAPI<any>('/accounting/reconciliation/match', { method: 'POST', body: JSON.stringify(data) }),
+  matchTransactions: (data: { transactionIds: string[]; matchType: string }) =>
+    fetchAPI<any>('/accounting/reconciliation/match', { method: 'POST', body: JSON.stringify(data) }),
 
-                                saveReconciliationSession: (data: any) =>
-                                  fetchAPI<any>('/accounting/reconciliation/save', { method: 'POST', body: JSON.stringify(data) })
+  saveReconciliationSession: (data: any) =>
+    fetchAPI<any>('/accounting/reconciliation/save', { method: 'POST', body: JSON.stringify(data) })
 };
 
 // ==================== ROOM SERVICE API (Python Microservice) ====================
