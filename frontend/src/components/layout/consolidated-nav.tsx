@@ -504,6 +504,18 @@ export function ConsolidatedNav() {
 
       <NavGroup label="Purchasing" icon={ShoppingCart} defaultOpen>
         <NavItem
+          href="/dashboard/central-store/procurement/purchase-orders"
+          icon={FileText}
+          label="Purchase Orders"
+          active={pathname.includes('/dashboard/central-store/procurement/purchase-orders')}
+        />
+        <NavItem
+          href="/dashboard/central-store/procurement/grn"
+          icon={ClipboardList}
+          label="Goods Receipt (GRN)"
+          active={pathname.includes('/dashboard/central-store/procurement/grn')}
+        />
+        <NavItem
           href="/dashboard/central-store/suppliers"
           icon={Users}
           label="Supplier Database"
@@ -747,6 +759,18 @@ export function ConsolidatedNav() {
       </NavGroup>
 
       <NavGroup label="Purchasing & Compliance" icon={ShoppingCart} defaultOpen>
+        <NavItem
+          href="/dashboard/central-store/procurement/purchase-orders"
+          icon={FileText}
+          label="Purchase Orders"
+          active={pathname.includes('/dashboard/central-store/procurement/purchase-orders')}
+        />
+        <NavItem
+          href="/dashboard/central-store/procurement/grn"
+          icon={ClipboardList}
+          label="Goods Receipt (GRN)"
+          active={pathname.includes('/dashboard/central-store/procurement/grn')}
+        />
         <NavItem
           href="/dashboard/central-store/suppliers"
           icon={Store}

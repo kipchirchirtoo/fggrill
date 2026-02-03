@@ -867,12 +867,17 @@ class DatabaseFetcher:
                 .is_('clock_out', 'null')\
                 .execute()
             
-            data['clocked_in_staff'] = [
-                {
-                    'name': f"{r['staff']['user']['first_name']} {r['staff']['user']['last_name']}",
-                    'time': r['clock_in']
-                } for r in (attendance_query.data or [])
-            ]
+            data['clocked_in_staff'] = []
+            for r in (attendance_query.data or []):
+                staff = r.get('staff') or {}
+                user = staff.get('user') or {}
+                first_name = user.get('first_name') or user.get('name', 'N/A')
+                last_name = user.get('last_name', '')
+                
+                data['clocked_in_staff'].append({
+                    'name': f"{first_name} {last_name}".strip(),
+                    'time': r.get('clock_in', 'N/A')
+                })
             
         except Exception as e:
             logger.error(f"Error fetching manager duty data: {e}")
@@ -1319,7 +1324,7 @@ class DatabaseFetcher:
             variances = query.execute()
             
             for v in (variances.data or []):
-                item = v.get('item', {})
+                item = v.get('item') or {}
                 name = item.get('name', 'Unknown')
                 cost = item.get('unit_cost', 0) or 0
                 
@@ -1368,12 +1373,14 @@ class DatabaseFetcher:
             item_prices = {}
             
             for m in (movements.data or []):
-                supplier = m.get('supplier', {}).get('name', 'Unknown')
+                supplier_obj = m.get('supplier') or {}
+                supplier = supplier_obj.get('name', 'Unknown')
                 amount = (m.get('quantity', 0) or 0) * (m.get('unit_cost', 0) or 0)
                 
                 supplier_totals[supplier] = supplier_totals.get(supplier, 0) + amount
                 
-                item_name = m.get('item', {}).get('name', 'Unknown')
+                item_obj = m.get('item') or {}
+                item_name = item_obj.get('name', 'Unknown')
                 price = m.get('unit_cost', 0) or 0
                 if item_name not in item_prices: item_prices[item_name] = []
                 item_prices[item_name].append(price)
@@ -1494,7 +1501,8 @@ class DatabaseFetcher:
             rest_sales = rest_q.execute()
             for order in (rest_sales.data or []):
                 for item in order.get('items', []):
-                    name = item.get('menu_item', {}).get('name', 'Unknown')
+                    menu_item = item.get('menu_item') or {}
+                    name = menu_item.get('name', 'Unknown')
                     qty = item.get('quantity', 0) or 0
                     if name in item_stats:
                         item_stats[name]['sold'] += qty
@@ -1550,8 +1558,9 @@ class DatabaseFetcher:
             
             agg = {}
             for item in (result.data or []):
-                if not item.get('menu_item'): continue
-                name = item['menu_item']['name']
+                menu_item = item.get('menu_item') or {}
+                name = menu_item.get('name', 'Unknown')
+                if name == 'Unknown' and not item.get('menu_item'): continue
                 qty = item.get('quantity', 0) or 0
                 price = item.get('unit_price', 0) or 0
                 
@@ -1959,7 +1968,7 @@ class DatabaseFetcher:
                 if branch_id:
                     item_query = item_query.eq('branch_id', branch_id)
                 item_result = item_query.execute()
-                if item_result.data:
+                if item_result.data and len(item_result.data) > 0:
                     data['item_name'] = item_result.data[0].get('item_name', '')
             
         except Exception as e:

@@ -472,6 +472,53 @@ export const storeAPI = {
   },
 };
 
+// =====================================================
+// PROCUREMENT API
+// =====================================================
+
+export const procurementAPI = {
+  // Purchase Orders
+  getPurchaseOrders: (params?: { supplier_id?: string; status?: string; from_date?: string; to_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.supplier_id) query.append('supplier_id', params.supplier_id);
+    if (params?.status) query.append('status', params.status);
+    if (params?.from_date) query.append('from_date', params.from_date);
+    if (params?.to_date) query.append('to_date', params.to_date);
+    const qs = query.toString();
+    return fetchAPI<any>(`/procurement/purchase-orders${qs ? `?${qs}` : ''}`);
+  },
+  getPurchaseOrder: (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}`),
+  createPurchaseOrder: (data: any) => fetchAPI<any>('/procurement/purchase-orders', { method: 'POST', body: JSON.stringify(data) }),
+  updatePurchaseOrder: (id: string, data: any) => fetchAPI<any>(`/procurement/purchase-orders/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  approvePurchaseOrder: (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}/approve`, { method: 'PUT' }),
+  cancelPurchaseOrder: (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}/cancel`, { method: 'PUT' }),
+  deletePurchaseOrder: (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}`, { method: 'DELETE' }),
+
+  // Goods Received Notes (GRN)
+  getGRNs: (params?: { supplier_id?: string; status?: string; po_id?: string; from_date?: string; to_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.supplier_id) query.append('supplier_id', params.supplier_id);
+    if (params?.status) query.append('status', params.status);
+    if (params?.po_id) query.append('po_id', params.po_id);
+    if (params?.from_date) query.append('from_date', params.from_date);
+    if (params?.to_date) query.append('to_date', params.to_date);
+    const qs = query.toString();
+    return fetchAPI<any>(`/procurement/grn${qs ? `?${qs}` : ''}`);
+  },
+  getGRN: (id: string) => fetchAPI<any>(`/procurement/grn/${id}`),
+  createGRN: (data: any) => fetchAPI<any>('/procurement/grn', { method: 'POST', body: JSON.stringify(data) }),
+  approveGRN: (id: string) => fetchAPI<any>(`/procurement/grn/${id}/approve`, { method: 'PUT' }),
+  cancelGRN: (id: string, reason?: string) => fetchAPI<any>(`/procurement/grn/${id}/cancel`, { method: 'PUT', body: JSON.stringify({ reason }) }),
+
+  // Suppliers (Re-using or extending)
+  getSuppliers: () => fetchAPI<any>('/store/suppliers'),
+  getSupplier: (id: string) => fetchAPI<any>(`/store/suppliers/${id}`),
+
+  // Reports
+  getVATReport: (params?: any) => fetchAPI<any>('/procurement/reports/vat'),
+  getAuditTrail: (params?: any) => fetchAPI<any>('/procurement/reports/audit-trail'),
+};
+
 
 
 // =====================================================

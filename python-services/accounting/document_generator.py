@@ -14,6 +14,7 @@ from datetime import datetime
 from decimal import Decimal
 import io
 from typing import Dict, List, Any
+from xml.sax.saxutils import escape
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
@@ -363,6 +364,7 @@ class AccountingDocumentGenerator:
         buffer = io.BytesIO()
         wb.save(buffer)
         buffer.seek(0)
+        return buffer.getvalue()
     
     def generate_supplier_statement_pdf(self, data: Dict[str, Any]) -> bytes:
         """Generate Supplier Statement PDF"""
@@ -379,8 +381,8 @@ class AccountingDocumentGenerator:
         # Supplier Details & Period
         header_data = [
             [
-                Paragraph(f"<b>To:</b><br/>{supplier.get('name', '')}<br/>{supplier.get('address', '')}<br/>{supplier.get('email', '')}", self.styles['Normal']),
-                Paragraph(f"<b>Statement Period:</b><br/>{data.get('start_date', '')} to {data.get('end_date', '')}<br/><br/><b>Currency:</b> KES", self.styles['Normal'])
+                Paragraph(f"<b>To:</b><br/>{escape(supplier.get('name', ''))}<br/>{escape(supplier.get('address', ''))}<br/>{escape(supplier.get('email', ''))}", self.styles['Normal']),
+                Paragraph(f"<b>Statement Period:</b><br/>{escape(str(data.get('start_date', '')))} to {escape(str(data.get('end_date', '')))}<br/><br/><b>Currency:</b> KES", self.styles['Normal'])
             ]
         ]
         
@@ -396,10 +398,10 @@ class AccountingDocumentGenerator:
         summary_data = [
             ['Opening Balance', 'Total Invoiced', 'Total Paid', 'Closing Balance'],
             [
-                f"{data.get('opening_balance', 0):,.2f}",
-                f"{data.get('total_invoiced', 0):,.2f}",
-                f"{data.get('total_paid', 0):,.2f}",
-                f"{data.get('closing_balance', 0):,.2f}"
+                f"{(data.get('opening_balance') or 0):,.2f}",
+                f"{(data.get('total_invoiced') or 0):,.2f}",
+                f"{(data.get('total_paid') or 0):,.2f}",
+                f"{(data.get('closing_balance') or 0):,.2f}"
             ]
         ]
         
@@ -437,7 +439,7 @@ class AccountingDocumentGenerator:
             
             trans_data.append([
                 trans.get('transaction_date', ''),
-                Paragraph(trans.get('description', ''), self.styles['Normal']),
+                Paragraph(escape(trans.get('description', '') or ''), self.styles['Normal']),
                 trans.get('reference_number', ''),
                 f"{debit:,.2f}" if debit > 0 else '-',
                 f"{credit:,.2f}" if credit > 0 else '-',
@@ -466,11 +468,11 @@ class AccountingDocumentGenerator:
         aging_data = [
             ['Current', '30 Days', '60 Days', '90+ Days', 'Total Due'],
             [
-                f"{aging.get('current_amount', 0):,.2f}",
-                f"{aging.get('days_30_amount', 0):,.2f}",
-                f"{aging.get('days_60_amount', 0):,.2f}",
-                f"{aging.get('days_90_plus_amount', 0):,.2f}",
-                f"{data.get('closing_balance', 0):,.2f}"
+                f"{(aging.get('current_amount') or 0):,.2f}",
+                f"{(aging.get('days_30_amount') or 0):,.2f}",
+                f"{(aging.get('days_60_amount') or 0):,.2f}",
+                f"{(aging.get('days_90_plus_amount') or 0):,.2f}",
+                f"{(data.get('closing_balance') or 0):,.2f}"
             ]
         ]
         
@@ -500,7 +502,7 @@ class AccountingDocumentGenerator:
         title_table_data = [
             [
                 Paragraph("PURCHASE ORDER", self.styles['CustomTitle']),
-                Paragraph(f"<b>PO Number:</b> {data.get('po_number', 'DRAFT')}<br/><b>Date:</b> {data.get('po_date', '')}<br/><b>Status:</b> {data.get('status', 'Draft').upper()}", self.styles['Normal'])
+                Paragraph(f"<b>PO Number:</b> {escape(str(data.get('po_number', 'DRAFT')))}<br/><b>Date:</b> {escape(str(data.get('po_date', '')))}<br/><b>Status:</b> {escape(str(data.get('status', 'Draft').upper()))}", self.styles['Normal'])
             ]
         ]
         title_table = Table(title_table_data, colWidths=[4.5*inch, 2.5*inch])
@@ -526,7 +528,7 @@ class AccountingDocumentGenerator:
                 Paragraph("<b>SHIP TO:</b>", self.styles['Normal'])
             ],
             [
-                Paragraph(f"{supplier.get('name', 'N/A')}<br/>{supplier.get('address', 'N/A')}<br/>Email: {supplier.get('email', 'N/A')}<br/>PIN: {supplier.get('supplier_pin', 'N/A')}", self.styles['Normal']),
+                Paragraph(f"{escape(supplier.get('name', 'N/A'))}<br/>{escape(supplier.get('address', 'N/A'))}<br/>Email: {escape(supplier.get('email', 'N/A'))}<br/>PIN: {escape(supplier.get('supplier_pin', 'N/A'))}", self.styles['Normal']),
                 Paragraph("<b>Central Stores</b><br/>Famous Gate Grill<br/>Main Branch<br/>Attn: Receiving Department", self.styles['Normal'])
             ]
         ]
@@ -568,7 +570,7 @@ class AccountingDocumentGenerator:
         for idx, item in enumerate(data.get('items', []), 1):
             items_data.append([
                 str(idx),
-                Paragraph(item.get('name', ''), self.styles['Normal']),
+                Paragraph(escape(item.get('name', '') or ''), self.styles['Normal']),
                 item.get('unit', 'Pcs'),
                 str(item.get('quantity', 0)),
                 f"{float(item.get('unit_price', 0)):,.2f}",
@@ -603,7 +605,7 @@ class AccountingDocumentGenerator:
         # 5. Authorization / Notes
         instructions = data.get('special_instructions', '')
         if instructions:
-            story.append(Paragraph(f"<b>Special Instructions:</b><br/>{instructions}", self.styles['Normal']))
+            story.append(Paragraph(f"<b>Special Instructions:</b><br/>{escape(instructions or '')}", self.styles['Normal']))
             story.append(Spacer(1, 0.2*inch))
             
         story.append(Paragraph("This Purchase Order is an official document of Famous Gate Grill. Authorization is required for validity.", self.styles['Italic']))

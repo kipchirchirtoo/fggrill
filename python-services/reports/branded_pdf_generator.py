@@ -2181,8 +2181,8 @@ class BrandedPDFGenerator:
         
         # Add summary text
         if branches:
-            best_branch = sorted_branches[0].get('name', 'Unknown')
-            best_value = sorted_branches[0].get(metric) or 0
+            best_branch = sorted_branches[0].get('name', 'Unknown') if sorted_branches else 'N/A'
+            best_value = (sorted_branches[0].get(metric) or 0) if sorted_branches else 0
             formatted_value = self._format_currency(best_value) if metric == 'revenue' else (
                 f"{best_value}%" if metric == 'occupancy' else str(best_value)
             )
