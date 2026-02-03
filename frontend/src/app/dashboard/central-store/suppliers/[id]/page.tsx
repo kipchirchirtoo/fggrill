@@ -159,6 +159,17 @@ export default function SupplierDetailPage() {
         }
     };
 
+    const handleDownloadPO = async (poId: string, poNumber: string) => {
+        try {
+            toast.info(`Downloading PO ${poNumber}...`);
+            await accountingAPI.downloadPurchaseOrder(poId);
+            toast.success('Download complete');
+        } catch (error) {
+            console.error('Download Error:', error);
+            toast.error('Failed to download PO');
+        }
+    };
+
     const addItemToPO = () => {
         if (!selectedItemId) return;
         const item = availableItems.find(i => i.id === selectedItemId);
@@ -433,7 +444,13 @@ export default function SupplierDetailPage() {
                                                     <td className="py-3 px-4"><IOSBadge variant="light" color={po.status === 'approved' ? 'success' : 'secondary'}>{po.status}</IOSBadge></td>
                                                     <td className="py-3 px-4 text-right font-medium">{po.total_amount.toLocaleString()}</td>
                                                     <td className="py-3 px-4 text-center">
-                                                        <button className="text-stone-400 hover:text-[#007AFF]"><Download className="h-4 w-4" /></button>
+                                                        <button
+                                                            className="text-stone-400 hover:text-[#007AFF]"
+                                                            onClick={() => handleDownloadPO(po.id, po.po_number)}
+                                                            title="Download PO PDF"
+                                                        >
+                                                            <Download className="h-4 w-4" />
+                                                        </button>
                                                     </td>
                                                 </tr>
                                             ))}

@@ -489,3 +489,134 @@ class AccountingDocumentGenerator:
         doc.build(story, onFirstPage=self._add_header, onLaterPages=self._add_header)
         buffer.seek(0)
         return buffer.getvalue()
+
+    def generate_purchase_order_pdf(self, data: Dict[str, Any]) -> bytes:
+        """Generate Purchase Order PDF"""
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=1.5*inch, bottomMargin=inch)
+        story = []
+        
+        # 1. Title & key metadata
+        title_table_data = [
+            [
+                Paragraph("PURCHASE ORDER", self.styles['CustomTitle']),
+                Paragraph(f"<b>PO Number:</b> {data.get('po_number', 'DRAFT')}<br/><b>Date:</b> {data.get('po_date', '')}<br/><b>Status:</b> {data.get('status', 'Draft').upper()}", self.styles['Normal'])
+            ]
+        ]
+        title_table = Table(title_table_data, colWidths=[4.5*inch, 2.5*inch])
+        title_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+        ]))
+        story.append(title_table)
+        story.append(Spacer(1, 0.3*inch))
+        
+        # 2. Supplier and Ship To
+        supplier = data.get('supplier', {})
+        org_details = [
+            "<b>Famous Gate Grill</b>",
+            "P.O Box 1234-00100",
+            "Nairobi, Kenya",
+            "Tel: +254 700 000 000"
+        ]
+        
+        address_data = [
+            [
+                Paragraph("<b>VENDOR:</b>", self.styles['Normal']),
+                Paragraph("<b>SHIP TO:</b>", self.styles['Normal'])
+            ],
+            [
+                Paragraph(f"{supplier.get('name', 'N/A')}<br/>{supplier.get('address', 'N/A')}<br/>Email: {supplier.get('email', 'N/A')}<br/>PIN: {supplier.get('supplier_pin', 'N/A')}", self.styles['Normal']),
+                Paragraph("<b>Central Stores</b><br/>Famous Gate Grill<br/>Main Branch<br/>Attn: Receiving Department", self.styles['Normal'])
+            ]
+        ]
+        
+        addr_table = Table(address_data, colWidths=[3.5*inch, 3.5*inch])
+        addr_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LINEBELOW', (0, 0), (1, 0), 0.5, colors.grey),
+            ('BOTTOMPADDING', (0, 1), (-1, 1), 10),
+        ]))
+        story.append(addr_table)
+        story.append(Spacer(1, 0.3*inch))
+        
+        # 3. Order Details (Terms)
+        terms_data = [
+            ['Payment Terms', 'Delivery Date', 'Delivery Method', 'Prepared By'],
+            [
+                data.get('payment_terms', '30 Days'),
+                data.get('expected_delivery_date', 'Immediate'),
+                data.get('delivery_terms', 'DDP'),
+                data.get('created_by_name', 'System')
+            ]
+        ]
+        terms_table = Table(terms_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
+        terms_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#ecf0f1')),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ]))
+        story.append(terms_table)
+        story.append(Spacer(1, 0.3*inch))
+        
+        # 4. Items Table
+        items_header = ['#', 'Item / Description', 'Unit', 'Qty', 'Unit Price', 'Total']
+        items_data = [items_header]
+        
+        for idx, item in enumerate(data.get('items', []), 1):
+            items_data.append([
+                str(idx),
+                Paragraph(item.get('name', ''), self.styles['Normal']),
+                item.get('unit', 'Pcs'),
+                str(item.get('quantity', 0)),
+                f"{float(item.get('unit_price', 0)):,.2f}",
+                f"{float(item.get('total_amount', 0) or (item.get('quantity', 0) * item.get('unit_price', 0))):,.2f}"
+            ])
+            
+        # Fill empty rows if few items
+        while len(items_data) < 8:
+            items_data.append(['', '', '', '', '', ''])
+            
+        # Total Row
+        total_amount = float(data.get('total_amount', 0))
+        items_data.append(['', '', '', '', 'TOTAL (KES)', f"{total_amount:,.2f}"])
+        
+        items_table = Table(items_data, colWidths=[0.5*inch, 3*inch, 0.8*inch, 0.8*inch, 1*inch, 1.2*inch])
+        
+        table_style = [
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('ALIGN', (3, 1), (-1, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -2), 0.5, colors.grey),
+            ('LINEBELOW', (0, -2), (-1, -2), 1, colors.black),
+            ('FONTNAME', (-2, -1), (-1, -1), 'Helvetica-Bold'),
+            ('BACKGROUND', (-2, -1), (-1, -1), colors.HexColor('#f8f9fa')),
+        ]
+        items_table.setStyle(TableStyle(table_style))
+        story.append(items_table)
+        story.append(Spacer(1, 0.3*inch))
+        
+        # 5. Authorization / Notes
+        instructions = data.get('special_instructions', '')
+        if instructions:
+            story.append(Paragraph(f"<b>Special Instructions:</b><br/>{instructions}", self.styles['Normal']))
+            story.append(Spacer(1, 0.2*inch))
+            
+        story.append(Paragraph("This Purchase Order is an official document of Famous Gate Grill. Authorization is required for validity.", self.styles['Italic']))
+        story.append(Spacer(1, 0.5*inch))
+        
+        # Signature block
+        sig_data = [
+            ['__________________________', '__________________________'],
+            ['Prepared By', 'Authorized Signature']
+        ]
+        sig_table = Table(sig_data, colWidths=[3.5*inch, 3.5*inch])
+        story.append(sig_table)
+        
+        doc.build(story, onFirstPage=self._add_header, onLaterPages=self._add_header)
+        buffer.seek(0)
+        return buffer.getvalue()

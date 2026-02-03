@@ -945,3 +945,55 @@ def export_supplier_statement_pdf():
     except Exception as e:
         logger.error(f"Error exporting supplier statement PDF: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@accounting_bp.route('/purchase-orders/<id>/export/pdf', methods=['GET'])
+def export_po_pdf(id):
+    """Export Purchase Order as PDF"""
+    try:
+        if not supabase:
+             return jsonify({'success': False, 'message': 'Service unavailable'}), 503
+
+        # Fetch PO with relations. Assuming 'store_purchase_order_items' linked via 'purchase_order_id' (implicit or explicit)
+        # Note: 'items:store_purchase_order_items(...)' syntax relies on foreign key naming. 
+        # If 'store_purchase_order_items' has 'po_id' or 'purchase_order_id', Supabase detects it.
+        # We need to be careful about the foreign key name. Assuming standard 'purchase_order_id'.
+        
+        po_res = supabase.table('store_purchase_orders')\
+            .select('*, supplier:store_suppliers(*), items:store_purchase_order_items(*, item:store_items(name, unit))')\
+            .eq('id', id)\
+            .single()\
+            .execute()
+        
+        if not po_res.data:
+            return jsonify({'success': False, 'message': 'PO not found'}), 404
+            
+        po_data = po_res.data
+        
+        # Flatten item structure
+        flat_items = []
+        for i in po_data.get('items', []):
+             item_details = i.get('item') or {}
+             flat_item = {
+                 'name': item_details.get('name', 'Unknown Item'),
+                 'unit': item_details.get('unit', 'Unit'),
+                 'quantity': i.get('quantity', 0),
+                 'unit_price': i.get('unit_price', 0),
+                 'total_amount': i.get('total_amount', 0)
+             }
+             flat_items.append(flat_item)
+        po_data['items'] = flat_items
+        
+        # Map user info if available (created_by_id)
+        # We can optionally fetch user name, but 'System' default is fine for MVP.
+        
+        pdf_bytes = doc_generator.generate_purchase_order_pdf(po_data)
+        
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f"PO_{po_data.get('po_number', 'draft')}.pdf"
+        )
+    except Exception as e:
+        logger.error(f"Error exporting PO PDF: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500

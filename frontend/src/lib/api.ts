@@ -3030,6 +3030,25 @@ export const accountingAPI = {
     return true;
   },
 
+  downloadPurchaseOrder: async (id: string) => {
+    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/purchase-orders/${id}/export/pdf`, {
+      headers: getHeaders()
+    });
+
+    if (!response.ok) throw new Error('Download failed');
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `PO_${id}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    return true;
+  },
+
 
   postJournalEntry: async (id: string, user?: string) => {
     const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/journal-entries/${id}/post`, {
