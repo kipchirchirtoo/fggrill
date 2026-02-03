@@ -187,7 +187,13 @@ export const createSupplier = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Supplier name is required' });
     }
 
-    if (!supplier_code) {
+    // Map legacy fields if incoming data uses them
+    const supplier_code_val = supplier_code || (req.body as any).code;
+    const address_line1_val = address_line1 || (req.body as any).address;
+    const tax_id_val = tax_id || (req.body as any).supplier_pin;
+    const vat_number_val = vat_number || (req.body as any).vat_registration_number;
+
+    if (!supplier_code_val) {
       return res.status(400).json({ success: false, message: 'Supplier code is required' });
     }
 
@@ -195,21 +201,21 @@ export const createSupplier = async (req: Request, res: Response) => {
       .from('store_suppliers')
       .insert([{
         name,
-        supplier_code,
+        supplier_code: supplier_code_val,
         legal_name,
         contact_person,
         email,
         phone,
         alternate_phone,
         website,
-        address_line1,
+        address_line1: address_line1_val,
         address_line2,
         city,
         state,
         country: country || 'Kenya',
         postal_code,
-        tax_id,
-        vat_number,
+        tax_id: tax_id_val,
+        vat_number: vat_number_val,
         registration_number,
         payment_terms,
         credit_limit,
@@ -244,9 +250,31 @@ export const updateSupplier = async (req: Request, res: Response) => {
       .eq('id', id)
       .single();
 
+    // Construct update object with allowed fields only and map legacy fields
+    const updateData: any = {};
+    const allowedFields = [
+      'name', 'supplier_code', 'legal_name', 'contact_person', 'email', 'phone',
+      'alternate_phone', 'website', 'address_line1', 'address_line2', 'city',
+      'state', 'country', 'postal_code', 'tax_id', 'vat_number', 'registration_number',
+      'payment_terms', 'credit_limit', 'bank_name', 'bank_account_number', 'bank_branch',
+      'lead_time_days', 'status', 'is_preferred', 'notes'
+    ];
+
+    allowedFields.forEach(field => {
+      if (body[field] !== undefined) updateData[field] = body[field];
+    });
+
+    // Map legacy fields if present and new ones aren't
+    if (body.code && !updateData.supplier_code) updateData.supplier_code = body.code;
+    if (body.address && !updateData.address_line1) updateData.address_line1 = body.address;
+    if (body.supplier_pin && !updateData.tax_id) updateData.tax_id = body.supplier_pin;
+    if (body.vat_registration_number && !updateData.vat_number) updateData.vat_number = body.vat_registration_number;
+
+    updateData.updated_at = new Date().toISOString();
+
     const { data, error } = await supabase
       .from('store_suppliers')
-      .update({ ...body, updated_at: new Date().toISOString() })
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();
@@ -260,7 +288,7 @@ export const updateSupplier = async (req: Request, res: Response) => {
         p_action: 'UPDATE',
         p_entity_type: 'SUPPLIER',
         p_entity_id: id,
-        p_entity_reference: data.code || data.name,
+        p_entity_reference: data.supplier_code || data.name,
         p_old_values: oldValues,
         p_new_values: data,
         p_description: `Updated supplier profile: ${data.name}`,
