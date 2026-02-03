@@ -20,7 +20,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
     Building2, Phone, Mail, MapPin, Landmark, Calendar,
     FileText, Truck, CreditCard, History, BarChart3,
-    ShieldCheck, ArrowLeft, Download, Plus, AlertCircle, RefreshCw
+    ShieldCheck, ArrowLeft, Download, Plus, AlertCircle, RefreshCw, Check
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -167,6 +167,18 @@ export default function SupplierDetailPage() {
         } catch (error) {
             console.error('Download Error:', error);
             toast.error('Failed to download PO');
+        }
+    };
+
+    const handleApprovePO = async (poId: string, poNumber: string) => {
+        try {
+            toast.info(`Approving PO ${poNumber}...`);
+            await procurementAPI.approvePurchaseOrder(poId);
+            toast.success('PO Approved');
+            fetchData();
+        } catch (error) {
+            console.error('Approval Error:', error);
+            toast.error('Failed to approve PO');
         }
     };
 
@@ -444,13 +456,24 @@ export default function SupplierDetailPage() {
                                                     <td className="py-3 px-4"><IOSBadge variant="light" color={po.status === 'approved' ? 'success' : 'secondary'}>{po.status}</IOSBadge></td>
                                                     <td className="py-3 px-4 text-right font-medium">{po.total_amount.toLocaleString()}</td>
                                                     <td className="py-3 px-4 text-center">
-                                                        <button
-                                                            className="text-stone-400 hover:text-[#007AFF]"
-                                                            onClick={() => handleDownloadPO(po.id, po.po_number)}
-                                                            title="Download PO PDF"
-                                                        >
-                                                            <Download className="h-4 w-4" />
-                                                        </button>
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            {po.status === 'draft' && (
+                                                                <button
+                                                                    className="text-stone-400 hover:text-emerald-500"
+                                                                    onClick={() => handleApprovePO(po.id, po.po_number)}
+                                                                    title="Approve PO"
+                                                                >
+                                                                    <Check className="h-4 w-4" />
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                className="text-stone-400 hover:text-[#007AFF]"
+                                                                onClick={() => handleDownloadPO(po.id, po.po_number)}
+                                                                title="Download PO PDF"
+                                                            >
+                                                                <Download className="h-4 w-4" />
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}

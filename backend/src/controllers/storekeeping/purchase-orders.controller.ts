@@ -297,7 +297,6 @@ export const updatePurchaseOrder = async (
         const { id } = req.params;
         const {
             supplier_id,
-            receiving_branch_id,
             po_date,
             expected_delivery_date,
             special_instructions,
@@ -332,7 +331,6 @@ export const updatePurchaseOrder = async (
             .from('store_purchase_orders')
             .update({
                 supplier_id,
-                receiving_branch_id,
                 po_date,
                 expected_delivery_date,
                 special_instructions,
