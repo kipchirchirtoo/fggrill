@@ -19,7 +19,6 @@ export const getPurchaseOrders = async (
             .select(`
         *,
         supplier:store_suppliers(id, name, supplier_code),
-        receiving_branch:branches!receiving_branch_id(id, name, code),
         created_by_user:users!created_by_id(id, first_name, last_name),
         approved_by_user:users!approved_by_id(id, first_name, last_name),
         received_by_user:users!received_by_id(id, first_name, last_name),
@@ -31,9 +30,11 @@ export const getPurchaseOrders = async (
             .order('created_at', { ascending: false });
 
         // Apply filters
+        /*
         if (branch_id) {
             query = query.eq('receiving_branch_id', branch_id);
         }
+        */
         if (supplier_id) {
             query = query.eq('supplier_id', supplier_id);
         }
