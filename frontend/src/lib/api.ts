@@ -375,6 +375,7 @@ export const storeAPI = {
 
   // Suppliers
   getSuppliers: () => fetchAPI<any>('/store/suppliers'),
+  getSupplier: (id: string) => fetchAPI<any>(`/store/suppliers/${id}`),
   createSupplier: (data: any) => fetchAPI<any>('/store/suppliers', { method: 'POST', body: JSON.stringify(data) }),
   updateSupplier: (id: string, data: any) => fetchAPI<any>(`/store/suppliers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteSupplier: (id: string) => fetchAPI<any>(`/store/suppliers/${id}`, { method: 'DELETE' }),
@@ -3448,21 +3449,37 @@ export const employeePortalAPI = {
 
 export const procurementAPI = {
   // Purchase Orders
-  getPurchaseOrders: (status?: string) => fetchAPI<any>(`/procurement/purchase-orders${status ? `?status=${status}` : ''}`),
+  getPurchaseOrders: (params?: { status?: string; supplier_id?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.supplier_id) query.append('supplier_id', params.supplier_id);
+    return fetchAPI<any>(`/procurement/purchase-orders?${query}`);
+  },
   getPurchaseOrder: (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}`),
   createPurchaseOrder: (data: any) => fetchAPI<any>('/procurement/purchase-orders', { method: 'POST', body: JSON.stringify(data) }),
   approvePurchaseOrder: (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}/approve`, { method: 'PUT' }),
   cancelPurchaseOrder: (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}/cancel`, { method: 'PUT' }),
 
   // GRN
-  getGRNs: (status?: string) => fetchAPI<any>(`/procurement/grn${status ? `?status=${status}` : ''}`),
+  getGRNs: (params?: { status?: string; supplier_id?: string; po_id?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.supplier_id) query.append('supplier_id', params.supplier_id);
+    if (params?.po_id) query.append('po_id', params.po_id);
+    return fetchAPI<any>(`/procurement/grn?${query}`);
+  },
   getGRN: (id: string) => fetchAPI<any>(`/procurement/grn/${id}`),
   createGRN: (data: any) => fetchAPI<any>('/procurement/grn', { method: 'POST', body: JSON.stringify(data) }),
   approveGRN: (id: string) => fetchAPI<any>(`/procurement/grn/${id}/approve`, { method: 'PUT' }),
   cancelGRN: (id: string) => fetchAPI<any>(`/procurement/grn/${id}/cancel`, { method: 'PUT' }),
 
   // Supplier Invoices
-  getInvoices: (status?: string) => fetchAPI<any>(`/procurement/invoices${status ? `?status=${status}` : ''}`),
+  getInvoices: (params?: { status?: string; supplier_id?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.supplier_id) query.append('supplier_id', params.supplier_id);
+    return fetchAPI<any>(`/procurement/invoices?${query}`);
+  },
   getInvoice: (id: string) => fetchAPI<any>(`/procurement/invoices/${id}`),
   createInvoice: (data: any) => fetchAPI<any>('/procurement/invoices', { method: 'POST', body: JSON.stringify(data) }),
   submitInvoice: (id: string) => fetchAPI<any>(`/procurement/invoices/${id}/submit`, { method: 'PUT' }),
@@ -3470,7 +3487,12 @@ export const procurementAPI = {
   rejectInvoice: (id: string, reason: string) => fetchAPI<any>(`/procurement/invoices/${id}/reject`, { method: 'PUT', body: JSON.stringify({ reason }) }),
 
   // Supplier Payments
-  getPayments: () => fetchAPI<any>('/procurement/payments'),
+  getPayments: (params?: { supplier_id?: string; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.supplier_id) query.append('supplier_id', params.supplier_id);
+    if (params?.status) query.append('status', params.status);
+    return fetchAPI<any>(`/procurement/payments?${query}`);
+  },
   getPayment: (id: string) => fetchAPI<any>(`/procurement/payments/${id}`),
   createPayment: (data: any) => fetchAPI<any>('/procurement/payments', { method: 'POST', body: JSON.stringify(data) }),
   processPayment: (id: string) => fetchAPI<any>(`/procurement/payments/${id}/process`, { method: 'PUT' }),
@@ -3479,7 +3501,15 @@ export const procurementAPI = {
   getAgingAnalysis: () => fetchAPI<any>('/procurement/reports/aging'),
   getVATReport: (startDate: string, endDate: string) => fetchAPI<any>(`/procurement/reports/vat?startDate=${startDate}&endDate=${endDate}`),
   getGRNIReport: () => fetchAPI<any>('/procurement/reports/grni'),
-  getAuditTrail: (entityType?: string) => fetchAPI<any>(`/procurement/reports/audit-trail${entityType ? `?entityType=${entityType}` : ''}`),
+  getAuditTrail: (params?: { entityType?: string; supplier_id?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.entityType) query.append('entityType', params.entityType);
+    if (params?.supplier_id) query.append('supplier_id', params.supplier_id);
+    return fetchAPI<any>(`/procurement/reports/audit-trail?${query}`);
+  },
+  getSupplierLedger: (supplierId: string) => fetchAPI<any>(`/procurement/ledger/${supplierId}`),
+  getSupplierPerformance: (supplierId: string) => fetchAPI<any>(`/procurement/performance/${supplierId}`),
+  getSupplier: (id: string) => fetchAPI<any>(`/store/suppliers/${id}`),
 };
 
 

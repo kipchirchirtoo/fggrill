@@ -143,7 +143,7 @@ export const getAuditTrail = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { entity_type, entity_id, from_date, to_date } = req.query;
+        const { entity_type, entity_id, from_date, to_date, supplier_id } = req.query;
 
         let query = supabase
             .from('store_procurement_audit_logs')
@@ -152,6 +152,7 @@ export const getAuditTrail = async (
 
         if (entity_type) query = query.eq('entity_type', entity_type);
         if (entity_id) query = query.eq('entity_id', entity_id);
+        if (supplier_id) query = query.eq('supplier_id', supplier_id);
         if (from_date) query = query.gte('action_timestamp', from_date);
         if (to_date) query = query.lte('action_timestamp', to_date);
 
@@ -167,5 +168,67 @@ export const getAuditTrail = async (
     } catch (error) {
         logger.error('Error fetching audit trail:', error);
         next(new AppError('Failed to fetch audit trail', 500));
+    }
+};
+
+// @desc    Get detailed supplier ledger
+// @route   GET /api/procurement/ledger/:supplierId
+// @access  Private
+export const getSupplierLedger = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { supplierId } = req.params;
+
+        const { data: ledger, error } = await supabase
+            .from('store_supplier_ledger')
+            .select('*')
+            .eq('supplier_id', supplierId)
+            .order('transaction_date', { ascending: false })
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        res.status(200).json({
+            success: true,
+            data: ledger || []
+        });
+    } catch (error) {
+        logger.error('Error fetching supplier ledger:', error);
+        next(new AppError('Failed to fetch supplier ledger', 500));
+    }
+};
+
+// @desc    Get supplier performance metrics
+// @route   GET /api/procurement/performance/:supplierId
+// @access  Private
+export const getSupplierPerformance = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { supplierId } = req.params;
+
+        const { data: performance, error } = await supabase
+            .from('store_supplier_balances')
+            .select('*')
+            .eq('supplier_id', supplierId)
+            .single();
+
+        if (error) throw error;
+
+        // In a real scenario, we might calculate more metrics here
+        // like average lead time deviation, dispute rate, etc.
+
+        res.status(200).json({
+            success: true,
+            data: performance
+        });
+    } catch (error) {
+        logger.error('Error fetching supplier performance:', error);
+        next(new AppError('Failed to fetch supplier performance', 500));
     }
 };

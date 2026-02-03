@@ -12,7 +12,7 @@ export const getPurchaseOrders = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { branch_id, status, from_date, to_date } = req.query;
+        const { branch_id, status, from_date, to_date, supplier_id } = req.query;
 
         let query = supabase
             .from('store_purchase_orders')
@@ -33,6 +33,9 @@ export const getPurchaseOrders = async (
         // Apply filters
         if (branch_id) {
             query = query.eq('receiving_branch_id', branch_id);
+        }
+        if (supplier_id) {
+            query = query.eq('supplier_id', supplier_id);
         }
         if (status) {
             query = query.eq('status', status);

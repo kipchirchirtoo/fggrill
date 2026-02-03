@@ -10,18 +10,44 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { storeAPI } from '@/lib/api';
-import { Building2, RefreshCw, Search, Phone, Mail, MapPin, Plus, Trash2, Edit2, Hash } from 'lucide-react';
+import { Building2, RefreshCw, Search, Phone, Mail, MapPin, Plus, Trash2, Edit2, Hash, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
-interface Supplier { id: string; name: string; code?: string; contact_person?: string; email?: string; phone?: string; address?: string; status: 'active' | 'inactive'; }
+interface Supplier {
+  id: string;
+  name: string;
+  code?: string;
+  contact_person?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  status: 'active' | 'inactive';
+  supplier_pin?: string;
+  vat_registered: boolean;
+  vat_registration_number?: string;
+  withholding_vat_applicable: boolean;
+  withholding_vat_rate: number;
+}
 
 export default function CentralSuppliersPage() {
   const { user } = useAuth();
   const isManager = user?.role === UserRole.AUDITOR || user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.CENTRAL_STOREKEEPER;
   const [addModalOpen, setAddModalOpen] = useState(false);
-  const [formData, setFormData] = useState({ name: '', code: '', contact_person: '', email: '', phone: '', address: '' });
+  const [formData, setFormData] = useState({
+    name: '',
+    code: '',
+    contact_person: '',
+    email: '',
+    phone: '',
+    address: '',
+    supplier_pin: '',
+    vat_registered: false,
+    vat_registration_number: '',
+    withholding_vat_applicable: false,
+    withholding_vat_rate: 0
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -65,7 +91,19 @@ export default function CentralSuppliersPage() {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', code: '', contact_person: '', email: '', phone: '', address: '' });
+    setFormData({
+      name: '',
+      code: '',
+      contact_person: '',
+      email: '',
+      phone: '',
+      address: '',
+      supplier_pin: '',
+      vat_registered: false,
+      vat_registration_number: '',
+      withholding_vat_applicable: false,
+      withholding_vat_rate: 0
+    });
     setEditingId(null);
   };
 
@@ -87,6 +125,11 @@ export default function CentralSuppliersPage() {
       email: supplier.email || '',
       phone: supplier.phone || '',
       address: supplier.address || '',
+      supplier_pin: supplier.supplier_pin || '',
+      vat_registered: supplier.vat_registered || false,
+      vat_registration_number: supplier.vat_registration_number || '',
+      withholding_vat_applicable: supplier.withholding_vat_applicable || false,
+      withholding_vat_rate: supplier.withholding_vat_rate || 0,
     });
     setAddModalOpen(true);
   };
@@ -96,11 +139,20 @@ export default function CentralSuppliersPage() {
       <DashboardLayout>
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div><h1 className="text-2xl font-bold text-gray-900">Suppliers</h1><p className="text-gray-500">Manage vendors and product suppliers</p></div>
+            <div><h1 className="text-2xl font-bold text-gray-900">Procurement & Suppliers</h1><p className="text-gray-500">Manage vendors, POs, and VAT compliance</p></div>
             <div className="flex gap-2">
               <IOSButton variant="secondary" onClick={fetchSuppliers} leftIcon={<RefreshCw />}>Refresh</IOSButton>
               {isManager && <IOSButton onClick={() => { resetForm(); setAddModalOpen(true); }} leftIcon={<Plus />}>Add Supplier</IOSButton>}
             </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 py-2 border-b border-stone-100">
+            <IOSButton variant="secondary" className="bg-stone-50 border-none h-8 text-xs px-3" onClick={() => window.location.href = '/dashboard/central-store/suppliers'}>Suppliers</IOSButton>
+            <IOSButton variant="secondary" className="bg-white border-none h-8 text-xs px-3 hover:bg-stone-50" onClick={() => window.location.href = '/dashboard/central-store/suppliers/purchase-orders'}>POs</IOSButton>
+            <IOSButton variant="secondary" className="bg-white border-none h-8 text-xs px-3 hover:bg-stone-50" onClick={() => window.location.href = '/dashboard/central-store/suppliers/grn'}>GRN</IOSButton>
+            <IOSButton variant="secondary" className="bg-white border-none h-8 text-xs px-3 hover:bg-stone-50" onClick={() => window.location.href = '/dashboard/central-store/suppliers/invoices'}>Invoices</IOSButton>
+            <IOSButton variant="secondary" className="bg-white border-none h-8 text-xs px-3 hover:bg-stone-50" onClick={() => window.location.href = '/dashboard/central-store/suppliers/payments'}>Payments</IOSButton>
+            <IOSButton variant="secondary" className="bg-white border-none h-8 text-xs px-3 hover:bg-stone-50" onClick={() => window.location.href = '/dashboard/central-store/suppliers/reports'}>Reports</IOSButton>
           </div>
 
           <IOSCard className="p-4">
@@ -130,8 +182,9 @@ export default function CentralSuppliersPage() {
                       <IOSBadge variant="light" color={supplier.status === 'active' ? 'success' : 'secondary'}>{supplier.status}</IOSBadge>
                       {isManager && (
                         <div className="flex gap-1">
-                          <button onClick={() => startEdit(supplier)} className="p-1 hover:bg-stone-100 rounded text-stone-400 hover:text-[#007AFF] transition-colors"><Edit2 className="h-4 w-4" /></button>
-                          <button onClick={() => handleDelete(supplier.id)} className="p-1 hover:bg-red-50 rounded text-stone-400 hover:text-red-600 transition-colors"><Trash2 className="h-4 w-4" /></button>
+                          <button onClick={() => window.location.href = `/dashboard/central-store/suppliers/${supplier.id}`} className="p-1 hover:bg-emerald-50 rounded text-stone-400 hover:text-emerald-600 transition-colors" title="View Detailed Account"><FileText className="h-4 w-4" /></button>
+                          <button onClick={() => startEdit(supplier)} className="p-1 hover:bg-stone-100 rounded text-stone-400 hover:text-[#007AFF] transition-colors" title="Edit Profile"><Edit2 className="h-4 w-4" /></button>
+                          <button onClick={() => handleDelete(supplier.id)} className="p-1 hover:bg-red-50 rounded text-stone-400 hover:text-red-600 transition-colors" title="Delete Supplier"><Trash2 className="h-4 w-4" /></button>
                         </div>
                       )}
                     </div>
@@ -140,7 +193,14 @@ export default function CentralSuppliersPage() {
                     {supplier.contact_person && <p className="flex items-center gap-2 text-stone-700 font-medium">{supplier.contact_person}</p>}
                     {supplier.phone && <p className="flex items-center gap-2"><Phone className="h-3 w-3" /> {supplier.phone}</p>}
                     {supplier.email && <p className="flex items-center gap-2"><Mail className="h-3 w-3" /> {supplier.email}</p>}
-                    {supplier.address && <p className="flex items-center gap-2"><MapPin className="h-3 w-3" /> {supplier.address}</p>}
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {supplier.supplier_pin && <IOSBadge variant="light" className="text-[10px] py-0 px-1 border-none bg-stone-50 text-stone-500">PIN: {supplier.supplier_pin}</IOSBadge>}
+                      {supplier.vat_registered ?
+                        <IOSBadge variant="light" color="success" className="text-[10px] py-0 px-1 border-none">VAT Registered</IOSBadge> :
+                        <IOSBadge variant="light" className="text-[10px] py-0 px-1 border-none bg-stone-50 text-stone-400">Non-VAT</IOSBadge>
+                      }
+                      {supplier.withholding_vat_applicable && <IOSBadge variant="light" color="warning" className="text-[10px] py-0 px-1 border-none">W/VAT: {supplier.withholding_vat_rate}%</IOSBadge>}
+                    </div>
                   </div>
                 </IOSCard>
               ))}
@@ -162,13 +222,36 @@ export default function CentralSuppliersPage() {
               </div>
               <div><label className="text-sm font-medium">Contact Person</label><Input value={formData.contact_person} onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })} /></div>
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm font-medium">Phone</label><Input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} /></div>
-                <div><label className="text-sm font-medium">Email</label><Input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} /></div>
+                <div><label className="text-xs font-medium text-stone-500">Phone</label><Input className="h-8 text-sm" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} /></div>
+                <div><label className="text-xs font-medium text-stone-500">Email</label><Input className="h-8 text-sm" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} /></div>
               </div>
-              <div><label className="text-sm font-medium">Address</label><Input value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} /></div>
-              <div className="flex gap-3 pt-2">
-                <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                <IOSButton onClick={handleCreateOrUpdate} disabled={isSubmitting} className="flex-1">{isSubmitting ? 'Saving...' : (editingId ? 'Save Changes' : 'Add Supplier')}</IOSButton>
+              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-stone-50">
+                <div><label className="text-xs font-medium text-stone-500">KRA PIN</label><Input className="h-8 text-sm" placeholder="A000000000X" value={formData.supplier_pin} onChange={(e) => setFormData({ ...formData, supplier_pin: e.target.value })} /></div>
+                <div className="flex items-end pb-1">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={formData.vat_registered} onChange={(e) => setFormData({ ...formData, vat_registered: e.target.checked })} />
+                    <span className="text-xs font-medium text-stone-600">VAT Registered</span>
+                  </label>
+                </div>
+              </div>
+              {formData.vat_registered && (
+                <div><label className="text-xs font-medium text-stone-500">VAT Registration No.</label><Input className="h-8 text-sm" value={formData.vat_registration_number} onChange={(e) => setFormData({ ...formData, vat_registration_number: e.target.value })} /></div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-2 mt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={formData.withholding_vat_applicable} onChange={(e) => setFormData({ ...formData, withholding_vat_applicable: e.target.checked })} />
+                    <span className="text-xs font-medium text-stone-600">W/VAT Applicable</span>
+                  </label>
+                </div>
+                {formData.withholding_vat_applicable && (
+                  <div><label className="text-xs font-medium text-stone-500">W/VAT Rate (%)</label><Input className="h-8 text-sm" type="number" step="0.01" value={formData.withholding_vat_rate} onChange={(e) => setFormData({ ...formData, withholding_vat_rate: parseFloat(e.target.value) || 0 })} /></div>
+                )}
+              </div>
+              <div><label className="text-xs font-medium text-stone-500">Address</label><Input className="h-8 text-sm" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} /></div>
+              <div className="flex gap-3 pt-4">
+                <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1 h-9 text-sm">Cancel</IOSButton>
+                <IOSButton onClick={handleCreateOrUpdate} disabled={isSubmitting} className="flex-1 h-9 text-sm">{isSubmitting ? 'Saving...' : (editingId ? 'Save Changes' : 'Add Supplier')}</IOSButton>
               </div>
             </div>
           </DialogContent>

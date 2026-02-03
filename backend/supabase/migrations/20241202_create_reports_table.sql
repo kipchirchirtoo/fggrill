@@ -76,7 +76,7 @@ CREATE POLICY "Users can view reports they created or for their branch"
     USING (
         created_by = auth.uid() OR
         branch_id IN (SELECT branch_id FROM public.users WHERE id = auth.uid()) OR
-        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role IN ('SUPER_ADMIN', 'GENERAL_MANAGER'))
+        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role IN ('super_admin', 'general_manager'))
     );
 
 CREATE POLICY "Users can create reports"
@@ -86,7 +86,7 @@ CREATE POLICY "Users can create reports"
 CREATE POLICY "Admins can manage all reports"
     ON public.reports FOR ALL
     USING (
-        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role IN ('SUPER_ADMIN', 'GENERAL_MANAGER'))
+        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role IN ('super_admin', 'general_manager'))
     );
 
 -- RLS Policies for scheduled_reports
@@ -95,13 +95,13 @@ CREATE POLICY "Users can view scheduled reports for their branch"
     USING (
         created_by = auth.uid() OR
         branch_id IN (SELECT branch_id FROM public.users WHERE id = auth.uid()) OR
-        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role IN ('SUPER_ADMIN', 'GENERAL_MANAGER'))
+        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role IN ('super_admin', 'general_manager'))
     );
 
 CREATE POLICY "Admins can manage scheduled reports"
     ON public.scheduled_reports FOR ALL
     USING (
-        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role IN ('SUPER_ADMIN', 'GENERAL_MANAGER'))
+        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role IN ('super_admin', 'general_manager'))
     );
 
 -- RLS Policies for report_templates
@@ -112,7 +112,7 @@ CREATE POLICY "All authenticated users can view report templates"
 CREATE POLICY "Admins can manage report templates"
     ON public.report_templates FOR ALL
     USING (
-        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role IN ('SUPER_ADMIN', 'GENERAL_MANAGER'))
+        EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role IN ('super_admin', 'general_manager'))
     );
 
 -- Insert default report templates

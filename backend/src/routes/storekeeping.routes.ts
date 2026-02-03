@@ -76,6 +76,7 @@ import {
   updateDriver,
   deleteDriver,
   getSuppliers,
+  getSupplier,
   createSupplier,
   updateSupplier,
   deleteSupplier,
@@ -242,6 +243,7 @@ router.route('/suppliers')
   .post(authorize(managerRoles), createSupplier);
 
 router.route('/suppliers/:id')
+  .get(authorize(staffRoles), getSupplier)
   .put(authorize(managerRoles), updateSupplier)
   .delete(authorize(managerRoles), deleteSupplier);
 

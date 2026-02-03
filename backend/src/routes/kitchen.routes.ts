@@ -79,7 +79,8 @@ const kitchenStaff = [
 const kitchenManagers = [
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
-    UserRole.BRANCH_MANAGER
+    UserRole.BRANCH_MANAGER,
+    UserRole.KITCHEN_OPERATIONS
 ];
 
 const storekeepers = [

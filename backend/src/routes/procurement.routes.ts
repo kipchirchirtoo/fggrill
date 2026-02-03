@@ -41,7 +41,9 @@ import {
     getAgingAnalysis,
     getVATReport,
     getGRNIReport,
-    getAuditTrail
+    getAuditTrail,
+    getSupplierLedger,
+    getSupplierPerformance
 } from '../controllers/storekeeping/supplier-reports.controller';
 
 const router = express.Router();
@@ -116,5 +118,7 @@ router.get('/reports/aging', authorize(auditorRoles), getAgingAnalysis);
 router.get('/reports/vat', authorize(auditorRoles), getVATReport);
 router.get('/reports/grni', authorize(auditorRoles), getGRNIReport);
 router.get('/reports/audit-trail', authorize(auditorRoles), getAuditTrail);
+router.get('/ledger/:supplierId', authorize(allProcurementStaff), getSupplierLedger);
+router.get('/performance/:supplierId', authorize(allProcurementStaff), getSupplierPerformance);
 
 export default router;

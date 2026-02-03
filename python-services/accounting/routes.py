@@ -4,8 +4,10 @@ Handles journal entries, reviews, reconciliation, and audit trails
 """
 
 from flask import Blueprint, request, jsonify
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+from decimal import Decimal
 import uuid
+import io
 from typing import Dict, List, Any, Optional, Tuple
 from functools import wraps
 import logging
@@ -16,7 +18,8 @@ audit_bp = Blueprint('audit', __name__, url_prefix='/api/audit')
 
 from .stock_valuation import StockValuationService
 from .reporting import ReportingService
-from flask import g
+from .document_generator import AccountingDocumentGenerator
+from flask import g, send_file
 
 logger = logging.getLogger(__name__)
 
@@ -649,5 +652,197 @@ def get_trial_balance_report():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# Initialize services
+stock_service = StockValuationService(supabase) if supabase else None
+doc_generator = AccountingDocumentGenerator()
+
 # ... keep existing journal routes below if needed or replace ...
 # Removed redundant fallback routes that were causing AssertionError
+
+# =====================================================
+# DOCUMENT EXPORT ROUTES
+# =====================================================
+
+@accounting_bp.route('/reports/trial-balance/export/pdf', methods=['GET'])
+def export_trial_balance_pdf():
+    """Export Trial Balance as PDF"""
+    try:
+        branch_id = request.args.get('branch_id')
+        as_of_date = request.args.get('as_of_date', datetime.now().strftime('%Y-%m-%d'))
+        
+        if supabase:
+            service = ReportingService(supabase)
+            data = service.get_trial_balance(branch_id)
+            data['as_of_date'] = as_of_date
+            
+            # Get branch name
+            if branch_id:
+                branch_res = supabase.table('branches').select('name').eq('id', branch_id).single().execute()
+                if branch_res.data:
+                    data['branch_name'] = branch_res.data['name']
+            
+            pdf_bytes = doc_generator.generate_trial_balance_pdf(data)
+            
+            return send_file(
+                io.BytesIO(pdf_bytes),
+                mimetype='application/pdf',
+                as_attachment=True,
+                download_name=f'trial_balance_{as_of_date}.pdf'
+            )
+        return jsonify({'success': False, 'message': 'Service unavailable'}), 503
+    except Exception as e:
+        logger.error(f"Error exporting trial balance PDF: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@accounting_bp.route('/reports/p-and-l/export/pdf', methods=['GET'])
+def export_profit_loss_pdf():
+    """Export Profit & Loss Statement as PDF"""
+    try:
+        branch_id = request.args.get('branch_id', type=int)
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        if supabase:
+            service = ReportingService(supabase)
+            data = service.get_profit_and_loss(branch_id, start_date, end_date)
+            data['start_date'] = start_date
+            data['end_date'] = end_date
+            
+            # Get branch name
+            if branch_id:
+                branch_res = supabase.table('branches').select('name').eq('id', branch_id).single().execute()
+                if branch_res.data:
+                    data['branch_name'] = branch_res.data['name']
+            
+            pdf_bytes = doc_generator.generate_profit_loss_pdf(data)
+            
+            return send_file(
+                io.BytesIO(pdf_bytes),
+                mimetype='application/pdf',
+                as_attachment=True,
+                download_name=f'profit_loss_{start_date}_to_{end_date}.pdf'
+            )
+        return jsonify({'success': False, 'message': 'Service unavailable'}), 503
+    except Exception as e:
+        logger.error(f"Error exporting P&L PDF: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@accounting_bp.route('/reports/balance-sheet/export/pdf', methods=['GET'])
+def export_balance_sheet_pdf():
+    """Export Balance Sheet as PDF"""
+    try:
+        branch_id = request.args.get('branch_id', type=int)
+        as_of_date = request.args.get('as_of_date', datetime.now().strftime('%Y-%m-%d'))
+        
+        if supabase:
+            # Fetch balance sheet data
+            assets_res = supabase.table('accounting_chart_of_accounts')\
+                .select('account_code, account_name, category:accounting_account_categories(name)')\
+                .eq('category.name', 'ASSETS')\
+                .execute()
+            
+            liabilities_res = supabase.table('accounting_chart_of_accounts')\
+                .select('account_code, account_name, category:accounting_account_categories(name)')\
+                .eq('category.name', 'LIABILITIES')\
+                .execute()
+            
+            equity_res = supabase.table('accounting_chart_of_accounts')\
+                .select('account_code, account_name, category:accounting_account_categories(name)')\
+                .eq('category.name', 'EQUITY')\
+                .execute()
+            
+            data = {
+                'as_of_date': as_of_date,
+                'assets': assets_res.data or [],
+                'liabilities': liabilities_res.data or [],
+                'equity': equity_res.data or []
+            }
+            
+            # Get branch name
+            if branch_id:
+                branch_res = supabase.table('branches').select('name').eq('id', branch_id).single().execute()
+                if branch_res.data:
+                    data['branch_name'] = branch_res.data['name']
+            
+            pdf_bytes = doc_generator.generate_balance_sheet_pdf(data)
+            
+            return send_file(
+                io.BytesIO(pdf_bytes),
+                mimetype='application/pdf',
+                as_attachment=True,
+                download_name=f'balance_sheet_{as_of_date}.pdf'
+            )
+        return jsonify({'success': False, 'message': 'Service unavailable'}), 503
+    except Exception as e:
+        logger.error(f"Error exporting balance sheet PDF: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@accounting_bp.route('/journal-entries/export/excel', methods=['GET'])
+def export_journal_entries_excel():
+    """Export Journal Entries as Excel"""
+    try:
+        branch_id = request.args.get('branch_id', type=int)
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        if supabase:
+            query = supabase.table('accounting_journal_entries')\
+                .select('*, items:accounting_journal_items(*, account:accounting_chart_of_accounts(*)), created_by:users(full_name)')
+            
+            if branch_id:
+                query = query.eq('branch_id', branch_id)
+            if start_date:
+                query = query.gte('entry_date', start_date)
+            if end_date:
+                query = query.lte('entry_date', end_date)
+            
+            res = query.order('entry_date', desc=True).execute()
+            
+            excel_bytes = doc_generator.generate_journal_entries_excel(res.data or [])
+            
+            return send_file(
+                io.BytesIO(excel_bytes),
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                as_attachment=True,
+                download_name=f'journal_entries_{start_date}_to_{end_date}.xlsx'
+            )
+        return jsonify({'success': False, 'message': 'Service unavailable'}), 503
+    except Exception as e:
+        logger.error(f"Error exporting journal entries Excel: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@accounting_bp.route('/stock-counts/export/pdf', methods=['GET'])
+def export_stock_count_pdf():
+    """Export Stock Count Report as PDF"""
+    try:
+        count_id = request.args.get('count_id')
+        
+        if not count_id:
+            return jsonify({'success': False, 'message': 'count_id required'}), 400
+        
+        if supabase:
+            # Fetch stock count data
+            count_res = supabase.table('stock_counts')\
+                .select('*, items:stock_count_items(*, item:store_items(*)), branch:branches(*), counted_by:staff_profiles(*)')\
+                .eq('id', count_id)\
+                .single()\
+                .execute()
+            
+            if not count_res.data:
+                return jsonify({'success': False, 'message': 'Stock count not found'}), 404
+            
+            # Generate PDF using branded_pdf_generator
+            from reports.branded_pdf_generator import generate_stock_count_report
+            pdf_bytes = generate_stock_count_report(count_res.data)
+            
+            return send_file(
+                io.BytesIO(pdf_bytes),
+                mimetype='application/pdf',
+                as_attachment=True,
+                download_name=f'stock_count_{count_id}.pdf'
+            )
+        return jsonify({'success': False, 'message': 'Service unavailable'}), 503
+    except Exception as e:
+        logger.error(f"Error exporting stock count PDF: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+

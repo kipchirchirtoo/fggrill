@@ -4,11 +4,55 @@
 -- Chart of Accounts Categories
 CREATE TABLE IF NOT EXISTS accounting_account_categories (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL, -- ASSETS, LIABILITIES, EQUITY, REVENUE, EXPENSES
-    normal_balance VARCHAR(10) CHECK (normal_balance IN ('DEBIT', 'CREDIT')),
-    code_range_start INTEGER,
-    code_range_end INTEGER
+    name VARCHAR(100) NOT NULL
 );
+
+-- Add missing columns if they don't exist
+DO $$ 
+BEGIN
+    -- Add normal_balance column
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'accounting_account_categories' 
+        AND column_name = 'normal_balance'
+    ) THEN
+        ALTER TABLE accounting_account_categories 
+        ADD COLUMN normal_balance VARCHAR(10);
+    END IF;
+
+    -- Add code_range_start column
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'accounting_account_categories' 
+        AND column_name = 'code_range_start'
+    ) THEN
+        ALTER TABLE accounting_account_categories 
+        ADD COLUMN code_range_start INTEGER;
+    END IF;
+
+    -- Add code_range_end column
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'accounting_account_categories' 
+        AND column_name = 'code_range_end'
+    ) THEN
+        ALTER TABLE accounting_account_categories 
+        ADD COLUMN code_range_end INTEGER;
+    END IF;
+END $$;
+
+-- Add constraint if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'accounting_account_categories_normal_balance_check'
+    ) THEN
+        ALTER TABLE accounting_account_categories 
+        ADD CONSTRAINT accounting_account_categories_normal_balance_check 
+        CHECK (normal_balance IN ('DEBIT', 'CREDIT'));
+    END IF;
+END $$;
 
 -- Chart of Accounts
 CREATE TABLE IF NOT EXISTS accounting_chart_of_accounts (
@@ -43,7 +87,7 @@ INSERT INTO accounting_account_categories (name, normal_balance, code_range_star
 ('EQUITY', 'CREDIT', 3000, 3999),
 ('REVENUE', 'CREDIT', 4000, 4999),
 ('EXPENSES', 'DEBIT', 5000, 5999)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (id) DO NOTHING;
 
 -- Views for Financial Reporting
 CREATE OR REPLACE VIEW trial_balance AS
@@ -51,11 +95,11 @@ SELECT
     coa.account_code,
     coa.account_name,
     cat.name as category,
-    SUM(ji.debit) as total_debit,
-    SUM(ji.credit) as total_credit,
+    COALESCE(SUM(ji.debit), 0) as total_debit,
+    COALESCE(SUM(ji.credit), 0) as total_credit,
     CASE 
-        WHEN cat.normal_balance = 'DEBIT' THEN SUM(ji.debit) - SUM(ji.credit)
-        ELSE SUM(ji.credit) - SUM(ji.debit)
+        WHEN cat.normal_balance = 'DEBIT' THEN COALESCE(SUM(ji.debit), 0) - COALESCE(SUM(ji.credit), 0)
+        ELSE COALESCE(SUM(ji.credit), 0) - COALESCE(SUM(ji.debit), 0)
     END as net_balance
 FROM accounting_chart_of_accounts coa
 JOIN accounting_account_categories cat ON coa.category_id = cat.id
@@ -68,11 +112,10 @@ CREATE INDEX IF NOT EXISTS idx_journal_items_account ON accounting_journal_items
 CREATE INDEX IF NOT EXISTS idx_journal_items_entry ON accounting_journal_items(journal_entry_id);
 
 -- Add some default accounts (Simplified)
--- Note: In a real migration, we would be more exhaustive
 INSERT INTO accounting_chart_of_accounts (account_code, account_name, category_id) VALUES
-('1000', 'Cash at Hand', (SELECT id FROM accounting_account_categories WHERE name='ASSETS')),
-('1100', 'Standard Chartered Bank', (SELECT id FROM accounting_account_categories WHERE name='ASSETS')),
-('1200', 'Inventory - Food & Beverage', (SELECT id FROM accounting_account_categories WHERE name='ASSETS')),
-('4000', 'Room Revenue', (SELECT id FROM accounting_account_categories WHERE name='REVENUE')),
-('5000', 'Salaries & Wages', (SELECT id FROM accounting_account_categories WHERE name='EXPENSES'))
-ON CONFLICT DO NOTHING;
+('1000', 'Cash at Hand', (SELECT id FROM accounting_account_categories WHERE name='ASSETS' LIMIT 1)),
+('1100', 'Standard Chartered Bank', (SELECT id FROM accounting_account_categories WHERE name='ASSETS' LIMIT 1)),
+('1200', 'Inventory - Food & Beverage', (SELECT id FROM accounting_account_categories WHERE name='ASSETS' LIMIT 1)),
+('4000', 'Room Revenue', (SELECT id FROM accounting_account_categories WHERE name='REVENUE' LIMIT 1)),
+('5000', 'Salaries & Wages', (SELECT id FROM accounting_account_categories WHERE name='EXPENSES' LIMIT 1))
+ON CONFLICT (account_code) DO NOTHING;

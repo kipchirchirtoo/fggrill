@@ -145,10 +145,26 @@ export const deleteDriver = async (req: Request, res: Response) => {
 // SUPPLIERS
 // =====================================================
 
+export const getSupplier = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from('store_suppliers')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const getSuppliers = async (req: Request, res: Response) => {
   try {
     const { data, error } = await supabase
-      .from('suppliers')
+      .from('store_suppliers')
       .select('*')
       .order('name');
 
@@ -161,15 +177,34 @@ export const getSuppliers = async (req: Request, res: Response) => {
 
 export const createSupplier = async (req: Request, res: Response) => {
   try {
-    const { name, code, contact_person, email, phone, address, city, payment_terms, status } = req.body;
+    const { name, code, contact_person, email, phone, address, city, payment_terms, status, trading_name, supplier_pin, vat_registered, vat_registration_number, withholding_vat_applicable, withholding_vat_rate, vat_category, contract_start_date, contract_end_date } = req.body;
 
     if (!name) {
       return res.status(400).json({ success: false, message: 'Supplier name is required' });
     }
 
     const { data, error } = await supabase
-      .from('suppliers')
-      .insert([{ name, code, contact_person, email, phone, address, city, payment_terms, status }])
+      .from('store_suppliers')
+      .insert([{
+        name,
+        code,
+        contact_person,
+        email,
+        phone,
+        address,
+        city,
+        payment_terms,
+        status,
+        trading_name,
+        supplier_pin,
+        vat_registered,
+        vat_registration_number,
+        withholding_vat_applicable,
+        withholding_vat_rate,
+        vat_category,
+        contract_start_date,
+        contract_end_date
+      }])
       .select()
       .single();
 
@@ -183,16 +218,40 @@ export const createSupplier = async (req: Request, res: Response) => {
 export const updateSupplier = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, code, contact_person, email, phone, address, city, payment_terms, status } = req.body;
+    const body = req.body;
+    const userId = (req as any).user?.id;
+
+    // Get old values for audit
+    const { data: oldValues } = await supabase
+      .from('store_suppliers')
+      .select('*')
+      .eq('id', id)
+      .single();
 
     const { data, error } = await supabase
-      .from('suppliers')
-      .update({ name, code, contact_person, email, phone, address, city, payment_terms, status, updated_at: new Date().toISOString() })
+      .from('store_suppliers')
+      .update({ ...body, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
       .single();
 
     if (error) throw error;
+
+    // Create audit log
+    if (userId) {
+      await supabase.rpc('create_audit_log', {
+        p_user_id: userId,
+        p_action: 'UPDATE',
+        p_entity_type: 'SUPPLIER',
+        p_entity_id: id,
+        p_entity_reference: data.code || data.name,
+        p_old_values: oldValues,
+        p_new_values: data,
+        p_description: `Updated supplier profile: ${data.name}`,
+        p_supplier_id: id
+      });
+    }
+
     res.json({ success: true, data });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -202,7 +261,7 @@ export const updateSupplier = async (req: Request, res: Response) => {
 export const deleteSupplier = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { error } = await supabase.from('suppliers').delete().eq('id', id);
+    const { error } = await supabase.from('store_suppliers').delete().eq('id', id);
     if (error) throw error;
     res.json({ success: true, message: 'Supplier deleted' });
   } catch (error: any) {
