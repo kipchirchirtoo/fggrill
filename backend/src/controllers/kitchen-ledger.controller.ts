@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { supabase } from '../config/database';
+import { createLedgerEntry as recordStockMovement } from './kitchen/stock.controller';
 
 /**
  * Kitchen Ledger Controller
@@ -13,7 +14,7 @@ import { supabase } from '../config/database';
 // Get all ledger entries
 export const getLedgerEntries = async (req: Request, res: Response) => {
   try {
-    const { branch_id, start_date, end_date, item_id } = req.query;
+    const { branch_id, start_date, end_date, item_id, status } = req.query;
 
     let query = supabase
       .from('kitchen_ledger_entries')
@@ -34,6 +35,10 @@ export const getLedgerEntries = async (req: Request, res: Response) => {
 
     if (item_id) {
       query = query.eq('item_id', item_id);
+    }
+
+    if (status) {
+      query = query.eq('status', status);
     }
 
     const { data, error } = await query;
@@ -69,7 +74,8 @@ export const createLedgerEntry = async (req: Request, res: Response) => {
       expected_sales,
       system_sales,
       unit_of_measure,
-      remarks
+      remarks,
+      status // Optional, default is draft
     } = req.body;
 
     // Calculate closing balance
@@ -102,12 +108,64 @@ export const createLedgerEntry = async (req: Request, res: Response) => {
         closing_balance,
         unit_of_measure,
         remarks,
+        status: status || 'draft',
         created_by: req.user?.id
       })
       .select()
       .single();
 
     if (error) throw error;
+
+    // Record movements in kitchen_stock_ledger for real-time stock tracking
+    try {
+      if (received_quantity && received_quantity > 0) {
+        await recordStockMovement({
+          branch_id,
+          item_sku: item_id, // item_id is used as SKU here
+          item_name,
+          transaction_type: 'RECEIPT',
+          reference_type: 'MANUAL_LEDGER',
+          reference_id: data.entry_number,
+          quantity_in: received_quantity,
+          unit_of_measure,
+          user_id: req.user?.id,
+          notes: remarks || 'Manual daily entry'
+        });
+      }
+
+      if (used_quantity && used_quantity > 0) {
+        await recordStockMovement({
+          branch_id,
+          item_sku: item_id,
+          item_name,
+          transaction_type: 'USAGE',
+          reference_type: 'MANUAL_LEDGER',
+          reference_id: data.entry_number,
+          quantity_out: used_quantity,
+          unit_of_measure,
+          user_id: req.user?.id,
+          notes: remarks || 'Manual daily entry'
+        });
+      }
+
+      if (wastage_quantity && wastage_quantity > 0) {
+        await recordStockMovement({
+          branch_id,
+          item_sku: item_id,
+          item_name,
+          transaction_type: 'WASTAGE',
+          reference_type: 'MANUAL_LEDGER',
+          reference_id: data.entry_number,
+          quantity_out: wastage_quantity,
+          unit_of_measure,
+          user_id: req.user?.id,
+          notes: remarks || 'Manual daily entry'
+        });
+      }
+    } catch (ledgerError) {
+      console.error('Error syncing manual entry to stock ledger:', ledgerError);
+      // We don't fail the whole request because the primary ledger entry was saved
+    }
 
     res.status(201).json({
       success: true,
@@ -170,6 +228,47 @@ export const updateLedgerEntry = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to update ledger entry'
+    });
+  }
+};
+
+// Update ledger entry status
+export const updateLedgerStatus = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!['draft', 'submitted', 'verified'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status'
+      });
+    }
+
+    const updateData: any = { status };
+    if (status === 'submitted') {
+      updateData.submitted_at = new Date().toISOString();
+    }
+
+    const { data, error } = await supabase
+      .from('kitchen_ledger_entries')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: 'Ledger status updated successfully',
+      data
+    });
+  } catch (error: any) {
+    console.error('Error updating ledger status:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update ledger status'
     });
   }
 };

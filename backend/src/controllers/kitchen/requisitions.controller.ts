@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
-import { createLedgerEntry } from './stock.controller';
+import { createLedgerEntry, createPortionLedgerEntry } from './stock.controller';
 
 /**
  * Create kitchen requisition
@@ -66,11 +66,20 @@ export const createRequisition = async (req: Request, res: Response) => {
 export const getRequisitions = async (req: Request, res: Response) => {
     try {
         const { branch_id, status } = req.query;
-        const userBranchId = (req as any).user?.branch_id;
-        const effectiveBranchId = branch_id || userBranchId;
+        const user = (req as any).user;
+        const userBranchId = user?.branch_id;
+        const userRole = user?.role?.toLowerCase();
 
-        if (!effectiveBranchId) {
-            return res.status(400).json({ success: false, message: 'Branch ID is required' });
+        const isCentralRole = ['auditor', 'central_storekeeper', 'super_admin', 'general_manager'].includes(userRole);
+
+        let targetBranchId = branch_id;
+
+        // If not central role, force their own branch
+        if (!isCentralRole) {
+            targetBranchId = userBranchId;
+            if (!targetBranchId) {
+                return res.status(400).json({ success: false, message: 'Branch ID is required for this user' });
+            }
         }
 
         let query = supabase
@@ -79,10 +88,14 @@ export const getRequisitions = async (req: Request, res: Response) => {
         *,
         items:kitchen_requisition_items(*),
         requester:requested_by(first_name, last_name),
-        approver:approved_by(first_name, last_name)
+        approver:approved_by(first_name, last_name),
+        branch:branches!branch_id(name)
       `)
-            .eq('branch_id', effectiveBranchId)
             .order('requested_at', { ascending: false });
+
+        if (targetBranchId) {
+            query = query.eq('branch_id', targetBranchId);
+        }
 
         if (status) {
             query = query.eq('status', status);
@@ -260,7 +273,9 @@ export const fulfillRequisition = async (req: Request, res: Response) => {
                     item_name: reqItem.item_name,
                     quantity: issuedItem.issued_quantity,
                     unit_of_measure: reqItem.unit_of_measure,
-                    ledger_entry_id: ledgerEntry.id
+                    ledger_entry_id: ledgerEntry.id,
+                    menu_item_id: issuedItem.menu_item_id,
+                    recipe_id: issuedItem.recipe_id
                 });
 
             // Update requisition item with issued quantity
@@ -268,6 +283,31 @@ export const fulfillRequisition = async (req: Request, res: Response) => {
                 .from('kitchen_requisition_items')
                 .update({ issued_quantity: issuedItem.issued_quantity })
                 .eq('id', issuedItem.item_id);
+
+            // --- YIELD CONVERSION LOGIC ---
+            // Check if there is a yield rule for this item
+            const { data: yieldRule } = await supabase
+                .from('kitchen_food_controls')
+                .select('*')
+                .or(`raw_item_sku.eq.${reqItem.item_sku},raw_item_name.ilike.%${reqItem.item_name}%`)
+                .limit(1)
+                .maybeSingle();
+
+            if (yieldRule) {
+                const expectedPortions = (issuedItem.issued_quantity / yieldRule.raw_quantity) * yieldRule.produced_portions;
+
+                await createPortionLedgerEntry({
+                    branch_id: requisition.branch_id,
+                    item_sku: reqItem.item_sku,
+                    portion_name: yieldRule.produced_item_name,
+                    transaction_type: 'ISSUE',
+                    reference_type: 'GRN',
+                    reference_id: grn.grn_number,
+                    quantity_in: expectedPortions,
+                    user_id: userId,
+                    notes: `Autogen from ${issuedItem.issued_quantity} ${reqItem.unit_of_measure} of ${reqItem.item_name}`
+                });
+            }
         }
 
         // Update requisition status

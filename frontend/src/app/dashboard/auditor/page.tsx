@@ -7,7 +7,7 @@ import {
     ChevronRight, Calendar as CalendarIcon,
     ShieldCheck, DollarSign, PieChart, TrendingUp,
     FileCheck, Activity, Search, Filter,
-    CreditCard, ShoppingCart, FileText, Scale
+    CreditCard, ShoppingCart, FileText, Scale, Trash2
 } from 'lucide-react';
 import { auditAPI, storeAPI, restaurantAPI } from '@/lib/api';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -42,7 +42,7 @@ export default function AuditorDashboard() {
 
             const [logsRes, requestsRes, ordersRes] = await Promise.all([
                 auditAPI.getAuditLogs({ branchId: effectiveBranchId }),
-                storeAPI.getBranchRequests('PENDING', effectiveBranchId),
+                storeAPI.getBranchRequests('PENDING_AUDIT', effectiveBranchId),
                 restaurantAPI.getOrders({ status: 'cancelled', branchId: effectiveBranchId })
             ]);
 
@@ -119,12 +119,36 @@ export default function AuditorDashboard() {
             stats: 'Sales performance view'
         },
         {
+            title: 'Kitchen Requisitions',
+            desc: 'Monitor and review kitchen-to-store requisition activity.',
+            icon: ShoppingBag,
+            href: '/dashboard/auditor/kitchen-requisitions',
+            color: 'bg-orange-50 text-orange-600 border-orange-100',
+            stats: 'Requisition oversight'
+        },
+        {
             title: 'Compare items sold against requisitions',
             desc: 'Compare items sold against requisitions to detect leakage or stock errors.',
             icon: Scale,
             href: '/dashboard/auditor/audit-reports',
             color: 'bg-rose-50 text-rose-600 border-rose-100',
             stats: 'Reconciliation report'
+        },
+        {
+            title: 'Kitchen Usage Oversight',
+            desc: 'Analyze manual usage entries and staff meal consumption.',
+            icon: ClipboardList,
+            href: '/dashboard/auditor/kitchen-usage',
+            color: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+            stats: 'Usage analysis'
+        },
+        {
+            title: 'Kitchen Wastage Oversight',
+            desc: 'Monitor kitchen spoilage and wastage reports across branches.',
+            icon: Trash2,
+            href: '/dashboard/auditor/kitchen-wastage',
+            color: 'bg-red-50 text-red-600 border-red-100',
+            stats: 'Wastage analysis'
         }
     ];
 

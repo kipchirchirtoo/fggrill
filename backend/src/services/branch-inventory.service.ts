@@ -209,7 +209,7 @@ export async function createStockRequest(
       priority,
       reason,
       needed_by_date: neededByDate,
-      status: 'PENDING'
+      status: 'PENDING_AUDIT'
     })
     .select()
     .single();
@@ -222,7 +222,7 @@ export async function createStockRequest(
     item_sku: item.item_sku,
     requested_quantity: item.requested_quantity,
     current_branch_stock: item.current_branch_stock || 0,
-    status: 'PENDING'
+    status: 'PENDING_AUDIT'
   }));
 
   const { error: itemsError } = await supabase
@@ -233,12 +233,12 @@ export async function createStockRequest(
 
   logger.info(`Stock request created: ${requestNumber} by branch ${branchCode}`);
 
-  // Notify Central Storekeeper
+  // Notify Auditor
   try {
     await notificationService.notifyRole(
       'auditor',
-      'New Stock Request',
-      `Branch ${branchCode} has submitted a new stock request (${requestNumber}). Priority: ${priority}`,
+      'New Stock Request for Review',
+      `Branch ${branchCode} has submitted a new stock request (${requestNumber}). Approval required.`,
       {
         type: 'info',
         category: 'stock',

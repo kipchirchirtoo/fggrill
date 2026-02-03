@@ -45,6 +45,21 @@ import {
     calculateYield
 } from '../controllers/kitchen/food-control.controller';
 
+import {
+    getVarianceReasons,
+    getDailyVariance,
+    submitVarianceReason,
+    approveVariance,
+    getPortionStock,
+    getPortionLedger
+} from '../controllers/kitchen/variance-reconciliation.controller';
+
+import {
+    getYieldReport,
+    getLossReport,
+    getAccountabilityReport
+} from '../controllers/kitchen/reports.controller';
+
 const router = express.Router();
 
 // Apply authentication to all routes
@@ -71,7 +86,8 @@ const storekeepers = [
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
     UserRole.CENTRAL_STOREKEEPER,
-    UserRole.BRANCH_STOREKEEPER
+    UserRole.BRANCH_STOREKEEPER,
+    UserRole.AUDITOR
 ];
 
 // =====================================================
@@ -82,6 +98,10 @@ router.get('/stock', authorize(kitchenStaff), getKitchenStock);
 router.get('/stock/ledger', authorize(kitchenStaff), getKitchenLedger);
 router.get('/stock/:sku/history', authorize(kitchenStaff), getItemHistory);
 router.get('/dashboard/stats', authorize(kitchenStaff), getKitchenDashboardStats);
+
+// Portion Stock Routes
+router.get('/portion-stock', authorize(kitchenStaff), getPortionStock);
+router.get('/portion-ledger', authorize(kitchenStaff), getPortionLedger);
 
 // =====================================================
 // REQUISITION ROUTES
@@ -131,5 +151,18 @@ router.post('/food-controls', authorize(kitchenManagers), createFoodControl);
 router.put('/food-controls/:id', authorize(kitchenManagers), updateFoodControl);
 router.delete('/food-controls/:id', authorize(kitchenManagers), deleteFoodControl);
 router.post('/food-controls/calculate', authorize(kitchenStaff), calculateYield);
+
+// Variance Reconciliation Routes
+router.get('/variance-reasons', authorize(kitchenStaff), getVarianceReasons);
+router.get('/variance', authorize(kitchenStaff), getDailyVariance);
+router.post('/variance/:id/reason', authorize(kitchenStaff), submitVarianceReason);
+router.post('/variance/:id/approve', authorize(kitchenManagers), approveVariance);
+
+// =====================================================
+// REPORT ROUTES
+// =====================================================
+router.get('/reports/yield', authorize(kitchenManagers), getYieldReport);
+router.get('/reports/loss', authorize(kitchenManagers), getLossReport);
+router.get('/reports/accountability', authorize(kitchenManagers), getAccountabilityReport);
 
 export default router;

@@ -1,7 +1,19 @@
+-- =====================================================
+-- MULTI-BRANCH SUPPORT FIXES
+-- =====================================================
+ALTER TABLE hk_staff_profiles ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id);
+ALTER TABLE hk_tasks ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id);
+ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id);
+ALTER TABLE hk_staff_points ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id);
+ALTER TABLE hk_staff_achievements ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id);
+ALTER TABLE hk_staff_schedules ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id);
 
--- COMPREHENSIVE FIXES FOR HOUSEKEEPING
+-- Fix foreign keys to use hk_staff_profiles instead of staff_profiles where appropriate
+ALTER TABLE hk_inspections DROP COLUMN IF EXISTS inspected_by CASCADE;
+ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS inspected_by UUID REFERENCES hk_staff_profiles(id);
+
+-- Restore original comprehensive fixes
 ALTER TABLE hk_staff_profiles ADD COLUMN IF NOT EXISTS assigned_floors INTEGER[];
-ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS inspected_by UUID REFERENCES staff_profiles(id);
 ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS result VARCHAR(20) CHECK (result IN ('pass', 'fail', 'pending'));
 ALTER TABLE hk_lost_found ADD COLUMN IF NOT EXISTS room_id UUID REFERENCES rooms(id);
 ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS inspection_number VARCHAR(50);
@@ -18,6 +30,8 @@ ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS created_at TIMESTAMP
 ALTER TABLE hk_checklist_templates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
 ALTER TABLE hk_checklist_templates DROP COLUMN IF EXISTS items;
 ALTER TABLE hk_checklist_templates DROP COLUMN IF EXISTS estimated_minutes;
+
+-- =====================================================
 
 -- =====================================================
 -- ENHANCED HOUSEKEEPING MODULE - COMPLETE MIGRATION
@@ -464,8 +478,8 @@ CREATE TABLE IF NOT EXISTS hk_inspections (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS result VARCHAR(20) CHECK (result IN ('pass', 'fail', 'pending'));
-ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS inspected_by UUID REFERENCES staff_profiles(id);
+ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS result VARCHAR(20) CHECK (result IN ('passed', 'failed', 'pending'));
+ALTER TABLE hk_inspections ADD COLUMN IF NOT EXISTS inspected_by UUID REFERENCES hk_staff_profiles(id);
 CREATE INDEX IF NOT EXISTS idx_hk_inspections_room ON hk_inspections(room_id);
 CREATE INDEX IF NOT EXISTS idx_hk_inspections_task ON hk_inspections(task_id);
 CREATE INDEX IF NOT EXISTS idx_hk_inspections_inspector ON hk_inspections(inspected_by);

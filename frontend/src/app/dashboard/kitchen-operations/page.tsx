@@ -83,6 +83,16 @@ export default function KitchenOperationsPage() {
             title: 'Food Controls',
             icon: BarChart3,
             href: '/dashboard/kitchen-operations/food-controls'
+        },
+        {
+            title: 'Portion Stock',
+            icon: Package,
+            href: '/dashboard/kitchen-operations/food-controls?tab=portions'
+        },
+        {
+            title: 'Variance',
+            icon: AlertTriangle,
+            href: '/dashboard/kitchen-operations/food-controls?tab=variance'
         }
     ];
 

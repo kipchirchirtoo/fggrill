@@ -1300,6 +1300,20 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
 
         if (error) throw error;
 
+        // Check for unresolved kitchen variances for this shift/date
+        // Variance is unresolved if variance != 0 and reason_id is null
+        const { data: unresolvedVariances } = await supabase
+            .from('kitchen_daily_variance')
+            .select('*')
+            .eq('branch_id', shift.branch_id)
+            .eq('variance_date', shift.shift_date)
+            .is('reason_id', null)
+            .neq('variance', 0);
+
+        if (unresolvedVariances && unresolvedVariances.length > 0) {
+            throw new AppError(`Cannot close shift: ${unresolvedVariances.length} kitchen items have variances without reasons.`, 400);
+        }
+
         res.json({
             success: true,
             message: 'Shift closed successfully',

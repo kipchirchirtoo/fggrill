@@ -18,7 +18,8 @@
     "start:prod": "NODE_ENV=production ./scripts/start.sh",
     "build:prod": "./scripts/build.sh",
     "test:full": "./scripts/test.sh",
-    "deploy": "./scripts/deploy.sh"
+    "deploy": "./scripts/deploy.sh",
+    "migrate": "node scripts/migrate.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.84.0",

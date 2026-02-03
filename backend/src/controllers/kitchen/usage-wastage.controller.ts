@@ -66,17 +66,27 @@ export const getUsageEntries = async (req: Request, res: Response) => {
     try {
         const { branch_id, start_date, end_date, usage_type } = req.query;
         const userBranchId = (req as any).user?.branch_id;
+        const userRole = (req as any).user?.role;
         const effectiveBranchId = branch_id || userBranchId;
 
-        if (!effectiveBranchId) {
+        // Auditors/Admins can view all if no branch specified
+        const canViewAll = userRole === 'AUDITOR' || userRole === 'SUPER_ADMIN' || userRole === 'GENERAL_MANAGER';
+
+        if (!effectiveBranchId && !canViewAll) {
             return res.status(400).json({ success: false, message: 'Branch ID is required' });
         }
 
         let query = supabase
             .from('kitchen_usage')
-            .select('*')
-            .eq('branch_id', effectiveBranchId)
+            .select(`
+                *,
+                branch:branches(name)
+            `)
             .order('created_at', { ascending: false });
+
+        if (effectiveBranchId) {
+            query = query.eq('branch_id', effectiveBranchId);
+        }
 
         if (usage_type) {
             query = query.eq('usage_type', usage_type);
@@ -166,17 +176,27 @@ export const getWastageRecords = async (req: Request, res: Response) => {
     try {
         const { branch_id, start_date, end_date, reason } = req.query;
         const userBranchId = (req as any).user?.branch_id;
+        const userRole = (req as any).user?.role;
         const effectiveBranchId = branch_id || userBranchId;
 
-        if (!effectiveBranchId) {
+        // Auditors/Admins can view all if no branch specified
+        const canViewAll = userRole === 'AUDITOR' || userRole === 'SUPER_ADMIN' || userRole === 'GENERAL_MANAGER';
+
+        if (!effectiveBranchId && !canViewAll) {
             return res.status(400).json({ success: false, message: 'Branch ID is required' });
         }
 
         let query = supabase
             .from('kitchen_wastage')
-            .select('*')
-            .eq('branch_id', effectiveBranchId)
+            .select(`
+                *,
+                branch:branches(name)
+            `)
             .order('created_at', { ascending: false });
+
+        if (effectiveBranchId) {
+            query = query.eq('branch_id', effectiveBranchId);
+        }
 
         if (reason) {
             query = query.eq('reason', reason);

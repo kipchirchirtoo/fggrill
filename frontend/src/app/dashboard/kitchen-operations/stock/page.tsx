@@ -8,7 +8,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
     BookOpen, Search, RefreshCw, Filter,
-    ArrowLeft, Plus, Calculator, AlertCircle
+    ArrowLeft, Plus, Calculator, AlertCircle, Download, FileText, CheckCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -48,13 +48,25 @@ interface KitchenLedgerEntry {
     unit_of_measure: string;
     remarks: string;
     created_at: string;
+    status: 'draft' | 'submitted' | 'verified';
+    submitted_at?: string;
+}
+
+interface KitchenStock {
+    id: number;
+    item_sku: string;
+    item_name: string;
+    unit_of_measure: string;
+    current_balance: number;
+    reorder_level: number;
 }
 
 export default function StockLedgerPage() {
     const { activeBranchId } = useBranch();
-    const [activeTab, setActiveTab] = useState<'transactions' | 'ledger_book'>('ledger_book');
+    const [activeTab, setActiveTab] = useState<'transactions' | 'ledger_book' | 'manual_ledger'>('ledger_book');
     const [transactions, setTransactions] = useState<StockTransaction[]>([]);
     const [ledgerEntries, setLedgerEntries] = useState<KitchenLedgerEntry[]>([]);
+    const [stockItems, setStockItems] = useState<KitchenStock[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [transactionType, setTransactionType] = useState('');
@@ -65,6 +77,7 @@ export default function StockLedgerPage() {
     const [formData, setFormData] = useState({
         item_name: '',
         item_id: '',
+        item_sku: '',
         entry_date: new Date().toISOString().split('T')[0],
         opening_balance: 0,
         received_quantity: 0,
@@ -79,8 +92,10 @@ export default function StockLedgerPage() {
     useEffect(() => {
         if (activeTab === 'transactions') {
             fetchTransactions();
+        } else if (activeTab === 'manual_ledger') {
+            fetchManualLedger();
         } else {
-            fetchLedgerEntries();
+            fetchStockItems();
         }
     }, [activeBranchId, activeTab, transactionType]);
 
@@ -101,7 +116,7 @@ export default function StockLedgerPage() {
         }
     };
 
-    const fetchLedgerEntries = async () => {
+    const fetchManualLedger = async () => {
         setIsLoading(true);
         try {
             const response = await api.kitchen.getLedger({ branch_id: activeBranchId || undefined });
@@ -109,8 +124,23 @@ export default function StockLedgerPage() {
                 setLedgerEntries(response.data || []);
             }
         } catch (error) {
-            console.error('Error fetching ledger:', error);
-            toast.error('Failed to load ledger book');
+            console.error('Error fetching manual ledger:', error);
+            toast.error('Failed to load manual ledger');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const fetchStockItems = async () => {
+        setIsLoading(true);
+        try {
+            const response = await api.kitchen.getKitchenStock(activeBranchId as any);
+            if (response.success) {
+                setStockItems(response.data || []);
+            }
+        } catch (error) {
+            console.error('Error fetching stock items:', error);
+            toast.error('Failed to load stock items');
         } finally {
             setIsLoading(false);
         }
@@ -130,7 +160,9 @@ export default function StockLedgerPage() {
             if (response.success) {
                 toast.success('Ledger entry captured');
                 setIsModalOpen(false);
-                fetchLedgerEntries();
+                fetchStockItems();
+                fetchManualLedger();
+                fetchTransactions();
             }
         } catch (error: any) {
             toast.error(error.message || 'Failed to capture entry');
@@ -139,14 +171,47 @@ export default function StockLedgerPage() {
         }
     };
 
+
+
+    const handleSubmitToAuditor = async (entry: KitchenLedgerEntry) => {
+        if (!confirm('Are you sure you want to submit this entry to the auditor? You will not be able to edit it afterwards.')) return;
+
+        try {
+            await api.kitchen.updateLedgerStatus(String(entry.id), 'submitted');
+            toast.success('Entry submitted to auditor');
+            fetchManualLedger();
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to submit entry');
+        }
+    };
+
+    const handleDownloadReport = async (format: 'pdf' | 'excel') => {
+        try {
+            toast.success(`Generating ${format.toUpperCase()} report...`);
+            await api.auditorReports.exportBrandedPdf('kitchen_ledger', {
+                branch_id: activeBranchId,
+                format: format
+            });
+            toast.success('Report downloaded');
+        } catch (error) {
+            console.error('Download error:', error);
+            toast.error('Failed to download report');
+        }
+    };
+
     const filteredTransactions = transactions.filter(entry =>
         entry.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         entry.item_sku.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const filteredLedgerEntries = ledgerEntries.filter(entry =>
+    const filteredStockItems = stockItems.filter(item =>
+        item.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.item_sku.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const filteredManualEntries = ledgerEntries.filter(entry =>
         entry.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (entry.item_id && entry.item_id.toLowerCase().includes(searchTerm.toLowerCase()))
+        entry.item_id.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const getTransactionBadge = (type: string) => {
@@ -159,6 +224,20 @@ export default function StockLedgerPage() {
         };
         const style = styles[type] || 'bg-stone-100 text-stone-700';
         return <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${style}`}>{type}</span>;
+    };
+
+    const getStatusBadge = (status: string) => {
+        const styles: Record<string, string> = {
+            draft: 'bg-stone-100 text-stone-600 border-stone-200',
+            submitted: 'bg-blue-50 text-blue-700 border-blue-200',
+            verified: 'bg-green-50 text-green-700 border-green-200'
+        };
+        const style = styles[status] || styles['draft'];
+        return (
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide ${style}`}>
+                {status}
+            </span>
+        );
     };
 
     return (
@@ -183,22 +262,27 @@ export default function StockLedgerPage() {
                         </div>
                         <div className="flex gap-3">
                             <button
-                                onClick={activeTab === 'transactions' ? fetchTransactions : fetchLedgerEntries}
+                                onClick={() => handleDownloadReport('pdf')}
+                                className="btn-secondary"
+                            >
+                                <FileText className="h-4 w-4" />
+                                <span>PDF Report</span>
+                            </button>
+                            <button
+                                onClick={activeTab === 'transactions' ? fetchTransactions : activeTab === 'manual_ledger' ? fetchManualLedger : fetchStockItems}
                                 className="btn-secondary"
                                 disabled={isLoading}
                             >
                                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                                 <span>Refresh</span>
                             </button>
-                            {activeTab === 'ledger_book' && (
-                                <button
-                                    onClick={() => setIsModalOpen(true)}
-                                    className="btn-primary"
-                                >
-                                    <Plus className="h-4 w-4" />
-                                    <span>Capture Entry</span>
-                                </button>
-                            )}
+                            <button
+                                onClick={() => setIsModalOpen(true)}
+                                className="btn-primary"
+                            >
+                                <Plus className="h-4 w-4" />
+                                <span>Capture Entry</span>
+                            </button>
                         </div>
                     </div>
 
@@ -208,96 +292,167 @@ export default function StockLedgerPage() {
                             onClick={() => setActiveTab('ledger_book')}
                             className={`pb-3 text-[13px] font-semibold transition-all border-b-2 ${activeTab === 'ledger_book' ? 'border-stone-900 text-stone-900' : 'border-transparent text-stone-500 hover:text-stone-700'}`}
                         >
-                            Ledger Book
+                            Stock Levels
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('manual_ledger')}
+                            className={`pb-3 text-[13px] font-semibold transition-all border-b-2 ${activeTab === 'manual_ledger' ? 'border-stone-900 text-stone-900' : 'border-transparent text-stone-500 hover:text-stone-700'}`}
+                        >
+                            Manual Ledger
                         </button>
                         <button
                             onClick={() => setActiveTab('transactions')}
                             className={`pb-3 text-[13px] font-semibold transition-all border-b-2 ${activeTab === 'transactions' ? 'border-stone-900 text-stone-900' : 'border-transparent text-stone-500 hover:text-stone-700'}`}
                         >
-                            Transactions
+                            Movement Log
                         </button>
                     </div>
 
                     {/* Filters */}
                     <div className="card-elevated p-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-                                <input
-                                    type="text"
-                                    placeholder="Search items..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="input-field pl-10"
-                                />
+                        <div className="flex flex-col md:flex-row gap-4 items-end">
+                            <div className="flex-1 space-y-1.5 w-full">
+                                <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider ml-1">Search Items</label>
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search by name or SKU..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="w-full bg-stone-50 border border-stone-200 rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all placeholder:text-stone-400"
+                                    />
+                                </div>
                             </div>
+
                             {activeTab === 'transactions' && (
-                                <select
-                                    value={transactionType}
-                                    onChange={(e) => setTransactionType(e.target.value)}
-                                    className="input-field"
-                                >
-                                    <option value="">All Types</option>
-                                    <option value="RECEIPT">Receipt</option>
-                                    <option value="USAGE">Usage</option>
-                                    <option value="WASTAGE">Wastage</option>
-                                    <option value="ADJUSTMENT">Adjustment</option>
-                                    <option value="OPENING">Opening</option>
-                                </select>
+                                <div className="w-full md:w-48 space-y-1.5">
+                                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider ml-1">Type</label>
+                                    <select
+                                        value={transactionType}
+                                        onChange={(e) => setTransactionType(e.target.value)}
+                                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all"
+                                    >
+                                        <option value="">All Movements</option>
+                                        <option value="RECEIPT">Receipts</option>
+                                        <option value="USAGE">Usage</option>
+                                        <option value="WASTAGE">Wastage</option>
+                                        <option value="ADJUSTMENT">Adjustments</option>
+                                    </select>
+                                </div>
                             )}
+
+                            <button
+                                onClick={activeTab === 'transactions' ? fetchTransactions : activeTab === 'manual_ledger' ? fetchManualLedger : fetchStockItems}
+                                className="p-2.5 bg-stone-900 text-white rounded-xl hover:bg-stone-800 transition-colors shadow-sm disabled:opacity-50"
+                                disabled={isLoading}
+                            >
+                                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                            </button>
                         </div>
                     </div>
 
-                    {/* Content */}
-                    <div className="card-elevated overflow-hidden">
+                    {/* Table Section */}
+                    <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden min-h-[400px]">
                         {activeTab === 'ledger_book' ? (
                             <div className="overflow-x-auto">
                                 <table className="w-full">
                                     <thead className="bg-stone-50 border-b border-stone-100">
                                         <tr>
-                                            <th className="px-5 py-3 text-left text-[11px] font-bold text-stone-500 uppercase">Date / Entry</th>
-                                            <th className="px-5 py-3 text-left text-[11px] font-bold text-stone-500 uppercase">Item</th>
-                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase">Opening</th>
-                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase">In</th>
-                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase">Used</th>
-                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase">Waste</th>
-                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase">Closing</th>
-                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-green-600 uppercase">Exp. Sales</th>
-                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-blue-600 uppercase">Sys. Sales</th>
-                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-900 uppercase">Variance</th>
+                                            <th className="px-5 py-3 text-left text-[11px] font-bold text-stone-500 uppercase">Item Name</th>
+                                            <th className="px-5 py-3 text-left text-[11px] font-bold text-stone-500 uppercase">SKU</th>
+                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase">Current Stock</th>
+                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase">Unit</th>
+                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase">Reorder Level</th>
+                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-stone-100">
                                         {isLoading ? (
-                                            <tr><td colSpan={10} className="px-5 py-8 text-center text-sm text-stone-500">Loading ledger...</td></tr>
-                                        ) : filteredLedgerEntries.length === 0 ? (
-                                            <tr><td colSpan={10} className="px-5 py-8 text-center text-sm text-stone-500">No ledger entries found</td></tr>
+                                            <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-stone-500">Loading items...</td></tr>
+                                        ) : filteredStockItems.length === 0 ? (
+                                            <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-stone-500">No items found</td></tr>
                                         ) : (
-                                            filteredLedgerEntries.map((entry) => {
-                                                const variance = entry.expected_sales - entry.system_sales;
-                                                return (
-                                                    <tr key={entry.id} className="hover:bg-stone-50/50 transition-colors">
-                                                        <td className="px-5 py-3">
-                                                            <p className="text-[13px] font-medium text-stone-900">{new Date(entry.entry_date).toLocaleDateString()}</p>
-                                                            <p className="text-[10px] text-stone-400 font-mono uppercase mt-0.5">{entry.entry_number}</p>
-                                                        </td>
-                                                        <td className="px-5 py-3">
-                                                            <p className="text-[13px] font-semibold text-stone-900">{entry.item_name}</p>
-                                                            <p className="text-[10px] text-stone-500">{entry.unit_of_measure}</p>
-                                                        </td>
-                                                        <td className="px-5 py-3 text-right text-[13px] font-variant-numeric">{entry.opening_balance.toFixed(2)}</td>
-                                                        <td className="px-5 py-3 text-right text-[13px] font-variant-numeric text-green-600">+{entry.received_quantity.toFixed(2)}</td>
-                                                        <td className="px-5 py-3 text-right text-[13px] font-variant-numeric text-blue-600">-{entry.used_quantity.toFixed(2)}</td>
-                                                        <td className="px-5 py-3 text-right text-[13px] font-variant-numeric text-red-600">-{entry.wastage_quantity.toFixed(2)}</td>
-                                                        <td className="px-5 py-3 text-right text-[13px] font-bold text-stone-900 font-variant-numeric">{entry.closing_balance.toFixed(2)}</td>
-                                                        <td className="px-5 py-3 text-right text-[13px] font-medium text-green-700 font-variant-numeric">KES {entry.expected_sales.toLocaleString()}</td>
-                                                        <td className="px-5 py-3 text-right text-[13px] font-medium text-blue-700 font-variant-numeric">KES {entry.system_sales.toLocaleString()}</td>
-                                                        <td className={`px-5 py-3 text-right text-[13px] font-black font-variant-numeric ${variance > 0 ? 'text-red-600' : variance < 0 ? 'text-green-600' : 'text-stone-400'}`}>
-                                                            KES {Math.abs(variance).toLocaleString()}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })
+                                            filteredStockItems.map((item) => (
+                                                <tr key={item.id} className="hover:bg-stone-50/50 transition-colors">
+                                                    <td className="px-5 py-4 font-semibold text-stone-900">{item.item_name}</td>
+                                                    <td className="px-5 py-4 text-[13px] font-mono text-stone-500 uppercase tracking-tighter">{item.item_sku}</td>
+                                                    <td className={`px-5 py-4 text-right text-[13px] font-bold ${item.current_balance <= item.reorder_level ? 'text-red-600' : 'text-stone-900'}`}>
+                                                        {Number(item.current_balance).toFixed(2)}
+                                                    </td>
+                                                    <td className="px-5 py-4 text-right text-[13px] text-stone-500">
+                                                        {item.unit_of_measure}
+                                                    </td>
+                                                    <td className="px-5 py-4 text-right text-[13px] text-stone-500">
+                                                        {Number(item.reorder_level).toFixed(2)}
+                                                    </td>
+                                                    <td className="px-5 py-4 text-right">
+                                                        <Link
+                                                            href={`/dashboard/kitchen-operations/stock/${item.item_sku}`}
+                                                            target="_blank"
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-[13px] font-semibold hover:bg-blue-100 transition-colors"
+                                                        >
+                                                            <FileText className="h-4 w-4" />
+                                                            View Details
+                                                        </Link>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : activeTab === 'manual_ledger' ? (
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="bg-stone-50 border-b border-stone-100">
+                                        <tr>
+                                            <th className="px-5 py-3 text-left text-[11px] font-bold text-stone-500 uppercase">Date</th>
+                                            <th className="px-5 py-3 text-left text-[11px] font-bold text-stone-500 uppercase">Item</th>
+                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase">Opening</th>
+                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase font-bold text-green-600">In</th>
+                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase font-bold text-blue-600">Used</th>
+                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase font-bold text-red-600">Waste</th>
+                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase">Closing</th>
+                                            <th className="px-5 py-3 text-center text-[11px] font-bold text-stone-500 uppercase">Status</th>
+                                            <th className="px-5 py-3 text-right text-[11px] font-bold text-stone-500 uppercase">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-stone-100">
+                                        {isLoading ? (
+                                            <tr><td colSpan={9} className="px-5 py-8 text-center text-sm text-stone-500">Loading manual ledger...</td></tr>
+                                        ) : filteredManualEntries.length === 0 ? (
+                                            <tr><td colSpan={9} className="px-5 py-8 text-center text-sm text-stone-500">No manual entries found</td></tr>
+                                        ) : (
+                                            filteredManualEntries.map((entry) => (
+                                                <tr key={entry.id} className="hover:bg-stone-50/50 transition-colors">
+                                                    <td className="px-5 py-3 text-[13px] text-stone-600">{new Date(entry.entry_date).toLocaleDateString()}</td>
+                                                    <td className="px-5 py-3">
+                                                        <p className="text-[13px] font-semibold text-stone-900">{entry.item_name}</p>
+                                                        <p className="text-[10px] text-stone-400 mt-0.5">{entry.item_id}</p>
+                                                    </td>
+                                                    <td className="px-5 py-3 text-right text-[13px] font-variant-numeric">{entry.opening_balance.toFixed(2)}</td>
+                                                    <td className="px-5 py-3 text-right text-[13px] font-variant-numeric text-green-600 font-medium">+{entry.received_quantity.toFixed(2)}</td>
+                                                    <td className="px-5 py-3 text-right text-[13px] font-variant-numeric text-blue-600 font-medium">-{entry.used_quantity.toFixed(2)}</td>
+                                                    <td className="px-5 py-3 text-right text-[13px] font-variant-numeric text-red-600 font-medium">-{entry.wastage_quantity.toFixed(2)}</td>
+                                                    <td className="px-5 py-3 text-right text-[13px] font-variant-numeric font-bold text-stone-900">
+                                                        {entry.closing_balance.toFixed(2)} {entry.unit_of_measure}
+                                                    </td>
+                                                    <td className="px-5 py-3 text-center">
+                                                        {getStatusBadge(entry.status)}
+                                                    </td>
+                                                    <td className="px-5 py-3 text-right">
+                                                        {(entry.status === 'draft' || !entry.status) && (
+                                                            <button
+                                                                onClick={() => handleSubmitToAuditor(entry)}
+                                                                className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline px-2 py-1"
+                                                            >
+                                                                Submit
+                                                            </button>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            ))
                                         )}
                                     </tbody>
                                 </table>
@@ -375,13 +530,49 @@ export default function StockLedgerPage() {
                                             <h3 className="text-[11px] font-bold uppercase tracking-wider text-stone-500 border-b border-stone-100 pb-1">Item Details</h3>
                                             <div className="space-y-2">
                                                 <div>
-                                                    <label className="text-[11px] font-medium text-stone-700 block mb-0.5">Item Name</label>
-                                                    <input
-                                                        value={formData.item_name}
-                                                        onChange={(e) => setFormData({ ...formData, item_name: e.target.value })}
-                                                        placeholder="e.g. Chicken"
+                                                    <label className="text-[11px] font-medium text-stone-700 block mb-0.5">Select Item</label>
+                                                    <select
+                                                        value={formData.item_sku}
+                                                        onChange={(e) => {
+                                                            const item = stockItems.find(i => i.item_sku === e.target.value);
+                                                            if (item) {
+                                                                setFormData({
+                                                                    ...formData,
+                                                                    item_name: item.item_name,
+                                                                    item_id: item.item_sku,
+                                                                    item_sku: item.item_sku,
+                                                                    opening_balance: item.current_balance,
+                                                                    unit_of_measure: item.unit_of_measure
+                                                                });
+                                                            }
+                                                        }}
                                                         className="w-full rounded-md border border-stone-200 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
-                                                    />
+                                                    >
+                                                        <option value="">Choose an item...</option>
+                                                        {stockItems.map(item => (
+                                                            <option key={item.item_sku} value={item.item_sku}>
+                                                                {item.item_name} ({item.item_sku})
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label className="text-[11px] font-medium text-stone-700 block mb-0.5">Item Name (Legacy Display)</label>
+                                                        <input
+                                                            value={formData.item_name}
+                                                            readOnly
+                                                            className="w-full rounded-md border border-stone-100 bg-stone-50 px-2.5 py-1.5 text-sm text-stone-500 outline-none"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[11px] font-medium text-stone-700 block mb-0.5">Item ID / SKU</label>
+                                                        <input
+                                                            value={formData.item_sku}
+                                                            readOnly
+                                                            className="w-full rounded-md border border-stone-100 bg-stone-50 px-2.5 py-1.5 text-sm text-stone-500 outline-none"
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <div>

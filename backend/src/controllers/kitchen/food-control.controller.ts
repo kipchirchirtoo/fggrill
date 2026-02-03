@@ -89,12 +89,20 @@ export const updateFoodControl = async (
 ): Promise<void> => {
     try {
         const { id } = req.params;
-        const updates = req.body;
+
+        // Get old data for logging
+        const { data: oldRule, error: fetchError } = await supabase
+            .from('kitchen_food_controls')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (fetchError) throw fetchError;
 
         const { data, error } = await supabase
             .from('kitchen_food_controls')
             .update({
-                ...updates,
+                ...req.body,
                 updated_at: new Date().toISOString()
             })
             .eq('id', id)
@@ -103,10 +111,16 @@ export const updateFoodControl = async (
 
         if (error) throw error;
 
-        res.status(200).json({
-            success: true,
-            data
+        // Log update
+        await supabase.from('kitchen_food_control_logs').insert({
+            rule_id: data.id,
+            action: 'UPDATE',
+            old_data: oldRule,
+            new_data: data,
+            changed_by: (req as any).user?.id
         });
+
+        res.status(200).json({ success: true, data });
     } catch (error) {
         next(error);
     }
@@ -123,6 +137,15 @@ export const deleteFoodControl = async (
     try {
         const { id } = req.params;
 
+        // Get old data for logging
+        const { data: oldRule, error: fetchError } = await supabase
+            .from('kitchen_food_controls')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (fetchError) throw fetchError;
+
         const { error } = await supabase
             .from('kitchen_food_controls')
             .delete()
@@ -130,10 +153,17 @@ export const deleteFoodControl = async (
 
         if (error) throw error;
 
-        res.status(200).json({
-            success: true,
-            message: 'Food control rule deleted'
-        });
+        // Log deletion
+        if (oldRule) {
+            await supabase.from('kitchen_food_control_logs').insert({
+                rule_id: Number(id),
+                action: 'DELETE',
+                old_data: oldRule,
+                changed_by: (req as any).user?.id
+            });
+        }
+
+        res.status(200).json({ success: true, message: 'Food control rule deleted' });
     } catch (error) {
         next(error);
     }

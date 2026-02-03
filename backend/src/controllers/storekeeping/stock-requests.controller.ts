@@ -202,7 +202,7 @@ export const createStockRequest = async (
                 priority: priority || 'NORMAL',
                 reason,
                 needed_by_date,
-                status: 'PENDING'
+                status: 'PENDING_AUDIT'
             })
             .select()
             .single();
@@ -224,7 +224,7 @@ export const createStockRequest = async (
                     item_sku: item.item_sku,
                     requested_quantity: item.requested_quantity,
                     current_branch_stock: stock?.quantity || 0,
-                    status: 'PENDING'
+                    status: 'PENDING_AUDIT'
                 };
             })
         );

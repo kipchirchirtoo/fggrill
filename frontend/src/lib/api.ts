@@ -288,6 +288,24 @@ export const storeAPI = {
   },
   getPendingRequests: () => fetchAPI<any>('/store/stock-requests/pending'),
 
+  // Kitchen Requisitions (Incoming from Kitchen)
+  getKitchenRequisitions: (params?: { branch_id?: number; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.status) query.append('status', params.status);
+    return fetchAPI<any>(`/store/kitchen-requisitions?${query}`);
+  },
+  fulfillKitchenRequisition: (id: string | number, items: any[]) =>
+    fetchAPI<any>(`/store/kitchen-requisitions/${id}/fulfill`, {
+      method: 'POST',
+      body: JSON.stringify({ items })
+    }),
+  rejectKitchenRequisition: (id: string | number, reason: string) =>
+    fetchAPI<any>(`/store/kitchen-requisitions/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    }),
+
   // Dispatch
   createDispatch: (data: { request_id?: string; to_branch_id: number; items: Array<{ item_sku: string; dispatched_quantity: number }>; notes?: string }) =>
     fetchAPI<any>('/store/dispatch-notes', { method: 'POST', body: JSON.stringify(data) }),
@@ -3260,11 +3278,12 @@ export const attendanceAnalyticsAPI = {
 
 export const kitchenAPI = {
   // Ledger
-  getLedger: (params?: { branch_id?: number; start_date?: string; end_date?: string }) => {
+  getLedger: (params?: { branch_id?: number; start_date?: string; end_date?: string; status?: string }) => {
     const query = new URLSearchParams();
     if (params?.branch_id) query.append('branch_id', String(params.branch_id));
     if (params?.start_date) query.append('start_date', params.start_date);
     if (params?.end_date) query.append('end_date', params.end_date);
+    if (params?.status) query.append('status', params.status);
     return fetchAPI<any>(`/kitchen/ledger?${query}`);
   },
   getStockLedger: (params?: { branch_id?: number; item_sku?: string; transaction_type?: string }) => {
@@ -3274,39 +3293,16 @@ export const kitchenAPI = {
     if (params?.transaction_type) query.append('transaction_type', params.transaction_type);
     return fetchAPI<any>(`/kitchen/stock/ledger?${query}`);
   },
+  getPortionStock: (branchId: number) => fetchAPI<any>(`/kitchen/portion-stock?branch_id=${branchId}`),
+  getPortionLedger: (params?: { branch_id?: number; item_sku?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.item_sku) query.append('item_sku', params.item_sku);
+    return fetchAPI<any>(`/kitchen/portion-ledger?${query}`);
+  },
   createLedgerEntry: (data: any) => fetchAPI<any>('/kitchen/ledger', { method: 'POST', body: JSON.stringify(data) }),
-
-  // Receipts (from store)
-  getReceipts: (params?: { branch_id?: number; status?: string }) => {
-    const query = new URLSearchParams();
-    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
-    if (params?.status) query.append('status', params.status);
-    return fetchAPI<any>(`/kitchen/receipts?${query}`);
-  },
-  createReceipt: (data: any) => fetchAPI<any>('/kitchen/receipts', { method: 'POST', body: JSON.stringify(data) }),
-  verifyReceipt: (id: string, data: { is_verified: boolean; notes?: string }) =>
-    fetchAPI<any>(`/kitchen/receipts/${id}/verify`, { method: 'PATCH', body: JSON.stringify(data) }),
-
-  // Portion Tracking
-  getPortionTracking: (params?: { branch_id?: number; entry_id?: string }) => {
-    const query = new URLSearchParams();
-    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
-    if (params?.entry_id) query.append('entry_id', params.entry_id);
-    return fetchAPI<any>(`/kitchen/portion-tracking?${query}`);
-  },
-  createPortionTracking: (data: any) => fetchAPI<any>('/kitchen/portion-tracking', { method: 'POST', body: JSON.stringify(data) }),
-  updatePortionTracking: (id: string, data: { actual_portions_produced: number; variance_reason?: string; production_notes?: string }) =>
-    fetchAPI<any>(`/kitchen/portion-tracking/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-
-  // Variance Logs
-  getVarianceLogs: (params?: { branch_id?: number; status?: string }) => {
-    const query = new URLSearchParams();
-    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
-    if (params?.status) query.append('status', params.status);
-    return fetchAPI<any>(`/kitchen/variance-logs?${query}`);
-  },
-  getStats: (branchId?: number) => fetchAPI<any>(`/kitchen/stats${branchId ? `?branch_id=${branchId}` : ''}`),
-  getDashboardStats: (branchId?: number) => fetchAPI<any>(`/kitchen/dashboard/stats${branchId ? `?branch_id=${branchId}` : ''}`),
+  updateLedgerStatus: (id: string, status: 'draft' | 'submitted' | 'verified') =>
+    fetchAPI<any>(`/kitchen/ledger/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 
   // Requisitions
   getRequisitions: (params?: { branch_id?: number; status?: string }) => {
@@ -3317,6 +3313,9 @@ export const kitchenAPI = {
   },
   getRequisition: (id: string | number) => fetchAPI<any>(`/kitchen/requisitions/${id}`),
   createRequisition: (data: any) => fetchAPI<any>('/kitchen/requisitions', { method: 'POST', body: JSON.stringify(data) }),
+  approveRequisition: (id: string | number) => fetchAPI<any>(`/kitchen/requisitions/${id}/approve`, { method: 'POST' }),
+  rejectRequisition: (id: string | number, reason: string) => fetchAPI<any>(`/kitchen/requisitions/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  fulfillRequisition: (id: string | number) => fetchAPI<any>(`/kitchen/requisitions/${id}/fulfill`, { method: 'POST' }),
 
   // Recipes
   getRecipes: () => fetchAPI<any>('/kitchen/recipes'),
@@ -3326,6 +3325,7 @@ export const kitchenAPI = {
   deleteRecipe: (id: string | number) => fetchAPI<any>(`/kitchen/recipes/${id}`, { method: 'DELETE' }),
 
   // Usage & Wastage
+  getKitchenStock: (branchId?: number) => fetchAPI<any>(`/kitchen/stock${branchId ? `?branch_id=${branchId}` : ''}`),
   recordUsage: (data: any) => fetchAPI<any>('/kitchen/usage', { method: 'POST', body: JSON.stringify(data) }),
   getUsageEntries: (branchId?: number) => fetchAPI<any>(`/kitchen/usage${branchId ? `?branch_id=${branchId}` : ''}`),
   recordWastage: (data: any) => fetchAPI<any>('/kitchen/wastage', { method: 'POST', body: JSON.stringify(data) }),
@@ -3337,6 +3337,47 @@ export const kitchenAPI = {
   updateFoodControl: (id: string | number, data: any) => fetchAPI<any>(`/kitchen/food-controls/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteFoodControl: (id: string | number) => fetchAPI<any>(`/kitchen/food-controls/${id}`, { method: 'DELETE' }),
   calculateYield: (data: { rule_id: number; raw_input_quantity: number }) => fetchAPI<any>('/kitchen/food-controls/calculate', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Variance Reconciliation
+  getVarianceReasons: () => fetchAPI<any>('/kitchen/variance-reasons'),
+  getDailyVariance: (params: { branch_id: number; date?: string; item_sku?: string }) => {
+    const query = new URLSearchParams();
+    query.append('branch_id', String(params.branch_id));
+    if (params.date) query.append('date', params.date);
+    if (params.item_sku) query.append('item_sku', params.item_sku);
+    return fetchAPI<any>(`/kitchen/variance?${query}`);
+  },
+  submitVarianceReason: (id: number, data: { reason_id: number; notes?: string }) =>
+    fetchAPI<any>(`/kitchen/variance/${id}/reason`, { method: 'POST', body: JSON.stringify(data) }),
+  approveVariance: (id: number, data: { status: 'approved' | 'rejected'; notes?: string }) =>
+    fetchAPI<any>(`/kitchen/variance/${id}/approve`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Receipts (from store)
+  getReceipts: (params?: { branch_id?: number; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.status) query.append('status', params.status);
+    return fetchAPI<any>(`/kitchen/receipts?${query}`);
+  },
+  createReceipt: (data: any) => fetchAPI<any>('/kitchen/receipts', { method: 'POST', body: JSON.stringify(data) }),
+  verifyReceipt: (id: string, data: { is_verified: boolean; notes?: string }) =>
+    fetchAPI<any>(`/kitchen/receipts/${id}/verify`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Reports
+  getYieldReport: (params: { branch_id: number; start_date: string; end_date: string }) => {
+    const query = new URLSearchParams();
+    query.append('branch_id', String(params.branch_id));
+    query.append('start_date', params.start_date);
+    query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/kitchen/reports/yield?${query}`);
+  },
+  getLossReport: (params: { branch_id: number; start_date: string; end_date: string }) => {
+    const query = new URLSearchParams();
+    query.append('branch_id', String(params.branch_id));
+    query.append('start_date', params.start_date);
+    query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/kitchen/reports/loss?${query}`);
+  },
 };
 
 // =====================================================
@@ -3440,6 +3481,8 @@ export const procurementAPI = {
   getGRNIReport: () => fetchAPI<any>('/procurement/reports/grni'),
   getAuditTrail: (entityType?: string) => fetchAPI<any>(`/procurement/reports/audit-trail${entityType ? `?entityType=${entityType}` : ''}`),
 };
+
+
 
 // =====================================================
 // UNIFIED API EXPORT

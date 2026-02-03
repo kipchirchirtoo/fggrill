@@ -245,4 +245,68 @@ export const getKitchenDashboardStats = async (req: Request, res: Response) => {
     }
 };
 
+/**
+ * Create portion ledger entry (internal helper)
+ */
+export async function createPortionLedgerEntry(params: {
+    branch_id: number;
+    item_sku: string;
+    portion_name: string;
+    transaction_type: string;
+    reference_type?: string;
+    reference_id?: string;
+    quantity_in?: number;
+    quantity_out?: number;
+    user_id?: string;
+    notes?: string;
+}) {
+    const {
+        branch_id,
+        item_sku,
+        portion_name,
+        transaction_type,
+        reference_type,
+        reference_id,
+        quantity_in = 0,
+        quantity_out = 0,
+        user_id,
+        notes
+    } = params;
+
+    // Get current portion balance
+    const { data: currentPortion } = await supabase
+        .from('kitchen_portion_stock')
+        .select('expected_balance')
+        .eq('branch_id', branch_id)
+        .eq('item_sku', item_sku)
+        .single();
+
+    const opening_balance = currentPortion?.expected_balance || 0;
+    const closing_balance = Number(opening_balance) + Number(quantity_in) - Number(quantity_out);
+
+    // Insert portion ledger entry
+    const { data, error } = await supabase
+        .from('kitchen_portion_ledger')
+        .insert({
+            branch_id,
+            item_sku,
+            portion_name,
+            transaction_type,
+            reference_type,
+            reference_id,
+            opening_balance,
+            quantity_in,
+            quantity_out,
+            closing_balance,
+            user_id,
+            notes
+        })
+        .select()
+        .single();
+
+    if (error) throw error;
+
+    return data;
+}
+
 export { createLedgerEntry };

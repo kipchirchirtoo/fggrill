@@ -295,6 +295,8 @@ class BrandedPDFGenerator:
             'conference_invoice': self._generate_conference_invoice,
             'conference_summary': self._generate_conference_summary_report,
             'dispatch_note': self._generate_dispatch_note,
+            'kitchen_ledger': self._generate_kitchen_ledger_report,
+            'kitchen_item_ledger': self._generate_kitchen_item_ledger_report,
         }
         
         # Normalize report type - handle common variations and cases
@@ -2994,5 +2996,172 @@ class BrandedPDFGenerator:
         bill_table = Table(bill_data, colWidths=[2*inch, 1*inch, 1.2*inch, 1.2*inch, 1.1*inch, 1*inch])
         bill_table.setStyle(self._get_table_style())
         elements.append(bill_table)
+        
+        return self._create_pdf(elements)
+
+    def _generate_kitchen_ledger_report(self, data: Dict[str, Any], filters: Dict[str, Any]) -> str:
+        """Generate Kitchen Ledger Report"""
+        elements = []
+        
+        # Header
+        date_range = f"Date: {datetime.now().strftime('%d/%m/%Y')}"
+        if filters.get('start_date') and filters.get('end_date'):
+            date_range = f"Period: {filters.get('start_date')} to {filters.get('end_date')}"
+            
+        elements.extend(self._create_header("KITCHEN LEDGER REPORT", date_range))
+        
+        # Summary Section
+        summary = data.get('summary', {})
+        summary_data = [
+            ['LEDGER SUMMARY', '', '', ''],
+            ['Total Entries:', self._format_number(summary.get('total_entries') or 0),
+             'Total Consumption:', self._format_number(summary.get('total_usage') or 0)],
+            ['Expected Sales:', self._format_currency(summary.get('total_expected_sales') or 0),
+             'System Sales:', self._format_currency(summary.get('total_system_sales') or 0)],
+            ['Total Variance:', self._format_currency(summary.get('total_variance') or 0),
+             'Variance Status:', 'OK' if abs(summary.get('total_variance') or 0) < 100 else 'REVIEW'],
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
+        summary_table.setStyle(TableStyle([
+            ('SPAN', (0, 0), (-1, 0)),
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 1), (2, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Entries Table
+        elements.append(Paragraph("<b>LEDGER ENTRIES</b>", self.styles['SectionHeader']))
+        
+        headers = ['Date', 'Item', 'Opening', 'In', 'Used', 'Waste', 'Closing', 'Exp. Sales', 'Sys. Sales', 'Variance']
+        entry_data = [headers]
+        
+        entries = data.get('entries', [])
+        if not entries:
+            entry_data.append(['No entries found', '-', '-', '-', '-', '-', '-', '-', '-', '-'])
+        else:
+            for entry in entries:
+                variance = (entry.get('expected_sales') or 0) - (entry.get('system_sales') or 0)
+                entry_data.append([
+                    entry.get('entry_date', '')[:10],
+                    entry.get('item_name', '')[:20],
+                    f"{entry.get('opening_balance', 0):.2f}",
+                    f"{entry.get('received_quantity', 0):.2f}",
+                    f"{entry.get('used_quantity', 0):.2f}",
+                    f"{entry.get('wastage_quantity', 0):.2f}",
+                    f"{entry.get('closing_balance', 0):.2f}",
+                    self._format_currency(entry.get('expected_sales') or 0),
+                    self._format_currency(entry.get('system_sales') or 0),
+                    self._format_currency(variance)
+                ])
+                
+        # Adjust column widths to fit A4 landscape if needed, or stick to A4 portrait
+        # Total width available approx 7.2 inch
+        col_widths = [0.8*inch, 1.4*inch, 0.6*inch, 0.6*inch, 0.6*inch, 0.6*inch, 0.6*inch, 0.8*inch, 0.8*inch, 0.8*inch]
+        
+        entry_table = Table(entry_data, colWidths=col_widths, repeatRows=1)
+        entry_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GREEN),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        
+        elements.append(entry_table)
+        
+        return self._create_pdf(elements)
+
+    def _generate_kitchen_item_ledger_report(self, data: Dict[str, Any], filters: Dict[str, Any]) -> str:
+        """Generate Detailed Kitchen Item Ledger Report"""
+        elements = []
+        
+        # Header
+        item_name = data.get('item_name', 'Unknown Item')
+        item_sku = data.get('item_sku', filters.get('item_sku', 'Unknown SKU'))
+        
+        date_range = f"Date: {datetime.now().strftime('%d/%m/%Y')}"
+        if filters.get('start_date') and filters.get('end_date'):
+            date_range = f"Period: {filters.get('start_date')} to {filters.get('end_date')}"
+            
+        elements.extend(self._create_header(f"ITEM LEDGER: {item_name}", date_range))
+        
+        # Item Info Section
+        info_data = [
+            ['ITEM INFORMATION', ''],
+            ['SKU:', item_sku],
+            ['Item Name:', item_name],
+        ]
+        
+        # Add current balance to info if available
+        transactions = data.get('transactions', [])
+        if transactions:
+            info_data.append(['Current Balance:', f"{transactions[-1].get('closing_balance', 0):.2f} {transactions[-1].get('unit_of_measure', '')}"])
+        
+        info_table = Table(info_data, colWidths=[1.5*inch, 5.5*inch])
+        info_table.setStyle(TableStyle([
+            ('SPAN', (0, 0), (-1, 0)),
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(info_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Transactions Table
+        elements.append(Paragraph("<b>TRANSACTION HISTORY</b>", self.styles['SectionHeader']))
+        
+        headers = ['Date & Time', 'Type', 'Reference', 'Opening', 'In', 'Out', 'Closing']
+        trans_data = [headers]
+        
+        if not transactions:
+            trans_data.append(['No transactions found', '-', '-', '-', '-', '-', '-'])
+        else:
+            for t in transactions:
+                # Format date/time
+                dt_str = t.get('transaction_date', '')
+                try:
+                    dt = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
+                    display_dt = dt.strftime('%Y-%m-%d %H:%M')
+                except:
+                    display_dt = dt_str[:16]
+                    
+                trans_data.append([
+                    display_dt,
+                    t.get('transaction_type', ''),
+                    f"{t.get('reference_type', '')} #{t.get('reference_id', '')}",
+                    f"{t.get('opening_balance', 0):.2f}",
+                    f"{t.get('quantity_in', 0):.2f}" if t.get('quantity_in', 0) > 0 else '-',
+                    f"{t.get('quantity_out', 0):.2f}" if t.get('quantity_out', 0) > 0 else '-',
+                    f"{t.get('closing_balance', 0):.2f}"
+                ])
+                
+        col_widths = [1.4*inch, 0.8*inch, 1.8*inch, 0.8*inch, 0.8*inch, 0.8*inch, 0.8*inch]
+        
+        trans_table = Table(trans_data, colWidths=col_widths, repeatRows=1)
+        trans_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GREEN),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('ALIGN', (3, 0), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        
+        elements.append(trans_table)
         
         return self._create_pdf(elements)

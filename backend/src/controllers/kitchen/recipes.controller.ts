@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
-import { createLedgerEntry } from './stock.controller';
+import { createLedgerEntry, createPortionLedgerEntry } from './stock.controller';
 
 /**
  * Create recipe
@@ -276,6 +276,30 @@ export const autoDeductIngredients = async (req: Request, res: Response) => {
                 unit_of_measure: ingredient.unit_of_measure,
                 notes: `Auto-deducted for ${recipe.menu_item_name} (Order #${order_id})`
             });
+
+            // --- PORTION DEDUCTION LOGIC ---
+            // Check if this item is tracked as portions
+            const { data: portionStock } = await supabase
+                .from('kitchen_portion_stock')
+                .select('*')
+                .eq('branch_id', branch_id)
+                .eq('item_sku', ingredient.item_sku)
+                .single();
+
+            if (portionStock) {
+                // Deduct from portion stock
+                await createPortionLedgerEntry({
+                    branch_id,
+                    item_sku: ingredient.item_sku,
+                    portion_name: portionStock.portion_name,
+                    transaction_type: 'POS_SALE',
+                    reference_type: 'POS_ORDER',
+                    reference_id: order_id.toString(),
+                    quantity_out: totalQuantity,
+                    user_id: (req as any).user?.id, // Tie to user (waiter/cashier)
+                    notes: `POS Sale: ${recipe.menu_item_name} (Order #${order_id}) - ${new Date().toLocaleTimeString()}`
+                });
+            }
         }
 
         res.json({ success: true, message: 'Ingredients deducted successfully' });

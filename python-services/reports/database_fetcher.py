@@ -65,6 +65,8 @@ class DatabaseFetcher:
                 'stock_usage': self._fetch_stock_usage,
                 'employee_credit': self._fetch_employee_credit,
                 'conference_summary': self._fetch_conference_reports,
+                'kitchen_ledger': self._fetch_kitchen_ledger,
+                'kitchen_item_ledger': self._fetch_kitchen_item_ledger,
             }
             
             fetcher = fetchers.get(report_type)
@@ -1878,5 +1880,89 @@ class DatabaseFetcher:
                 
         except Exception as e:
             logger.error(f"Error fetching bar sales: {e}")
+            
+        return data
+
+    def _fetch_kitchen_ledger(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch kitchen ledger summary for a branch"""
+        start_date, end_date = self._parse_dates(filters)
+        branch_id = filters.get('branch_id')
+        
+        data = {
+            'branch_id': branch_id,
+            'start_date': start_date,
+            'end_date': end_date,
+            'items': []
+        }
+        
+        if not self.client:
+            return data
+            
+        try:
+            # Query kitchen_ledger_entries for the branch and date range
+            query = self.client.table('kitchen_ledger_entries').select('*')
+            if branch_id:
+                try:
+                    query = query.eq('branch_id', int(branch_id))
+                except:
+                    query = query.eq('branch_id', branch_id)
+            query = query.gte('entry_date', start_date).lte('entry_date', end_date)
+            query = query.order('entry_date', desc=True)
+            
+            result = query.execute()
+            data['items'] = result.data or []
+            
+        except Exception as e:
+            logger.error(f"Error fetching kitchen ledger: {e}")
+            
+        return data
+
+    def _fetch_kitchen_item_ledger(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch detailed ledger for a specific kitchen item"""
+        start_date, end_date = self._parse_dates(filters)
+        branch_id = filters.get('branch_id')
+        item_sku = filters.get('item_sku')
+        
+        data = {
+            'branch_id': branch_id,
+            'item_sku': item_sku,
+            'start_date': start_date,
+            'end_date': end_date,
+            'item_name': '',
+            'transactions': []
+        }
+        
+        if not self.client or not item_sku:
+            return data
+            
+        try:
+            # Query kitchen_stock_ledger for the specific item
+            query = self.client.table('kitchen_stock_ledger').select('*')
+            if branch_id:
+                try:
+                    query = query.eq('branch_id', int(branch_id))
+                except:
+                    query = query.eq('branch_id', branch_id)
+            query = query.eq('item_sku', item_sku)
+            query = query.gte('transaction_date', f'{start_date}T00:00:00')
+            query = query.lte('transaction_date', f'{end_date}T23:59:59')
+            query = query.order('transaction_date', desc=False)
+            
+            result = query.execute()
+            data['transactions'] = result.data or []
+            
+            if data['transactions']:
+                data['item_name'] = data['transactions'][0].get('item_name', '')
+            else:
+                # Fallback to fetch item name from kitchen_stock if no transactions found
+                item_query = self.client.table('kitchen_stock').select('item_name').eq('item_sku', item_sku)
+                if branch_id:
+                    item_query = item_query.eq('branch_id', branch_id)
+                item_result = item_query.execute()
+                if item_result.data:
+                    data['item_name'] = item_result.data[0].get('item_name', '')
+            
+        except Exception as e:
+            logger.error(f"Error fetching kitchen item ledger: {e}")
             
         return data

@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS hk_staff_achievements (
   earned_at TIMESTAMPTZ DEFAULT NOW(),
   task_id UUID REFERENCES hk_tasks(id), -- related task if applicable
   notes TEXT,
-  UNIQUE(staff_id, achievement_id, DATE(earned_at))
+  UNIQUE(staff_id, achievement_id)
 );
 
 -- Points & Leaderboard

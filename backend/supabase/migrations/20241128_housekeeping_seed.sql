@@ -26,13 +26,11 @@ END $$;
 -- 1. CREATE ROOM TYPES IF NOT EXISTS
 -- =====================================================
 
-INSERT INTO room_types (id, name, description, base_price, capacity, amenities)
+INSERT INTO room_types (id, name, description, base_price, max_occupancy)
 VALUES 
-  (gen_random_uuid(), 'Standard Single', 'Comfortable single room', 3500, 1, ARRAY['wifi', 'tv', 'ac']::room_amenity[]),
-  (gen_random_uuid(), 'Standard Double', 'Spacious double room', 5000, 2, ARRAY['wifi', 'tv', 'ac', 'minibar']::room_amenity[]),
-  (gen_random_uuid(), 'Deluxe Room', 'Premium room with extra amenities', 7500, 2, ARRAY['wifi', 'tv', 'ac', 'minibar', 'safe']::room_amenity[]),
-  (gen_random_uuid(), 'Executive Suite', 'Luxury suite with living area', 12000, 3, ARRAY['wifi', 'tv', 'ac', 'minibar', 'safe', 'jacuzzi']::room_amenity[]),
-  (gen_random_uuid(), 'Family Room', 'Large room for families', 9000, 4, ARRAY['wifi', 'tv', 'ac', 'minibar']::room_amenity[])
+  (gen_random_uuid(), 'Standard', 'Comfortable standard room', 3500, 2),
+  (gen_random_uuid(), 'Deluxe', 'Premium room with extra space', 7500, 2),
+  (gen_random_uuid(), 'Suite', 'Luxury suite with living area', 12000, 4)
 ON CONFLICT DO NOTHING;
 
 -- =====================================================
@@ -103,7 +101,7 @@ ON CONFLICT (room_number) DO NOTHING;
 INSERT INTO rooms (room_number, type_id, floor, status, hk_status, cleaning_priority, is_vip, cleaning_credits, branch_id)
 SELECT 
   '4' || LPAD(n::TEXT, 2, '0') AS room_number,
-  (SELECT id FROM room_types WHERE name LIKE '%Suite%' OR name LIKE '%Deluxe%' ORDER BY random() LIMIT 1) AS type_id,
+  (SELECT id FROM room_types WHERE name::text LIKE '%Suite%' OR name::text LIKE '%Deluxe%' ORDER BY random() LIMIT 1) AS type_id,
   4 AS floor,
   CASE WHEN random() < 0.6 THEN 'available' ELSE 'occupied' END::room_status AS status,
   CASE 
@@ -167,7 +165,7 @@ ON CONFLICT (email) DO NOTHING;
 -- =====================================================
 
 -- Supervisors
-INSERT INTO hk_staff_profiles (user_id, staff_code, designation, assigned_floors, max_rooms_per_shift, max_credits_per_shift, skills, quality_score, is_available)
+INSERT INTO hk_staff_profiles (user_id, staff_code, designation, assigned_floors, max_rooms_per_shift, max_credits_per_shift, quality_score, is_available)
 SELECT 
   id,
   'HK-SUP-' || ROW_NUMBER() OVER () AS staff_code,
@@ -175,7 +173,6 @@ SELECT
   ARRAY[1,2,3,4,5] AS assigned_floors,
   0 AS max_rooms_per_shift,
   0 AS max_credits_per_shift,
-  ARRAY['inspection', 'training', 'vip_service', 'deep_cleaning'] AS skills,
   4.5 + (random() * 0.5) AS quality_score,
   TRUE AS is_available
 FROM users 
@@ -183,7 +180,7 @@ WHERE email LIKE 'hk.supervisor%'
 ON CONFLICT (user_id) DO NOTHING;
 
 -- Room Attendants
-INSERT INTO hk_staff_profiles (user_id, staff_code, designation, assigned_floors, max_rooms_per_shift, max_credits_per_shift, skills, quality_score, is_available, tasks_completed_today, tasks_completed_month)
+INSERT INTO hk_staff_profiles (user_id, staff_code, designation, assigned_floors, max_rooms_per_shift, max_credits_per_shift, quality_score, is_available)
 SELECT 
   id,
   'HK-RA-' || LPAD(ROW_NUMBER() OVER ()::TEXT, 3, '0') AS staff_code,
@@ -196,15 +193,8 @@ SELECT
   END AS assigned_floors,
   14 AS max_rooms_per_shift,
   14.0 AS max_credits_per_shift,
-  CASE 
-    WHEN random() < 0.3 THEN ARRAY['standard_cleaning', 'turndown']
-    WHEN random() < 0.6 THEN ARRAY['standard_cleaning', 'deep_cleaning']
-    ELSE ARRAY['standard_cleaning', 'vip_service', 'turndown']
-  END AS skills,
   3.5 + (random() * 1.5) AS quality_score,
-  CASE WHEN random() < 0.8 THEN TRUE ELSE FALSE END AS is_available,
-  FLOOR(random() * 8)::INTEGER AS tasks_completed_today,
-  FLOOR(random() * 150 + 50)::INTEGER AS tasks_completed_month
+  CASE WHEN random() < 0.8 THEN TRUE ELSE FALSE END AS is_available
 FROM users 
 WHERE email LIKE 'attendant.%'
 ON CONFLICT (user_id) DO NOTHING;
@@ -266,45 +256,49 @@ ON CONFLICT DO NOTHING;
 UPDATE hk_tasks 
 SET 
   assigned_to = (SELECT id FROM hk_staff_profiles WHERE designation = 'Room Attendant' AND is_available = TRUE ORDER BY random() LIMIT 1),
-  assigned_at = NOW() - INTERVAL '1 hour',
+  assigned_at = NOW() - INTERVAL '4 hours',
   status = 'assigned'
 WHERE status = 'pending' 
-  AND random() < 0.4;
+  AND random() < 0.7;
 
 -- Set some tasks as in progress
 UPDATE hk_tasks
 SET 
   status = 'in_progress',
-  started_at = NOW() - (INTERVAL '1 minute' * (random() * 30)::INTEGER)
+  started_at = NOW() - INTERVAL '2 hours'
 WHERE status = 'assigned'
-  AND random() < 0.3;
+  AND random() < 0.6;
+
+-- Set some tasks as completed
+UPDATE hk_tasks
+SET 
+  status = 'completed',
+  completed_at = NOW() - INTERVAL '1 hour',
+  completed_by = assigned_to,
+  actual_duration_minutes = 30 + (random() * 20)::INTEGER
+WHERE status = 'in_progress'
+  AND random() < 0.5;
 
 -- =====================================================
 -- 6. ADD SAMPLE INSPECTION DATA
 -- =====================================================
 
 -- Create some completed inspections
-INSERT INTO hk_inspections (room_id, room_number, task_id, inspected_by, overall_score, result, category_scores, deficiencies)
+INSERT INTO hk_inspections (room_id, task_id, inspector_id, overall_score, result, checklist_results, branch_id)
 SELECT 
   t.room_id,
-  t.room_number,
   t.id AS task_id,
-  (SELECT id FROM hk_staff_profiles WHERE designation = 'Floor Supervisor' LIMIT 1) AS inspected_by,
+  (SELECT id FROM hk_staff_profiles WHERE designation = 'Floor Supervisor' LIMIT 1) AS inspector_id,
   CASE WHEN random() < 0.85 THEN 4.0 + random() ELSE 2.5 + random() * 1.5 END AS overall_score,
-  CASE WHEN random() < 0.85 THEN 'pass' ELSE 'fail' END::hk_inspection_result AS result,
+  CASE WHEN random() < 0.85 THEN 'passed' ELSE 'failed' END::hk_inspection_result AS result,
   jsonb_build_object(
     'bedroom', 3.5 + random() * 1.5,
     'bathroom', 3.5 + random() * 1.5,
     'entrance', 4.0 + random(),
     'amenities', 4.0 + random(),
     'overall_presentation', 3.5 + random() * 1.5
-  ) AS category_scores,
-  CASE 
-    WHEN random() < 0.7 THEN '[]'::jsonb
-    ELSE jsonb_build_array(
-      jsonb_build_object('category', 'cleanliness', 'item', 'Dust on surfaces', 'severity', 'minor')
-    )
-  END AS deficiencies
+  ) AS checklist_results,
+  t.branch_id
 FROM hk_tasks t
 WHERE t.status IN ('completed', 'inspection_passed')
 LIMIT 20;
@@ -313,16 +307,17 @@ LIMIT 20;
 -- 7. ADD SAMPLE LOST & FOUND ITEMS
 -- =====================================================
 
-INSERT INTO hk_lost_found (item_description, item_category, found_location, room_id, status, storage_location, storage_bin, retention_days)
+INSERT INTO hk_lost_found (item_name, description, category, found_location, room_id, status, storage_location, branch_id, found_by)
 SELECT 
+  item_desc,
   item_desc,
   category,
   'Room ' || room_num,
   (SELECT id FROM rooms WHERE room_number = room_num LIMIT 1),
-  CASE WHEN random() < 0.7 THEN 'stored' ELSE 'found' END::hk_lost_found_status,
+  CASE WHEN random() < 0.7 THEN 'stored' ELSE 'found' END,
   'Lost & Found Cabinet',
-  'Bin ' || (FLOOR(random() * 10) + 1)::TEXT,
-  90
+  (SELECT id FROM branches LIMIT 1),
+  (SELECT id FROM hk_staff_profiles LIMIT 1)
 FROM (VALUES 
   ('Black leather wallet', 'valuables', '201'),
   ('iPhone charger cable', 'electronics', '305'),
@@ -338,15 +333,16 @@ FROM (VALUES
 -- 8. ADD SAMPLE GUEST SERVICE REQUESTS
 -- =====================================================
 
-INSERT INTO hk_guest_service_requests (room_id, room_number, guest_name, request_type, details, priority, status)
+INSERT INTO hk_guest_service_requests (room_id, room_number, guest_name, request_type, details, priority, status, branch_id)
 SELECT 
   r.id,
   r.room_number,
   'Guest in ' || r.room_number,
   req_type,
   details::jsonb,
-  CASE WHEN random() < 0.2 THEN 'high' ELSE 'normal' END::hk_priority,
-  CASE WHEN random() < 0.6 THEN 'pending' ELSE 'completed' END
+  CASE WHEN random() < 0.2 THEN 'high'::hk_priority ELSE 'normal'::hk_priority END,
+  CASE WHEN random() < 0.6 THEN 'pending' ELSE 'completed' END,
+  r.branch_id
 FROM rooms r
 CROSS JOIN (VALUES 
   ('extra_amenities', '{"items": ["extra towels", "pillows"]}'),
@@ -361,15 +357,14 @@ LIMIT 10;
 -- 9. ADD SAMPLE MAINTENANCE REQUESTS
 -- =====================================================
 
-INSERT INTO hk_maintenance_requests (room_id, room_number, category, description, priority, status, reported_by)
+INSERT INTO hk_maintenance_requests (room_id, reported_by, issue_type, description, priority, status)
 SELECT 
   r.id,
-  r.room_number,
+  (SELECT id FROM hk_staff_profiles WHERE designation = 'Room Attendant' ORDER BY random() LIMIT 1),
   category,
   description,
-  CASE WHEN random() < 0.3 THEN 'high' ELSE 'normal' END::hk_priority,
-  CASE WHEN random() < 0.5 THEN 'submitted' ELSE 'in_progress' END::hk_maintenance_status,
-  (SELECT id FROM hk_staff_profiles WHERE designation = 'Room Attendant' ORDER BY random() LIMIT 1)
+  CASE WHEN random() < 0.3 THEN 'high'::hk_priority ELSE 'normal'::hk_priority END,
+  CASE WHEN random() < 0.5 THEN 'submitted' ELSE 'in_progress' END
 FROM rooms r
 CROSS JOIN (VALUES 
   ('plumbing', 'Slow drain in bathroom sink'),
@@ -394,8 +389,8 @@ SELECT
   EXTRACT(MONTH FROM CURRENT_DATE)::INTEGER AS period_month,
   EXTRACT(YEAR FROM CURRENT_DATE)::INTEGER AS period_year
 FROM hk_staff_profiles s
-WHERE s.designation = 'Room Attendant'
-CROSS JOIN generate_series(1, 5);
+CROSS JOIN generate_series(1, 5)
+WHERE s.designation = 'Room Attendant';
 
 -- Award some achievements
 INSERT INTO hk_staff_achievements (staff_id, achievement_id, notes)

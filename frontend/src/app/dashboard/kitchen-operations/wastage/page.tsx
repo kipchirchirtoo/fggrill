@@ -18,6 +18,7 @@ export default function WastagePage() {
     const [wastageRecords, setWastageRecords] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [kitchenStock, setKitchenStock] = useState<any[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterReason, setFilterReason] = useState('ALL');
     const [formData, setFormData] = useState({
@@ -33,7 +34,21 @@ export default function WastagePage() {
 
     useEffect(() => {
         fetchWastage();
+        if (activeBranchId) {
+            fetchStock();
+        }
     }, [activeBranchId]);
+
+    const fetchStock = async () => {
+        try {
+            const response = await api.kitchen.getKitchenStock(activeBranchId!);
+            if (response.success) {
+                setKitchenStock(response.data || []);
+            }
+        } catch (error) {
+            console.error('Error fetching kitchen stock:', error);
+        }
+    };
 
     const fetchWastage = async () => {
         setIsLoading(true);
@@ -51,8 +66,8 @@ export default function WastagePage() {
     };
 
     const handleSubmit = async () => {
-        if (!formData.item_name || !formData.quantity || !formData.estimated_value) {
-            toast.error('Please fill in required fields');
+        if (!formData.item_sku || !formData.quantity || !formData.reason) {
+            toast.error('Item SKU, quantity, and reason are required');
             return;
         }
 
@@ -229,24 +244,34 @@ export default function WastagePage() {
                                     </p>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 gap-4">
                                     <div className="space-y-1.5">
-                                        <label className="input-label">Item Name</label>
-                                        <input
-                                            value={formData.item_name}
-                                            onChange={(e) => setFormData({ ...formData, item_name: e.target.value })}
-                                            placeholder="e.g., Tomatoes"
+                                        <label className="input-label">Select Item from Stock</label>
+                                        <select
                                             className="input-field"
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="input-label">Item SKU</label>
-                                        <input
                                             value={formData.item_sku}
-                                            onChange={(e) => setFormData({ ...formData, item_sku: e.target.value })}
-                                            placeholder="Optional"
-                                            className="input-field"
-                                        />
+                                            onChange={(e) => {
+                                                const stockItem = kitchenStock.find(i => i.item_sku === e.target.value);
+                                                if (stockItem) {
+                                                    setFormData({
+                                                        ...formData,
+                                                        item_sku: stockItem.item_sku,
+                                                        item_name: stockItem.item_name,
+                                                        unit_of_measure: stockItem.unit_of_measure,
+                                                        estimated_value: 0 // Reset or calculate if price available
+                                                    });
+                                                } else {
+                                                    setFormData({ ...formData, item_sku: '', item_name: '', unit_of_measure: 'kg' });
+                                                }
+                                            }}
+                                        >
+                                            <option value="">-- Choose Stock Item --</option>
+                                            {kitchenStock.map((item) => (
+                                                <option key={item.item_sku} value={item.item_sku}>
+                                                    {item.item_name} ({item.current_balance} {item.unit_of_measure} available)
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
                                 </div>
 

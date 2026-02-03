@@ -27,6 +27,8 @@ export default function RequisitionsPage() {
     const [requisitions, setRequisitions] = useState<Requisition[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedRequisition, setSelectedRequisition] = useState<Requisition | null>(null);
+    const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
     const [selectedItems, setSelectedItems] = useState<any[]>([]);
     const [priority, setPriority] = useState('NORMAL');
     const [reason, setReason] = useState('');
@@ -212,7 +214,13 @@ export default function RequisitionsPage() {
                                                     {req.items?.length || 0}
                                                 </td>
                                                 <td className="px-5 py-3 text-right">
-                                                    <button className="text-[13px] font-medium text-blue-600 hover:text-blue-700">
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedRequisition(req);
+                                                            setIsDetailsModalOpen(true);
+                                                        }}
+                                                        className="text-[13px] font-medium text-blue-600 hover:text-blue-700"
+                                                    >
                                                         View Details
                                                     </button>
                                                 </td>
@@ -339,6 +347,97 @@ export default function RequisitionsPage() {
                                 </button>
                                 <button className="btn-primary flex-1" onClick={handleCreateRequisition}>
                                     Submit Request
+                                </button>
+                            </div>
+                        </DialogContent>
+                    </Dialog>
+
+                    {/* View Details Modal */}
+                    <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
+                        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col p-0 overflow-hidden">
+                            <DialogHeader className="px-6 py-5 border-b border-stone-100 bg-stone-50/50">
+                                <DialogTitle className="flex items-center gap-2 text-[17px] font-semibold text-stone-900">
+                                    <ShoppingCart className="h-5 w-5 text-stone-500" />
+                                    Requisition Details: {selectedRequisition?.requisition_number}
+                                </DialogTitle>
+                            </DialogHeader>
+
+                            <div className="overflow-y-auto px-6 py-6 flex-1 space-y-6">
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                        <p className="text-stone-500 font-medium">Status</p>
+                                        <div className="mt-1">{selectedRequisition && getStatusBadge(selectedRequisition.status)}</div>
+                                    </div>
+                                    <div>
+                                        <p className="text-stone-500 font-medium">Priority</p>
+                                        <p className={`mt-1 font-bold ${selectedRequisition?.priority === 'URGENT' ? 'text-red-600' : 'text-stone-900'}`}>
+                                            {selectedRequisition?.priority}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-stone-500 font-medium">Requested At</p>
+                                        <p className="mt-1 text-stone-900">
+                                            {selectedRequisition && new Date(selectedRequisition.requested_at).toLocaleString()}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-stone-500 font-medium">Reason</p>
+                                        <p className="mt-1 text-stone-900">{(selectedRequisition as any)?.reason || '-'}</p>
+                                    </div>
+                                </div>
+
+                                <div className="border-t border-stone-100 pt-6">
+                                    <h3 className="text-sm font-bold text-stone-900 mb-4">Requested Items</h3>
+                                    <div className="border border-stone-100 rounded-lg overflow-hidden">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-stone-50">
+                                                <tr>
+                                                    <th className="px-4 py-2 text-left font-semibold text-stone-600 uppercase text-[10px]">Item</th>
+                                                    <th className="px-4 py-2 text-left font-semibold text-stone-600 uppercase text-[10px]">SKU</th>
+                                                    <th className="px-4 py-2 text-right font-semibold text-stone-600 uppercase text-[10px]">Requested</th>
+                                                    <th className="px-4 py-2 text-right font-semibold text-stone-600 uppercase text-[10px]">Approved</th>
+                                                    <th className="px-4 py-2 text-right font-semibold text-stone-600 uppercase text-[10px]">Issued</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-stone-100 italic">
+                                                {selectedRequisition?.items?.map((item: any, idx: number) => (
+                                                    <tr key={idx}>
+                                                        <td className="px-4 py-2.5 font-medium text-stone-900">{item.item_name}</td>
+                                                        <td className="px-4 py-2.5 text-stone-500 font-mono text-xs">{item.item_sku}</td>
+                                                        <td className="px-4 py-2.5 text-right font-bold">
+                                                            {item.requested_quantity} {item.unit_of_measure}
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-right font-bold text-green-600">
+                                                            {item.approved_quantity !== null ? `${item.approved_quantity} ${item.unit_of_measure}` : '-'}
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-right font-bold text-blue-600">
+                                                            {item.issued_quantity !== null ? `${item.issued_quantity} ${item.unit_of_measure}` : '-'}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                {(selectedRequisition as any)?.notes && (
+                                    <div className="bg-stone-50 p-3 rounded-lg border border-stone-100">
+                                        <p className="text-xs text-stone-500 font-bold uppercase tracking-wider mb-1">Notes</p>
+                                        <p className="text-sm text-stone-800">{(selectedRequisition as any).notes}</p>
+                                    </div>
+                                )}
+
+                                {(selectedRequisition as any)?.rejection_reason && (
+                                    <div className="bg-red-50 p-3 rounded-lg border border-red-100">
+                                        <p className="text-xs text-red-500 font-bold uppercase tracking-wider mb-1">Rejection Reason</p>
+                                        <p className="text-sm text-red-800 font-medium">{(selectedRequisition as any).rejection_reason}</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="px-6 py-4 border-t border-stone-100 bg-stone-50/50 flex justify-end">
+                                <button className="btn-secondary px-8" onClick={() => setIsDetailsModalOpen(false)}>
+                                    Close
                                 </button>
                             </div>
                         </DialogContent>

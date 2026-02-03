@@ -81,24 +81,24 @@ JOIN branches b ON bs.branch_id = b.id
 WHERE bs.quantity <= COALESCE(ii.reorder_point, 10)
 ORDER BY bs.quantity ASC;
 
--- 6. v_requisition_summary
-DROP VIEW IF EXISTS public.v_requisition_summary;
-CREATE VIEW public.v_requisition_summary AS
-SELECT 
-    r.id,
-    r.requisition_number,
-    r.status,
-    r.priority,
-    r.requested_by,
-    r.approved_by,
-    r.branch as branch_name,
-    r.created_at,
-    r.updated_at,
-    COUNT(ri.id) as items_count,
-    SUM(ri.quantity * COALESCE(ri.unit_price, 0)) as total_value
-FROM requisitions r
-LEFT JOIN requisition_items ri ON r.id = ri.requisition_id
-GROUP BY r.id, r.branch;
+-- 6. v_requisition_summary (Skipped due to schema mismatch - status/priority missing in requisitions)
+-- DROP VIEW IF EXISTS public.v_requisition_summary;
+-- CREATE VIEW public.v_requisition_summary AS
+-- SELECT 
+--     r.id,
+--     r.requisition_number,
+--     r.status,
+--     r.priority,
+--     r.requested_by,
+--     r.approved_by,
+--     r.branch as branch_name,
+--     r.created_at,
+--     r.updated_at,
+--     COUNT(ri.id) as items_count,
+--     SUM(ri.quantity * COALESCE(ri.unit_price, 0)) as total_value
+-- FROM requisitions r
+-- LEFT JOIN requisition_items ri ON r.id = ri.requisition_id
+-- GROUP BY r.id, r.branch;
 
 -- 7. v_purchase_order_summary
 DROP VIEW IF EXISTS public.v_purchase_order_summary;
@@ -114,7 +114,7 @@ SELECT
     COUNT(poi.id) as items_count,
     SUM(poi.quantity * poi.unit_price) as total_value
 FROM purchase_orders po
-LEFT JOIN purchase_order_items poi ON po.id = poi.purchase_order_id
+LEFT JOIN purchase_order_items poi ON po.id = poi.po_id
 LEFT JOIN suppliers s ON po.supplier_id = s.id
 GROUP BY po.id, s.name;
 
@@ -127,8 +127,8 @@ SELECT
     sti.item_sku,
     ii.name as item_name,
     sti.system_quantity,
-    sti.actual_quantity,
-    (sti.actual_quantity - sti.system_quantity) as variance,
+    sti.counted_quantity as actual_quantity,
+    (sti.counted_quantity - sti.system_quantity) as variance,
     st.branch_id,
     b.name as branch_name,
     st.status,
@@ -137,7 +137,7 @@ FROM stock_take_items sti
 JOIN stock_takes st ON sti.stock_take_id = st.id
 LEFT JOIN inventory_items ii ON sti.item_sku = ii.item_code
 LEFT JOIN branches b ON st.branch_id = b.id
-WHERE sti.actual_quantity != sti.system_quantity;
+WHERE sti.counted_quantity != sti.system_quantity;
 
 -- 9. v_pending_requests
 DROP VIEW IF EXISTS public.v_pending_requests;
@@ -169,19 +169,19 @@ SELECT
     s.id as supplier_id,
     s.name as supplier_name,
     COUNT(po.id) as total_orders,
-    COUNT(CASE WHEN po.status = 'COMPLETED' THEN 1 END) as completed_orders,
-    SUM(CASE WHEN po.status = 'COMPLETED' THEN poi_total.total_value ELSE 0 END) as total_value,
-    AVG(CASE WHEN grn.received_at IS NOT NULL THEN 
-        EXTRACT(EPOCH FROM (grn.received_at - po.created_at)) / 86400 
+    COUNT(CASE WHEN po.status = 'received' THEN 1 END) as completed_orders,
+    SUM(CASE WHEN po.status = 'received' THEN poi_total.total_value ELSE 0 END) as total_value,
+    AVG(CASE WHEN grn.received_date IS NOT NULL THEN 
+        EXTRACT(EPOCH FROM (grn.received_date - po.created_at)) / 86400 
     END) as avg_delivery_days
 FROM suppliers s
 LEFT JOIN purchase_orders po ON s.id = po.supplier_id
 LEFT JOIN (
-    SELECT purchase_order_id, SUM(quantity * unit_price) as total_value
+    SELECT po_id, SUM(quantity * unit_price) as total_value
     FROM purchase_order_items
-    GROUP BY purchase_order_id
-) poi_total ON po.id = poi_total.purchase_order_id
-LEFT JOIN goods_received_notes grn ON po.id = grn.purchase_order_id
+    GROUP BY po_id
+) poi_total ON po.id = poi_total.po_id
+LEFT JOIN goods_received_notes grn ON po.id = grn.po_id
 GROUP BY s.id, s.name;
 
 -- 12. v_low_stock_by_branch
@@ -196,7 +196,7 @@ SELECT
 FROM branches b
 LEFT JOIN branch_stock bs ON b.id = bs.branch_id
 LEFT JOIN inventory_items ii ON bs.item_sku = ii.item_code
-WHERE b.status = 'active'
+-- WHERE b.status = 'active'
 GROUP BY b.id, b.name, b.code;
 
 -- 13. v_kitchen_usage_details
@@ -288,17 +288,16 @@ DROP VIEW IF EXISTS public.v_expiring_items;
 CREATE VIEW public.v_expiring_items AS
 SELECT 
     ib.id,
-    ib.item_sku,
+    ii.item_code as item_sku,
     ii.name as item_name,
     ib.batch_number,
-    ib.quantity,
     ib.expiry_date,
-    ib.branch_id,
-    b.name as branch_name,
+    ib.quantity,
+    ii.unit,
+    ib.branch as branch_name,
     (ib.expiry_date - CURRENT_DATE) as days_until_expiry
 FROM inventory_batches ib
-JOIN inventory_items ii ON ib.item_sku = ii.item_code
-JOIN branches b ON ib.branch_id = b.id
+LEFT JOIN inventory_items ii ON ib.item_id = ii.id
 WHERE ib.expiry_date IS NOT NULL 
   AND ib.expiry_date <= (CURRENT_DATE + INTERVAL '30 days')
   AND ib.quantity > 0
@@ -311,20 +310,16 @@ SELECT
     st.id,
     st.transfer_number,
     st.status,
-    st.from_branch_id,
-    fb.name as from_branch_name,
-    st.to_branch_id,
-    tb.name as to_branch_name,
-    st.created_by,
+    st.from_branch::text as from_branch_name,
+    st.to_branch::text as to_branch_name,
+    st.requested_by as created_by,
     st.created_at,
-    st.completed_at,
+    st.updated_at as completed_at,
     COUNT(sti.id) as items_count,
     SUM(sti.quantity) as total_quantity
 FROM stock_transfers st
 LEFT JOIN stock_transfer_items sti ON st.id = sti.transfer_id
-LEFT JOIN branches fb ON st.from_branch_id = fb.id
-LEFT JOIN branches tb ON st.to_branch_id = tb.id
-GROUP BY st.id, fb.name, tb.name;
+GROUP BY st.id;
 
 -- 19. v_inventory_valuation
 DROP VIEW IF EXISTS public.v_inventory_valuation;
@@ -339,7 +334,7 @@ SELECT
 FROM branches b
 LEFT JOIN branch_stock bs ON b.id = bs.branch_id
 LEFT JOIN inventory_items ii ON bs.item_sku = ii.item_code
-WHERE b.status = 'active'
+-- WHERE b.status = 'active'
 GROUP BY b.id, b.name, b.code;
 
 -- 20. v_staff_accountability
@@ -447,6 +442,14 @@ BEGIN
     (current_setting('request.jwt.claims', true)::json->>'branch_id')::integer,
     (SELECT branch_id FROM public.users WHERE id = auth.uid()::uuid)
   );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Helper function to get user's branch_name
+CREATE OR REPLACE FUNCTION public.get_user_branch_name()
+RETURNS TEXT AS $$
+BEGIN
+  RETURN (SELECT name FROM public.branches WHERE id = public.get_user_branch_id());
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -612,11 +615,11 @@ CREATE POLICY "kitchen_usage_records_policy" ON public.kitchen_usage_records
   FOR ALL TO authenticated
   USING (
     get_user_role() IN ('super_admin', 'general_manager', 'auditor')
-    -- OR branch_id = get_user_branch_id()
+    OR branch_id = public.get_user_branch_id()
   )
   WITH CHECK (
     get_user_role() IN ('super_admin', 'general_manager')
-    -- OR branch_id = get_user_branch_id()
+    OR branch_id = public.get_user_branch_id()
   );
 
 DROP POLICY IF EXISTS "kitchen_usage_entries_policy" ON public.kitchen_usage_entries;
@@ -672,11 +675,11 @@ CREATE POLICY "staff_attendance_policy" ON public.staff_attendance
   FOR ALL TO authenticated
   USING (
     get_user_role() IN ('super_admin', 'general_manager', 'auditor')
-    -- OR branch_id = get_user_branch_id()
+    OR staff_id IN (SELECT id FROM public.users WHERE branch_id = public.get_user_branch_id())
   )
   WITH CHECK (
     get_user_role() IN ('super_admin', 'general_manager')
-    -- OR branch_id = get_user_branch_id()
+    OR staff_id IN (SELECT id FROM public.users WHERE branch_id = public.get_user_branch_id())
   );
 
 -- =====================================================
@@ -737,7 +740,7 @@ CREATE POLICY "requisitions_policy" ON public.requisitions
   FOR ALL TO authenticated
   USING (
     get_user_role() IN ('super_admin', 'general_manager', 'central_storekeeper', 'auditor')
-    OR branch_id = get_user_branch_id()
+    OR branch::text = public.get_user_branch_name()
   )
   WITH CHECK (true);
 
@@ -751,8 +754,8 @@ CREATE POLICY "stock_transfers_policy" ON public.stock_transfers
   FOR ALL TO authenticated
   USING (
     get_user_role() IN ('super_admin', 'general_manager', 'central_storekeeper', 'auditor')
-    OR from_branch = get_user_branch_id()::text
-    OR to_branch = get_user_branch_id()::text
+    OR from_branch::text = public.get_user_branch_name()
+    OR to_branch::text = public.get_user_branch_name()
   )
   WITH CHECK (true);
 
@@ -771,7 +774,7 @@ CREATE POLICY "inventory_batches_policy" ON public.inventory_batches
   FOR ALL TO authenticated
   USING (
     get_user_role() IN ('super_admin', 'general_manager', 'central_storekeeper', 'auditor')
-    OR branch_id = get_user_branch_id()
+    OR branch::text = public.get_user_branch_name()
   )
   WITH CHECK (true);
 
@@ -781,7 +784,7 @@ CREATE POLICY "branch_inventory_policy" ON public.branch_inventory
   FOR ALL TO authenticated
   USING (
     get_user_role() IN ('super_admin', 'general_manager', 'central_storekeeper', 'auditor')
-    OR branch_id = get_user_branch_id()
+    OR branch::text = public.get_user_branch_name()
   )
   WITH CHECK (true);
 
@@ -791,7 +794,7 @@ CREATE POLICY "consumption_records_policy" ON public.consumption_records
   FOR ALL TO authenticated
   USING (
     get_user_role() IN ('super_admin', 'general_manager', 'auditor')
-    OR branch_id = get_user_branch_id()
+    OR branch::text = public.get_user_branch_name()
   )
   WITH CHECK (true);
 
@@ -801,7 +804,7 @@ CREATE POLICY "inventory_adjustments_policy" ON public.inventory_adjustments
   FOR ALL TO authenticated
   USING (
     get_user_role() IN ('super_admin', 'general_manager', 'central_storekeeper', 'auditor')
-    OR branch_id = get_user_branch_id()
+    OR branch::text = public.get_user_branch_name()
   )
   WITH CHECK (true);
 
@@ -811,7 +814,7 @@ CREATE POLICY "inventory_counts_policy" ON public.inventory_counts
   FOR ALL TO authenticated
   USING (
     get_user_role() IN ('super_admin', 'general_manager', 'auditor')
-    OR branch_id = get_user_branch_id()
+    OR branch::text = public.get_user_branch_name()
   )
   WITH CHECK (true);
 
@@ -825,7 +828,7 @@ CREATE POLICY "stock_history_policy" ON public.stock_history
   FOR SELECT TO authenticated
   USING (
     get_user_role() IN ('super_admin', 'general_manager', 'central_storekeeper', 'auditor')
-    OR branch_id = get_user_branch_id()
+    OR user_id = auth.uid()
   );
 
 DROP POLICY IF EXISTS "stock_history_insert_policy" ON public.stock_history;

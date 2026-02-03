@@ -43,7 +43,7 @@ export default function AuditorApprovalPanel() {
     const fetchRequests = useCallback(async () => {
         setIsLoading(true);
         try {
-            const response = await storeAPI.getBranchRequests('PENDING');
+            const response = await storeAPI.getBranchRequests('PENDING_AUDIT');
             if (response.success) {
                 const pendingRequests = response.data || [];
                 setRequests(pendingRequests);
