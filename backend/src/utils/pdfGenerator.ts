@@ -1,5 +1,7 @@
 import PDFDocument from 'pdfkit';
 import { Buffer } from 'buffer';
+import path from 'path';
+import fs from 'fs';
 
 export interface PayslipData {
     month: string;
@@ -22,6 +24,9 @@ export interface PayslipData {
             first_name: string;
             last_name: string;
         };
+        bank_name?: string;
+        bank_account_number?: string;
+        department?: string;
     };
     company?: string;
     company_email?: string;
@@ -30,117 +35,149 @@ export interface PayslipData {
 
 export const generatePayslipPDF = (data: PayslipData): Promise<Buffer> => {
     return new Promise((resolve, reject) => {
-        const doc = new PDFDocument({ margin: 50, size: 'A4' });
+        const doc = new PDFDocument({ margin: 40, size: 'A4' });
         const chunks: Buffer[] = [];
 
         doc.on('data', (chunk) => chunks.push(chunk));
         doc.on('end', () => resolve(Buffer.concat(chunks)));
         doc.on('error', (err) => reject(err));
 
-        // Colors
-        const FG_DARK = '#3C3C43';
-        const FG_GRAY = '#8E8E93';
-        const HEADER_GRAY = '#D9D9D9';
+        // Colors - Premium Palette
+        const PRIMARY = '#1a1a1a';
+        const SECONDARY = '#555555';
+        const ACCENT = '#0066cc';
+        const BORDER = '#e0e0e0';
+        const ROW_BG = '#f9f9f9';
+        const HEADER_BG = '#333333';
 
-        // Header
-        // Logo placeholder (since we don't have the file easily here, we'll use a rect or text)
-        doc.fillColor(FG_DARK).rect(50, 45, 40, 40).fill();
-        doc.fillColor('white').fontSize(20).text('F', 62, 55);
+        // Header Section
+        const logoPath = path.join(process.cwd(), '../frontend/public/fglogo.png');
+        if (fs.existsSync(logoPath)) {
+            doc.image(logoPath, 40, 40, { width: 60 });
+        } else {
+            // Branded Circle Placeholder
+            doc.circle(70, 70, 30).fill(PRIMARY);
+            doc.fillColor('white').fontSize(24).font('Helvetica-Bold').text('FG', 54, 60);
+        }
 
-        doc.fillColor(FG_GRAY).fontSize(10).text('SmithBrand', 100, 50);
-        doc.fillColor(FG_DARK).fontSize(22).font('Helvetica-Bold').text('PAYSLIP', 100, 65);
-        doc.fillColor(FG_GRAY).fontSize(8).font('Helvetica').text(`${data.company_email || 'accounts@famousgate.co.ke'} | ${data.company_address || 'Kericho-Kisumu Highway, Kericho, Kenya'}`, 100, 95);
+        // Company Information (Top Right)
+        doc.fillColor(PRIMARY).fontSize(16).font('Helvetica-Bold').text('FAMOUS GATE HOTEL', 120, 40, { align: 'right' });
+        doc.fontSize(10).font('Helvetica').text(data.company_address || 'Kericho-Kisumu Highway, Kericho, Kenya', { align: 'right' });
+        doc.text(`Email: ${data.company_email || 'accounts@famousgate.co.ke'}`, { align: 'right' });
+        doc.text('Tel: +254 (0) 7XX XXX XXX', { align: 'right' });
 
-        doc.moveDown(3);
+        doc.moveDown(1);
+        doc.strokeColor(BORDER).lineWidth(1).moveTo(40, 110).lineTo(555, 110).stroke();
 
-        // Body Title
-        doc.fillColor(FG_DARK).fontSize(20).font('Helvetica-Bold').text('Payslip', { align: 'center' });
-        doc.fontSize(11).font('Helvetica').text(`Pay Period: ${data.month} ${data.year}`, { align: 'center' });
+        // Payslip Title & Period
+        doc.moveDown(2);
+        doc.fillColor(PRIMARY).fontSize(20).font('Helvetica-Bold').text('PAYSLIP', { align: 'center' });
+        doc.fontSize(12).font('Helvetica-Bold').text(`${data.month.toUpperCase()} ${data.year}`, { align: 'center' });
 
         doc.moveDown(2);
 
-        // Employee Info
-        const name = `${data.employee.user.first_name} ${data.employee.user.last_name}`;
-        const id = data.employee.kra_pin || data.employee.national_id || 'N/A';
-        const position = data.employee.employee_type || 'Staff';
+        // Employee Information Grid
+        const infoY = doc.y;
+        doc.rect(40, infoY, 515, 80).stroke(BORDER);
 
-        doc.fontSize(10).font('Helvetica-Bold').text('Employee Name: ', { continued: true }).font('Helvetica').text(name);
-        doc.font('Helvetica-Bold').text('Employee PIN/ID: ', { continued: true }).font('Helvetica').text(id);
-        doc.font('Helvetica-Bold').text('Position: ', { continued: true }).font('Helvetica').text(position);
+        const leftCol = 50;
+        const midCol = 280;
 
-        doc.moveDown(2);
+        doc.fontSize(10).font('Helvetica-Bold');
+        doc.text('Employee Name:', leftCol, infoY + 15);
+        doc.font('Helvetica').text(`${data.employee.user.first_name} ${data.employee.user.last_name}`, leftCol + 90, infoY + 15);
 
-        // Financial Table
+        doc.font('Helvetica-Bold').text('Employee ID:', leftCol, infoY + 35);
+        doc.font('Helvetica').text(data.employee.national_id || 'N/A', leftCol + 90, infoY + 35);
+
+        doc.font('Helvetica-Bold').text('Position:', leftCol, infoY + 55);
+        doc.font('Helvetica').text(data.employee.employee_type || 'Staff', leftCol + 90, infoY + 55);
+
+        doc.font('Helvetica-Bold').text('Department:', midCol, infoY + 15);
+        doc.font('Helvetica').text(data.employee.department || 'General', midCol + 90, infoY + 15);
+
+        doc.font('Helvetica-Bold').text('Bank Account:', midCol, infoY + 35);
+        doc.font('Helvetica').text(data.employee.bank_account_number || 'N/A', midCol + 90, infoY + 35);
+
+        doc.font('Helvetica-Bold').text('Bank Name:', midCol, infoY + 55);
+        doc.font('Helvetica').text(data.employee.bank_name || 'N/A', midCol + 90, infoY + 55);
+
+        doc.moveDown(4);
+
+        // Table Constants
         const tableTop = doc.y;
-        const col1 = 50;
-        const col2 = 200;
-        const col3 = 300;
-        const col4 = 450;
-        const rowHeight = 25;
+        const col1W = 160; // Category name
+        const col2W = 100; // Amount
+        const col3W = 160; // Category name
+        const col4W = 95;  // Amount
+        const rowH = 25;
 
         // Table Header
-        doc.rect(col1, tableTop, 500, rowHeight).fill(HEADER_GRAY);
-        doc.fillColor(FG_DARK).font('Helvetica-Bold').fontSize(10);
-        doc.text('Earnings', col1 + 10, tableTop + 7);
-        doc.text('Amount', col2 + 10, tableTop + 7);
-        doc.text('Deductions', col3 + 10, tableTop + 7);
-        doc.text('Amount', col4 + 10, tableTop + 7);
+        doc.rect(40, tableTop, 515, rowH).fill(HEADER_BG);
+        doc.fillColor('white').font('Helvetica-Bold').fontSize(10);
+        doc.text('EARNINGS', 40 + 10, tableTop + 7);
+        doc.text('AMOUNT', 40 + col1W + 10, tableTop + 7, { width: col2W - 20, align: 'right' });
+        doc.text('DEDUCTIONS', 40 + col1W + col2W + 10, tableTop + 7);
+        doc.text('AMOUNT', 40 + col1W + col2W + col3W + 10, tableTop + 7, { width: col4W - 20, align: 'right' });
 
-        const formatCurrency = (amt: number) => `KES ${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const formatCurrency = (amt: number) => amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         const rows = [
-            ['Base Salary', formatCurrency(data.basic_salary), 'PAYE Tax', formatCurrency(data.paye_tax)],
-            ['Overtime Pay', formatCurrency(data.overtime_pay), 'NSSF', formatCurrency(data.nssf_deduction)],
-            ['Allowances/Bonuses', formatCurrency(data.allowances), 'SHIF', formatCurrency(data.shif_deduction)],
-            ['', '', 'Housing Levy', formatCurrency(data.housing_levy_deduction)],
-            ['Gross Salary', formatCurrency(data.gross_pay), 'Other Deductions', formatCurrency(0)],
-            ['Total', formatCurrency(data.gross_pay), 'Total', formatCurrency(data.total_deductions)]
+            ['Basic Salary', formatCurrency(data.basic_salary), 'PAYE Tax', formatCurrency(data.paye_tax)],
+            ['Overtime Pay', formatCurrency(data.overtime_pay), 'NSSF (Tier I+II)', formatCurrency(data.nssf_deduction)],
+            ['Allowances', formatCurrency(data.allowances), 'SHIF (Health)', formatCurrency(data.shif_deduction)],
+            ['Other Bonuses', formatCurrency(0), 'Housing Levy', formatCurrency(data.housing_levy_deduction)],
+            ['', '', 'Other Deductions', formatCurrency(0)],
+            ['Total Earnings', formatCurrency(data.gross_pay), 'Total Deductions', formatCurrency(data.total_deductions)]
         ];
 
-        let currentY = tableTop + rowHeight;
-        doc.font('Helvetica').fontSize(9);
+        let currentY = tableTop + rowH;
 
         rows.forEach((row, i) => {
-            // Background for alternate rows if desired
+            // Alternating Row Backgrounds
             if (i % 2 === 1) {
-                // doc.rect(col1, currentY, 500, rowHeight).fill('#F9F9F9');
+                doc.fillColor(ROW_BG).rect(40, currentY, 515, rowH).fill();
             }
 
-            doc.fillColor(FG_DARK);
-            if (i === 4 || i === 5) doc.font('Helvetica-Bold'); else doc.font('Helvetica');
+            doc.fillColor(PRIMARY).font(i === rows.length - 1 ? 'Helvetica-Bold' : 'Helvetica').fontSize(9);
 
-            doc.text(row[0], col1 + 10, currentY + 7);
-            doc.text(row[1], col2 + 10, currentY + 7, { align: 'right', width: col3 - col2 - 20 });
-            doc.text(row[2], col3 + 10, currentY + 7);
-            doc.text(row[3], col4 + 10, currentY + 7, { align: 'right', width: 100 });
+            // Earnings Column
+            doc.text(row[0], 40 + 10, currentY + 7);
+            if (row[1]) doc.text(row[1], 40 + col1W + 10, currentY + 7, { width: col2W - 20, align: 'right' });
 
-            // Borders
-            doc.rect(col1, currentY, 500, rowHeight).stroke(FG_GRAY);
-            doc.lineCap('butt').moveTo(col2, currentY).lineTo(col2, currentY + rowHeight).stroke(FG_GRAY);
-            doc.moveTo(col3, currentY).lineTo(col3, currentY + rowHeight).stroke(FG_GRAY);
-            doc.moveTo(col4, currentY).lineTo(col4, currentY + rowHeight).stroke(FG_GRAY);
+            // Deductions Column
+            doc.text(row[2], 40 + col1W + col2W + 10, currentY + 7);
+            if (row[3]) doc.text(row[3], 40 + col1W + col2W + col3W + 10, currentY + 7, { width: col4W - 20, align: 'right' });
 
-            currentY += rowHeight;
+            // Horizontal border
+            doc.strokeColor(BORDER).lineWidth(0.5).moveTo(40, currentY + rowH).lineTo(555, currentY + rowH).stroke();
+
+            currentY += rowH;
         });
 
-        doc.moveDown(2);
-
-        // Net Pay Table
-        const netTop = doc.y;
-        doc.rect(col1, netTop, 500, rowHeight).fill(HEADER_GRAY);
-        doc.fillColor(FG_DARK).font('Helvetica-Bold').fontSize(10);
-        doc.text('Net Pay', col1 + 10, netTop + 7);
-        doc.text('Amount', col3 + 10, netTop + 7);
-
-        doc.rect(col1, netTop + rowHeight, 500, rowHeight).stroke(FG_GRAY);
-        doc.font('Helvetica').text('Net Pay', col1 + 10, netTop + rowHeight + 7);
-        doc.font('Helvetica-Bold').text(formatCurrency(data.net_salary), col3 + 10, netTop + rowHeight + 7, { align: 'right', width: col4 - col3 + 100 - 10 });
-        doc.moveTo(col3, netTop).lineTo(col3, netTop + 2 * rowHeight).stroke(FG_GRAY);
+        // Vertical Borders
+        doc.strokeColor(BORDER).lineWidth(0.5);
+        doc.moveTo(40, tableTop).lineTo(40, currentY).stroke();
+        doc.moveTo(40 + col1W, tableTop).lineTo(40 + col1W, currentY).stroke();
+        doc.moveTo(40 + col1W + col2W, tableTop).lineTo(40 + col1W + col2W, currentY).stroke();
+        doc.moveTo(40 + col1W + col2W + col3W, tableTop).lineTo(40 + col1W + col2W + col3W, currentY).stroke();
+        doc.moveTo(555, tableTop).lineTo(555, currentY).stroke();
 
         doc.moveDown(3);
 
-        // Footer
-        doc.font('Helvetica').fontSize(9).text(`If you need further assistance, please feel free to contact HR at ${data.company_email || 'accounts@famousgate.co.ke'}.`, { align: 'left' });
+        // Net Salary Section
+        const netY = doc.y;
+        doc.rect(300, netY, 255, 40).fill(PRIMARY).stroke(PRIMARY);
+        doc.fillColor('white').fontSize(14).font('Helvetica-Bold').text('NET PAYABLE', 315, netY + 13);
+        doc.fontSize(16).text(`KES ${formatCurrency(data.net_salary)}`, 400, netY + 12, { align: 'right', width: 140 });
+
+        // Footer Section
+        doc.moveDown(6);
+        doc.fillColor(SECONDARY).fontSize(8).font('Helvetica');
+        doc.text('---------------------------------------------------------', { align: 'center' });
+        doc.text('This is a computer generated document and does not require a physical signature.', { align: 'center' });
+        doc.moveDown(0.5);
+        doc.text(`Generated on: ${new Date().toLocaleString()}`, { align: 'center' });
 
         doc.end();
     });

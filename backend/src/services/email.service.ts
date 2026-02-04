@@ -16,15 +16,27 @@ class EmailService {
   private transporter: nodemailer.Transporter;
 
   constructor() {
-    this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      }
-    });
+    const isGmail = process.env.EMAIL_SERVICE === 'gmail';
+
+    if (isGmail) {
+      this.transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER || process.env.SMTP_USER,
+          pass: process.env.EMAIL_PASS || process.env.SMTP_PASS
+        }
+      });
+    } else {
+      this.transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: {
+          user: process.env.SMTP_USER || process.env.EMAIL_USER,
+          pass: process.env.SMTP_PASS || process.env.EMAIL_PASS
+        }
+      });
+    }
   }
 
   async sendEmail(options: EmailOptions): Promise<void> {
@@ -56,7 +68,7 @@ class EmailService {
 
   async sendPasswordResetEmail(email: string, resetToken: string): Promise<void> {
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
-    
+
     await this.sendEmail({
       to: email,
       subject: 'Password Reset Request - FG Grill Hotel',
@@ -72,9 +84,9 @@ class EmailService {
       // Generate barcode for booking
       const confirmationNumber = bookingDetails.confirmation_number || bookingDetails.id;
       logger.info(`Generating barcode for booking ${confirmationNumber}`);
-      
+
       const barcodeBase64 = await barcodeGeneratorService.generateBarcode(confirmationNumber);
-      
+
       if (barcodeBase64) {
         logger.info(`Barcode generated successfully for ${confirmationNumber}`);
       } else {
@@ -101,7 +113,7 @@ class EmailService {
 
       // Send email with attachment
       await this.sendEmail(mailOptions);
-      
+
       logger.info(`Booking confirmation email sent to ${email} with${barcodeBase64 ? '' : 'out'} barcode`);
     } catch (error) {
       logger.error('Error in sendBookingConfirmation:', error);
@@ -141,17 +153,17 @@ class EmailService {
     items: any[]
   ): Promise<void> {
     const formattedTime = new Date().toLocaleString('en-GB', { timeZone: 'Europe/London' });
-    
+
     let itemsHtml = '<ul>';
     let itemsText = '';
 
     items.forEach(item => {
-        const sku = item.item?.sku || item.item_sku || 'N/A';
-        const desc = item.item?.description || 'N/A';
-        const price = item.item?.retail_price || 0;
-        const qty = item.quantity;
+      const sku = item.item?.sku || item.item_sku || 'N/A';
+      const desc = item.item?.description || 'N/A';
+      const price = item.item?.retail_price || 0;
+      const qty = item.quantity;
 
-        itemsHtml += `
+      itemsHtml += `
             <li>
                 <strong>SKU:</strong> ${sku}<br>
                 <strong>Description:</strong> ${desc}<br>
@@ -160,7 +172,7 @@ class EmailService {
             </li><br>
         `;
 
-        itemsText += `
+      itemsText += `
             - SKU: ${sku}
             - Description: ${desc}
             - Units transferred: ${qty}
@@ -179,14 +191,29 @@ class EmailService {
 
     // In a real app, we would fetch the "stock administrators" list. 
     // For now, we'll send to the system admin email or the user themselves for confirmation + admin.
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com'; 
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
     // We might want to send to a list of recipients.
-    
+
     await this.sendEmail({
-        to: adminEmail, // and maybe cc user.email
-        subject: '[STOCK MANAGEMENT] A transfer request been placed.',
-        html,
-        text: `Stock Transfer Request\n\nThe following order has been placed by ${user.email} on ${formattedTime}.\n\n${itemsText}`
+      to: adminEmail, // and maybe cc user.email
+      subject: '[STOCK MANAGEMENT] A transfer request been placed.',
+      html,
+      text: `Stock Transfer Request\n\nThe following order has been placed by ${user.email} on ${formattedTime}.\n\n${itemsText}`
+    });
+  }
+
+  async sendPayslipEmail(staff: any, month: string, year: number, pdfBuffer: Buffer): Promise<void> {
+    await this.sendEmail({
+      to: staff.user.email,
+      subject: `Payslip for ${month} ${year} - Famous Gate Hotel`,
+      html: enterpriseEmailTemplates.payslipNotification(`${staff.user.first_name} ${staff.user.last_name}`, month, year),
+      attachments: [
+        {
+          filename: `Payslip_${staff.user.last_name}_${month}_${year}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf'
+        }
+      ]
     });
   }
 

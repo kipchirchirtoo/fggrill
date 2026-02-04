@@ -6,6 +6,8 @@ import { mpesaService } from '../services/mpesa.service';
 import { PayrollService } from '../services/payroll.service';
 import { generatePayslipPDF } from '../utils/pdfGenerator';
 import axios from 'axios';
+import { emailService } from '../services/email.service';
+import { bankDistributionService } from '../services/bankDistribution.service';
 
 // @desc    Get payroll summary
 // @route   GET /api/payroll/summary
@@ -423,6 +425,22 @@ export const processPayrollPayment = async (
       // but in a real enterprise app, this should be a transaction.
     }
 
+    // 5. Send Payslip Email
+    try {
+      const monthName = new Date(0, payrollRecord.month - 1).toLocaleString('en-US', { month: 'long' });
+      const pdfBuffer = await generatePayslipPDF({
+        ...payrollRecord,
+        month: monthName,
+        company: 'Famous Gate Hotel',
+        company_email: 'accounts@famousgate.co.ke'
+      });
+      await emailService.sendPayslipEmail(payrollRecord.employee, monthName, payrollRecord.year, pdfBuffer);
+      logger.info(`Payslip email sent to ${payrollRecord.employee.user.email} after payment`);
+    } catch (emailError) {
+      logger.error('Failed to send payslip email after payment:', emailError);
+      // We don't fail the request if just the email fails
+    }
+
     res.status(200).json({ success: true, data: { paymentReference, status: 'paid' } });
   } catch (error) {
     next(error);
@@ -524,6 +542,51 @@ export const verifyBankAccount = async (req: Request, res: Response, next: NextF
     const { accountNumber, bankCode } = req.body;
     const verification = await paystackService.verifyBankAccount(accountNumber, bankCode);
     res.status(200).json({ success: true, data: verification.data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Export bank distribution file (CSV)
+// @route   GET /api/payroll/export/bank-distribution
+// @access  Private (Admin, HR)
+export const exportBankDistribution = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { month, year } = req.query;
+
+    if (!month || !year) {
+      res.status(400).json({ success: false, message: 'Month and year are required' });
+      return;
+    }
+
+    const { data: records, error } = await supabase
+      .from('payroll_records')
+      .select('*, employee:staff_profiles!staff_id(*, user:users!user_id(*))')
+      .eq('month', parseInt(month as string))
+      .eq('year', parseInt(year as string))
+      .eq('approval_status', 'approved');
+
+    if (error) throw error;
+
+    if (!records || records.length === 0) {
+      res.status(404).json({ success: false, message: 'No approved records found for this period' });
+      return;
+    }
+
+    const bankRecords = records.map(r => ({
+      account_number: r.employee.bank_account_number || 'N/A',
+      account_name: `${r.employee.user.first_name} ${r.employee.user.last_name}`,
+      bank_name: r.employee.bank_name || 'N/A',
+      bank_branch: r.employee.bank_branch || 'N/A',
+      amount: parseFloat(r.net_salary),
+      reference: `SALARY-${r.month}-${r.year}`
+    }));
+
+    const csv = await bankDistributionService.generateBankCSV(bankRecords);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=Bank_Distribution_${month}_${year}.csv`);
+    res.status(200).send(csv);
   } catch (error) {
     next(error);
   }
