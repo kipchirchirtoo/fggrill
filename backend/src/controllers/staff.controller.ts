@@ -128,7 +128,8 @@ export const getStaff = async (
           first_name,
           last_name,
           phone_number,
-          role
+          role,
+          avatar
         )
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
@@ -136,7 +137,7 @@ export const getStaff = async (
 
     // Add filters
     if (req.query.branch_id) {
-      query = query.eq('user.branch_id', req.query.branch_id);
+      query = query.eq('branch_id', req.query.branch_id);
     }
     if (req.query.department) {
       query = query.eq('department', req.query.department);
@@ -158,13 +159,18 @@ export const getStaff = async (
       throw error;
     }
 
+    const formattedData = staff.map((s: any) => ({
+      ...s,
+      profile_photo: s.user?.avatar || s.profile_photo
+    }));
+
     res.status(200).json({
       success: true,
       count: staff.length,
       total: count || 0,
       page,
       pages: Math.ceil((count || 0) / limit),
-      data: staff
+      data: formattedData
     });
   } catch (error) {
     next(error);
@@ -193,7 +199,8 @@ export const getStaffMember = async (
           first_name,
           last_name,
           phone_number,
-          role
+          role,
+          avatar
         ),
         schedules:staff_schedules(*)
       `);
@@ -203,7 +210,7 @@ export const getStaffMember = async (
     } else {
       // Use double quotes for values in .or() to handle special characters (e.g. spaces, dots)
       // This matches PostgREST syntax requirements for strings with special characters
-      query = query.or(`id_number.eq."${id}", national_id.eq."${id}"`);
+      query = query.or(`id_number.eq."${id}", rfid_tag.eq."${id}", national_id.eq."${id}"`);
     }
 
     logger.debug?.('Executing getStaffMember query', { id, isUUID });
@@ -246,7 +253,10 @@ export const getStaffMember = async (
 
     res.status(200).json({
       success: true,
-      data: staff
+      data: {
+        ...staff,
+        profile_photo: staff.user?.avatar || staff.profile_photo
+      }
     });
   } catch (error: any) {
     logger.error('Exception in getStaffMember:', error);
@@ -712,10 +722,9 @@ export const updateStaffMember = async (
     if (status !== undefined) staffUpdateData.status = status;
     if (start_date) staffUpdateData.start_date = start_date;
     if (national_id !== undefined) staffUpdateData.national_id = national_id;
-    if (phone_number !== undefined) staffUpdateData.phone = phone_number;
     if (department !== undefined) staffUpdateData.department = department;
     if (role !== undefined) staffUpdateData.role = role;
-    // Note: email is NOT in staff_profiles, it's in users table
+    // Note: email and phone_number are in users table, not staff_profiles
     if (employee_id !== undefined) staffUpdateData.id_number = employee_id;
 
     const { data: updatedStaff, error: updateError } = await supabase
@@ -1545,25 +1554,26 @@ export const uploadStaffPhoto = async (
 
     logger.info('Photo uploaded to storage:', data.path);
 
-    // Update staff_profiles with photo path
-    const { data: updatedStaff, error: updateError } = await supabase
-      .from('staff_profiles')
-      .update({ profile_photo: data.path })
-      .eq('id', req.params.id)
+    // Update user profile with photo path (avatar is in users table)
+    const { data: updatedUser, error: updateError } = await supabase
+      .from('users')
+      .update({ avatar: data.path })
+      .eq('id', staff.user_id)
       .select()
       .single();
 
     if (updateError) {
-      logger.error('Error updating staff profile:', updateError);
+      logger.error('Error updating user profile photo:', updateError);
       throw updateError;
     }
 
-    logger.info(`Staff photo updated successfully for ${req.params.id}`);
+    logger.info(`Staff photo updated successfully for user ${staff.user_id}`);
 
     res.status(200).json({
       success: true,
       data: {
-        ...updatedStaff,
+        user_id: staff.user_id,
+        profile_photo: data.path,
         profile_photo_url: `${process.env.SUPABASE_PROJECT_URL}/storage/v1/object/public/profile/${data.path}`
       },
       message: 'Photo uploaded successfully'
