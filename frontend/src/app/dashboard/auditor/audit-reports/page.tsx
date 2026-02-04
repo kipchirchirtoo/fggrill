@@ -79,7 +79,7 @@ export default function AuditReporting() {
                     </div>
 
                     {/* Filters */}
-                    <IOSCard className="p-4">
+                    <IOSCard className="p-4 overflow-visible relative z-20">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="text-sm font-medium text-gray-700 mb-2 block">Branch Selection</label>
