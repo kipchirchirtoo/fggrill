@@ -234,7 +234,7 @@ export default function SoldItemsAnalyticsPage() {
                                                         <td className="table-cell">
                                                             <div className="flex flex-col">
                                                                 <span className="font-bold text-stone-900">{item.name}</span>
-                                                                <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Serial #{(idx + 101)}</span>
+                                                                <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">{item.category || (idx + 1).toString().padStart(3, '0')}</span>
                                                             </div>
                                                         </td>
                                                         <td className="table-cell text-center font-semibold text-stone-700">
@@ -244,12 +244,12 @@ export default function SoldItemsAnalyticsPage() {
                                                             KES {item.revenue.toLocaleString()}
                                                         </td>
                                                         <td className="table-cell text-center font-medium text-stone-400 italic">
-                                                            {item.stock_requested.toLocaleString()}
+                                                            {item.stock_requested ? item.stock_requested.toLocaleString() : '-'}
                                                         </td>
                                                         <td className="table-cell text-center">
                                                             <div className="flex flex-col items-center gap-1.5 min-w-[100px]">
-                                                                <span className={`text-[11px] font-bold uppercase tracking-tight ${ratio > 90 ? 'text-emerald-600' : ratio > 50 ? 'text-amber-600' : 'text-rose-600'}`}>
-                                                                    {ratio.toFixed(1)}%
+                                                                <span className={`text-[11px] font-bold uppercase tracking-tight ${ratio > 90 ? 'text-emerald-600' : ratio > 50 ? 'text-amber-600' : ratio === 0 ? 'text-stone-300' : 'text-rose-600'}`}>
+                                                                    {item.stock_requested ? `${ratio.toFixed(1)}%` : 'N/A'}
                                                                 </span>
                                                                 <div className="w-full h-1 bg-stone-100 rounded-full overflow-hidden">
                                                                     <div
