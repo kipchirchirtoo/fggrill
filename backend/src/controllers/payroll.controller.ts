@@ -88,6 +88,9 @@ export const getPayrollSummary = async (
 // @desc    Calculate payroll for an employee
 // @route   POST /api/payroll/calculate
 // @access  Private (Admin, HR)
+// @desc    Calculate payroll for an employee or all active employees
+// @route   POST /api/payroll/calculate
+// @access  Private (Admin, HR)
 export const calculatePayroll = async (
   req: Request,
   res: Response,
@@ -113,172 +116,178 @@ export const calculatePayroll = async (
     const month = new Date(payPeriodStart).getMonth() + 1;
     const year = new Date(payPeriodStart).getFullYear();
 
-    // 1. PRE-VALIDATION: Check if payroll is already locked (Approved/Paid)
-    const { data: existingPayroll } = await supabase
-      .from('staff_payroll')
-      .select('approval_status')
-      .eq('staff_id', employeeId)
-      .eq('month', month)
-      .eq('year', year)
-      .maybeSingle();
+    // Helper function to process a single employee
+    const processSingleEmployee = async (id: string, salary: number) => {
+      // 1. PRE-VALIDATION: Check if payroll is already locked (Approved/Paid)
+      const { data: existingPayroll } = await supabase
+        .from('staff_payroll')
+        .select('approval_status')
+        .eq('staff_id', id)
+        .eq('month', month)
+        .eq('year', year)
+        .maybeSingle();
 
-    if (existingPayroll && (existingPayroll.approval_status === 'approved' || existingPayroll.approval_status === 'paid')) {
-      res.status(403).json({
-        success: false,
-        message: 'Payroll record is locked (Approved or Paid). Editing not allowed.'
-      });
-      return;
-    }
+      if (existingPayroll && (existingPayroll.approval_status === 'approved' || existingPayroll.approval_status === 'paid')) {
+        return; // Skip locked records
+      }
 
-    // 2. WORKFLOW VALIDATION: Check if attendance is confirmed and leave is locked
-    const { data: attendanceCheck } = await supabase
-      .from('staff_attendance')
-      .select('id')
-      .eq('staff_id', employeeId)
-      .gte('attendance_date', payPeriodStart)
-      .lte('attendance_date', payPeriodEnd)
-      .eq('is_confirmed', false)
-      .limit(1);
-
-    if (attendanceCheck && attendanceCheck.length > 0) {
-      res.status(400).json({
-        success: false,
-        message: 'Cannot calculate payroll: Some attendance records are NOT confirmed for this period.'
-      });
-      return;
-    }
-
-    const { data: leaveCheck } = await supabase
-      .from('staff_leave')
-      .select('id')
-      .eq('staff_id', employeeId)
-      .gte('start_date', payPeriodStart)
-      .lte('end_date', payPeriodEnd)
-      .eq('status', 'approved')
-      .eq('is_locked', false)
-      .limit(1);
-
-    if (leaveCheck && leaveCheck.length > 0) {
-      res.status(400).json({
-        success: false,
-        message: 'Cannot calculate payroll: Approved leave requests must be LOCKED first.'
-      });
-      return;
-    }
-
-    let finalOvertime = parseFloat(overtime);
-
-    // AUTO-INTEGRATION: If overtime is not provided, fetch from approved attendance
-    if (finalOvertime === 0 && employeeId && payPeriodStart && payPeriodEnd) {
-      const { data: attendance } = await supabase
+      // 2. WORKFLOW VALIDATION: Check if attendance is confirmed and leave is locked
+      const { data: attendanceCheck } = await supabase
         .from('staff_attendance')
-        .select(`
-          hours_ot_weekday, 
-          hours_ot_rest, 
-          hours_ot_holiday, 
-          staff:staff_profiles(hourly_base_rate)
-        `)
-        .eq('staff_id', employeeId)
+        .select('id')
+        .eq('staff_id', id)
         .gte('attendance_date', payPeriodStart)
         .lte('attendance_date', payPeriodEnd)
-        .eq('is_approved', true)
-        .eq('is_confirmed', true); // Only confirmed ones
+        .eq('is_confirmed', false)
+        .limit(1);
 
-      if (attendance && attendance.length > 0) {
-        const staff: any = attendance[0].staff;
-        const baseRate = Number(Array.isArray(staff) ? staff[0]?.hourly_base_rate : staff?.hourly_base_rate || 0);
-
-        finalOvertime = attendance.reduce((sum, rec) => {
-          const weekdayVal = Number(rec.hours_ot_weekday || 0) * baseRate * 1.5;
-          const restVal = Number(rec.hours_ot_rest || 0) * baseRate * 2.0;
-          const holidayVal = Number(rec.hours_ot_holiday || 0) * baseRate * 2.0;
-          return sum + weekdayVal + restVal + holidayVal;
-        }, 0);
+      if (attendanceCheck && attendanceCheck.length > 0) {
+        throw new Error(`Attendance not confirmed for staff ${id}`);
       }
-    }
 
-    // 3. AUTO-INTEGRATION: Fetch unpaid leave and calculate deductions
-    let unpaidLeaveDeduction = Number(unpaidLeaveDeductionOverride);
-    if (unpaidLeaveDeductionOverride === null || unpaidLeaveDeductionOverride === undefined) {
-      const { data: unpaidLeave } = await supabase
-        .from('staff_leave')
-        .select('start_date, end_date')
-        .eq('staff_id', employeeId)
-        .eq('leave_type', 'unpaid')
-        .eq('status', 'approved')
-        .eq('is_locked', true)
-        .gte('start_date', payPeriodStart)
-        .lte('end_date', payPeriodEnd);
+      let finalOvertime = parseFloat(overtime.toString());
 
-      if (unpaidLeave && unpaidLeave.length > 0) {
-        // Calculate days
-        let totalUnpaidDays = 0;
-        unpaidLeave.forEach(leave => {
-          const start = new Date(leave.start_date);
-          const end = new Date(leave.end_date);
-          const diffTime = Math.abs(end.getTime() - start.getTime());
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-          totalUnpaidDays += diffDays;
-        });
+      // AUTO-INTEGRATION: If overtime is not provided, fetch from approved attendance
+      if (finalOvertime === 0) {
+        const { data: attendance } = await supabase
+          .from('staff_attendance')
+          .select(`
+            hours_ot_weekday, 
+            hours_ot_rest, 
+            hours_ot_holiday, 
+            staff:staff_profiles(hourly_base_rate)
+          `)
+          .eq('staff_id', id)
+          .gte('attendance_date', payPeriodStart)
+          .lte('attendance_date', payPeriodEnd)
+          .eq('is_approved', true)
+          .eq('is_confirmed', true);
 
-        // Calculate deduction based on daily rate (Basic Salary / 26 days)
-        const dailyRate = parseFloat(basicSalary) / 26;
-        unpaidLeaveDeduction = totalUnpaidDays * dailyRate;
-      } else {
-        unpaidLeaveDeduction = 0;
+        if (attendance && attendance.length > 0) {
+          const staff: any = attendance[0].staff;
+          const baseRate = Number(Array.isArray(staff) ? staff[0]?.hourly_base_rate : staff?.hourly_base_rate || 0);
+
+          finalOvertime = attendance.reduce((sum, rec) => {
+            const weekdayVal = Number(rec.hours_ot_weekday || 0) * baseRate * 1.5;
+            const restVal = Number(rec.hours_ot_rest || 0) * baseRate * 2.0;
+            const holidayVal = Number(rec.hours_ot_holiday || 0) * baseRate * 2.0;
+            return sum + weekdayVal + restVal + holidayVal;
+          }, 0);
+        }
       }
-    }
 
-    const grossPay = parseFloat(basicSalary) + parseFloat(allowances) + finalOvertime + parseFloat(bonuses) + parseFloat(customAllowances);
+      // 3. AUTO-INTEGRATION: Fetch unpaid leave and calculate deductions
+      let unpaidLeaveDeduction = Number(unpaidLeaveDeductionOverride);
+      if (unpaidLeaveDeductionOverride === null || unpaidLeaveDeductionOverride === undefined) {
+        const { data: unpaidLeave } = await supabase
+          .from('staff_leave')
+          .select('start_date, end_date')
+          .eq('staff_id', id)
+          .eq('leave_type', 'unpaid')
+          .eq('status', 'approved')
+          .eq('is_locked', true)
+          .gte('start_date', payPeriodStart)
+          .lte('end_date', payPeriodEnd);
 
-    // Calculate deductions using Service (HR Settings)
-    const taxDeductions = await PayrollService.calculatePAYE(grossPay);
-    const shifDeductions = await PayrollService.calculateSHIF(grossPay);
-    const housingLevyDeductions = await PayrollService.calculateHousingLevy(grossPay);
-    const nssfDeductions = await PayrollService.calculateNSSF(grossPay);
+        if (unpaidLeave && unpaidLeave.length > 0) {
+          let totalUnpaidDays = 0;
+          unpaidLeave.forEach(leave => {
+            const start = new Date(leave.start_date);
+            const end = new Date(leave.end_date);
+            const diffTime = Math.abs(end.getTime() - start.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            totalUnpaidDays += diffDays;
+          });
 
-    const otherDeductions = parseFloat(loans) + parseFloat(advances) + parseFloat(absencePenalties) + parseFloat(customDeductions) + unpaidLeaveDeduction;
-    const totalDeductions = taxDeductions + shifDeductions + nssfDeductions + housingLevyDeductions + otherDeductions;
-    const netPay = grossPay - totalDeductions;
+          const dailyRate = salary / 26;
+          unpaidLeaveDeduction = totalUnpaidDays * dailyRate;
+        } else {
+          unpaidLeaveDeduction = 0;
+        }
+      }
 
-    const payrollData = {
-      staff_id: employeeId,
-      month,
-      year,
-      base_salary: basicSalary,
-      allowances,
-      overtime_hours: finalOvertime / (/* assuming base rate */ 1),
-      overtime_rate: 1.5,
-      bonuses,
-      gross_pay: grossPay,
-      tax_deductions: taxDeductions,
-      shif_deduction: shifDeductions,
-      housing_levy_deduction: housingLevyDeductions,
-      nssf_deduction: nssfDeductions,
-      other_deductions: otherDeductions,
-      absence_penalties: absencePenalties,
-      custom_deductions: customDeductions,
-      custom_allowances: customAllowances,
-      unpaid_leave_deduction: unpaidLeaveDeduction,
-      total_deductions: totalDeductions,
-      net_salary: netPay,
-      approval_status: 'draft',
-      status: 'pending',
-      created_at: new Date().toISOString()
+      const grossPay = salary + parseFloat(allowances.toString()) + finalOvertime + parseFloat(bonuses.toString()) + parseFloat(customAllowances.toString());
+
+      // Calculate deductions using Service
+      const taxDeductions = await PayrollService.calculatePAYE(grossPay);
+      const shifDeductions = await PayrollService.calculateSHIF(grossPay);
+      const housingLevyDeductions = await PayrollService.calculateHousingLevy(grossPay);
+      const nssfDeductions = await PayrollService.calculateNSSF(grossPay);
+
+      const otherDeductions = parseFloat(loans.toString()) + parseFloat(advances.toString()) + parseFloat(absencePenalties.toString()) + parseFloat(customDeductions.toString()) + unpaidLeaveDeduction;
+      const totalDeductions = taxDeductions + shifDeductions + nssfDeductions + housingLevyDeductions + otherDeductions;
+      const netPay = grossPay - totalDeductions;
+
+      const payrollData = {
+        staff_id: id,
+        month,
+        year,
+        base_salary: salary,
+        allowances,
+        overtime_hours: finalOvertime / 1,
+        overtime_rate: 1.5,
+        bonuses,
+        gross_pay: grossPay,
+        tax_deductions: taxDeductions,
+        shif_deduction: shifDeductions,
+        housing_levy_deduction: housingLevyDeductions,
+        nssf_deduction: nssfDeductions,
+        other_deductions: otherDeductions,
+        absence_penalties: absencePenalties,
+        custom_deductions: customDeductions,
+        custom_allowances: customAllowances,
+        unpaid_leave_deduction: unpaidLeaveDeduction,
+        total_deductions: totalDeductions,
+        net_salary: netPay,
+        approval_status: 'draft',
+        status: 'pending',
+        created_at: new Date().toISOString()
+      };
+
+      const { data: savedPayroll, error: saveError } = await supabase
+        .from('staff_payroll')
+        .upsert([payrollData], { onConflict: 'staff_id, month, year' })
+        .select()
+        .single();
+
+      if (saveError) throw saveError;
+      return savedPayroll;
     };
 
-    const { data: savedPayroll, error: saveError } = await supabase
-      .from('staff_payroll')
-      .upsert([payrollData], { onConflict: 'staff_id, month, year' })
-      .select()
-      .single();
+    // MAIN LOGIC: Bulk vs Single
+    if (employeeId) {
+      // Single Employee Calculation
+      const saved = await processSingleEmployee(employeeId, parseFloat(basicSalary));
+      res.status(200).json({ success: true, data: saved });
+    } else {
+      // Bulk Calculation for ALL Active Staff
+      const { data: activeStaff, error: staffError } = await supabase
+        .from('staff_profiles')
+        .select('id, basic_salary')
+        .eq('status', 'active');
 
-    if (saveError) throw saveError;
+      if (staffError) throw staffError;
 
-    res.status(200).json({
-      success: true,
-      data: savedPayroll
-    });
+      let processedCount = 0;
+      const errors = [];
+
+      for (const staff of activeStaff || []) {
+        try {
+          await processSingleEmployee(staff.id, parseFloat(staff.basic_salary || 0));
+          processedCount++;
+        } catch (err: any) {
+          logger.error(`Failed to process payroll for staff ${staff.id}:`, err);
+          errors.push({ id: staff.id, error: err.message });
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `Processed ${processedCount} records. ${errors.length} failed.`,
+        errors
+      });
+    }
+
   } catch (error) {
     next(error);
   }
