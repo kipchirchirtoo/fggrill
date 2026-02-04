@@ -3339,112 +3339,111 @@ class BrandedPDFGenerator:
             elements.append(t_age)
         
         return self._create_pdf(elements)
- 
-         d e f   _ g e n e r a t e _ r e v e n u e _ r e c o n c i l i a t i o n _ r e p o r t ( s e l f ,   d a t a :   D i c t ,   f i l t e r s :   D i c t )   - >   s t r :  
-                 " " " G e n e r a t e   R e v e n u e   R e c o n c i l i a t i o n   R e p o r t " " "  
-                 e l e m e n t s   =   [ ]  
-                  
-                 s t a r t _ d a t e   =   f i l t e r s . g e t ( ' s t a r t _ d a t e ' )  
-                 e n d _ d a t e   =   f i l t e r s . g e t ( ' e n d _ d a t e ' )  
-                 d a t e _ r a n g e   =   f " P e r i o d :   { s t a r t _ d a t e }   t o   { e n d _ d a t e } "   i f   s t a r t _ d a t e   a n d   e n d _ d a t e   e l s e   f " D a t e :   { d a t e t i m e . n o w ( ) . s t r f t i m e ( ' % d / % m / % Y ' ) } "  
-                  
-                 #   H e a d e r  
-                 e l e m e n t s . e x t e n d ( s e l f . _ c r e a t e _ h e a d e r ( " R E V E N U E   R E C O N C I L I A T I O N   A U D I T " ,   d a t e _ r a n g e ) )  
-                  
-                 #   1 .   E x e c u t i v e   S u m m a r y  
-                 e l e m e n t s . a p p e n d ( P a r a g r a p h ( " < b > E X E C U T I V E   S U M M A R Y < / b > " ,   s e l f . s t y l e s [ ' S e c t i o n H e a d e r ' ] ) )  
-                  
-                 t o t a l _ r e v   =   d a t a . g e t ( ' t o t a l _ r e v e n u e ' ,   0 )  
-                  
-                 s u m m a r y _ d a t a   =   [  
-                         [ ' T O T A L   V E R I F I E D   R E V E N U E ' ,   s e l f . _ f o r m a t _ c u r r e n c y ( t o t a l _ r e v ) ] ,  
-                         [ ' A u d i t   S t a t u s ' ,   ' V E R I F I E D '   i f   t o t a l _ r e v   >   0   e l s e   ' N O   D A T A ' ]  
-                 ]  
-                  
-                 s u m m a r y _ t a b l e   =   T a b l e ( s u m m a r y _ d a t a ,   c o l W i d t h s = [ 3 * i n c h ,   2 * i n c h ] )  
-                 s u m m a r y _ t a b l e . s e t S t y l e ( T a b l e S t y l e ( [  
-                         ( ' B A C K G R O U N D ' ,   ( 0 ,   0 ) ,   ( 0 ,   - 1 ) ,   H E A D E R _ B L U E ) ,  
-                         ( ' F O N T N A M E ' ,   ( 0 ,   0 ) ,   ( - 1 ,   - 1 ) ,   ' H e l v e t i c a - B o l d ' ) ,  
-                         ( ' G R I D ' ,   ( 0 ,   0 ) ,   ( - 1 ,   - 1 ) ,   0 . 5 ,   F G _ G R A Y ) ,  
-                         ( ' A L I G N ' ,   ( 1 ,   0 ) ,   ( 1 ,   - 1 ) ,   ' R I G H T ' ) ,  
-                         ( ' P A D D I N G ' ,   ( 0 ,   0 ) ,   ( - 1 ,   - 1 ) ,   1 2 ) ,  
-                 ] ) )  
-                 e l e m e n t s . a p p e n d ( s u m m a r y _ t a b l e )  
-                 e l e m e n t s . a p p e n d ( S p a c e r ( 1 ,   0 . 2 * i n c h ) )  
-                  
-                 #   2 .   R e v e n u e   B r e a k d o w n   ( D e p a r t m e n t s   &   M o d e s )  
-                 #   C r e a t e   t w o   t a b l e s   s i d e - b y - s i d e  
-                  
-                 #   D e p a r t m e n t   T a b l e  
-                 d e p t _ d a t a   =   [ [ ' D E P A R T M E N T ' ,   ' R E V E N U E ' ] ]  
-                 d e p t s   =   d a t a . g e t ( ' d e p a r t m e n t s ' ,   { } )  
-                 f o r   d e p t ,   a m o u n t   i n   d e p t s . i t e m s ( ) :  
-                         d e p t _ d a t a . a p p e n d ( [ d e p t . r e p l a c e ( ' _ ' ,   '   ' ) . t i t l e ( ) ,   s e l f . _ f o r m a t _ c u r r e n c y ( a m o u n t ) ] )  
-                          
-                 d e p t _ t a b l e   =   T a b l e ( d e p t _ d a t a ,   c o l W i d t h s = [ 2 . 5 * i n c h ,   1 . 5 * i n c h ] )  
-                 d e p t _ t a b l e . s e t S t y l e ( T a b l e S t y l e ( [  
-                         ( ' B A C K G R O U N D ' ,   ( 0 ,   0 ) ,   ( - 1 ,   0 ) ,   H E A D E R _ G R E E N ) ,  
-                         ( ' F O N T N A M E ' ,   ( 0 ,   0 ) ,   ( - 1 ,   0 ) ,   ' H e l v e t i c a - B o l d ' ) ,  
-                         ( ' G R I D ' ,   ( 0 ,   0 ) ,   ( - 1 ,   - 1 ) ,   0 . 5 ,   F G _ G R A Y ) ,  
-                         ( ' A L I G N ' ,   ( 1 ,   0 ) ,   ( 1 ,   - 1 ) ,   ' R I G H T ' ) ,  
-                 ] ) )  
-                  
-                 #   M o d e   T a b l e  
-                 m o d e _ d a t a   =   [ [ ' P A Y M E N T   M O D E ' ,   ' A M O U N T ' ] ]  
-                 m o d e s   =   d a t a . g e t ( ' p a y m e n t _ m o d e s ' ,   { } )  
-                 f o r   m o d e ,   a m o u n t   i n   m o d e s . i t e m s ( ) :  
-                         m o d e _ d a t a . a p p e n d ( [ m o d e . r e p l a c e ( ' _ ' ,   '   ' ) . t i t l e ( ) ,   s e l f . _ f o r m a t _ c u r r e n c y ( a m o u n t ) ] )  
-                          
-                 m o d e _ t a b l e   =   T a b l e ( m o d e _ d a t a ,   c o l W i d t h s = [ 2 . 5 * i n c h ,   1 . 5 * i n c h ] )  
-                 m o d e _ t a b l e . s e t S t y l e ( T a b l e S t y l e ( [  
-                         ( ' B A C K G R O U N D ' ,   ( 0 ,   0 ) ,   ( - 1 ,   0 ) ,   H E A D E R _ Y E L L O W ) ,  
-                         ( ' F O N T N A M E ' ,   ( 0 ,   0 ) ,   ( - 1 ,   0 ) ,   ' H e l v e t i c a - B o l d ' ) ,  
-                         ( ' G R I D ' ,   ( 0 ,   0 ) ,   ( - 1 ,   - 1 ) ,   0 . 5 ,   F G _ G R A Y ) ,  
-                         ( ' A L I G N ' ,   ( 1 ,   0 ) ,   ( 1 ,   - 1 ) ,   ' R I G H T ' ) ,  
-                 ] ) )  
-                  
-                 e l e m e n t s . a p p e n d ( P a r a g r a p h ( " < b > R E V E N U E   B R E A K D O W N < / b > " ,   s e l f . s t y l e s [ ' S e c t i o n H e a d e r ' ] ) )  
-                 e l e m e n t s . a p p e n d ( d e p t _ t a b l e )  
-                 e l e m e n t s . a p p e n d ( S p a c e r ( 1 ,   0 . 2 * i n c h ) )  
-                 e l e m e n t s . a p p e n d ( m o d e _ t a b l e )  
-                 e l e m e n t s . a p p e n d ( S p a c e r ( 1 ,   0 . 3 * i n c h ) )  
-                  
-                 #   3 .   T r a n s a c t i o n   D e t a i l s  
-                 e l e m e n t s . a p p e n d ( P a r a g r a p h ( " < b > V E R I F I E D   T R A N S A C T I O N S   ( T o p   1 0 0 ) < / b > " ,   s e l f . s t y l e s [ ' S e c t i o n H e a d e r ' ] ) )  
-                  
-                 h e a d e r s   =   [ ' D a t e ' ,   ' R e f e r e n c e ' ,   ' T y p e ' ,   ' M e t h o d ' ,   ' A m o u n t ' ]  
-                 t x n _ d a t a   =   [ h e a d e r s ]  
-                  
-                 t r a n s a c t i o n s   =   d a t a . g e t ( ' t r a n s a c t i o n s ' ,   [ ] )  
-                  
-                 f o r   t x n   i n   t r a n s a c t i o n s :  
-                         d t   =   t x n . g e t ( ' d a t e ' ,   ' ' )  
-                         i f   ' T '   i n   d t :   d t   =   d t . s p l i t ( ' T ' ) [ 0 ]  
-                          
-                         t x n _ d a t a . a p p e n d ( [  
-                                 d t ,  
-                                 s t r ( t x n . g e t ( ' r e f e r e n c e ' ,   ' ' ) ) [ : 1 5 ] ,  
-                                 t x n . g e t ( ' t y p e ' ,   ' ' ) ,  
-                                 t x n . g e t ( ' m e t h o d ' ,   ' ' ) . t i t l e ( ) ,  
-                                 s e l f . _ f o r m a t _ c u r r e n c y ( t x n . g e t ( ' a m o u n t ' ,   0 ) )  
-                         ] )  
-                          
-                 i f   n o t   t r a n s a c t i o n s :  
-                         t x n _ d a t a . a p p e n d ( [ ' N o   t r a n s a c t i o n s   f o u n d ' ,   ' ' ,   ' ' ,   ' ' ,   ' - ' ] )  
-                          
-                 t   =   T a b l e ( t x n _ d a t a ,   c o l W i d t h s = [ 1 . 2 * i n c h ,   2 * i n c h ,   1 . 5 * i n c h ,   1 . 5 * i n c h ,   1 . 5 * i n c h ] )  
-                 t . s e t S t y l e ( T a b l e S t y l e ( [  
-                         ( ' B A C K G R O U N D ' ,   ( 0 ,   0 ) ,   ( - 1 ,   0 ) ,   H E A D E R _ G R A Y ) ,  
-                         ( ' F O N T N A M E ' ,   ( 0 ,   0 ) ,   ( - 1 ,   0 ) ,   ' H e l v e t i c a - B o l d ' ) ,  
-                         ( ' F O N T S I Z E ' ,   ( 0 ,   0 ) ,   ( - 1 ,   - 1 ) ,   8 ) ,  
-                         ( ' G R I D ' ,   ( 0 ,   0 ) ,   ( - 1 ,   - 1 ) ,   0 . 5 ,   F G _ G R A Y ) ,  
-                         ( ' A L I G N ' ,   ( - 1 ,   0 ) ,   ( - 1 ,   - 1 ) ,   ' R I G H T ' ) ,  
-                         ( ' A L I G N ' ,   ( 0 ,   0 ) ,   ( 3 ,   - 1 ) ,   ' L E F T ' ) ,  
-                         ( ' R O W B A C K G R O U N D S ' ,   ( 1 ,   1 ) ,   ( - 1 ,   - 1 ) ,   [ c o l o r s . w h i t e ,   R O W _ A L T ] ) ,  
-                 ] ) )  
-                  
-                 e l e m e n t s . a p p e n d ( t )  
-                  
-                 #   B u i l d   P D F  
-                 r e t u r n   s e l f . _ b u i l d _ p d f ( e l e m e n t s )  
- 
+
+    def _generate_revenue_reconciliation_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Revenue Reconciliation Report"""
+        elements = []
+        
+        start_date = filters.get('start_date')
+        end_date = filters.get('end_date')
+        date_range = f"Period: {start_date} to {end_date}" if start_date and end_date else f"Date: {datetime.now().strftime('%d/%m/%Y')}"
+        
+        # Header
+        elements.extend(self._create_header("REVENUE RECONCILIATION AUDIT", date_range))
+        
+        # 1. Executive Summary
+        elements.append(Paragraph("<b>EXECUTIVE SUMMARY</b>", self.styles['SectionHeader']))
+        
+        total_rev = data.get('total_revenue', 0)
+        
+        summary_data = [
+            ['TOTAL VERIFIED REVENUE', self._format_currency(total_rev)],
+            ['Audit Status', 'VERIFIED' if total_rev > 0 else 'NO DATA']
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[3*inch, 2*inch])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('PADDING', (0, 0), (-1, -1), 12),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # 2. Revenue Breakdown (Departments & Modes)
+        # Create two tables side-by-side
+        
+        # Department Table
+        dept_data = [['DEPARTMENT', 'REVENUE']]
+        depts = data.get('departments', {})
+        for dept, amount in depts.items():
+            dept_data.append([dept.replace('_', ' ').title(), self._format_currency(amount)])
+            
+        dept_table = Table(dept_data, colWidths=[2.5*inch, 1.5*inch])
+        dept_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GREEN),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ]))
+        
+        # Mode Table
+        mode_data = [['PAYMENT MODE', 'AMOUNT']]
+        modes = data.get('payment_modes', {})
+        for mode, amount in modes.items():
+            mode_data.append([mode.replace('_', ' ').title(), self._format_currency(amount)])
+            
+        mode_table = Table(mode_data, colWidths=[2.5*inch, 1.5*inch])
+        mode_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_YELLOW),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ]))
+        
+        elements.append(Paragraph("<b>REVENUE BREAKDOWN</b>", self.styles['SectionHeader']))
+        elements.append(dept_table)
+        elements.append(Spacer(1, 0.2*inch))
+        elements.append(mode_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # 3. Transaction Details
+        elements.append(Paragraph("<b>VERIFIED TRANSACTIONS (Top 100)</b>", self.styles['SectionHeader']))
+        
+        headers = ['Date', 'Reference', 'Type', 'Method', 'Amount']
+        txn_data = [headers]
+        
+        transactions = data.get('transactions', [])
+        
+        for txn in transactions:
+            dt = txn.get('date', '')
+            if 'T' in dt: dt = dt.split('T')[0]
+            
+            txn_data.append([
+                dt,
+                str(txn.get('reference', ''))[:15],
+                txn.get('type', ''),
+                txn.get('method', '').title(),
+                self._format_currency(txn.get('amount', 0))
+            ])
+            
+        if not transactions:
+            txn_data.append(['No transactions found', '', '', '', '-'])
+            
+        t = Table(txn_data, colWidths=[1.2*inch, 2*inch, 1.5*inch, 1.5*inch, 1.5*inch])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GRAY),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
+            ('ALIGN', (0, 0), (3, -1), 'LEFT'),
+            ('ROWBACKGROUNDS', (1, 1), (-1, -1), [colors.white, ROW_ALT]),
+        ]))
+        
+        elements.append(t)
+        
+        # Build PDF
+        return self._build_pdf(elements)
