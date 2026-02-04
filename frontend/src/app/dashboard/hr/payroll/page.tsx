@@ -535,13 +535,13 @@ export default function HRPayrollPage() {
 
                     {/* Calculation Modal */}
                     <Dialog open={calcModalOpen} onOpenChange={setCalcModalOpen}>
-                        <DialogContent className="max-w-[450px] bg-white p-0 overflow-hidden rounded-ios-3xl border-none shadow-2xl">
-                            <div className="px-6 py-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
+                        <DialogContent className="max-w-[600px] h-[80vh] bg-white p-0 overflow-hidden rounded-ios-3xl border-none shadow-2xl flex flex-col">
+                            <div className="px-6 py-4 border-b border-stone-100 flex-none flex items-center justify-between bg-stone-50/50">
                                 <h3 className="text-lg font-bold text-stone-900">Run Payroll Engine</h3>
                                 <button onClick={() => setCalcModalOpen(false)} className="text-[#007AFF] font-semibold text-sm">Close</button>
                             </div>
 
-                            <div className="p-6 space-y-6">
+                            <div className="flex-1 overflow-y-auto p-6 space-y-6">
                                 <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl">
                                     <p className="text-[11px] text-blue-600 font-bold uppercase tracking-wider mb-1">Calculation Window</p>
                                     <p className="text-sm font-bold text-blue-900">
@@ -600,7 +600,9 @@ export default function HRPayrollPage() {
                                         placeholder="Explain any manual adjustments..."
                                     />
                                 </div>
+                            </div>
 
+                            <div className="p-6 border-t border-stone-100 bg-white flex-none">
                                 <button
                                     onClick={handleCalculate}
                                     disabled={isProcessing}
