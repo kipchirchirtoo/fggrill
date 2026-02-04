@@ -402,7 +402,7 @@ function CashierPageContent() {
         }
         setIsProcessing(true);
         try {
-            const identifier = (billData.type === 'restaurant' || billData.type === 'bar') ? billData.order.order_number : billData.booking.id;
+            const identifier = (billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos') ? billData.order.order_number : billData.booking.id;
             // Correct path: /payments/mpesa/...
             const response = await fetchAPI('/payments/mpesa/initiate', {
                 method: 'POST',
@@ -410,7 +410,7 @@ function CashierPageContent() {
                     phoneNumber: customerPhone,
                     amount: parseFloat(paymentAmount),
                     bookingId: billData.type === 'hotel' ? identifier : undefined,
-                    billId: billData.type === 'restaurant' || billData.type === 'bar' ? identifier : undefined,
+                    billId: (billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos') ? identifier : undefined,
                     accountReference: `POS-${identifier.slice(-5)}`
                 })
             }) as any;
@@ -549,7 +549,7 @@ function CashierPageContent() {
 
                 // Refresh bill data
                 if (billData) {
-                    const identifier = (billData.type === 'restaurant' || billData.type === 'bar') ? billData.order.order_number : billData.booking.id;
+                    const identifier = (billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos') ? billData.order.order_number : billData.booking.id;
                     const refresh = await fetchAPI(`/cashier/bill/${identifier}`) as any;
                     if (refresh.success) {
                         setBillData(refresh.data);
@@ -643,7 +643,7 @@ function CashierPageContent() {
             const subtotal = Math.round(totalAmount / (1 + vatRate));
             const vatAmount = totalAmount - subtotal;
 
-            if (billData.type === 'restaurant' || billData.type === 'bar') {
+            if (billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos') {
                 receiptData = {
                     receipt_type: 'sale' as const,
                     receipt_number: billData.order.order_number,
@@ -925,20 +925,20 @@ function CashierPageContent() {
                                         <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8">
                                             <div>
                                                 <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">Bill Number</p>
-                                                <p className="font-bold text-stone-900">{(billData.type === 'restaurant' || billData.type === 'bar') ? billData.order.order_number : billData.booking.id.slice(0, 8)}</p>
+                                                <p className="font-bold text-stone-900">{(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos') ? billData.order.order_number : billData.booking.id.slice(0, 8)}</p>
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">Customer</p>
-                                                <p className="font-bold text-stone-900">{(billData.type === 'restaurant' || billData.type === 'bar') ? billData.order.guest_name : billData.booking.guest_name}</p>
+                                                <p className="font-bold text-stone-900">{(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos') ? billData.order.guest_name : billData.booking.guest_name}</p>
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">Module</p>
                                                 <p className="font-bold text-stone-900 capitalize">{billData.type}</p>
                                             </div>
                                             <div>
-                                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">{billData.type === 'hotel' ? 'Room' : 'Table'}</p>
+                                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">{billData.type === 'hotel' ? 'Room' : (billData.type === 'pos' ? 'Source' : 'Table')}</p>
                                                 <p className="font-bold text-stone-900">
-                                                    {billData.type === 'hotel' ? billData.booking.room_number : (billData.order.table_number || 'N/A')}
+                                                    {billData.type === 'hotel' ? billData.booking.room_number : (billData.type === 'pos' ? 'POS Terminal' : (billData.order.table_number || 'N/A'))}
                                                 </p>
                                             </div>
                                             {billData.type === 'hotel' && (
@@ -954,14 +954,14 @@ function CashierPageContent() {
                                                 </>
                                             )}
                                         </div>
-                                        {(billData.type === 'restaurant' || billData.type === 'bar') && billData.order.items && (
+                                        {(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos') && billData.order.items && (
                                             <div className="mb-8">
                                                 <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight mb-3">Order Items</p>
                                                 <div className="bg-stone-50 rounded-xl p-4 space-y-2 border border-stone-100">
                                                     {billData.order.items.map((item: any, idx: number) => (
                                                         <div key={idx} className="flex justify-between text-sm">
                                                             <span className="text-stone-600">{item.name} <span className="text-stone-400 text-xs">x{item.quantity}</span></span>
-                                                            <span className="font-bold text-stone-900">KES {item.total.toLocaleString()}</span>
+                                                            <span className="font-bold text-stone-900">KES {(item.total || (item.price * item.quantity)).toLocaleString()}</span>
                                                         </div>
                                                     ))}
                                                 </div>

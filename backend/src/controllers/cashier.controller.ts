@@ -140,6 +140,52 @@ export const getBillDetails = async (
             return;
         }
 
+        // Check if it's a POS transaction (starts with CS)
+        if (bookingId.startsWith('CS-')) {
+            const { data: transaction, error: txError } = await supabase
+                .from('pos_transactions')
+                .select(`
+                    *,
+                    items:pos_transaction_items(
+                        *,
+                        product:restaurant_menu_items(name)
+                    )
+                `)
+                .eq('transaction_ref', bookingId)
+                .single();
+
+            if (txError || !transaction) {
+                throw new AppError('POS Transaction not found', 404);
+            }
+
+            res.json({
+                success: true,
+                data: {
+                    type: 'pos',
+                    order: {
+                        id: transaction.id,
+                        order_number: transaction.transaction_ref,
+                        guest_name: transaction.customer_name || 'Walk-in',
+                        status: transaction.status,
+                        items: transaction.items?.map((item: any) => ({
+                            name: item.product?.name || 'Unknown Item',
+                            quantity: item.qty,
+                            price: item.unit_price,
+                            total: item.line_total
+                        }))
+                    },
+                    financials: {
+                        total_amount: transaction.total_amount,
+                        amount_paid: transaction.status === 'PAID' ? transaction.total_amount : 0,
+                        balance: transaction.status === 'PAID' ? 0 : transaction.total_amount,
+                        currency: 'KES'
+                    },
+                    payment_status: transaction.status.toLowerCase()
+                }
+            });
+            return;
+        }
+
         // Check if it's an unpaid bill from other streams (CON, POL, CWS)
         const otherPrefixes = ['CON', 'POL', 'CWS', 'BILL'];
         const billPrefix = otherPrefixes.find(p => bookingId.startsWith(p));
@@ -433,6 +479,79 @@ export const processCashierPayment = async (
             res.json({
                 success: true,
                 message: 'Bar payment processed successfully',
+                data: payment
+            });
+            return;
+        }
+
+        // Check if it's a POS transaction
+        if (bookingId.startsWith('CS-')) {
+            // 1. Fetch the transaction from ref
+            const { data: transaction, error: txError } = await supabase
+                .from('pos_transactions')
+                .select('*')
+                .eq('transaction_ref', bookingId)
+                .single();
+
+            if (txError || !transaction) {
+                throw new AppError('POS transaction not found', 404);
+            }
+
+            const isVerifiedMethod = method === 'cash';
+            const initialStatus = isVerifiedMethod ? 'completed' : 'pending';
+
+            // 2. Record Payment in Database
+            const { data: payment, error: paymentError } = await supabase
+                .from('payments')
+                .insert({
+                    pos_transaction_id: transaction.id,
+                    amount: amount,
+                    currency: 'KES',
+                    payment_method: method,
+                    status: initialStatus,
+                    reference: paymentRef,
+                    metadata: {
+                        processed_by: 'cashier',
+                        processed_at: new Date().toISOString(),
+                        transaction_ref: bookingId
+                    }
+                })
+                .select()
+                .single();
+
+            if (paymentError) {
+                throw new AppError(`Payment recording failed: ${paymentError.message}`, 500);
+            }
+
+            // 3. Update Transaction Status if completed
+            if (initialStatus === 'completed') {
+                await supabase
+                    .from('pos_transactions')
+                    .update({
+                        status: 'PAID',
+                        payment_method: method.toUpperCase(),
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', transaction.id);
+
+                // Record legacy transaction for logbook
+                await supabase.from('cashier_transactions').insert({
+                    transaction_number: `POS-${transaction.transaction_ref}`,
+                    branch_id: transaction.branch_id,
+                    cashier_id: req.user?.id,
+                    transaction_type: 'payment',
+                    revenue_type: 'POS_SALE',
+                    reference_type: 'pos_transaction',
+                    reference_id: transaction.id,
+                    payment_method: method,
+                    amount: amount,
+                    customer_name: transaction.customer_name
+                });
+            }
+
+            res.json({
+                success: true,
+                message: 'POS payment processed successfully',
                 data: payment
             });
             return;
