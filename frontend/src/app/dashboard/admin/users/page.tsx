@@ -15,6 +15,7 @@ import { Users, RefreshCw, Plus, Search, Edit2, Trash2, User, Mail, Building2, C
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { WizardStepIndicator, WizardStep } from '@/components/ui/wizard-step-indicator';
 
 interface UserData {
   id: string;
@@ -601,17 +602,18 @@ export default function AdminUsersPage() {
               <div className="w-12"></div>
             </div>
 
-            <div className="p-4 bg-[#F2F2F7] min-h-[400px]">
-              {/* Step Indicator */}
-              <div className="flex justify-center gap-1 mb-6">
-                {[1, 2, 3, ...(formData.role === UserRole.EMPLOYEE ? [4, 5] : [])].map((step) => (
-                  <div
-                    key={step}
-                    className={`h-1.5 rounded-full transition-all duration-300 ${wizardStep === step ? 'w-8 bg-[#007AFF]' : 'w-2 bg-gray-300'
-                      }`}
-                  />
-                ))}
-              </div>
+            <div className="p-4 bg-white min-h-[500px]">
+              {/* Wizard Step Indicator */}
+              <WizardStepIndicator
+                steps={[
+                  { id: 1, title: 'Account', description: 'Basic credentials' },
+                  { id: 2, title: 'Role & Access', description: 'Permissions' },
+                  { id: 3, title: 'Contact Info', description: 'Phone & PIN' },
+                ]}
+                currentStep={wizardStep - 1}
+                onStepClick={(index) => setWizardStep(index + 1)}
+                allowClickNavigation={true}
+              />
 
               <AnimatePresence mode="wait">
                 {wizardStep === 1 && (
@@ -820,17 +822,18 @@ export default function AdminUsersPage() {
               <div className="w-12"></div>
             </div>
 
-            <div className="p-4 bg-[#F2F2F7] min-h-[400px]">
-              {/* Step Indicator */}
-              <div className="flex justify-center gap-1 mb-6">
-                {[1, 2, 3, ...(formData.role === UserRole.EMPLOYEE ? [4, 5] : [])].map((step) => (
-                  <div
-                    key={step}
-                    className={`h-1.5 rounded-full transition-all duration-300 ${wizardStep === step ? 'w-8 bg-[#007AFF]' : 'w-2 bg-gray-300'
-                      }`}
-                  />
-                ))}
-              </div>
+            <div className="p-4 bg-white min-h-[500px]">
+              {/* Wizard Step Indicator */}
+              <WizardStepIndicator
+                steps={[
+                  { id: 1, title: 'Account', description: 'Basic credentials' },
+                  { id: 2, title: 'Role & Access', description: 'Permissions' },
+                  { id: 3, title: 'Contact Info', description: 'Phone & PIN' },
+                ]}
+                currentStep={wizardStep - 1}
+                onStepClick={(index) => setWizardStep(index + 1)}
+                allowClickNavigation={true}
+              />
 
               <AnimatePresence mode="wait">
                 {wizardStep === 1 && (

@@ -15,6 +15,8 @@ import { Users, RefreshCw, Plus, Search, User, Building2, Calendar, Edit2, Trash
 import Link from 'next/link';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { WizardStepIndicator } from '@/components/ui/wizard-step-indicator';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Staff {
   id: string;
@@ -56,6 +58,7 @@ export default function AdminStaffPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [departmentFilter, setDepartmentFilter] = useState('');
+  const [wizardStep, setWizardStep] = useState(1);
 
   const fetchStaff = useCallback(async () => {
     setIsLoading(true);
@@ -107,6 +110,7 @@ export default function AdminStaffPage() {
       status: 'active'
     });
     setFormErrors({});
+    setWizardStep(1);
   };
 
   const validateForm = () => {
@@ -155,6 +159,7 @@ export default function AdminStaffPage() {
       status: member.status
     });
     setEditModalOpen(true);
+    setWizardStep(1);
   };
 
   const handleUpdateStaff = async () => {
@@ -408,97 +413,242 @@ export default function AdminStaffPage() {
           if (!open) resetForm();
           setAddModalOpen(open);
         }}>
-          <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Add Staff Member</DialogTitle></DialogHeader>
-            <div className="space-y-4 mt-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">First Name <span className="text-red-500">*</span></label>
-                  <Input
-                    value={formData.first_name}
-                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                    className={formErrors.first_name ? 'border-red-500' : ''}
-                  />
-                  {formErrors.first_name && <p className="text-red-500 text-xs mt-1">{formErrors.first_name}</p>}
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Last Name <span className="text-red-500">*</span></label>
-                  <Input
-                    value={formData.last_name}
-                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                    className={formErrors.last_name ? 'border-red-500' : ''}
-                  />
-                  {formErrors.last_name && <p className="text-red-500 text-xs mt-1">{formErrors.last_name}</p>}
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Email <span className="text-red-500">*</span></label>
-                <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className={formErrors.email ? 'border-red-500' : ''}
-                />
-                {formErrors.email && <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>}
-              </div>
-              <div>
-                <label className="text-sm font-medium">Phone</label>
-                <Input
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Role <span className="text-red-500">*</span></label>
-                <select
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  className={`w-full p-2 border rounded-ios-lg ${formErrors.role ? 'border-red-500' : ''}`}
-                >
-                  <option value="">Select role</option>
-                  {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
-                </select>
-                {formErrors.role && <p className="text-red-500 text-xs mt-1">{formErrors.role}</p>}
-              </div>
-              <div>
-                <label className="text-sm font-medium">Department <span className="text-red-500">*</span></label>
-                <select
-                  value={formData.department}
-                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  className={`w-full p-2 border rounded-ios-lg ${formErrors.department ? 'border-red-500' : ''}`}
-                >
-                  <option value="">Select department</option>
-                  {departments.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
-                </select>
-                {formErrors.department && <p className="text-red-500 text-xs mt-1">{formErrors.department}</p>}
-              </div>
-              <div>
-                <label className="text-sm font-medium">Branch</label>
-                <select
-                  value={formData.branch_id}
-                  onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })}
-                  className="w-full p-2 border rounded-ios-lg"
-                >
-                  <option value="">Select branch</option>
-                  {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Status</label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
-                  className="w-full p-2 border rounded-ios-lg"
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </div>
-              <div className="flex gap-3 pt-2">
-                <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1" disabled={isSubmitting}>Cancel</IOSButton>
-                <IOSButton onClick={handleCreateStaff} className="flex-1" disabled={isSubmitting}>
-                  {isSubmitting ? 'Creating...' : 'Create Staff'}
-                </IOSButton>
+          <DialogContent className="max-w-2xl p-0 overflow-hidden border-none">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b flex items-center justify-between">
+              <button onClick={() => setAddModalOpen(false)} className="text-blue-600 hover:text-blue-700 font-medium">Cancel</button>
+              <DialogTitle className="text-xl font-bold text-gray-800">Add Staff Member</DialogTitle>
+              <div className="w-16"></div>
+            </div>
+
+            <div className="p-6 bg-white min-h-[550px]">
+              {/* Wizard Step Indicator */}
+              <WizardStepIndicator
+                steps={[
+                  { id: 1, title: 'Personal Info', description: 'Basic details' },
+                  { id: 2, title: 'Role & Department', description: 'Work assignment' },
+                  { id: 3, title: 'Review', description: 'Confirm details' },
+                ]}
+                currentStep={wizardStep - 1}
+                onStepClick={(index) => setWizardStep(index + 1)}
+                allowClickNavigation={true}
+              />
+
+              <AnimatePresence mode="wait">
+                {wizardStep === 1 && (
+                  <motion.div
+                    key="step1"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-4 mt-6"
+                  >
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 mb-1 block">First Name <span className="text-red-500">*</span></label>
+                        <Input
+                          value={formData.first_name}
+                          onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                          className={formErrors.first_name ? 'border-red-500' : ''}
+                          placeholder="Enter first name"
+                        />
+                        {formErrors.first_name && <p className="text-red-500 text-xs mt-1">{formErrors.first_name}</p>}
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 mb-1 block">Last Name <span className="text-red-500">*</span></label>
+                        <Input
+                          value={formData.last_name}
+                          onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                          className={formErrors.last_name ? 'border-red-500' : ''}
+                          placeholder="Enter last name"
+                        />
+                        {formErrors.last_name && <p className="text-red-500 text-xs mt-1">{formErrors.last_name}</p>}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1 block">Email <span className="text-red-500">*</span></label>
+                      <Input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        className={formErrors.email ? 'border-red-500' : ''}
+                        placeholder="email@example.com"
+                      />
+                      {formErrors.email && <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>}
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1 block">Phone</label>
+                      <Input
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        placeholder="+254 7XX XXX XXX"
+                      />
+                    </div>
+                  </motion.div>
+                )}
+
+                {wizardStep === 2 && (
+                  <motion.div
+                    key="step2"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-4 mt-6"
+                  >
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1 block">Role <span className="text-red-500">*</span></label>
+                      <select
+                        value={formData.role}
+                        onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                        className={`w-full p-2 border rounded-lg ${formErrors.role ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                      >
+                        <option value="">Select role</option>
+                        {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
+                      </select>
+                      {formErrors.role && <p className="text-red-500 text-xs mt-1">{formErrors.role}</p>}
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1 block">Department <span className="text-red-500">*</span></label>
+                      <select
+                        value={formData.department}
+                        onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                        className={`w-full p-2 border rounded-lg ${formErrors.department ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                      >
+                        <option value="">Select department</option>
+                        {departments.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                      </select>
+                      {formErrors.department && <p className="text-red-500 text-xs mt-1">{formErrors.department}</p>}
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1 block">Branch</label>
+                      <select
+                        value={formData.branch_id}
+                        onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })}
+                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">Select branch</option>
+                        {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1 block">Status</label>
+                      <select
+                        value={formData.status}
+                        onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
+                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
+                    </div>
+                  </motion.div>
+                )}
+
+                {wizardStep === 3 && (
+                  <motion.div
+                    key="step3"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="mt-6"
+                  >
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
+                      <h3 className="font-bold text-lg text-gray-800 mb-4 flex items-center gap-2">
+                        <User className="h-5 w-5 text-blue-600" />
+                        Review Staff Details
+                      </h3>
+                      <div className="space-y-3 text-sm">
+                        <div className="flex justify-between py-2 border-b border-blue-100">
+                          <span className="text-gray-600">Name:</span>
+                          <span className="font-semibold text-gray-800">{formData.first_name} {formData.last_name}</span>
+                        </div>
+                        <div className="flex justify-between py-2 border-b border-blue-100">
+                          <span className="text-gray-600">Email:</span>
+                          <span className="font-medium text-gray-800">{formData.email}</span>
+                        </div>
+                        {formData.phone && (
+                          <div className="flex justify-between py-2 border-b border-blue-100">
+                            <span className="text-gray-600">Phone:</span>
+                            <span className="font-medium text-gray-800">{formData.phone}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between py-2 border-b border-blue-100">
+                          <span className="text-gray-600">Role:</span>
+                          <span className="font-semibold text-blue-600">{formData.role}</span>
+                        </div>
+                        <div className="flex justify-between py-2 border-b border-blue-100">
+                          <span className="text-gray-600">Department:</span>
+                          <span className="font-semibold text-indigo-600">{formData.department}</span>
+                        </div>
+                        {formData.branch_id && (
+                          <div className="flex justify-between py-2 border-b border-blue-100">
+                            <span className="text-gray-600">Branch:</span>
+                            <span className="font-medium text-gray-800">{branches.find(b => b.id.toString() === formData.branch_id)?.name}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between py-2">
+                          <span className="text-gray-600">Status:</span>
+                          <IOSBadge className={formData.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                            {formData.status}
+                          </IOSBadge>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Navigation Buttons */}
+              <div className="flex gap-3 mt-8">
+                {wizardStep > 1 && (
+                  <button
+                    onClick={() => setWizardStep(prev => prev - 1)}
+                    className="flex-1 py-3 px-4 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 active:bg-gray-300 transition-colors"
+                  >
+                    Previous
+                  </button>
+                )}
+
+                {wizardStep < 3 ? (
+                  <button
+                    onClick={() => {
+                      if (wizardStep === 1) {
+                        const errors: any = {};
+                        if (!formData.first_name) errors.first_name = 'First name is required';
+                        if (!formData.last_name) errors.last_name = 'Last name is required';
+                        if (!formData.email) errors.email = 'Email is required';
+                        else if (!/\S+@\S+\.\S+/.test(formData.email)) errors.email = 'Email is invalid';
+                        if (Object.keys(errors).length > 0) {
+                          setFormErrors(errors);
+                          toast.error('Please fill in required fields');
+                          return;
+                        }
+                      }
+                      if (wizardStep === 2) {
+                        const errors: any = {};
+                        if (!formData.role) errors.role = 'Role is required';
+                        if (!formData.department) errors.department = 'Department is required';
+                        if (Object.keys(errors).length > 0) {
+                          setFormErrors(errors);
+                          toast.error('Please fill in required fields');
+                          return;
+                        }
+                      }
+                      setFormErrors({});
+                      setWizardStep(prev => prev + 1);
+                    }}
+                    className="flex-1 py-3 px-4 rounded-xl bg-blue-500 text-white font-semibold hover:bg-blue-600 active:bg-blue-700 shadow-md transition-all"
+                  >
+                    Next
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleCreateStaff}
+                    className="flex-1 py-3 px-4 rounded-xl bg-emerald-500 text-white font-semibold hover:bg-emerald-600 active:bg-emerald-700 shadow-md transition-all"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? 'Creating...' : 'Create Staff Member'}
+                  </button>
+                )}
               </div>
             </div>
           </DialogContent>

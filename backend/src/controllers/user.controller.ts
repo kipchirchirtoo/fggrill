@@ -156,7 +156,7 @@ export const createUser = async (
 
     try {
       const userId = uuidv4();
-      const hashedPassword = await bcrypt.hash(password, 12);
+      const hashedPassword = await bcrypt.hash(userPassword, 12);
 
       // Start transaction
       const client = await pool.connect();
@@ -179,7 +179,7 @@ export const createUser = async (
             $4,
             NOW(), NOW()
           )
-        `, [userId, email, hashedPassword, JSON.stringify({
+        `, [userId, userEmail, hashedPassword, JSON.stringify({
           first_name: firstName.trim(),
           last_name: lastName.trim()
         })]);
@@ -237,7 +237,7 @@ export const createUser = async (
           message: 'User created successfully'
         });
 
-        logger.info(`User created by admin: ${email} (${role})`);
+        logger.info(`User created by admin: ${userEmail} (${role})`);
 
       } catch (txError) {
         await client.query('ROLLBACK');
