@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'use';
+import { useEffect } from 'react';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
