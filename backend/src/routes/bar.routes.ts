@@ -18,6 +18,13 @@ router.use(protect);
 // router.use(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RESTAURANT])); // "Bartender" -> Restaurant?
 
 // ====================
+// POOL TABLE TOKENS
+// ====================
+console.log('Mounting pool table routes at /bar/pool-table');
+router.get('/pool-table/earnings', poolTokenController.getSales);
+router.post('/pool-table/tokens', poolTokenController.recordSale);
+
+// ====================
 // ORDERS
 // ====================
 router.get('/orders', orderController.getOrders);
@@ -77,10 +84,6 @@ router.put('/stock-requests/:id/status', authorize([UserRole.SUPER_ADMIN, UserRo
 router.put('/stock-requests/:id/fulfill', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER]), stockRequestController.fulfillStockRequest);
 router.delete('/stock-requests/:id', stockRequestController.deleteStockRequest);
 
-// ====================
-// POOL TABLE TOKENS
-// ====================
-router.get('/pool-table/earnings', poolTokenController.getSales);
-router.post('/pool-table/tokens', poolTokenController.recordSale);
+
 
 export default router;

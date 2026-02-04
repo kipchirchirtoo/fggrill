@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../config/supabase';
 
 export const recordSale = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -7,7 +7,7 @@ export const recordSale = async (req: Request, res: Response, next: NextFunction
         const user_id = (req as any).user?.id;
 
         const finalQuantity = quantity || tokens_sold;
-        const finalAmountPerToken = amount_per_token || (amount && finalQuantity ? amount / finalQuantity : 100);
+        const finalAmountPerToken = amount_per_token || (amount && finalQuantity ? amount / finalQuantity : 50);
         const finalPaymentMethod = payment_method || 'cash';
 
         if (!finalQuantity) {

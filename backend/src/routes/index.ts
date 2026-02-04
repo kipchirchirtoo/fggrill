@@ -90,7 +90,6 @@ router.use('/finance', financeRoutes);
 router.use('/system', systemRoutes);
 router.use('/fleet', fleetRoutes);
 router.use('/bar', barRoutes);
-router.use('/bar/stock-requests', barStockRequestsRoutes);
 router.use('/restaurant', restaurantRoutes);
 router.use('/restaurant/reservations', restaurantReservationRoutes);
 router.use('/restaurant/tables', restaurantTableRoutes);
