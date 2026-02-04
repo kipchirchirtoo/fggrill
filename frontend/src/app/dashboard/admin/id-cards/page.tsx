@@ -280,7 +280,7 @@ export default function IDCardsManagementPage() {
                                 <div className="relative">
                                     <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-stone-50 shadow-inner bg-stone-100">
                                         {emp.profile_photo ? (
-                                            <img src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/profile-photos/${emp.profile_photo}`} alt="" className="w-full h-full object-cover" />
+                                            <img src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/profile/${emp.profile_photo}`} alt="" className="w-full h-full object-cover" />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center text-stone-300">
                                                 <UserIcon className="w-10 h-10" />

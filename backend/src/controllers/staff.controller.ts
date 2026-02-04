@@ -1512,17 +1512,32 @@ export const uploadStaffPhoto = async (
 
     logger.debug('Uploading staff photo:', { staffId: req.params.id, filename: file.originalname });
 
-    // Upload to Supabase Storage
+    // Get staff to find user_id
+    const { data: staff, error: staffError } = await supabase
+      .from('staff_profiles')
+      .select('user_id')
+      .eq('id', req.params.id)
+      .single();
+
+    if (staffError || !staff) {
+      logger.error('Staff not found:', staffError);
+      res.status(404).json({
+        success: false,
+        message: 'Staff member not found'
+      });
+      return;
+    }
+
+    // Upload to Supabase Storage using user_id for RLS compliance
+    const fileExt = file.originalname.split('.').pop();
+    const fileName = `${staff.user_id}-${Date.now()}.${fileExt}`;
+
     const { data, error } = await supabase.storage
-      .from('profile-photos')
-      .upload(
-        `staff/${req.params.id}/${Date.now()}-${file.originalname}`,
-        file.buffer,
-        {
-          contentType: file.mimetype,
-          upsert: true
-        }
-      );
+      .from('profile')
+      .upload(fileName, file.buffer, {
+        contentType: file.mimetype,
+        upsert: true
+      });
 
     if (error) {
       logger.error('Error uploading to storage:', error);
@@ -1532,7 +1547,7 @@ export const uploadStaffPhoto = async (
     logger.info('Photo uploaded to storage:', data.path);
 
     // Update staff_profiles with photo path
-    const { data: staff, error: updateError } = await supabase
+    const { data: updatedStaff, error: updateError } = await supabase
       .from('staff_profiles')
       .update({ profile_photo: data.path })
       .eq('id', req.params.id)
@@ -1549,8 +1564,8 @@ export const uploadStaffPhoto = async (
     res.status(200).json({
       success: true,
       data: {
-        ...staff,
-        profile_photo_url: `${process.env.SUPABASE_PROJECT_URL}/storage/v1/object/public/profile-photos/${data.path}`
+        ...updatedStaff,
+        profile_photo_url: `${process.env.SUPABASE_PROJECT_URL}/storage/v1/object/public/profile/${data.path}`
       },
       message: 'Photo uploaded successfully'
     });
