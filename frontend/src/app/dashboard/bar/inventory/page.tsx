@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import {
     Package, Search, RefreshCw, ShoppingCart,
     AlertTriangle, ArrowLeft, ArrowRight, Warehouse, Plus,
-    ClipboardCheck, Save, X, Loader2, Calculator, BarChartHorizontal
+    ClipboardCheck, Save, X, Loader2, Calculator, BarChartHorizontal, Database
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -43,6 +43,7 @@ export default function BarInventoryPage() {
     const [isRecording, setIsRecording] = useState(false);
     const [stockTakeItems, setStockTakeItems] = useState<any[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
 
     const fetchInventory = useCallback(async () => {
         setIsLoading(true);
@@ -77,6 +78,22 @@ export default function BarInventoryPage() {
     useEffect(() => {
         fetchInventory();
     }, [fetchInventory]);
+
+    const handleSyncFromMaster = async () => {
+        setIsSyncing(true);
+        try {
+            const branchIdStr = activeBranchId ? String(activeBranchId) : undefined;
+            const res = await api.barInventory.syncFromMaster({ branch_id: branchIdStr });
+            if (res.success) {
+                toast.success(res.message);
+                fetchInventory();
+            }
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to sync from Master Inventory');
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     const startRecording = () => {
         setStockTakeItems(items.map(i => ({
@@ -140,6 +157,20 @@ export default function BarInventoryPage() {
                             </div>
                         </div>
                         <div className="flex gap-2">
+                            <button
+                                onClick={handleSyncFromMaster}
+                                disabled={isSyncing}
+                                className="btn-secondary h-[44px] px-4 flex items-center justify-center gap-2 bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100"
+                            >
+                                <Database className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                                <span>{isSyncing ? 'Syncing...' : 'Sync Master'}</span>
+                            </button>
+                            <Link href="/dashboard/bar/inventory/morning-count">
+                                <button className="btn-secondary h-[44px] px-4 flex items-center justify-center gap-2 bg-orange-50 text-orange-700 border-orange-100 hover:bg-orange-100">
+                                    <ClipboardCheck className="h-4 w-4" />
+                                    <span>Morning Count</span>
+                                </button>
+                            </Link>
                             <button
                                 onClick={startRecording}
                                 className="btn-secondary h-[44px] px-4 flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100"
@@ -224,13 +255,29 @@ export default function BarInventoryPage() {
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-3">
-                                            <p className="text-xs font-bold text-stone-400 uppercase">Physical Remaining</p>
-                                            <Input
-                                                type="number"
-                                                value={item.physical_quantity}
-                                                onChange={(e) => handlePhysicalUpdate(item.drink_id, e.target.value)}
-                                                className="w-24 text-center font-bold text-lg h-10 border-emerald-100 focus:ring-emerald-500"
-                                            />
+                                            <div className="text-right">
+                                                <p className="text-[10px] font-bold text-stone-400 uppercase mb-1">Wastage</p>
+                                                <Input
+                                                    type="number"
+                                                    value={item.wastage || 0}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setStockTakeItems(prev => prev.map(i =>
+                                                            i.drink_id === item.drink_id ? { ...i, wastage: val } : i
+                                                        ));
+                                                    }}
+                                                    className="w-20 text-center font-bold text-sm h-10 border-red-100 focus:ring-red-500"
+                                                />
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[10px] font-bold text-stone-400 uppercase mb-1">Physical</p>
+                                                <Input
+                                                    type="number"
+                                                    value={item.physical_quantity}
+                                                    onChange={(e) => handlePhysicalUpdate(item.drink_id, e.target.value)}
+                                                    className="w-24 text-center font-bold text-lg h-10 border-emerald-100 focus:ring-emerald-500"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 ))}

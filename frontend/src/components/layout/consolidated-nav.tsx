@@ -481,7 +481,13 @@ export function ConsolidatedNav() {
         />
       </NavGroup>
 
-      <NavGroup label="Inventory" icon={Package}>
+      <NavGroup label="Inventory" icon={Package} defaultOpen>
+        <NavItem
+          href="/dashboard/bar/inventory"
+          icon={ClipboardList}
+          label="Bar Inventory"
+          active={pathname === '/dashboard/bar/inventory'}
+        />
         <NavItem
           href="/dashboard/branch-store/requests"
           icon={ShoppingCart}

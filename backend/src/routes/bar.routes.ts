@@ -7,6 +7,7 @@ import * as tabController from '../controllers/bar/tabs.controller';
 import * as inventoryController from '../controllers/bar/inventory.controller';
 import * as reportController from '../controllers/bar/reports.controller';
 import * as stockRequestController from '../controllers/bar/stock-requests.controller';
+import * as syncController from '../controllers/bar/sync.controller';
 
 const router = express.Router();
 
@@ -51,6 +52,7 @@ router.post('/tabs/:id/close', tabController.closeTab);
 // ====================
 // INVENTORY / STOCK
 // ====================
+router.post('/stock/sync', syncController.syncFromMaster);
 router.get('/stock', inventoryController.getStock);
 router.get('/stock/logs', inventoryController.getStockLogs);
 router.get('/stock/consumption-report', inventoryController.getConsumptionReport);

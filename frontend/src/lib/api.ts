@@ -2238,6 +2238,7 @@ export const barAPI = {
   closeTab: (tabId: string, paymentMethod: string) => fetchAPI<any>(`/bar/tabs/${tabId}/close`, { method: 'POST', body: JSON.stringify({ payment_method: paymentMethod }) }),
 
   // Stock & Inventory
+  syncFromMaster: (branchId?: number) => fetchAPI<any>('/bar/stock/sync', { method: 'POST', body: JSON.stringify({ branch_id: branchId }) }),
   getStock: (branchId?: number) => {
     const query = branchId ? `?branch_id=${branchId}` : '';
     return fetchAPI<any>(`/bar/stock${query}`);
@@ -3542,6 +3543,8 @@ export const barInventoryAPI = {
   },
   submitStockTake: (data: { branch_id?: number | string; items: any[]; notes?: string; count_type?: string }) =>
     fetchAPI<any>('/bar/stock/take', { method: 'POST', body: JSON.stringify(data) }),
+  syncFromMaster: (branchId?: number | string) =>
+    fetchAPI<any>('/bar/stock/sync', { method: 'POST', body: JSON.stringify({ branch_id: branchId }) }),
 };
 
 
