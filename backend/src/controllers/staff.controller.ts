@@ -629,7 +629,7 @@ export const updateStaffMember = async (
     // Get staff profile
     const { data: staff, error: getError } = await supabase
       .from('staff_profiles')
-      .select('user_id, email')
+      .select('user_id')
       .eq('id', req.params.id)
       .single();
 
@@ -642,6 +642,18 @@ export const updateStaffMember = async (
       return;
     }
 
+    // Get current email from users table for comparison
+    let currentEmail = null;
+    if (email) {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('email')
+        .eq('id', staff.user_id)
+        .single();
+
+      currentEmail = userData?.email;
+    }
+
     // Update user profile in users table
     const userUpdateData: any = {
       first_name,
@@ -652,6 +664,7 @@ export const updateStaffMember = async (
 
     if (role) userUpdateData.role = role;
     if (department) userUpdateData.department = department;
+    if (email) userUpdateData.email = email;
 
     const { error: userError } = await supabase
       .from('users')
@@ -664,7 +677,7 @@ export const updateStaffMember = async (
     }
 
     // Update email in Supabase Auth if changed and user exists
-    if (email && email !== staff.email) {
+    if (email && email !== currentEmail) {
       try {
         // First check if the auth user exists
         const { data: authUser, error: authCheckError } = await supabase.auth.admin.getUserById(staff.user_id);
@@ -701,7 +714,7 @@ export const updateStaffMember = async (
     if (phone_number !== undefined) staffUpdateData.phone = phone_number;
     if (department !== undefined) staffUpdateData.department = department;
     if (role !== undefined) staffUpdateData.role = role;
-    if (email !== undefined) staffUpdateData.email = email;
+    // Note: email is NOT in staff_profiles, it's in users table
     if (employee_id !== undefined) staffUpdateData.employee_id = employee_id;
     if (first_name !== undefined) staffUpdateData.first_name = first_name;
     if (last_name !== undefined) staffUpdateData.last_name = last_name;
