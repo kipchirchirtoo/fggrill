@@ -136,7 +136,7 @@ export const getStaff = async (
 
     // Add filters
     if (req.query.branch_id) {
-      query = query.eq('branch_id', req.query.branch_id);
+      query = query.eq('user.branch_id', req.query.branch_id);
     }
     if (req.query.department) {
       query = query.eq('department', req.query.department);
@@ -203,7 +203,7 @@ export const getStaffMember = async (
     } else {
       // Use double quotes for values in .or() to handle special characters (e.g. spaces, dots)
       // This matches PostgREST syntax requirements for strings with special characters
-      query = query.or(`id_number.eq."${id}", rfid_tag.eq."${id}", national_id.eq."${id}"`);
+      query = query.or(`id_number.eq."${id}", national_id.eq."${id}"`);
     }
 
     logger.debug?.('Executing getStaffMember query', { id, isUUID });
@@ -222,7 +222,7 @@ export const getStaffMember = async (
       });
 
       // Provide more info in dev, but keep it safe in prod
-      return res.status(500).json({
+      res.status(500).json({
         success: false,
         message: 'Database error loading staff member details',
         error: process.env.NODE_ENV === 'development' ? {
@@ -232,6 +232,7 @@ export const getStaffMember = async (
           hint: error.hint
         } : undefined
       });
+      return;
     }
 
     if (!staff) {
@@ -715,9 +716,7 @@ export const updateStaffMember = async (
     if (department !== undefined) staffUpdateData.department = department;
     if (role !== undefined) staffUpdateData.role = role;
     // Note: email is NOT in staff_profiles, it's in users table
-    if (employee_id !== undefined) staffUpdateData.employee_id = employee_id;
-    if (first_name !== undefined) staffUpdateData.first_name = first_name;
-    if (last_name !== undefined) staffUpdateData.last_name = last_name;
+    if (employee_id !== undefined) staffUpdateData.id_number = employee_id;
 
     const { data: updatedStaff, error: updateError } = await supabase
       .from('staff_profiles')
