@@ -83,18 +83,18 @@ class VendorPerformanceService {
       calculation_method: 'percentage'
     }
   ];
-  
+
   constructor() {
     this.db = pool;
   }
-  
+
   /**
    * Get all vendors with their performance scores
    */
   async getAllVendorPerformance(): Promise<any> {
     try {
       logger.info('Fetching all vendor performance data');
-      
+
       // Get vendor data with performance metrics
       const query = `
         SELECT 
@@ -119,9 +119,9 @@ class VendorPerformanceService {
         ORDER BY 
           overall_score DESC
       `;
-      
+
       const { rows } = await this.db.query(query);
-      
+
       return {
         success: true,
         data: rows
@@ -135,7 +135,7 @@ class VendorPerformanceService {
       };
     }
   }
-  
+
   /**
    * Get detailed performance for a specific vendor
    * @param vendorId Vendor ID
@@ -143,7 +143,7 @@ class VendorPerformanceService {
   async getVendorPerformanceDetails(vendorId: number): Promise<any> {
     try {
       logger.info(`Fetching detailed performance for vendor ${vendorId}`);
-      
+
       // Get vendor data
       const vendorQuery = `
         SELECT 
@@ -173,16 +173,16 @@ class VendorPerformanceService {
         WHERE 
           v.id = $1
       `;
-      
+
       const { rows: vendorData } = await this.db.query(vendorQuery, [vendorId]);
-      
+
       if (!vendorData.length) {
         return {
           success: false,
           message: 'Vendor not found'
         };
       }
-      
+
       // Get recent deliveries
       const deliveriesQuery = `
         SELECT 
@@ -208,9 +208,9 @@ class VendorPerformanceService {
           vd.delivery_date DESC
         LIMIT 10
       `;
-      
+
       const { rows: deliveries } = await this.db.query(deliveriesQuery, [vendorId]);
-      
+
       // Get recent ratings
       const ratingsQuery = `
         SELECT 
@@ -219,7 +219,7 @@ class VendorPerformanceService {
           vr.score,
           vr.comment,
           vr.created_at,
-          u.name as rated_by
+          (u.first_name || ' ' || u.last_name) as rated_by
         FROM 
           vendor_ratings vr
         JOIN
@@ -230,9 +230,9 @@ class VendorPerformanceService {
           vr.created_at DESC
         LIMIT 10
       `;
-      
+
       const { rows: ratings } = await this.db.query(ratingsQuery, [vendorId]);
-      
+
       // Get price comparison
       const priceQuery = `
         SELECT 
@@ -260,9 +260,9 @@ class VendorPerformanceService {
           i.name
         LIMIT 15
       `;
-      
+
       const { rows: priceComparison } = await this.db.query(priceQuery, [vendorId]);
-      
+
       // Calculate performance trends over time
       const trendsQuery = `
         SELECT 
@@ -295,9 +295,9 @@ class VendorPerformanceService {
         ORDER BY 
           month ASC
       `;
-      
+
       const { rows: trends } = await this.db.query(trendsQuery, [vendorId]);
-      
+
       return {
         success: true,
         data: {
@@ -318,7 +318,7 @@ class VendorPerformanceService {
       };
     }
   }
-  
+
   /**
    * Record a new vendor delivery
    * @param delivery Delivery data
@@ -326,12 +326,12 @@ class VendorPerformanceService {
   async recordDelivery(delivery: VendorDelivery): Promise<any> {
     try {
       logger.info(`Recording delivery for vendor ${delivery.vendor_id}, PO: ${delivery.purchase_order_id}`);
-      
+
       // Calculate days delayed
       const expectedDate = new Date(delivery.expected_date);
       const deliveryDate = new Date(delivery.delivery_date);
       const daysDelayed = Math.max(0, Math.floor((deliveryDate.getTime() - expectedDate.getTime()) / (1000 * 60 * 60 * 24)));
-      
+
       // Insert delivery record
       const insertQuery = `
         INSERT INTO vendor_deliveries (
@@ -341,7 +341,7 @@ class VendorPerformanceService {
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING id
       `;
-      
+
       const values = [
         delivery.vendor_id,
         delivery.purchase_order_id,
@@ -353,12 +353,12 @@ class VendorPerformanceService {
         delivery.quality_issues,
         delivery.issues_description
       ];
-      
+
       const { rows } = await this.db.query(insertQuery, values);
-      
+
       // Update vendor performance scores
       await this.updateVendorScores(delivery.vendor_id);
-      
+
       return {
         success: true,
         data: {
@@ -377,7 +377,7 @@ class VendorPerformanceService {
       };
     }
   }
-  
+
   /**
    * Submit a rating for a vendor
    * @param rating Rating data
@@ -385,7 +385,7 @@ class VendorPerformanceService {
   async submitRating(rating: VendorRating): Promise<any> {
     try {
       logger.info(`Submitting ${rating.category} rating for vendor ${rating.vendor_id}`);
-      
+
       // Insert rating
       const insertQuery = `
         INSERT INTO vendor_ratings (
@@ -394,7 +394,7 @@ class VendorPerformanceService {
         VALUES ($1, $2, $3, $4, $5, NOW())
         RETURNING id
       `;
-      
+
       const values = [
         rating.vendor_id,
         rating.category,
@@ -402,12 +402,12 @@ class VendorPerformanceService {
         rating.comment || '',
         rating.created_by
       ];
-      
+
       const { rows } = await this.db.query(insertQuery, values);
-      
+
       // Update vendor performance scores
       await this.updateVendorScores(rating.vendor_id);
-      
+
       return {
         success: true,
         data: {
@@ -424,7 +424,7 @@ class VendorPerformanceService {
       };
     }
   }
-  
+
   /**
    * Update all performance scores for a vendor
    * @param vendorId Vendor ID
@@ -451,10 +451,10 @@ class VendorPerformanceService {
           po.vendor_id = $1
           AND vd.delivery_date >= NOW() - INTERVAL '12 months'
       `;
-      
+
       const { rows: otdData } = await this.db.query(otdQuery, [vendorId]);
       const onTimeDeliveryScore = otdData[0].score || 0;
-      
+
       // Calculate quality score
       const qualityQuery = `
         SELECT
@@ -473,14 +473,14 @@ class VendorPerformanceService {
           po.vendor_id = $1
           AND vd.delivery_date >= NOW() - INTERVAL '12 months'
       `;
-      
+
       const { rows: qualityData } = await this.db.query(qualityQuery, [vendorId]);
       const productQuality = qualityData[0].product_quality || 0;
       const ratingQuality = qualityData[0].rating_quality || 0;
-      
+
       // Weight product quality (70%) and rating quality (30%)
       const qualityScore = (productQuality * 0.7) + (ratingQuality * 0.3);
-      
+
       // Calculate price competitiveness score
       const priceQuery = `
         SELECT
@@ -511,10 +511,10 @@ class VendorPerformanceService {
             AND po.order_date >= NOW() - INTERVAL '12 months'
         ) AS price_comparison
       `;
-      
+
       const { rows: priceData } = await this.db.query(priceQuery, [vendorId]);
       const priceScore = priceData[0].price_score || 50;
-      
+
       // Calculate responsiveness score
       const responsivenessQuery = `
         SELECT
@@ -526,10 +526,10 @@ class VendorPerformanceService {
           AND category = 'responsiveness'
           AND created_at >= NOW() - INTERVAL '12 months'
       `;
-      
+
       const { rows: responsivenessData } = await this.db.query(responsivenessQuery, [vendorId]);
       const responsivenessScore = responsivenessData[0].score || 50;
-      
+
       // Calculate contract compliance score
       const complianceQuery = `
         SELECT
@@ -541,17 +541,17 @@ class VendorPerformanceService {
           AND category = 'compliance'
           AND created_at >= NOW() - INTERVAL '12 months'
       `;
-      
+
       const { rows: complianceData } = await this.db.query(complianceQuery, [vendorId]);
       const complianceScore = complianceData[0].score || 50;
-      
+
       // Calculate overall score
       const otdWeight = this.metrics.find(m => m.name === 'on_time_delivery')?.weight || 25;
       const qualityWeight = this.metrics.find(m => m.name === 'quality')?.weight || 25;
       const priceWeight = this.metrics.find(m => m.name === 'price_competitiveness')?.weight || 20;
       const responsivenessWeight = this.metrics.find(m => m.name === 'responsiveness')?.weight || 15;
       const complianceWeight = this.metrics.find(m => m.name === 'contract_compliance')?.weight || 15;
-      
+
       const overallScore = (
         (onTimeDeliveryScore * otdWeight / 100) +
         (qualityScore * qualityWeight / 100) +
@@ -559,7 +559,7 @@ class VendorPerformanceService {
         (responsivenessScore * responsivenessWeight / 100) +
         (complianceScore * complianceWeight / 100)
       );
-      
+
       // Update vendor performance record
       const upsertQuery = `
         INSERT INTO vendor_performance (
@@ -577,7 +577,7 @@ class VendorPerformanceService {
           compliance_score = $7,
           last_updated = NOW()
       `;
-      
+
       await this.db.query(upsertQuery, [
         vendorId,
         overallScore,
@@ -587,20 +587,20 @@ class VendorPerformanceService {
         responsivenessScore,
         complianceScore
       ]);
-      
+
       logger.info(`Updated performance scores for vendor ${vendorId}`);
     } catch (error) {
       logger.error(`Error updating vendor scores for ${vendorId}:`, error);
     }
   }
-  
+
   /**
    * Get vendor ranking and comparison
    */
   async getVendorRankings(category?: string): Promise<any> {
     try {
       logger.info(`Generating vendor rankings ${category ? `for category: ${category}` : ''}`);
-      
+
       const query = `
         SELECT 
           v.id,
@@ -626,26 +626,26 @@ class VendorPerformanceService {
         ORDER BY 
           overall_score DESC
       `;
-      
+
       const { rows } = await this.db.query(
-        query, 
+        query,
         category ? [category] : []
       );
-      
+
       // Calculate category averages
       const categories = [...new Set(rows.map((v: any) => v.category))];
-      
+
       const categoryStats = [];
       for (const cat of categories) {
         const vendorsInCategory = rows.filter((v: any) => v.category === cat);
-        
+
         if (vendorsInCategory.length === 0) continue;
-        
+
         const avgOverall = vendorsInCategory.reduce((sum, v: any) => sum + v.overall_score, 0) / vendorsInCategory.length;
         const avgDelivery = vendorsInCategory.reduce((sum, v: any) => sum + v.on_time_delivery_score, 0) / vendorsInCategory.length;
         const avgQuality = vendorsInCategory.reduce((sum, v: any) => sum + v.quality_score, 0) / vendorsInCategory.length;
         const avgPrice = vendorsInCategory.reduce((sum, v: any) => sum + v.price_score, 0) / vendorsInCategory.length;
-        
+
         categoryStats.push({
           category: cat,
           vendor_count: vendorsInCategory.length,
@@ -655,7 +655,7 @@ class VendorPerformanceService {
           avg_price_score: Math.round(avgPrice * 10) / 10
         });
       }
-      
+
       return {
         success: true,
         data: {
@@ -673,7 +673,7 @@ class VendorPerformanceService {
       };
     }
   }
-  
+
   /**
    * Generate vendor performance report
    * @param vendorId Optional vendor ID
@@ -682,17 +682,17 @@ class VendorPerformanceService {
   async generatePerformanceReport(vendorId?: number, category?: string): Promise<any> {
     try {
       logger.info(`Generating vendor performance report ${vendorId ? `for vendor ${vendorId}` : category ? `for category ${category}` : 'for all vendors'}`);
-      
+
       let vendors = [];
       let trends = [];
-      
+
       if (vendorId) {
         // Get data for specific vendor
         const vendorData = await this.getVendorPerformanceDetails(vendorId);
         if (!vendorData.success) {
           return vendorData;
         }
-        
+
         vendors = [vendorData.data.vendor];
         trends = vendorData.data.trends;
       } else {
@@ -701,12 +701,12 @@ class VendorPerformanceService {
         if (!rankingData.success) {
           return rankingData;
         }
-        
+
         vendors = rankingData.data.vendors;
-        
+
         // Get trend data for top vendors
         const topVendorIds = vendors.slice(0, 5).map((v: any) => v.id);
-        
+
         const trendsQuery = `
           SELECT 
             v.id as vendor_id,
@@ -735,11 +735,11 @@ class VendorPerformanceService {
           ORDER BY 
             v.id, month ASC
         `;
-        
+
         const { rows: trendData } = await this.db.query(trendsQuery, [topVendorIds]);
         trends = trendData;
       }
-      
+
       // Get recent issue reports
       const issuesQuery = `
         SELECT 
@@ -762,15 +762,15 @@ class VendorPerformanceService {
           vd.delivery_date DESC
         LIMIT 10
       `;
-      
+
       const { rows: issues } = await this.db.query(
         issuesQuery,
         vendorId || category ? [vendorId || category] : []
       );
-      
+
       // Get top performing vendors
       const topVendors = vendors.slice(0, 5);
-      
+
       return {
         success: true,
         data: {

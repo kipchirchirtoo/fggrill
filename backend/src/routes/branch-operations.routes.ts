@@ -284,7 +284,7 @@ router.get('/staff', protect, validateBranch, async (req, res) => {
 
     // Build the SQL query with filters
     let query = `
-      SELECT s.id, s.employee_id, u.name, s.department, s.position, s.status, 
+      SELECT s.id, s.employee_id, (u.first_name || ' ' || u.last_name) as name, s.department, s.position, s.status, 
              u.email, s.phone, s.hire_date, s.created_at,
              u.first_name as firstName, u.last_name as lastName
       FROM staff_profiles s
@@ -724,7 +724,7 @@ router.get('/staff/shifts', protect, validateBranch, async (req, res) => {
     st.name as shift_type_name,
     st.color as shift_type_color,
     s.position,
-    u.name as staff_name
+    (u.first_name || ' ' || u.last_name) as staff_name
       FROM staff_shifts ss
       JOIN shift_types st ON ss.shift_type_id = st.id
       JOIN staff_profiles s ON ss.staff_id = s.id
@@ -1137,9 +1137,9 @@ a.id,
   a.check_out,
   a.notes,
   s.position,
-  u.name as staff_name
+  (u.first_name || ' ' || u.last_name) as staff_name
       FROM staff_attendance a
-      JOIN staff s ON a.staff_id = s.id
+      JOIN staff_profiles s ON a.staff_id = s.id
       JOIN users u ON s.user_id = u.id
       WHERE a.branch_id = $1
   `;
@@ -1230,7 +1230,7 @@ router.post('/staff/attendance', protect, validateBranch, async (req, res) => {
 
     // Validate staff belongs to branch
     const staffCheck = await db.query(
-      'SELECT id FROM staff WHERE id = $1 AND branch_id = $2',
+      'SELECT id FROM staff_profiles WHERE id = $1 AND branch_id = $2',
       [staff_id, branchId]
     );
 
@@ -1754,7 +1754,7 @@ router.post('/communications/messages', protect, validateBranch, async (req, res
     if (recipient_id && !is_global) {
       const userCheck = await db.query(`
         SELECT u.id FROM users u 
-        JOIN staff s ON u.id = s.user_id 
+        JOIN staff_profiles s ON u.id = s.user_id 
         WHERE u.id = $1 AND s.branch_id = $2
   `, [recipient_id, branchId]);
 
@@ -1954,7 +1954,7 @@ router.get('/communications/announcements', protect, validateBranch, async (req,
 
     // Get user's department
     const userDeptQuery = `
-      SELECT department FROM staff WHERE user_id = $1 AND branch_id = $2
+      SELECT department FROM staff_profiles WHERE user_id = $1 AND branch_id = $2
   `;
     const userDeptResult = await db.query(userDeptQuery, [userId, branchId]);
     const userDept = userDeptResult.rows[0]?.department || null;
@@ -1971,7 +1971,7 @@ a.id,
   a.expires_at,
   a.target_departments,
   a.created_at,
-  u.name as author_name
+  (u.first_name || ' ' || u.last_name) as author_name
       FROM branch_announcements a
       JOIN users u ON a.author_id = u.id
       WHERE a.branch_id = $1
@@ -2251,7 +2251,7 @@ fr.id,
   fr.file_size,
   fr.status,
   fr.created_at,
-  u.name as created_by
+  (u.first_name || ' ' || u.last_name) as created_by
       FROM financial_reports fr
       LEFT JOIN users u ON fr.created_by = u.id
       WHERE fr.branch_id = $1
@@ -3368,19 +3368,25 @@ router.post('/staff', protect, validateBranch, async (req, res) => {
     if (userCheck.rows.length > 0) {
       userId = userCheck.rows[0].id;
     } else {
-      // Create new user account
+      // Split name into first and last name
+      const nameParts = name.trim().split(/\s+/);
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Staff';
+
+      // Create new user account (public.users table)
+      // Note: In production we should use supabase.auth.admin.createUser
       const newUser = await db.query(
-        `INSERT INTO users(name, email, phone, role, password_hash)
-VALUES($1, $2, $3, $4, $5)
+        `INSERT INTO users(id, first_name, last_name, email, phone_number, role)
+         VALUES($1, $2, $3, $4, $5, $6)
          RETURNING id`,
-        [name, email, phone || '', 'staff', 'changeme'] // Default password
+        [require('crypto').randomUUID(), firstName, lastName, email, phone || '', 'staff']
       );
       userId = newUser.rows[0].id;
     }
 
     // Check if staff profile already exists
     const staffCheck = await db.query(
-      'SELECT id FROM staff WHERE user_id = $1 AND branch_id = $2',
+      'SELECT id FROM staff_profiles WHERE user_id = $1 AND branch_id = $2',
       [userId, branchId]
     );
 
@@ -3393,7 +3399,7 @@ VALUES($1, $2, $3, $4, $5)
 
     // Insert staff profile
     const insertQuery = `
-      INSERT INTO staff(
+      INSERT INTO staff_profiles(
   user_id, branch_id, position, department, status, hire_date
 )
 VALUES($1, $2, $3, $4, $5, NOW())

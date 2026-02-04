@@ -26,7 +26,7 @@ export default function AdminStorekeepingPage() {
       ]);
       setStats({
         totalItems: dashboardRes.data?.totalItems || 0,
-        lowStock: dashboardRes.data?.lowStockItems || 0,
+        lowStock: dashboardRes.data?.lowStockCount || dashboardRes.data?.lowStockItems?.length || 0,
         pendingRequests: requestsRes.data?.length || 0,
       });
     } catch (error) { console.error('Error:', error); }
@@ -38,7 +38,7 @@ export default function AdminStorekeepingPage() {
   const quickLinks = [
     { href: '/dashboard/admin/storekeeping/central', icon: Warehouse, label: 'Central Store', color: 'bg-blue-50 text-[#007AFF]' },
     { href: '/dashboard/admin/storekeeping/branch', icon: Building2, label: 'Branch Stores', color: 'bg-green-50 text-[#34C759]' },
-    { href: '/dashboard/admin/storekeeping/requests', icon: ClipboardList, label: 'Requests', color: 'bg-yellow-50 text-yellow-600' },
+    { href: '/dashboard/central-store/requests', icon: ClipboardList, label: 'Requests', color: 'bg-yellow-50 text-yellow-600' },
     { href: '/dashboard/admin/storekeeping/transfers', icon: Truck, label: 'Transfers', color: 'bg-purple-50 text-purple-600' },
     { href: '/dashboard/admin/storekeeping/stock-takes', icon: ClipboardList, label: 'Stock Takes', color: 'bg-orange-50 text-orange-600' },
   ];

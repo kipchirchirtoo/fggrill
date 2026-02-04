@@ -17,7 +17,7 @@ export const getAttendance = async (
 
         let query = supabase
             .from('staff_attendance')
-            .select('*, user:users(id, full_name, role)');
+            .select('*, user:users(id, first_name, last_name, role)');
 
         if (branchId) {
             query = query.eq('branch_id', branchId);

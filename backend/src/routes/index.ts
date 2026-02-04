@@ -119,7 +119,7 @@ router.use('/barcode', barcodeRoutes);
 router.use('/storekeeping', storekeepingEnhancedRoutes);
 router.use('/cashier', cashierRoutes);
 router.use('/wastage', wastageRoutes);
-router.use('/kitchen', kitchenLedgerRoutes);
+router.use('/kitchen-ledger', kitchenLedgerRoutes);
 router.use('/additional-services', additionalServicesRoutes);
 router.use('/reports/auditor', auditorReportsRoutes);
 router.use('/conference', conferenceRoutes);

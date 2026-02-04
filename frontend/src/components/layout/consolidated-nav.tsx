@@ -534,16 +534,16 @@ export function ConsolidatedNav() {
 
       <NavGroup label="Accounts Payable" icon={DollarSign} defaultOpen>
         <NavItem
-          href="/dashboard/procurement/invoices"
+          href="/dashboard/central-store/suppliers/invoices"
           icon={Receipt}
           label="Supplier Invoices"
-          active={pathname.includes('/dashboard/procurement/invoices')}
+          active={pathname.includes('/dashboard/central-store/suppliers/invoices')}
         />
         <NavItem
-          href="/dashboard/procurement/payments"
+          href="/dashboard/central-store/suppliers/payments"
           icon={CreditCard}
           label="Payments"
-          active={pathname.includes('/dashboard/procurement/payments')}
+          active={pathname.includes('/dashboard/central-store/suppliers/payments')}
         />
       </NavGroup>
 

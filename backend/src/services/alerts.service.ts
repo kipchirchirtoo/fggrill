@@ -152,7 +152,7 @@ class AlertsService {
 
         // Get branch managers and storekeepers for email alerts
         const usersQuery = `
-          SELECT u.id, u.name, u.email, u.role 
+          SELECT u.id, (u.first_name || ' ' || u.last_name) as name, u.email, u.role 
           FROM users u
           WHERE u.branch_id = $1 AND u.role IN ('BRANCH_MANAGER', 'STOREKEEPER')
         `;
@@ -178,7 +178,7 @@ class AlertsService {
       // Get central operations team emails for central warehouse alerts
       if (isCentral) {
         const usersQuery = `
-          SELECT u.id, u.name, u.email, u.role 
+          SELECT u.id, (u.first_name || ' ' || u.last_name) as name, u.email, u.role 
           FROM users u
           WHERE u.role = 'GENERAL_MANAGER' OR u.role = 'CENTRAL_STOREKEEPER'
         `;
@@ -287,7 +287,7 @@ class AlertsService {
 
       // Get branch manager emails
       const usersQuery = `
-        SELECT u.id, u.name, u.email, u.role 
+        SELECT u.id, (u.first_name || ' ' || u.last_name) as name, u.email, u.role 
         FROM users u
         WHERE u.branch_id = $1 AND u.role = 'BRANCH_MANAGER'
       `;
@@ -295,7 +295,7 @@ class AlertsService {
 
       // Get compliance team emails
       const complianceUsersQuery = `
-        SELECT u.id, u.name, u.email, u.role 
+        SELECT u.id, (u.first_name || ' ' || u.last_name) as name, u.email, u.role 
         FROM users u
         WHERE u.role = 'GENERAL_MANAGER'
       `;
@@ -412,7 +412,7 @@ class AlertsService {
 
       // Get branch manager and finance emails
       const usersQuery = `
-        SELECT u.id, u.name, u.email, u.role 
+        SELECT u.id, (u.first_name || ' ' || u.last_name) as name, u.email, u.role 
         FROM users u
         WHERE (u.branch_id = $1 AND u.role = 'BRANCH_MANAGER') OR
               u.role IN ('GENERAL_MANAGER', 'FINANCE_MANAGER')
@@ -561,7 +561,7 @@ class AlertsService {
 
       // Get branch manager emails
       const usersQuery = `
-        SELECT u.id, u.name, u.email, u.role 
+        SELECT u.id, (u.first_name || ' ' || u.last_name) as name, u.email, u.role 
         FROM users u
         WHERE (u.branch_id = $1 AND u.role = 'BRANCH_MANAGER') OR
               u.role IN ('GENERAL_MANAGER')

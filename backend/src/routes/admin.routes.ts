@@ -1,10 +1,13 @@
 import { Router } from 'express';
-import { authorize, UserRole } from '../middleware/auth';
+import { protect, authorize, UserRole } from '../middleware/auth';
 
 const router = Router();
 
+// Apply authentication to all admin routes
+router.use(protect);
+
 // Role Migration Management
-router.get('/role-migrations', 
+router.get('/role-migrations',
   authorize([UserRole.SUPER_ADMIN]),
   async (req, res) => {
     try {
@@ -62,7 +65,7 @@ router.post('/role-migrations/:id/execute',
   async (req, res) => {
     try {
       const { id } = req.params;
-      
+
       // Mock execution
       res.json({
         success: true,
@@ -89,7 +92,7 @@ router.post('/role-migrations/:id/revert',
   async (req, res) => {
     try {
       const { id } = req.params;
-      
+
       // Mock revert
       res.json({
         success: true,
@@ -116,7 +119,7 @@ router.get('/role-migrations/:id/users',
   async (req, res) => {
     try {
       const { id } = req.params;
-      
+
       // Mock affected users data
       const users = [
         {

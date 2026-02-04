@@ -697,6 +697,8 @@ export const getCentralDashboard = async (
         stats,
         centralWarehouse: central,
         branches: branches?.filter(b => !b.is_central_warehouse),
+        totalItems: centralStock.length,
+        lowStockCount: centralStock.filter(i => (i.quantity || 0) <= (i.reorder_level || 10)).length,
         lowStockItems: centralStock.filter(i => (i.quantity || 0) <= (i.reorder_level || 10))
       }
     });

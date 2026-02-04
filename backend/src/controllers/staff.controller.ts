@@ -201,16 +201,33 @@ export const getStaffMember = async (
     if (isUUID) {
       query = query.eq('id', id);
     } else {
-      query = query.or(`id_number.eq.${id},rfid_tag.eq.${id},national_id.eq.${id}`);
+      // Use double quotes for values in .or() to handle special characters (e.g. spaces, dots)
+      // This matches PostgREST syntax requirements for strings with special characters
+      query = query.or(`id_number.eq."${id}", rfid_tag.eq."${id}", national_id.eq."${id}"`);
     }
+
+    logger.debug?.('Executing getStaffMember query', { id, isUUID });
 
     const { data: staff, error } = await query.maybeSingle();
 
     if (error) {
-      throw error;
+      logger.error('Database error in getStaffMember:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        lookupId: id
+      });
+      res.status(500).json({
+        success: false,
+        message: 'Database error loading staff member',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+      return;
     }
 
     if (!staff) {
+      logger.warn('Staff member not found in getStaffMember', { lookupId: id });
       res.status(404).json({
         success: false,
         message: 'Staff member not found'
@@ -222,7 +239,8 @@ export const getStaffMember = async (
       success: true,
       data: staff
     });
-  } catch (error) {
+  } catch (error: any) {
+    logger.error('Exception in getStaffMember:', error);
     next(error);
   }
 };
@@ -347,8 +365,8 @@ export const createStaffMember = async (
         // Finance & Admin
         'accountant': 'accountant',
         'auditor': 'accountant',
-        'hr_manager': 'hr_manager',
-        'payroll_clerk': 'hr_manager',
+        'hr_manager': 'manager',
+        'payroll_clerk': 'accountant',
         // Department-like alias
         'finance': 'accountant',
 
@@ -357,7 +375,7 @@ export const createStaffMember = async (
         'branch_storekeeper': 'accountant',
         'inventory_clerk': 'accountant',
         'purchasing_manager': 'accountant',
-        'driver': 'driver'
+        'driver': 'restaurant' // default for others not in enum
       };
 
       const normalizedRole = String(role || '').toLowerCase();
@@ -522,8 +540,8 @@ export const createStaffMember = async (
       .from('staff_profiles')
       .upsert([staffData], { onConflict: 'user_id' })
       .select(`
-        *,
-        user:users!user_id(
+      *,
+        user: users!user_id(
           id,
           email,
           first_name,
@@ -531,7 +549,7 @@ export const createStaffMember = async (
           phone_number,
           role
         )
-      `)
+        `)
       .single();
 
     if (staffError) {
@@ -568,7 +586,7 @@ export const createStaffMember = async (
       message: 'Staff member created successfully'
     });
 
-    logger.info(`Staff member created: ${email} with role ${role}`);
+    logger.info(`Staff member created: ${email} with role ${role} `);
   } catch (error) {
     next(error);
   }
@@ -675,7 +693,7 @@ export const updateStaffMember = async (
       data: updatedStaff
     });
 
-    logger.info(`Staff member updated: ${email || updatedStaff.id}`);
+    logger.info(`Staff member updated: ${email || updatedStaff.id} `);
   } catch (error) {
     next(error);
   }
@@ -769,7 +787,7 @@ export const processPayroll = async (
       data: payroll
     });
 
-    logger.info(`Payroll processed for ${month}/${year}`);
+    logger.info(`Payroll processed for ${month} / ${year}`);
   } catch (error) {
     next(error);
   }
@@ -850,13 +868,13 @@ export const getAttendance = async (
     let query = supabase
       .from('staff_attendance')
       .select(`
-        *,
-        staff:staff_profiles!inner(
-          id,
-          branch_id,
-          id_number,
-          user:users!user_id(id, first_name, last_name, email)
-        )
+      *,
+      staff: staff_profiles!inner(
+        id,
+        branch_id,
+        id_number,
+        user: users!user_id(id, first_name, last_name, email)
+      )
       `)
       .order('attendance_date', { ascending: false });
 
@@ -933,7 +951,7 @@ export const clockIn = async (
       if (staff.branch_id !== req.user.branch_id) {
         res.status(403).json({
           success: false,
-          message: `Cross-branch clock-in not allowed. Staff belongs to branch ${staff.branch_id}`
+          message: `Cross - branch clock -in not allowed.Staff belongs to branch ${staff.branch_id} `
         });
         return;
       }
@@ -1157,8 +1175,8 @@ export const getAttendanceSummary = async (
     }
 
     if (month && year) {
-      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-      const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+      const startDate = `${year} -${String(month).padStart(2, '0')}-01`;
+      const endDate = `${year} -${String(month).padStart(2, '0')} -31`;
       query = query.gte('attendance_date', startDate).lte('attendance_date', endDate);
     }
 
@@ -1203,13 +1221,13 @@ export const getLeaveRequests = async (
     let query = supabase
       .from('staff_leave')
       .select(`
-        *,
-        staff:staff_profiles(
-          id, department, status,
-          user:users(id, first_name, last_name, email)
-        ),
-        approver:users!approved_by(first_name, last_name)
-      `)
+      *,
+      staff: staff_profiles(
+        id, department, status,
+        user: users(id, first_name, last_name, email)
+      ),
+        approver: users!approved_by(first_name, last_name)
+          `)
       .order('created_at', { ascending: false });
 
     if (staff_id) query = query.eq('staff_id', staff_id);
@@ -1377,14 +1395,14 @@ export const getAttendanceReports = async (
     const { data: records, error } = await supabase
       .from('staff_attendance')
       .select(`
-        *,
-        staff:staff_profiles(
-          id,
-          branch_id,
-          rest_day,
-          user:users(first_name, last_name, department)
-        )
-      `)
+          *,
+          staff: staff_profiles(
+            id,
+            branch_id,
+            rest_day,
+            user: users(first_name, last_name, department)
+          )
+            `)
       .order('attendance_date', { ascending: false });
 
     if (error) throw error;
