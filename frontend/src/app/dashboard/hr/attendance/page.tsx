@@ -41,8 +41,14 @@ interface AttendanceRecord {
     hours_night: number;
     is_approved: boolean;
     rejection_reason?: string;
-    department?: string;
     issues?: string[];
+    staff?: {
+        user: {
+            first_name: string;
+            last_name: string;
+            department?: string;
+        }
+    }
 }
 
 export default function HRAttendancePage() {
@@ -137,118 +143,161 @@ export default function HRAttendancePage() {
     return (
         <ProtectedRoute allowedRoles={[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN]}>
             <DashboardLayout>
-                <div className="space-y-6">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div className="space-y-8 animate-ios-fade-in">
+                    {/* Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
                         <div>
-                            <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Attendance & Compliance</h1>
-                            <p className="text-stone-500 mt-0.5">Kenyan Labour Law hour tracking and verification</p>
+                            <h1 className="text-[28px] font-bold text-stone-900 tracking-tight font-sf-pro-display">Personnel Logs</h1>
+                            <p className="text-stone-500 font-medium">Compliance verification and labor hour audit</p>
                         </div>
-                        <div className="flex gap-2">
-                            <IOSButton variant="secondary" onClick={handleExport} leftIcon={<Filter className="h-4 w-4" />}>
-                                Export CSV
-                            </IOSButton>
-                            <div className="flex gap-2 mx-2">
-                                <IOSButton variant="primary" onClick={() => window.open('/dashboard/hr/terminal', '_blank')} leftIcon={<Clock className="h-4 w-4" />}>
-                                    Open Terminal
-                                </IOSButton>
-                            </div>
-                            <div className="flex items-center bg-stone-100 rounded-ios-lg p-1">
-                                <button
-                                    onClick={() => {
-                                        const d = new Date(selectedDate);
-                                        d.setDate(d.getDate() - 1);
-                                        setSelectedDate(d.toISOString().split('T')[0]);
-                                    }}
-                                    className="p-2 hover:bg-white rounded-ios-md transition-colors"
-                                >
-                                    <ChevronLeft className="h-4 w-4" />
-                                </button>
-                                <input
-                                    type="date"
-                                    value={selectedDate}
-                                    onChange={(e) => setSelectedDate(e.target.value)}
-                                    className="bg-transparent border-none text-[13px] font-bold text-stone-700 focus:ring-0 w-32 px-1 text-center"
-                                />
-                                <button
-                                    onClick={() => {
-                                        const d = new Date(selectedDate);
-                                        d.setDate(d.getDate() + 1);
-                                        setSelectedDate(d.toISOString().split('T')[0]);
-                                    }}
-                                    className="p-2 hover:bg-white rounded-ios-md transition-colors"
-                                >
-                                    <ChevronRight className="h-4 w-4" />
-                                </button>
-                            </div>
-                            <IOSButton variant="secondary" onClick={fetchRecords} leftIcon={<RefreshCw className={isLoading ? 'animate-spin' : ''} />}>
-                                Refresh
-                            </IOSButton>
+                        <div className="flex flex-wrap items-center gap-3">
+                            <button
+                                onClick={handleExport}
+                                className="px-4 py-2 rounded-full border border-stone-200 bg-white text-stone-600 text-sm font-bold hover:bg-stone-50 transition-all flex items-center gap-2 active:scale-95 shadow-sm"
+                            >
+                                <Filter className="h-4 w-4" />
+                                <span>Export Audit</span>
+                            </button>
+                            <button
+                                onClick={() => window.open('/dashboard/hr/terminal', '_blank')}
+                                className="px-4 py-2 rounded-full bg-stone-900 text-white text-sm font-bold hover:bg-stone-800 transition-all flex items-center gap-2 active:scale-95 shadow-md"
+                            >
+                                <Clock className="h-4 w-4" />
+                                <span>Registry Terminal</span>
+                            </button>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <IOSCard
-                            className={`p-4 border-l-4 cursor-pointer transition-all ${showOnlyOnDuty ? 'border-l-blue-600 ring-2 ring-blue-600/10' : 'border-l-[#34C759]'}`}
+                    {/* Controls & Sync */}
+                    <div className="flex flex-col lg:flex-row items-center justify-between gap-4 bg-stone-50 p-2 rounded-2xl border border-stone-100">
+                        <div className="flex items-center bg-white rounded-xl border border-stone-200 p-1 shadow-sm w-full lg:w-auto">
+                            <button
+                                onClick={() => {
+                                    const d = new Date(selectedDate);
+                                    d.setDate(d.getDate() - 1);
+                                    setSelectedDate(d.toISOString().split('T')[0]);
+                                }}
+                                className="p-2 hover:bg-stone-50 rounded-lg text-stone-400 hover:text-stone-900 transition-colors"
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                            </button>
+                            <input
+                                type="date"
+                                value={selectedDate}
+                                onChange={(e) => setSelectedDate(e.target.value)}
+                                className="bg-transparent border-none text-[13px] font-bold text-stone-900 focus:ring-0 w-36 px-2 text-center"
+                            />
+                            <button
+                                onClick={() => {
+                                    const d = new Date(selectedDate);
+                                    d.setDate(d.getDate() + 1);
+                                    setSelectedDate(d.toISOString().split('T')[0]);
+                                }}
+                                className="p-2 hover:bg-stone-50 rounded-lg text-stone-400 hover:text-stone-900 transition-colors"
+                            >
+                                <ChevronRight className="h-4 w-4" />
+                            </button>
+                        </div>
+
+                        <div className="flex items-center gap-3 w-full lg:w-auto">
+                            <div className="relative flex-1 lg:flex-none">
+                                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400" />
+                                <input
+                                    placeholder="Filter by name or department..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full lg:w-[280px] pl-10 pr-4 py-3 bg-white border border-stone-200 rounded-xl text-[13px] text-stone-800 focus:outline-none focus:ring-2 focus:ring-stone-900/5 focus:border-stone-400 transition-all placeholder:text-stone-400"
+                                />
+                            </div>
+                            <button
+                                onClick={fetchRecords}
+                                disabled={isLoading}
+                                className="w-11 h-11 rounded-xl bg-white border border-stone-200 text-stone-500 hover:bg-stone-50 transition-all flex items-center justify-center shadow-sm active:scale-95"
+                            >
+                                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Insights Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div
+                            className={`p-5 rounded-2xl bg-white border cursor-pointer transition-all shadow-sm group ${showOnlyOnDuty ? 'border-l-4 border-l-blue-600 ring-4 ring-blue-50/50 text-blue-600' : 'border-l-4 border-l-emerald-500 border-stone-100 hover:border-stone-200'}`}
                             onClick={() => setShowOnlyOnDuty(!showOnlyOnDuty)}
                         >
-                            <User className={`h-5 w-5 mb-2 ${showOnlyOnDuty ? 'text-blue-600' : 'text-[#34C759]'}`} />
-                            <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">{showOnlyOnDuty ? "Showing On-Duty" : "Active Today"}</p>
-                            <p className={`text-2xl font-bold ${showOnlyOnDuty ? 'text-blue-600' : 'text-[#34C759]'}`}>{showOnlyOnDuty ? stats.onDuty : stats.present}</p>
-                        </IOSCard>
-                        <IOSCard className="p-4 border-l-4 border-l-blue-500">
-                            <Clock className="h-5 w-5 text-blue-500 mb-2" />
-                            <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">OT Hours</p>
-                            <p className="text-2xl font-bold text-blue-500">{stats.totalOT.toFixed(1)}h</p>
-                        </IOSCard>
-                        <IOSCard className="p-4 border-l-4 border-l-amber-500">
-                            <Info className="h-5 w-5 text-amber-500 mb-2" />
-                            <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">Pending Appr.</p>
-                            <p className="text-2xl font-bold text-amber-500">{stats.pendingApproval}</p>
-                        </IOSCard>
-                        <IOSCard className="p-4 border-l-4 border-l-purple-500">
-                            <Clock className="h-5 w-5 text-purple-500 mb-2" />
-                            <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">Night Hours</p>
-                            <p className="text-2xl font-bold text-purple-500">{(summary?.totalNight || 0).toFixed(1)}h</p>
-                        </IOSCard>
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">{showOnlyOnDuty ? "Active Now" : "Total Registry"}</p>
+                                    <p className="text-2xl font-bold mt-1">{showOnlyOnDuty ? stats.onDuty : stats.present}</p>
+                                </div>
+                                <div className={`w-9 h-9 rounded-full flex items-center justify-center ${showOnlyOnDuty ? 'bg-blue-50' : 'bg-emerald-50'}`}>
+                                    <User className={`h-4 w-4 ${showOnlyOnDuty ? 'text-blue-400' : 'text-emerald-400'}`} />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-5 rounded-2xl bg-white border border-stone-100 border-l-4 border-l-sky-500 shadow-sm">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">OT Hours</p>
+                                    <p className="text-2xl font-bold text-sky-600 mt-1">{stats.totalOT.toFixed(1)}h</p>
+                                </div>
+                                <div className="w-9 h-9 rounded-full bg-sky-50 flex items-center justify-center">
+                                    <Clock className="h-4 w-4 text-sky-400" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-5 rounded-2xl bg-white border border-stone-100 border-l-4 border-l-amber-500 shadow-sm">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Pending Appr.</p>
+                                    <p className="text-2xl font-bold text-amber-600 mt-1">{stats.pendingApproval}</p>
+                                </div>
+                                <div className="w-9 h-9 rounded-full bg-amber-50 flex items-center justify-center">
+                                    <Info className="h-4 w-4 text-amber-400" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-5 rounded-2xl bg-white border border-stone-100 border-l-4 border-l-indigo-500 shadow-sm">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Night Shifts</p>
+                                    <p className="text-2xl font-bold text-indigo-600 mt-1">{(summary?.totalNight || 0).toFixed(1)}h</p>
+                                </div>
+                                <div className="w-9 h-9 rounded-full bg-indigo-50 flex items-center justify-center">
+                                    <Clock className="h-4 w-4 text-indigo-400" />
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <IOSCard className="p-4">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-                            <Input
-                                placeholder="Search by staff name or department..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-9 h-11 bg-stone-50 border-stone-100"
-                            />
-                        </div>
-                    </IOSCard>
-
-                    <IOSCard className="overflow-hidden">
+                    <div className="bg-white rounded-2xl border border-stone-100 overflow-hidden shadow-sm">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse">
                                 <thead>
-                                    <tr className="bg-stone-50/50">
-                                        <th className="px-5 py-3 text-[11px] font-bold text-stone-400 uppercase tracking-wider">Staff member</th>
-                                        <th className="px-5 py-3 text-[11px] font-bold text-stone-400 uppercase tracking-wider">Method</th>
-                                        <th className="px-5 py-3 text-[11px] font-bold text-stone-400 uppercase tracking-wider">Normal</th>
-                                        <th className="px-5 py-3 text-[11px] font-bold text-stone-400 uppercase tracking-wider">Overtime</th>
-                                        <th className="px-5 py-3 text-[11px] font-bold text-stone-400 uppercase tracking-wider">Compliance</th>
-                                        <th className="px-5 py-3 text-[11px] font-bold text-stone-400 uppercase tracking-wider text-right">Action</th>
+                                    <tr className="bg-stone-50/50 border-b border-stone-100">
+                                        <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-widest">Personnel</th>
+                                        <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-widest">Method</th>
+                                        <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-center">Hours</th>
+                                        <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-center">Overtime</th>
+                                        <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-widest">Audit Status</th>
+                                        <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-right">Verification</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-stone-50">
                                     {isLoading ? (
                                         <tr>
-                                            <td colSpan={6} className="px-5 py-20 text-center">
+                                            <td colSpan={6} className="px-6 py-20 text-center">
                                                 <RefreshCw className="h-8 w-8 animate-spin mx-auto text-stone-200 mb-2" />
-                                                <p className="text-stone-400 text-sm font-medium">Crunching labour data...</p>
+                                                <p className="text-stone-400 text-[13px] font-medium">Synchronizing logs...</p>
                                             </td>
                                         </tr>
                                     ) : filteredRecords.length === 0 ? (
                                         <tr>
-                                            <td colSpan={6} className="px-5 py-20 text-center">
-                                                <p className="text-stone-500 mt-1 font-medium">No records for this period</p>
+                                            <td colSpan={6} className="px-6 py-20 text-center text-stone-400 font-medium italic">
+                                                No activity logs found for this period
                                             </td>
                                         </tr>
                                     ) : (
@@ -260,73 +309,79 @@ export default function HRAttendancePage() {
 
                                             return (
                                                 <tr key={record.id} className="hover:bg-stone-50/50 transition-colors group">
-                                                    <td className="px-5 py-4">
+                                                    <td className="px-6 py-5">
                                                         <div className="flex items-center gap-3">
-                                                            <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 font-bold text-[10px] border border-stone-200 uppercase">
+                                                            <div className="w-9 h-9 rounded-full bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-600 font-bold text-[10px] uppercase">
                                                                 {staffName.split(' ').map((n: string) => n[0]).join('')}
                                                             </div>
                                                             <div>
-                                                                <p className="text-sm font-bold text-stone-900 leading-none">{staffName}</p>
-                                                                <p className="text-[11px] text-stone-500 font-medium mt-1 uppercase tracking-tight">
+                                                                <p className="text-[14px] font-bold text-stone-900 leading-none">{staffName}</p>
+                                                                <p className="text-[11px] text-stone-400 font-bold mt-1.5 uppercase tracking-tighter">
                                                                     {new Date(record.clock_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                                    {record.clock_out ? ` - ${new Date(record.clock_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ' (On-Duty)'}
+                                                                    {record.clock_out ? ` — ${new Date(record.clock_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ' (On-Duty)'}
                                                                 </p>
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td className="px-5 py-4">
-                                                        <div className="flex flex-col gap-1">
-                                                            <IOSBadge variant="secondary" className="w-fit text-[10px] opacity-70">
+                                                    <td className="px-6 py-5">
+                                                        <div className="flex flex-col gap-1.5">
+                                                            <div className="inline-flex items-center px-2 py-0.5 rounded bg-stone-100 text-[9px] font-bold text-stone-500 uppercase tracking-widest w-fit">
                                                                 IN: {record.in_method}
-                                                            </IOSBadge>
+                                                            </div>
                                                             {record.out_method && (
-                                                                <IOSBadge variant="secondary" className="w-fit text-[10px] opacity-70">
+                                                                <div className="inline-flex items-center px-2 py-0.5 rounded bg-stone-100 text-[9px] font-bold text-stone-500 uppercase tracking-widest w-fit">
                                                                     OUT: {record.out_method}
-                                                                </IOSBadge>
+                                                                </div>
                                                             )}
                                                         </div>
                                                     </td>
-                                                    <td className="px-5 py-4 text-sm font-bold text-stone-700">
-                                                        {record.hours_normal?.toFixed(1) || '0.0'}h
+                                                    <td className="px-6 py-5 text-center">
+                                                        <span className="text-[14px] font-bold text-stone-700">{record.hours_normal?.toFixed(1) || '0.0'}h</span>
                                                     </td>
-                                                    <td className="px-5 py-4">
-                                                        <p className="text-sm font-bold text-blue-600 leading-none">{totalOT.toFixed(1)}h</p>
+                                                    <td className="px-6 py-5 text-center">
+                                                        <p className="text-[14px] font-bold text-sky-600 leading-none">{totalOT.toFixed(1)}h</p>
                                                         {record.hours_night > 0 && (
-                                                            <p className="text-[10px] text-purple-600 font-bold mt-1">NIGHT: {record.hours_night.toFixed(1)}h</p>
+                                                            <p className="text-[10px] text-indigo-600 font-bold mt-1 uppercase tracking-tighter">Night: {record.hours_night.toFixed(1)}h</p>
                                                         )}
                                                     </td>
-                                                    <td className="px-5 py-4">
+                                                    <td className="px-6 py-5">
                                                         {record.issues && record.issues.length > 0 ? (
-                                                            <div className="space-y-1">
+                                                            <div className="space-y-1.5">
                                                                 {record.issues.map((msg: string, i: number) => (
-                                                                    <div key={i} className="flex items-center gap-1.5 text-[10px] font-bold text-rose-500 uppercase">
+                                                                    <div key={i} className="flex items-center gap-1.5 text-[10px] font-bold text-rose-500 uppercase tracking-tight">
                                                                         <Info className="h-3 w-3" />
                                                                         {msg}
                                                                     </div>
                                                                 ))}
                                                             </div>
                                                         ) : (
-                                                            <IOSBadge variant="success">Compliant</IOSBadge>
+                                                            <div className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[9px] font-bold uppercase tracking-widest border border-emerald-100">
+                                                                Compliant
+                                                            </div>
                                                         )}
                                                     </td>
-                                                    <td className="px-5 py-4 text-right">
+                                                    <td className="px-6 py-5 text-right">
                                                         {!record.is_approved ? (
-                                                            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                                 <button
                                                                     onClick={() => handleApprove(record.id, true)}
-                                                                    className="p-2 bg-emerald-100 text-emerald-700 rounded-ios-lg hover:bg-emerald-200 transition-colors"
+                                                                    className="w-8 h-8 flex items-center justify-center bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white transition-all shadow-sm border border-emerald-100"
+                                                                    title="Verify Entry"
                                                                 >
                                                                     <CheckCircle className="h-4 w-4" />
                                                                 </button>
                                                                 <button
                                                                     onClick={() => handleApprove(record.id, false)}
-                                                                    className="p-2 bg-rose-100 text-rose-700 rounded-ios-lg hover:bg-rose-200 transition-colors"
+                                                                    className="w-8 h-8 flex items-center justify-center bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-600 hover:text-white transition-all shadow-sm border border-rose-100"
+                                                                    title="Invalidate Entry"
                                                                 >
                                                                     <XCircle className="h-4 w-4" />
                                                                 </button>
                                                             </div>
                                                         ) : (
-                                                            <IOSBadge variant="secondary" className="opacity-40">Verified</IOSBadge>
+                                                            <div className="inline-flex items-center px-2 py-0.5 rounded-full bg-stone-50 text-stone-400 text-[9px] font-bold uppercase tracking-widest border border-stone-200 select-none">
+                                                                Verified
+                                                            </div>
                                                         )}
                                                     </td>
                                                 </tr>
@@ -336,7 +391,8 @@ export default function HRAttendancePage() {
                                 </tbody>
                             </table>
                         </div>
-                    </IOSCard>
+                    </div>
+
                 </div>
             </DashboardLayout>
         </ProtectedRoute>

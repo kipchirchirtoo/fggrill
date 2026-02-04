@@ -5,7 +5,8 @@ import {
   processPayrollPayment,
   processBulkPayroll,
   getBanks,
-  verifyBankAccount
+  verifyBankAccount,
+  generatePayslip
 } from '../controllers/payroll.controller';
 import { protect as authenticate, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -44,5 +45,8 @@ router.get('/banks', getBanks);
 
 // Verify bank account
 router.post('/verify-bank', verifyBankAccount);
+
+// Generate payslip
+router.get('/:id/payslip', generatePayslip);
 
 export default router;

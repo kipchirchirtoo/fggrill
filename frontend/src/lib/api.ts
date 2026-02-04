@@ -801,6 +801,22 @@ export const staffAPI = {
   },
   assignTraining: (data: any) => fetchAPI<any>('/staff/trainings', { method: 'POST', body: JSON.stringify(data) }),
   completeTraining: (id: string) => fetchAPI<any>(`/staff/trainings/${id}/complete`, { method: 'PUT' }),
+
+  // Payroll Workflow Extensions
+  batchConfirmAttendance: (data: { startDate: string; endDate: string; department?: string }) =>
+    fetchAPI<any>('/staff/attendance/confirm', { method: 'POST', body: JSON.stringify(data) }),
+  batchLockLeave: (data: { startDate: string; endDate: string }) =>
+    fetchAPI<any>('/staff/leave/lock', { method: 'POST', body: JSON.stringify(data) }),
+  getStaffHistory: (id: string) => fetchAPI<any>(`/staff/${id}/history`),
+  archiveStaff: (id: string, notes: string) => fetchAPI<any>(`/staff/${id}/archive`, { method: 'POST', body: JSON.stringify({ notes }) }),
+  getStaffDocuments: (id: string) => fetchAPI<any>(`/staff/${id}/documents`),
+  uploadStaffDocument: (id: string, formData: FormData) => {
+    return fetch(`${API_URL}/api/staff/${id}/documents`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      body: formData
+    }).then(r => r.json());
+  },
 };
 
 // =====================================================
@@ -3086,6 +3102,10 @@ export const payrollAPI = {
   getBanks: () => fetchAPI<any>('/payroll/banks'),
   verifyBankAccount: (data: { accountNumber: string; bankCode: string }) =>
     fetchAPI<any>('/payroll/verify-bank', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Workflow Actions
+  review: (id: string) => fetchAPI<any>(`/payroll/${id}/review`, { method: 'PUT' }),
+  approve: (id: string) => fetchAPI<any>(`/payroll/${id}/approve`, { method: 'PUT' }),
 };
 
 // =====================================================

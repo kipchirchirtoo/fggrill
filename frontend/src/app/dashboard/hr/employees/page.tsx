@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { staffAPI, systemAPI } from '@/lib/api';
 import { toast } from 'sonner';
-import { Users, RefreshCw, Plus, Search, User, Building2, Edit2, Trash2, Mail, Phone } from 'lucide-react';
+import { Users, RefreshCw, Plus, Search, User, Building2, Edit2, Trash2, Mail, Phone, FileText, History, UserPlus, Archive } from 'lucide-react';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
@@ -36,6 +36,11 @@ export default function HREmployeesPage() {
     const [addModalOpen, setAddModalOpen] = useState(false);
     const [editModalOpen, setEditModalOpen] = useState(false);
     const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+    const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
+    const [detailModalOpen, setDetailModalOpen] = useState(false);
+    const [selectedStaff, setSelectedStaff] = useState<any>(null);
+    const [history, setHistory] = useState<any[]>([]);
+    const [documents, setDocuments] = useState<any[]>([]);
     const [branches, setBranches] = useState<any[]>([]);
     const [departments, setDepartments] = useState<any[]>([]);
     const [roles, setRoles] = useState<any[]>([]);
@@ -55,7 +60,9 @@ export default function HREmployeesPage() {
         ec_name: '',
         ec_phone: '',
         ec_relationship: '',
-        status: 'active'
+        supervisor_id: '',
+        status: 'active',
+        archive_notes: ''
     });
     const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -119,7 +126,9 @@ export default function HREmployeesPage() {
             ec_name: '',
             ec_phone: '',
             ec_relationship: '',
-            status: 'active'
+            supervisor_id: '',
+            status: 'active',
+            archive_notes: ''
         });
         setWizardStep(1);
         setFormErrors({});
@@ -171,9 +180,70 @@ export default function HREmployeesPage() {
             address: (member as any).address || '',
             ec_name: (member as any).emergency_contact?.name || (member as any).ec_name || '',
             ec_phone: (member as any).emergency_contact?.phone || (member as any).ec_phone || '',
-            ec_relationship: (member as any).emergency_contact?.relationship || (member as any).ec_relationship || ''
+            ec_relationship: (member as any).emergency_contact?.relationship || (member as any).ec_relationship || '',
+            supervisor_id: (member as any).supervisor_id || '',
+            archive_notes: (member as any).archive_notes || ''
         });
         setEditModalOpen(true);
+    };
+
+    const handleViewDetails = async (member: Staff) => {
+        setSelectedStaff(member);
+        setDetailModalOpen(true);
+        setIsLoading(true);
+        try {
+            const [histRes, docsRes] = await Promise.all([
+                staffAPI.getStaffHistory(member.id),
+                staffAPI.getStaffDocuments(member.id)
+            ]);
+            if (histRes.success) setHistory(histRes.data);
+            if (docsRes.success) setDocuments(docsRes.data);
+        } catch (error) {
+            toast.error('Failed to load profile details');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleArchiveStaff = (member: Staff) => {
+        setFormData({ ...formData, id: member.id, archive_notes: '' });
+        setConfirmArchiveOpen(true);
+    };
+
+    const handleConfirmArchive = async () => {
+        setIsSubmitting(true);
+        try {
+            await staffAPI.archiveStaff(formData.id, formData.archive_notes);
+            toast.success('Employee archived/terminated');
+            setConfirmArchiveOpen(false);
+            resetForm();
+            fetchStaffData();
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to archive employee');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleUploadDocument = async (e: React.ChangeEvent<HTMLInputElement>, type: string) => {
+        const file = e.target.files?.[0];
+        if (!file || !selectedStaff) return;
+
+        const formData = new FormData();
+        formData.append('document', file);
+        formData.append('documentType', type);
+
+        try {
+            const res = await staffAPI.uploadStaffDocument(selectedStaff.id, formData);
+            if (res.success) {
+                toast.success(`${type} uploaded successfully`);
+                // Refresh documents
+                const docRes = await staffAPI.getStaffDocuments(selectedStaff.id);
+                if (docRes.success) setDocuments(docRes.data);
+            }
+        } catch (error) {
+            toast.error('Failed to upload document');
+        }
     };
 
     const handleUpdateStaff = async () => {
@@ -215,119 +285,171 @@ export default function HREmployeesPage() {
     return (
         <ProtectedRoute allowedRoles={[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN]}>
             <DashboardLayout>
-                <div className="space-y-6">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div className="space-y-8 animate-ios-fade-in">
+                    {/* Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
                         <div>
-                            <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Employees</h1>
-                            <p className="text-stone-500 mt-0.5">Manage staff profiles and directory</p>
+                            <h1 className="text-[28px] font-bold text-stone-900 tracking-tight font-sf-pro-display">Personnel Registry</h1>
+                            <p className="text-stone-500">Comprehensive directory of all system personnel</p>
                         </div>
-                        <div className="flex gap-2">
-                            <IOSButton variant="secondary" onClick={fetchStaffData} leftIcon={<RefreshCw className={isLoading ? 'animate-spin' : ''} />}>
-                                Refresh
-                            </IOSButton>
-                            <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>
-                                Onboard New Staff
-                            </IOSButton>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={fetchStaffData}
+                                disabled={isLoading}
+                                className="w-10 h-10 rounded-full bg-white border border-stone-200 text-stone-500 hover:bg-stone-50 transition-all flex items-center justify-center shadow-sm active:scale-95"
+                                title="Sync Registry"
+                            >
+                                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                            </button>
+                            <button
+                                onClick={() => setAddModalOpen(true)}
+                                className="px-5 py-2.5 rounded-full bg-stone-900 text-white text-sm font-bold hover:bg-stone-800 transition-all flex items-center gap-2 shadow-md active:scale-95"
+                            >
+                                <Plus className="h-4 w-4" />
+                                <span>Onboard Personnel</span>
+                            </button>
                         </div>
                     </div>
 
-                    {/* Filters */}
-                    <IOSCard className="p-4">
-                        <div className="grid md:grid-cols-4 gap-4">
-                            <div className="md:col-span-2 relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-                                <Input
-                                    placeholder="Search by name, email, or role..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="pl-9 h-11 bg-stone-50 border-stone-100"
-                                />
-                            </div>
-                            <div className="col-span-1">
-                                <select
-                                    value={departmentFilter}
-                                    onChange={(e) => setDepartmentFilter(e.target.value)}
-                                    className="w-full h-11 px-3 bg-stone-50 border border-stone-100 rounded-ios-lg text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-stone-200"
-                                >
-                                    <option value="">All Departments</option>
-                                    {departments.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
-                                </select>
-                            </div>
-                            <div className="flex items-center justify-center bg-stone-50 rounded-ios-lg px-4 border border-stone-100 h-11">
-                                <Users className="h-4 w-4 text-stone-400 mr-2" />
-                                <span className="text-sm font-medium text-stone-600">{filteredStaff.length} Employees</span>
+                    {/* Filters & Statistics */}
+                    <div className="flex flex-col lg:flex-row items-center justify-between gap-4 bg-stone-50 p-2 rounded-2xl border border-stone-100">
+                        <div className="relative w-full lg:w-[400px]">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                            <input
+                                placeholder="Search by name, role or email..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full pl-11 pr-4 py-3 bg-white border border-stone-200 rounded-xl text-[14px] text-stone-800 focus:outline-none focus:ring-2 focus:ring-stone-900/5 focus:border-stone-400 transition-all placeholder:text-stone-400"
+                            />
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                            <select
+                                value={departmentFilter}
+                                onChange={(e) => setDepartmentFilter(e.target.value)}
+                                className="flex-1 lg:flex-none px-4 py-3 bg-white border border-stone-200 rounded-xl text-[14px] text-stone-700 focus:outline-none focus:ring-2 focus:ring-stone-900/5 appearance-none min-w-[180px]"
+                            >
+                                <option value="">All Departments</option>
+                                {departments.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                            </select>
+
+                            <div className="px-5 py-3 bg-stone-900 text-white rounded-xl text-[13px] font-bold shadow-sm whitespace-nowrap">
+                                {filteredStaff.length} Total Personnel
                             </div>
                         </div>
-                    </IOSCard>
+                    </div>
 
                     {isLoading ? (
-                        <div className="flex items-center justify-center py-20">
-                            <RefreshCw className="h-8 w-8 animate-spin text-stone-300" />
+                        <div className="flex items-center justify-center py-20 bg-white rounded-2xl border border-stone-100 border-dashed">
+                            <div className="flex flex-col items-center gap-3">
+                                <RefreshCw className="h-8 w-8 animate-spin text-stone-200" />
+                                <p className="text-stone-400 text-sm font-medium">Synchronizing personnel data...</p>
+                            </div>
                         </div>
                     ) : filteredStaff.length === 0 ? (
-                        <IOSCard className="p-20 text-center">
+                        <div className="bg-white rounded-2xl border border-stone-100 border-dashed p-20 text-center">
                             <div className="w-16 h-16 bg-stone-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-stone-100">
-                                <Users className="h-8 w-8 text-stone-300" />
+                                <Users className="h-8 w-8 text-stone-200" />
                             </div>
-                            <h3 className="text-lg font-medium text-stone-900">No employees found</h3>
-                            <p className="text-stone-500 mt-1">Try adjusting your search or filters</p>
-                        </IOSCard>
+                            <h3 className="text-lg font-bold text-stone-900">No personnel records identified</h3>
+                            <p className="text-stone-500 mt-1 max-w-xs mx-auto">The current search parameters did not yield any results in the registry.</p>
+                        </div>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                            {filteredStaff.map((member) => (
-                                <IOSCard key={member.id} className="p-5 hover:shadow-md transition-shadow group h-full flex flex-col">
-                                    <div className="flex items-start justify-between mb-4">
-                                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-stone-100 to-stone-200 flex items-center justify-center text-stone-600 font-bold text-lg border border-stone-100">
-                                            {member.first_name?.[0]}{member.last_name?.[0]}
-                                        </div>
-                                        <IOSBadge variant={member.status === 'active' ? 'pill' : 'outline'}>
-                                            {member.status}
-                                        </IOSBadge>
-                                    </div>
-
-                                    <div className="flex-1">
-                                        <h3 className="font-bold text-stone-900 leading-tight">{member.first_name} {member.last_name}</h3>
-                                        <p className="text-stone-500 text-xs font-medium uppercase tracking-wider mt-1">{member.role}</p>
-
-                                        <div className="mt-4 space-y-2">
-                                            <div className="flex items-center gap-2 text-[13px] text-stone-600">
-                                                <Building2 className="h-3.5 w-3.5 text-stone-400" />
-                                                <span>{member.department || member.branch_name || 'N/A'}</span>
-                                            </div>
-                                            <div className="flex items-center gap-2 text-[13px] text-stone-600">
-                                                <Mail className="h-3.5 w-3.5 text-stone-400" />
-                                                <span className="truncate">{member.email}</span>
-                                            </div>
-                                            {member.phone && (
-                                                <div className="flex items-center gap-2 text-[13px] text-stone-600">
-                                                    <Phone className="h-3.5 w-3.5 text-stone-400" />
-                                                    <span>{member.phone}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <div className="flex gap-2 mt-6 pt-4 border-t border-stone-50">
-                                        <IOSButton
-                                            size="sm"
-                                            variant="secondary"
-                                            className="flex-1 h-9 rounded-ios-md"
-                                            onClick={() => handleEditStaff(member)}
-                                            leftIcon={<Edit2 className="h-3.5 w-3.5" />}
-                                        >
-                                            Edit
-                                        </IOSButton>
-                                        <IOSButton
-                                            size="sm"
-                                            variant="secondary"
-                                            className="h-9 w-9 p-0 rounded-ios-md text-red-500 hover:bg-red-50"
-                                            onClick={() => handleDeleteClick(member)}
-                                        >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                        </IOSButton>
-                                    </div>
-                                </IOSCard>
-                            ))}
+                        <div className="bg-white rounded-2xl border border-stone-100 overflow-hidden shadow-sm">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-stone-50/50 border-b border-stone-100">
+                                            <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-widest">Personnel</th>
+                                            <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-widest">System Role</th>
+                                            <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-widest">Department</th>
+                                            <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-widest">Contact Info</th>
+                                            <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-widest">Status</th>
+                                            <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-right">Operations</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-stone-50">
+                                        {filteredStaff.map((member) => (
+                                            <tr key={member.id} className="hover:bg-stone-50/50 transition-colors group">
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-9 h-9 rounded-full bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-600 font-bold text-xs">
+                                                            {member.first_name?.[0]}{member.last_name?.[0]}
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[14px] font-bold text-stone-900 leading-none">{member.first_name} {member.last_name}</p>
+                                                            <p className="text-[11px] text-stone-400 mt-1 font-medium select-all">{member.id.substring(0, 8)}</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className="text-[13px] font-semibold text-stone-700">{member.role}</span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-1.5 text-[13px] text-stone-600 font-medium">
+                                                        <Building2 className="h-3.5 w-3.5 text-stone-300" />
+                                                        {member.department || 'General'}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="space-y-1">
+                                                        <div className="flex items-center gap-1.5 text-[12px] text-stone-500">
+                                                            <Mail className="h-3 w-3 text-stone-300" />
+                                                            {member.email}
+                                                        </div>
+                                                        {member.phone && (
+                                                            <div className="flex items-center gap-1.5 text-[12px] text-stone-500">
+                                                                <Phone className="h-3 w-3 text-stone-300" />
+                                                                {member.phone}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${member.status === 'active'
+                                                        ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                                                        : 'bg-stone-100 text-stone-500 border border-stone-200'
+                                                        }`}>
+                                                        {member.status}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <button
+                                                            onClick={() => handleViewDetails(member)}
+                                                            className="p-2 hover:bg-stone-100 rounded-lg text-stone-400 hover:text-[#007AFF] transition-colors"
+                                                            title="View Profile Details"
+                                                        >
+                                                            <User className="h-4 w-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleEditStaff(member)}
+                                                            className="p-2 hover:bg-stone-100 rounded-lg text-stone-400 hover:text-stone-900 transition-colors"
+                                                            title="Edit Profile"
+                                                        >
+                                                            <Edit2 className="h-4 w-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleArchiveStaff(member)}
+                                                            className="p-2 hover:bg-amber-50 rounded-lg text-stone-400 hover:text-amber-600 transition-colors"
+                                                            title="Archive/Terminate"
+                                                        >
+                                                            <Archive className="h-4 w-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteClick(member)}
+                                                            className="p-2 hover:bg-red-50 rounded-lg text-stone-400 hover:text-red-600 transition-colors"
+                                                            title="Force Delete"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -455,7 +577,7 @@ export default function HREmployeesPage() {
                                                     {departments.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
                                                 </select>
                                             </div>
-                                            <div className="p-4">
+                                            <div className="p-4 border-b border-stone-50">
                                                 <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Branch</label>
                                                 <select
                                                     value={formData.branch_id}
@@ -464,6 +586,19 @@ export default function HREmployeesPage() {
                                                 >
                                                     <option value="">Select branch</option>
                                                     {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="p-4">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Immediate Supervisor</label>
+                                                <select
+                                                    value={formData.supervisor_id}
+                                                    onChange={(e) => setFormData({ ...formData, supervisor_id: e.target.value })}
+                                                    className="w-full bg-transparent border-none p-0 h-auto focus:ring-0 text-lg appearance-none cursor-pointer"
+                                                >
+                                                    <option value="">No Supervisor (Top Level)</option>
+                                                    {staff.filter(s => s.id !== formData.id).map((s) => (
+                                                        <option key={s.id} value={s.id}>{s.first_name} {s.last_name} ({s.role})</option>
+                                                    ))}
                                                 </select>
                                             </div>
                                         </div>
@@ -636,32 +771,146 @@ export default function HREmployeesPage() {
                     </DialogContent>
                 </Dialog>
 
-                {/* Delete Confirmation */}
-                <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
-                    <DialogContent className="max-w-[320px] bg-white p-6 rounded-ios-2xl border-none shadow-2xl">
+                {/* Archive Confirmation */}
+                <Dialog open={confirmArchiveOpen} onOpenChange={setConfirmArchiveOpen}>
+                    <DialogContent className="max-w-[400px] bg-white p-6 rounded-ios-2xl border-none shadow-2xl">
                         <div className="text-center">
-                            <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <Trash2 className="h-6 w-6 text-red-500" />
+                            <div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Archive className="h-6 w-6 text-amber-500" />
                             </div>
-                            <h3 className="text-lg font-bold text-stone-900">Remove Employee?</h3>
-                            <p className="text-stone-500 text-sm mt-2 font-medium">This will permanently remove the record from the system.</p>
+                            <h3 className="text-lg font-bold text-stone-900">Archive/Terminate Personnel</h3>
+                            <p className="text-stone-500 text-sm mt-2 font-medium">This will mark the employee as terminated and log it in their history.</p>
+                        </div>
+                        <div className="mt-4">
+                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Termination Notes / Reason</label>
+                            <textarea
+                                value={formData.archive_notes}
+                                onChange={(e) => setFormData({ ...formData, archive_notes: e.target.value })}
+                                className="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-stone-900/5 min-h-[80px]"
+                                placeholder="e.g. Contract ended, Resignation, etc."
+                            />
                         </div>
                         <div className="flex flex-col gap-2 mt-6">
                             <IOSButton
-                                onClick={handleConfirmDelete}
-                                className="w-full bg-red-500 hover:bg-red-600 text-white border-none h-11"
+                                onClick={handleConfirmArchive}
+                                className="w-full bg-stone-900 hover:bg-stone-800 text-white border-none h-11"
                                 disabled={isSubmitting}
                             >
-                                {isSubmitting ? 'Removing...' : 'Remove Record'}
+                                {isSubmitting ? 'Archiving...' : 'Archive Personnel'}
                             </IOSButton>
                             <IOSButton
                                 variant="secondary"
-                                onClick={() => setConfirmDeleteOpen(false)}
+                                onClick={() => setConfirmArchiveOpen(false)}
                                 className="w-full h-11"
                                 disabled={isSubmitting}
                             >
-                                Keep Record
+                                Cancel
                             </IOSButton>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Detailed Profile View */}
+                <Dialog open={detailModalOpen} onOpenChange={setDetailModalOpen}>
+                    <DialogContent className="max-w-[700px] h-[80vh] bg-[#F2F2F7] p-0 overflow-hidden border-none rounded-ios-3xl shadow-2xl flex flex-col">
+                        <div className="bg-white/80 backdrop-blur-xl px-6 py-4 border-b flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-full bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-600 font-bold text-lg">
+                                    {selectedStaff?.first_name?.[0]}{selectedStaff?.last_name?.[0]}
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold text-stone-900">{selectedStaff?.first_name} {selectedStaff?.last_name}</h3>
+                                    <p className="text-sm text-[#007AFF] font-semibold">{selectedStaff?.role}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setDetailModalOpen(false)} className="text-[#007AFF] font-semibold">Done</button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                            {/* Employment History Timeline */}
+                            <section>
+                                <div className="flex items-center gap-2 mb-4">
+                                    <History className="h-5 w-5 text-stone-400" />
+                                    <h4 className="text-[13px] font-bold text-stone-400 uppercase tracking-widest">Employment Timeline</h4>
+                                </div>
+                                <div className="space-y-4">
+                                    {history.length > 0 ? (
+                                        history.map((item, idx) => (
+                                            <div key={item.id} className="relative pl-6 pb-4 border-l border-stone-200 last:border-0 last:pb-0">
+                                                <div className="absolute left-[-5px] top-1.5 w-2.5 h-2.5 rounded-full bg-stone-900 ring-4 ring-white" />
+                                                <span className="text-[10px] text-stone-400 font-bold block mb-1">
+                                                    {new Date(item.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                </span>
+                                                <p className="text-[14px] font-bold text-stone-800 capitalize">{item.change_type.replace(/_/g, ' ')}</p>
+                                                {item.old_value && (
+                                                    <p className="text-[12px] text-stone-500 mt-1">
+                                                        Changed from <span className="font-semibold">{item.old_value}</span> to <span className="font-semibold">{item.new_value}</span>
+                                                    </p>
+                                                )}
+                                                {item.notes && <p className="text-[12px] text-stone-400 italic mt-1">"{item.notes}"</p>}
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="bg-white p-6 rounded-2xl border border-stone-100 text-center text-stone-400 text-sm italic">
+                                            No history recorded yet.
+                                        </div>
+                                    )}
+                                </div>
+                            </section>
+
+                            {/* Document Center */}
+                            <section>
+                                <div className="flex items-center gap-2 mb-4">
+                                    <FileText className="h-5 w-5 text-stone-400" />
+                                    <h4 className="text-[13px] font-bold text-stone-400 uppercase tracking-widest">Document Vault</h4>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {['National ID', 'Contract', 'CV', 'Certification'].map((type) => {
+                                        const doc = documents.find(d => d.document_type === type);
+                                        return (
+                                            <div key={type} className="bg-white p-4 rounded-2xl border border-stone-100 shadow-sm relative group overflow-hidden">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className={`p-2 rounded-lg ${doc ? 'bg-[#34C759]/10 text-[#34C759]' : 'bg-stone-50 text-stone-300'}`}>
+                                                            <FileText className="h-4 w-4" />
+                                                        </div>
+                                                        <span className="text-sm font-bold text-stone-700">{type}</span>
+                                                    </div>
+                                                    {doc && (
+                                                        <IOSBadge variant="outline" className="text-[10px]">VERIFIED</IOSBadge>
+                                                    )}
+                                                </div>
+
+                                                {doc ? (
+                                                    <div className="mt-2 flex items-center justify-between">
+                                                        <span className="text-[11px] text-stone-400 truncate max-w-[120px]">{doc.file_name}</span>
+                                                        <a
+                                                            href={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/staff-documents/${doc.file_path}`}
+                                                            target="_blank"
+                                                            className="text-[11px] text-[#007AFF] font-bold hover:underline"
+                                                        >
+                                                            View File
+                                                        </a>
+                                                    </div>
+                                                ) : (
+                                                    <div className="mt-2">
+                                                        <label className="cursor-pointer text-[11px] text-[#007AFF] font-bold flex items-center gap-1 hover:bg-[#007AFF]/5 w-fit px-2 py-1 rounded-lg transition-colors">
+                                                            <Plus className="h-3 w-3" />
+                                                            Upload {type}
+                                                            <input
+                                                                type="file"
+                                                                className="hidden"
+                                                                onChange={(e) => handleUploadDocument(e, type)}
+                                                                accept=".pdf,.jpg,.jpeg,.png"
+                                                            />
+                                                        </label>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </section>
                         </div>
                     </DialogContent>
                 </Dialog>

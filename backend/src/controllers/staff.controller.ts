@@ -289,7 +289,21 @@ export const createStaffMember = async (
       pos_pin,
       emergencyContact,
       address,
-      branchId
+      branchId,
+      kra_pin,
+      nssf_number,
+      nhif_number,
+      shif_number,
+      bank_name,
+      bank_branch,
+      account_number,
+      mpesa_number,
+      employment_type,
+      contract_expiry,
+      next_of_kin_name,
+      next_of_kin_phone,
+      next_of_kin_relationship,
+      supervisor_id
     } = req.body;
 
     // Generate Staff ID if not provided
@@ -546,6 +560,20 @@ export const createStaffMember = async (
       id_number: actualIdNumber,
       national_id: nationalId || 'pending',
       status: 'active',
+      kra_pin,
+      nssf_number,
+      nhif_number,
+      shif_number,
+      bank_name,
+      bank_branch,
+      account_number,
+      mpesa_number,
+      employment_type: employment_type || 'permanent',
+      contract_expiry,
+      next_of_kin_name,
+      next_of_kin_phone,
+      next_of_kin_relationship,
+      supervisor_id,
       updated_at: new Date().toISOString()
     };
 
@@ -632,7 +660,22 @@ export const updateStaffMember = async (
       start_date,
       national_id,
       status,
-      employee_id
+      employee_id,
+      kra_pin,
+      nssf_number,
+      nhif_number,
+      shif_number,
+      bank_name,
+      bank_branch,
+      account_number,
+      mpesa_number,
+      employment_type,
+      contract_expiry,
+      next_of_kin_name,
+      next_of_kin_phone,
+      next_of_kin_relationship,
+      supervisor_id,
+      archive_notes
     } = req.body;
 
     logger.debug('Update staff request:', { id: req.params.id, body: req.body });
@@ -640,7 +683,7 @@ export const updateStaffMember = async (
     // Get staff profile
     const { data: staff, error: getError } = await supabase
       .from('staff_profiles')
-      .select('user_id')
+      .select('*, user_id')
       .eq('id', req.params.id)
       .single();
 
@@ -726,6 +769,21 @@ export const updateStaffMember = async (
     if (role !== undefined) staffUpdateData.role = role;
     // Note: email and phone_number are in users table, not staff_profiles
     if (employee_id !== undefined) staffUpdateData.id_number = employee_id;
+    if (kra_pin !== undefined) staffUpdateData.kra_pin = kra_pin;
+    if (nssf_number !== undefined) staffUpdateData.nssf_number = nssf_number;
+    if (nhif_number !== undefined) staffUpdateData.nhif_number = nhif_number;
+    if (shif_number !== undefined) staffUpdateData.shif_number = shif_number;
+    if (bank_name !== undefined) staffUpdateData.bank_name = bank_name;
+    if (bank_branch !== undefined) staffUpdateData.bank_branch = bank_branch;
+    if (account_number !== undefined) staffUpdateData.account_number = account_number;
+    if (mpesa_number !== undefined) staffUpdateData.mpesa_number = mpesa_number;
+    if (employment_type !== undefined) staffUpdateData.employment_type = employment_type;
+    if (contract_expiry !== undefined) staffUpdateData.contract_expiry = contract_expiry;
+    if (next_of_kin_name !== undefined) staffUpdateData.next_of_kin_name = next_of_kin_name;
+    if (next_of_kin_phone !== undefined) staffUpdateData.next_of_kin_phone = next_of_kin_phone;
+    if (next_of_kin_relationship !== undefined) staffUpdateData.next_of_kin_relationship = next_of_kin_relationship;
+    if (supervisor_id !== undefined) staffUpdateData.supervisor_id = supervisor_id;
+    if (archive_notes !== undefined) staffUpdateData.archive_notes = archive_notes;
 
     const { data: updatedStaff, error: updateError } = await supabase
       .from('staff_profiles')
@@ -739,6 +797,54 @@ export const updateStaffMember = async (
       throw updateError;
     }
 
+    // Step 4: Track significant changes in history
+    const historyEntries = [];
+    if (salary !== undefined && staff.salary !== parseFloat(salary)) {
+      historyEntries.push({
+        staff_id: req.params.id,
+        change_type: 'salary_adjustment',
+        old_value: staff.salary.toString(),
+        new_value: salary.toString(),
+        created_by: req.user?.id,
+        notes: 'Manual adjustment'
+      });
+    }
+    if (role !== undefined && staff.role !== role) {
+      historyEntries.push({
+        staff_id: req.params.id,
+        change_type: 'role_change',
+        old_value: staff.role,
+        new_value: role,
+        created_by: req.user?.id
+      });
+    }
+    if (department !== undefined && staff.department !== department) {
+      historyEntries.push({
+        staff_id: req.params.id,
+        change_type: 'department_transfer',
+        old_value: staff.department,
+        new_value: department,
+        created_by: req.user?.id
+      });
+    }
+    if (status !== undefined && staff.status !== status) {
+      historyEntries.push({
+        staff_id: req.params.id,
+        change_type: 'status_change',
+        old_value: staff.status,
+        new_value: status,
+        created_by: req.user?.id,
+        notes: archive_notes
+      });
+    }
+
+    if (historyEntries.length > 0) {
+      const { error: historyError } = await supabase
+        .from('staff_employment_history')
+        .insert(historyEntries);
+      if (historyError) logger.error('Error logging staff history:', historyError);
+    }
+
     res.status(200).json({
       success: true,
       data: updatedStaff
@@ -747,6 +853,92 @@ export const updateStaffMember = async (
     logger.info(`Staff member updated: ${email || updatedStaff.id}`);
   } catch (error) {
     logger.error('Error in updateStaffMember:', error);
+    next(error);
+  }
+};
+
+// @desc    Archive staff member (Termination)
+// @route   POST /api/staff/:id/archive
+// @access  Private (Admin, HR Manager)
+export const archiveStaff = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { notes } = req.body;
+
+    // Get current status
+    const { data: staff, error: getError } = await supabase
+      .from('staff_profiles')
+      .select('status')
+      .eq('id', req.params.id)
+      .single();
+
+    if (getError || !staff) {
+      res.status(404).json({ success: false, message: 'Staff member not found' });
+      return;
+    }
+
+    // Update status and archive notes
+    const { data: updatedStaff, error: updateError } = await supabase
+      .from('staff_profiles')
+      .update({
+        status: 'terminated',
+        archive_notes: notes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    // Create history entry
+    await supabase.from('staff_employment_history').insert([{
+      staff_id: req.params.id,
+      change_type: 'termination',
+      old_value: staff.status,
+      new_value: 'terminated',
+      notes,
+      created_by: req.user?.id
+    }]);
+
+    res.status(200).json({
+      success: true,
+      data: updatedStaff,
+      message: 'Staff member archived/terminated successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get staff employment history
+// @route   GET /api/staff/:id/history
+// @access  Private (Admin, HR Manager)
+export const getStaffHistory = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { data, error } = await supabase
+      .from('staff_employment_history')
+      .select(`
+        *,
+        creator:users!created_by(id, first_name, last_name)
+      `)
+      .eq('staff_id', req.params.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      data
+    });
+  } catch (error) {
     next(error);
   }
 };
@@ -1143,6 +1335,11 @@ export const updateAttendance = async (
       return;
     }
 
+    if (oldRecord.is_confirmed) {
+      res.status(403).json({ success: false, message: 'Cannot update confirmed attendance. Unlock first.' });
+      return;
+    }
+
     const effectiveIn = clock_in || oldRecord.clock_in;
     const effectiveOut = clock_out || oldRecord.clock_out;
 
@@ -1255,6 +1452,50 @@ export const getAttendanceSummary = async (
   }
 };
 
+// @desc    Batch confirm attendance for a period
+// @route   POST /api/staff/attendance/confirm
+// @access  Private (Admin, HR Manager)
+export const batchConfirmAttendance = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { startDate, endDate, department } = req.body;
+
+    let query = supabase
+      .from('staff_attendance')
+      .update({
+        is_confirmed: true,
+        confirmed_by: req.user?.id,
+        confirmed_at: new Date().toISOString()
+      })
+      .gte('attendance_date', startDate)
+      .lte('attendance_date', endDate);
+
+    if (department) {
+      // Need to filter by staff profiles department
+      const { data: staffIds } = await supabase
+        .from('staff_profiles')
+        .select('id')
+        .eq('department', department);
+
+      const ids = staffIds?.map(s => s.id) || [];
+      query = query.in('staff_id', ids);
+    }
+
+    const { error } = await query;
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      message: 'Attendance records confirmed for the period'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // =====================================================
 // LEAVE MANAGEMENT
 // =====================================================
@@ -1346,6 +1587,21 @@ export const updateLeaveRequest = async (
     const { status, notes } = req.body;
     const userId = (req as any).user?.id;
 
+    // Check if record is locked
+    const { data: existing } = await supabase
+      .from('staff_leave')
+      .select('is_locked')
+      .eq('id', id)
+      .single();
+
+    if (existing?.is_locked) {
+      res.status(403).json({
+        success: false,
+        message: 'Cannot update locked leave request. Locked for payroll processing.'
+      });
+      return;
+    }
+
     const updateData: any = { status };
     if (notes) updateData.notes = notes;
     if (status === 'approved' || status === 'rejected') {
@@ -1427,6 +1683,39 @@ export const rejectLeaveRequest = async (
       success: true,
       message: 'Leave request rejected',
       data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Batch lock leave records for a period
+// @route   POST /api/staff/leave/lock
+// @access  Private (Admin, HR Manager)
+export const batchLockLeave = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { startDate, endDate } = req.body;
+
+    const { error } = await supabase
+      .from('staff_leave')
+      .update({
+        is_locked: true,
+        locked_by: req.user?.id,
+        locked_at: new Date().toISOString()
+      })
+      .gte('start_date', startDate)
+      .lte('end_date', endDate)
+      .eq('status', 'approved'); // Only lock approved leaves
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      message: 'Approved leave records locked for the period'
     });
   } catch (error) {
     next(error);
@@ -1580,6 +1869,99 @@ export const uploadStaffPhoto = async (
     });
   } catch (error) {
     logger.error('Error in uploadStaffPhoto:', error);
+    next(error);
+  }
+};
+
+// @desc    Upload staff document (ID, Contract, CV)
+// @route   POST /api/staff/:id/documents
+// @access  Private (Admin, HR Manager)
+export const uploadStaffDocument = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const file = req.file as Express.Multer.File;
+    const { documentType } = req.body;
+
+    if (!file || !documentType) {
+      res.status(400).json({ success: false, message: 'No file or document type provided' });
+      return;
+    }
+
+    // Check staff
+    const { data: staff, error: staffError } = await supabase
+      .from('staff_profiles')
+      .select('user_id')
+      .eq('id', req.params.id)
+      .single();
+
+    if (staffError || !staff) {
+      res.status(404).json({ success: false, message: 'Staff member not found' });
+      return;
+    }
+
+    const fileExt = file.originalname.split('.').pop();
+    const fileName = `${req.params.id}-${documentType}-${Date.now()}.${fileExt}`;
+
+    const { data: storageData, error: storageError } = await supabase.storage
+      .from('staff-documents')
+      .upload(fileName, file.buffer, {
+        contentType: file.mimetype,
+        upsert: true
+      });
+
+    if (storageError) throw storageError;
+
+    // Record in database
+    const { data: docRecord, error: dbError } = await supabase
+      .from('staff_documents')
+      .insert([{
+        staff_id: req.params.id,
+        document_type: documentType,
+        file_name: file.originalname,
+        file_path: storageData.path,
+        file_size: file.size,
+        mime_type: file.mimetype
+      }])
+      .select()
+      .single();
+
+    if (dbError) throw dbError;
+
+    res.status(200).json({
+      success: true,
+      data: docRecord,
+      message: 'Document uploaded successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get staff documents
+// @route   GET /api/staff/:id/documents
+// @access  Private (Admin, HR Manager)
+export const getStaffDocuments = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { data, error } = await supabase
+      .from('staff_documents')
+      .select('*')
+      .eq('staff_id', req.params.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      data
+    });
+  } catch (error) {
     next(error);
   }
 };

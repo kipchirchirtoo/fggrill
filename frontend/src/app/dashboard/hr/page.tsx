@@ -114,75 +114,92 @@ export default function HRDashboard() {
     return (
         <ProtectedRoute allowedRoles={[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN]}>
             <DashboardLayout>
-                <div className="space-y-6">
+                <div className="space-y-8 animate-ios-fade-in">
                     {/* Header */}
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div>
-                            <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">HR Dashboard</h1>
-                            <p className="text-stone-500 mt-0.5">Manage employees, payroll, and attendance</p>
+                            <h1 className="text-[28px] font-bold text-stone-900 tracking-tight font-sf-pro-display">HR Command</h1>
+                            <p className="text-stone-500">Personnel management and payroll oversight</p>
                         </div>
-                        <IOSButton
-                            variant="secondary"
+                        <button
                             onClick={fetchData}
                             disabled={isLoading}
-                            leftIcon={<RefreshCw className={isLoading ? 'animate-spin' : ''} />}
+                            className="px-4 py-2 rounded-full bg-white border border-stone-200 text-stone-600 text-sm font-medium hover:bg-stone-50 transition-all flex items-center gap-2 shadow-sm active:scale-95"
                         >
-                            Refresh Data
-                        </IOSButton>
+                            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                            <span>Refresh Personnel Data</span>
+                        </button>
                     </div>
 
                     {/* Stats Grid */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="stat-card">
-                            <div className="stat-icon bg-blue-50 text-blue-600">
-                                <Users className="h-5 w-5" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="stat-card border-l-4 border-l-stone-900">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="stat-label uppercase tracking-widest text-[10px]">Total Workforce</p>
+                                    <p className="stat-value text-2xl">{stats.totalStaff}</p>
+                                </div>
+                                <div className="w-8 h-8 rounded-full bg-stone-50 flex items-center justify-center">
+                                    <Users className="h-4 w-4 text-stone-400" />
+                                </div>
                             </div>
-                            <p className="stat-value">{stats.totalStaff}</p>
-                            <p className="stat-label mt-1">Total Employees</p>
                         </div>
 
-                        <div className="stat-card">
-                            <div className="stat-icon bg-emerald-50 text-emerald-600">
-                                <DollarSign className="h-5 w-5" />
+                        <div className="stat-card border-l-4 border-l-emerald-500">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="stat-label uppercase tracking-widest text-[10px]">Monthly Payroll</p>
+                                    <p className="stat-value text-2xl">KES {stats.totalPayroll.toLocaleString()}</p>
+                                </div>
+                                <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center">
+                                    <DollarSign className="h-4 w-4 text-emerald-400" />
+                                </div>
                             </div>
-                            <p className="stat-value">KES {stats.totalPayroll.toLocaleString()}</p>
-                            <p className="stat-label mt-1">Monthly Gross Pay</p>
                         </div>
 
-                        <div className="stat-card">
-                            <div className="stat-icon bg-amber-50 text-amber-600">
-                                <FileText className="h-5 w-5" />
+                        <div className="stat-card border-l-4 border-l-amber-500">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="stat-label uppercase tracking-widest text-[10px]">Pending Leave</p>
+                                    <p className="stat-value text-2xl text-amber-600">{stats.pendingLeave}</p>
+                                </div>
+                                <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center">
+                                    <FileText className="h-4 w-4 text-amber-400" />
+                                </div>
                             </div>
-                            <p className="stat-value text-amber-600">{stats.pendingLeave}</p>
-                            <p className="stat-label mt-1">Pending Leave</p>
                         </div>
 
-                        <div className="stat-card">
-                            <div className="stat-icon bg-green-50 text-green-600">
-                                <Calendar className="h-5 w-5" />
+                        <div className="stat-card border-l-4 border-l-green-500">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="stat-label uppercase tracking-widest text-[10px]">Active Today</p>
+                                    <p className="stat-value text-2xl">{stats.presentToday}</p>
+                                    000                                </div>
+                                <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center">
+                                    <Calendar className="h-4 w-4 text-green-400" />
+                                </div>
                             </div>
-                            <p className="stat-value">{stats.presentToday}</p>
-                            <p className="stat-label mt-1">Present Today</p>
                         </div>
                     </div>
 
-                    {/* Quick Access */}
+                    {/* Management Modules */}
                     <div className="card-elevated p-6">
-                        <div className="section-header">
-                            <div>
-                                <h2 className="section-title">Management Modules</h2>
-                                <p className="section-subtitle">Quick access to HR functionalities</p>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        <h3 className="text-[15px] font-bold text-stone-900 mb-6 flex items-center gap-2">
+                            <Users className="h-4 w-4 text-stone-400" />
+                            HR Control Modules
+                        </h3>
+                        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {quickLinks.map((link) => (
                                 <Link key={link.href} href={link.href}>
-                                    <div className="action-card group h-full">
-                                        <div className={`action-card-icon ${link.bgColor} ${link.color} group-hover:bg-opacity-80 transition-all`}>
-                                            <link.icon className="h-6 w-6" />
+                                    <div className="flex items-center gap-4 p-4 rounded-xl border border-stone-50 hover:bg-stone-50 hover:border-stone-200 transition-all group cursor-pointer h-full">
+                                        <div className="w-10 h-10 rounded-lg bg-stone-100 flex items-center justify-center group-hover:bg-white border border-transparent group-hover:border-stone-200 transition-all">
+                                            <link.icon className="h-5 w-5 text-stone-600" />
                                         </div>
-                                        <p className="action-card-label font-semibold text-[14px]">{link.label}</p>
-                                        <p className="text-[11px] text-stone-400 mt-0.5">{link.desc}</p>
+                                        <div>
+                                            <p className="text-[14px] font-bold text-stone-900">{link.label}</p>
+                                            <p className="text-[12px] text-stone-500">{link.desc}</p>
+                                        </div>
+                                        <ChevronRight className="h-4 w-4 text-stone-300 ml-auto group-hover:translate-x-1 transition-transform" />
                                     </div>
                                 </Link>
                             ))}
@@ -190,45 +207,47 @@ export default function HRDashboard() {
                     </div>
 
                     {/* Bottom Grid */}
-                    <div className="grid lg:grid-cols-2 gap-5">
-                        {/* Recent Leave Requests */}
-                        <div className="card-elevated p-5">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-[15px] font-semibold text-stone-900">Pending Leave Requests</h3>
-                                <Link href="/dashboard/hr/leave" className="text-[12px] text-amber-600 font-medium hover:underline">View All</Link>
+                    <div className="grid lg:grid-cols-2 gap-6">
+                        {/* Leave Requests */}
+                        <div className="card-elevated p-6 border-l-4 border-l-amber-300">
+                            <div className="flex items-center justify-between mb-6">
+                                <h3 className="text-[15px] font-bold text-stone-900 flex items-center gap-2">
+                                    <FileText className="h-4 w-4 text-stone-400" />
+                                    Pending Review
+                                </h3>
+                                <Link href="/dashboard/hr/leave" className="text-[12px] text-amber-600 font-bold hover:underline">View Repository</Link>
                             </div>
-                            <div className="space-y-3">
-                                {stats.pendingLeave === 0 ? (
-                                    <div className="flex flex-col items-center justify-center py-8 text-stone-400">
-                                        <CheckCircle className="h-8 w-8 mb-2 opacity-20" />
-                                        <p className="text-sm">No pending requests</p>
+
+                            {stats.pendingLeave === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-8 text-stone-400">
+                                    <CheckCircle className="h-8 w-8 mb-2 opacity-20" />
+                                    <p className="text-sm font-medium">Clearance achieved</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="p-4 bg-stone-50 rounded-xl border border-stone-100">
+                                        <p className="text-[13px] font-bold text-stone-900 mb-1">Attention Required</p>
+                                        <p className="text-[12px] text-stone-500 leading-relaxed">
+                                            There are currently {stats.pendingLeave} leave application(s) awaiting administrative decision.
+                                        </p>
                                     </div>
-                                ) : (
-                                    <div className="bg-amber-50 rounded-lg p-4 border border-amber-100 flex items-start gap-3">
-                                        <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                                        <div>
-                                            <p className="text-[13px] font-medium text-amber-900">Review Required</p>
-                                            <p className="text-[12px] text-amber-700 mt-0.5">
-                                                There are {stats.pendingLeave} leave requests waiting for your approval.
-                                            </p>
-                                            <Link href="/dashboard/hr/leave">
-                                                <button className="mt-3 text-[12px] bg-amber-600 text-white px-3 py-1.5 rounded-md font-medium hover:bg-amber-700 transition-colors">
-                                                    Review Requests
-                                                </button>
-                                            </Link>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
+                                    <Link href="/dashboard/hr/leave" className="block text-center py-2.5 bg-stone-900 text-white rounded-lg text-[13px] font-bold active:scale-95 transition-all">
+                                        Open Review Interface
+                                    </Link>
+                                </div>
+                            )}
                         </div>
 
-                        {/* Payroll Processing Status */}
-                        <div className="card-elevated p-5">
-                            <h3 className="text-[15px] font-semibold text-stone-900 mb-4">Payroll Status</h3>
+                        {/* Payroll Status */}
+                        <div className="card-elevated p-6 border-l-4 border-l-emerald-300">
+                            <h3 className="text-[15px] font-bold text-stone-900 mb-6 flex items-center gap-2">
+                                <DollarSign className="h-4 w-4 text-stone-400" />
+                                Payroll Cycle Status
+                            </h3>
                             <div className="space-y-4">
                                 <div className="p-4 bg-stone-50 rounded-xl border border-stone-100">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="text-[13px] font-medium text-stone-600">Current Period</span>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="text-[13px] font-bold text-stone-600 uppercase tracking-tighter">Current Period</span>
                                         <span className="text-[13px] font-bold text-stone-900">
                                             {new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}
                                         </span>
@@ -236,25 +255,23 @@ export default function HRDashboard() {
                                     <div className="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden">
                                         <div className="bg-emerald-500 h-full w-[15%] transition-all" />
                                     </div>
-                                    <div className="flex items-center justify-between mt-2">
-                                        <span className="text-[11px] text-stone-500">Processing Status</span>
-                                        <span className="text-[11px] font-medium text-stone-700">Initial Stage</span>
+                                    <div className="flex items-center justify-between mt-3">
+                                        <span className="text-[11px] font-medium text-stone-500">Operation Status</span>
+                                        <span className="text-[11px] font-bold text-emerald-600">Active Cycle</span>
                                     </div>
                                 </div>
 
-                                <Link href="/dashboard/hr/payroll" className="block">
-                                    <div className="flex items-center justify-between p-3 rounded-lg hover:bg-stone-50 transition-all group border border-transparent hover:border-stone-100">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center">
-                                                <TrendingUp className="h-4 w-4 text-emerald-600" />
-                                            </div>
-                                            <div>
-                                                <p className="text-[13px] font-semibold text-stone-800">Process Payroll</p>
-                                                <p className="text-[11px] text-stone-500">Calculate & Pay Salaries</p>
-                                            </div>
+                                <Link href="/dashboard/hr/payroll" className="flex items-center justify-between p-4 rounded-xl border border-stone-50 hover:bg-stone-50 hover:border-stone-200 transition-all group">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center">
+                                            <TrendingUp className="h-4 w-4 text-emerald-600" />
                                         </div>
-                                        <ChevronRight className="h-4 w-4 text-stone-300 group-hover:text-stone-400" />
+                                        <div>
+                                            <p className="text-[14px] font-bold text-stone-900">Initiate Payroll</p>
+                                            <p className="text-[12px] text-stone-500">Execute salary disbursement</p>
+                                        </div>
                                     </div>
+                                    <ChevronRight className="h-4 w-4 text-stone-300 group-hover:translate-x-1 transition-transform" />
                                 </Link>
                             </div>
                         </div>

@@ -20,7 +20,13 @@ import {
   updateAttendance,
   approveAttendance,
   getAttendanceReports,
-  uploadStaffPhoto
+  uploadStaffPhoto,
+  batchConfirmAttendance,
+  batchLockLeave,
+  archiveStaff,
+  getStaffHistory,
+  uploadStaffDocument,
+  getStaffDocuments
 } from '../controllers/staff.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -86,6 +92,11 @@ router.get('/attendance/summary',
   getAttendanceSummary
 );
 
+router.post('/attendance/confirm',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER]),
+  batchConfirmAttendance
+);
+
 router.put('/attendance/:id',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER]),
   updateAttendance
@@ -100,6 +111,11 @@ router.put('/attendance/:id/approve',
 router.route('/leave')
   .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER]), getLeaveRequests)
   .post(protect, createLeaveRequest);
+
+router.post('/leave/lock',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER]),
+  batchLockLeave
+);
 
 router.get('/attendance/reports',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER]),
@@ -122,6 +138,27 @@ router.get('/:id',
 router.put('/:id',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER]),
   updateStaffMember
+);
+
+router.post('/:id/archive',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER]),
+  archiveStaff
+);
+
+router.get('/:id/history',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER]),
+  getStaffHistory
+);
+
+router.post('/:id/documents',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER]),
+  upload.single('document'),
+  uploadStaffDocument
+);
+
+router.get('/:id/documents',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER]),
+  getStaffDocuments
 );
 
 router.put('/leave/:id',

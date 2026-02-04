@@ -9,23 +9,23 @@ export interface ShiftCalculation {
     hoursOTHoliday: number;
     hoursNight: number;
     otRateApplied: number;
+    isLate: boolean;
+    isEarlyExit: boolean;
+    clockInLatenessMinutes: number;
+    clockOutEarlyMinutes: number;
 }
 
 export class AttendanceService {
     /**
      * Calculates categorized hours for a shift based on Kenyan Labour Laws
-     * Rules:
-     * - Normal Day: First 8 hours normal, anything above is 1.5x OT.
-     * - Rest Day: All hours are 2.0x OT.
-     * - Public Holiday: All hours are 2.0x OT.
-     * - Night hours (22:00-06:00) are tracked separately.
+     * Also detects lateness and early exits.
      */
     static async calculateShiftHours(staffId: string, clockIn: string | Date, clockOut: string | Date): Promise<ShiftCalculation> {
         try {
             // 1. Fetch Staff Profile for rules
             const { data: profile, error: profileError } = await supabase
                 .from('staff_profiles')
-                .select('id, rest_day, hourly_base_rate')
+                .select('id, rest_day, hourly_base_rate, shift')
                 .eq('id', staffId)
                 .single();
 
@@ -70,7 +70,7 @@ export class AttendanceService {
                 if (totalHours > 8) {
                     hoursNormal = 8;
                     hoursOTWeekday = totalHours - 8;
-                    otRateApplied = 1.5; // mixed rate, but 1.5 is the OT trigger
+                    otRateApplied = 1.5;
                 } else {
                     hoursNormal = totalHours;
                     otRateApplied = 1.0;
@@ -80,13 +80,39 @@ export class AttendanceService {
             // 4. Night Hours Calculation (22:00 - 06:00)
             const hoursNight = this.calculateNightOverlap(inMoment, outMoment);
 
+            // 5. Lateness & Early Exit Detection
+            // Define standard shift starts (customizable in enterprise version)
+            const shiftConfigs: Record<string, { start: string, end: string }> = {
+                'morning': { start: '08:00', end: '17:00' },
+                'evening': { start: '14:00', end: '23:00' },
+                'night': { start: '22:00', end: '07:00' }
+            };
+
+            const staffShift = profile.shift || 'morning';
+            const config = shiftConfigs[staffShift.toLowerCase()] || shiftConfigs['morning'];
+
+            const expectedStart = moment(dateStr + ' ' + config.start, 'YYYY-MM-DD HH:mm');
+            const expectedEnd = moment(dateStr + ' ' + config.end, 'YYYY-MM-DD HH:mm');
+
+            // Adjust end date if night shift crosses midnight
+            if (expectedEnd.isBefore(expectedStart)) {
+                expectedEnd.add(1, 'day');
+            }
+
+            let clockInLatenessMinutes = inMoment.diff(expectedStart, 'minutes');
+            let clockOutEarlyMinutes = expectedEnd.diff(outMoment, 'minutes');
+
             return {
                 hoursNormal: Number(hoursNormal.toFixed(2)),
                 hoursOTWeekday: Number(hoursOTWeekday.toFixed(2)),
                 hoursOTRest: Number(hoursOTRest.toFixed(2)),
                 hoursOTHoliday: Number(hoursOTHoliday.toFixed(2)),
                 hoursNight: Number(hoursNight.toFixed(2)),
-                otRateApplied
+                otRateApplied,
+                isLate: clockInLatenessMinutes > 0,
+                isEarlyExit: clockOutEarlyMinutes > 0,
+                clockInLatenessMinutes: clockInLatenessMinutes > 0 ? clockInLatenessMinutes : 0,
+                clockOutEarlyMinutes: clockOutEarlyMinutes > 0 ? clockOutEarlyMinutes : 0
             };
         } catch (error) {
             logger.error('Error in calculateShiftHours:', error);
