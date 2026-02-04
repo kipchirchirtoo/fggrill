@@ -671,35 +671,52 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
     if (!branch_id || branch_id === '0') {
       const branchGroups: Record<string, any> = {};
 
-      payments.forEach(p => {
-        const branchId = p.branch_id || 'main';
-        const branchName = p.branch?.name || 'Main Office';
-
-        if (!branchGroups[branchId]) {
-          branchGroups[branchId] = {
-            branch_id: branchId,
-            branch_name: branchName,
+      const getGroup = (id: string, nameFallback: string) => {
+        if (!branchGroups[id]) {
+          branchGroups[id] = {
+            branch_id: id,
+            branch_name: nameFallback,
             total_payments: 0,
             payment_count: 0,
             cash: 0,
             mpesa: 0,
-            card: 0
+            card: 0,
+            total_sales: 0
           };
         }
+        return branchGroups[id];
+      };
 
-        branchGroups[branchId].total_payments += Number(p.amount);
-        branchGroups[branchId].payment_count += 1;
+      payments.forEach(p => {
+        const bg = getGroup(p.branch_id || 'main', p.branch?.name || 'Main Office');
+        bg.total_payments += Number(p.amount);
+        bg.payment_count += 1;
 
         if (p.payment_method === 'cash') {
-          branchGroups[branchId].cash += Number(p.amount);
-        } else if (p.payment_method === 'mpesa' || p.payment_method === 'mpesa_manual') {
-          branchGroups[branchId].mpesa += Number(p.amount);
-        } else if (p.payment_method === 'card_manual') {
-          branchGroups[branchId].card += Number(p.amount);
+          bg.cash += Number(p.amount);
+        } else if (p.payment_method?.includes('mpesa')) {
+          bg.mpesa += Number(p.amount);
+        } else if (p.payment_method?.includes('card')) {
+          bg.card += Number(p.amount);
         }
       });
 
-      branchSummaries = Object.values(branchGroups);
+      // Add Sales Data
+      restSales?.forEach(o => {
+        const bg = getGroup(o.branch_id || 'main', 'Main Office');
+        bg.total_sales += Number(o.total_amount || 0);
+      });
+
+      barSales?.forEach(o => {
+        const bg = getGroup(o.branch_id || 'main', 'Main Office');
+        bg.total_sales += Number(o.total || 0);
+      });
+
+      // Finalize with Variance
+      branchSummaries = Object.values(branchGroups).map((bg: any) => ({
+        ...bg,
+        variance: bg.total_payments - bg.total_sales
+      }));
     }
 
     res.status(200).json({
