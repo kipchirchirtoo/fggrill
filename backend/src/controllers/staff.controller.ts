@@ -610,27 +610,31 @@ export const updateStaffMember = async (
 ): Promise<void> => {
   try {
     const {
-      firstName,
-      lastName,
+      first_name,
+      last_name,
       email,
-      phone,
+      phone_number,
       role,
       department,
       shift,
       salary,
-      startDate,
-      nationalId,
-      status
+      start_date,
+      national_id,
+      status,
+      employee_id
     } = req.body;
+
+    logger.debug('Update staff request:', { id: req.params.id, body: req.body });
 
     // Get staff profile
     const { data: staff, error: getError } = await supabase
       .from('staff_profiles')
-      .select('user_id')
+      .select('user_id, email')
       .eq('id', req.params.id)
       .single();
 
     if (getError || !staff) {
+      logger.error('Staff member not found:', getError);
       res.status(404).json({
         success: false,
         message: 'Staff member not found'
@@ -638,11 +642,12 @@ export const updateStaffMember = async (
       return;
     }
 
-    // Update user profile
+    // Update user profile in users table
     const userUpdateData: any = {
-      first_name: firstName,
-      last_name: lastName,
-      phone_number: phone
+      first_name,
+      last_name,
+      phone_number,
+      updated_at: new Date().toISOString()
     };
 
     if (role) userUpdateData.role = role;
@@ -654,36 +659,52 @@ export const updateStaffMember = async (
       .eq('id', staff.user_id);
 
     if (userError) {
+      logger.error('Error updating user profile:', userError);
       throw userError;
     }
 
-    // Update email if changed
-    if (email) {
-      const { error: emailError } = await supabase.auth.admin.updateUserById(
-        staff.user_id,
-        { email }
-      );
+    // Update email in Supabase Auth if changed and user exists
+    if (email && email !== staff.email) {
+      try {
+        // First check if the auth user exists
+        const { data: authUser, error: authCheckError } = await supabase.auth.admin.getUserById(staff.user_id);
 
-      if (emailError) {
-        throw emailError;
+        if (authCheckError) {
+          logger.warn(`Auth user not found for staff ${req.params.id}, skipping email update:`, authCheckError);
+        } else if (authUser) {
+          const { error: emailError } = await supabase.auth.admin.updateUserById(
+            staff.user_id,
+            { email }
+          );
+
+          if (emailError) {
+            logger.error('Error updating email in auth:', emailError);
+            // Don't throw - continue with other updates
+            logger.warn('Continuing with staff profile update despite auth email update failure');
+          }
+        }
+      } catch (authError: any) {
+        logger.warn('Failed to update auth email, continuing with profile update:', authError.message);
       }
     }
 
     // Update staff profile
     const staffUpdateData: any = {
-      shift,
-      salary,
-      status,
       updated_at: new Date().toISOString()
     };
 
-    if (startDate) staffUpdateData.start_date = startDate;
-    if (nationalId) staffUpdateData.national_id = nationalId;
-    if (phone) staffUpdateData.phone = phone;
-    if (department) staffUpdateData.department = department;
-    if (role) {
-      staffUpdateData.role = role; // Changed from position
-    }
+    if (shift !== undefined) staffUpdateData.shift = shift;
+    if (salary !== undefined) staffUpdateData.salary = salary;
+    if (status !== undefined) staffUpdateData.status = status;
+    if (start_date) staffUpdateData.start_date = start_date;
+    if (national_id !== undefined) staffUpdateData.national_id = national_id;
+    if (phone_number !== undefined) staffUpdateData.phone = phone_number;
+    if (department !== undefined) staffUpdateData.department = department;
+    if (role !== undefined) staffUpdateData.role = role;
+    if (email !== undefined) staffUpdateData.email = email;
+    if (employee_id !== undefined) staffUpdateData.employee_id = employee_id;
+    if (first_name !== undefined) staffUpdateData.first_name = first_name;
+    if (last_name !== undefined) staffUpdateData.last_name = last_name;
 
     const { data: updatedStaff, error: updateError } = await supabase
       .from('staff_profiles')
@@ -693,6 +714,7 @@ export const updateStaffMember = async (
       .single();
 
     if (updateError) {
+      logger.error('Error updating staff profile:', updateError);
       throw updateError;
     }
 
@@ -701,8 +723,9 @@ export const updateStaffMember = async (
       data: updatedStaff
     });
 
-    logger.info(`Staff member updated: ${email || updatedStaff.id} `);
+    logger.info(`Staff member updated: ${email || updatedStaff.id}`);
   } catch (error) {
+    logger.error('Error in updateStaffMember:', error);
     next(error);
   }
 };
