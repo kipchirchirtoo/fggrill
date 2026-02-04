@@ -859,55 +859,43 @@ function CashierPageContent() {
                     {activeTab === 'station' ? (
                         <>
                             {!paymentFlowChoice && !isPOSType ? (
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto py-12 animate-in fade-in slide-in-from-bottom-8 duration-500">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto py-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
                                     <button
                                         onClick={() => { setPaymentFlowChoice('mpesa'); setPaymentMethod('mpesa'); }}
-                                        className="group relative h-80 bg-white rounded-[2rem] border-4 border-transparent hover:border-orange-500 shadow-xl overflow-hidden transition-all duration-300 transform hover:-translate-y-2"
+                                        className="group relative bg-white p-8 rounded-3xl border border-stone-100 hover:border-emerald-500 hover:shadow-xl hover:shadow-emerald-500/5 transition-all duration-300 flex flex-col items-center justify-center text-center space-y-4"
                                     >
-                                        <div className="absolute inset-0 bg-gradient-to-br from-orange-50/50 to-emerald-50/50 group-hover:opacity-100 transition-opacity" />
-                                        <div className="relative h-full flex flex-col items-center justify-center p-8 text-center">
-                                            <div className="w-24 h-24 bg-emerald-100 rounded-3xl flex items-center justify-center mb-6 text-emerald-600 group-hover:scale-110 group-hover:rotate-6 transition-transform duration-500">
-                                                <Smartphone size={48} />
-                                            </div>
-                                            <h3 className="text-2xl font-black text-stone-900 mb-2">M-Pesa</h3>
-                                            <p className="text-stone-500 text-sm font-bold uppercase tracking-widest px-4">Instant STK & Verification</p>
+                                        <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors duration-300">
+                                            <Smartphone size={32} />
                                         </div>
-                                        <div className="absolute bottom-6 right-6 w-12 h-12 bg-orange-600 rounded-2xl flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all translate-y-4 group-hover:translate-y-0">
-                                            <Zap size={24} />
+                                        <div>
+                                            <h3 className="text-xl font-bold text-stone-900">M-Pesa</h3>
+                                            <p className="text-stone-400 text-xs font-medium mt-1">Instant STK & Verification</p>
                                         </div>
                                     </button>
 
                                     <button
                                         onClick={() => { setPaymentFlowChoice('cash'); setPaymentMethod('cash'); }}
-                                        className="group relative h-80 bg-white rounded-[2rem] border-4 border-transparent hover:border-stone-900 shadow-xl overflow-hidden transition-all duration-300 transform hover:-translate-y-2"
+                                        className="group relative bg-white p-8 rounded-3xl border border-stone-100 hover:border-stone-900 hover:shadow-xl hover:shadow-stone-900/5 transition-all duration-300 flex flex-col items-center justify-center text-center space-y-4"
                                     >
-                                        <div className="absolute inset-0 bg-gradient-to-br from-stone-50/50 to-orange-50/50 group-hover:opacity-100 transition-opacity" />
-                                        <div className="relative h-full flex flex-col items-center justify-center p-8 text-center">
-                                            <div className="w-24 h-24 bg-stone-100 rounded-3xl flex items-center justify-center mb-6 text-stone-900 group-hover:scale-110 group-hover:-rotate-6 transition-transform duration-500">
-                                                <Banknote size={48} />
-                                            </div>
-                                            <h3 className="text-2xl font-black text-stone-900 mb-2">Cash</h3>
-                                            <p className="text-stone-500 text-sm font-bold uppercase tracking-widest px-4">Money & Change Flow</p>
+                                        <div className="w-16 h-16 bg-stone-50 rounded-2xl flex items-center justify-center text-stone-900 group-hover:bg-stone-900 group-hover:text-white transition-colors duration-300">
+                                            <Banknote size={32} />
                                         </div>
-                                        <div className="absolute bottom-6 right-6 w-12 h-12 bg-stone-900 rounded-2xl flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all translate-y-4 group-hover:translate-y-0">
-                                            <Zap size={24} />
+                                        <div>
+                                            <h3 className="text-xl font-bold text-stone-900">Cash</h3>
+                                            <p className="text-stone-400 text-xs font-medium mt-1">Money & Change Flow</p>
                                         </div>
                                     </button>
 
                                     <button
                                         onClick={() => { setPaymentFlowChoice('card'); setPaymentMethod('card'); }}
-                                        className="group relative h-80 bg-white rounded-[2rem] border-4 border-transparent hover:border-blue-500 shadow-xl overflow-hidden transition-all duration-300 transform hover:-translate-y-2"
+                                        className="group relative bg-white p-8 rounded-3xl border border-stone-100 hover:border-blue-500 hover:shadow-xl hover:shadow-blue-500/5 transition-all duration-300 flex flex-col items-center justify-center text-center space-y-4"
                                     >
-                                        <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-stone-50/50 group-hover:opacity-100 transition-opacity" />
-                                        <div className="relative h-full flex flex-col items-center justify-center p-8 text-center">
-                                            <div className="w-24 h-24 bg-blue-100 rounded-3xl flex items-center justify-center mb-6 text-blue-600 group-hover:scale-110 group-hover:rotate-12 transition-transform duration-500">
-                                                <CreditCard size={48} />
-                                            </div>
-                                            <h3 className="text-2xl font-black text-stone-900 mb-2">Card</h3>
-                                            <p className="text-stone-500 text-sm font-bold uppercase tracking-widest px-4">Secure Paystack Terminal</p>
+                                        <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300">
+                                            <CreditCard size={32} />
                                         </div>
-                                        <div className="absolute bottom-6 right-6 w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all translate-y-4 group-hover:translate-y-0">
-                                            <Zap size={24} />
+                                        <div>
+                                            <h3 className="text-xl font-bold text-stone-900">Card</h3>
+                                            <p className="text-stone-400 text-xs font-medium mt-1">Secure Paystack Terminal</p>
                                         </div>
                                     </button>
                                 </div>
