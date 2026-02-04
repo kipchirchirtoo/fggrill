@@ -43,7 +43,9 @@ router.use((req: any, res, next) => {
         'branch_manager',
         'bartender',
         'waiter',
-        'restaurant_manager'
+        'restaurant_manager',
+        'auditor',
+        'general_manager'
     ];
     if (allowedRoles.includes(req.user.role)) {
         return next();
