@@ -2765,7 +2765,7 @@ export const auditAPI = {
   },
   verifyStockLevels: (params: { branch_id?: number }) => {
     const query = new URLSearchParams();
-    if (params.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params.branch_id !== undefined && params.branch_id !== null) query.append('branch_id', String(params.branch_id));
     return fetchAPI<any>(`/auditor/verify/stock-levels?${query}`);
   },
   verifyBranchOrders: (params: { branch_id?: number; status?: string; start_date?: string; end_date?: string }) => {

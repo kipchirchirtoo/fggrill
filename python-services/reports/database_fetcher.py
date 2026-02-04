@@ -36,6 +36,20 @@ class DatabaseFetcher:
     def fetch_report_data(self, report_type: str, filters: Dict[str, Any]) -> Dict[str, Any]:
         """Fetch data for specific report type"""
         try:
+            # Aliases for common IDs used in frontend (match BrandedPDFGenerator)
+            aliases = {
+                'inventory_status_report': 'inventory_status',
+                'exception_summary': 'exception_logs',
+                'void_analytics': 'exception_logs',
+                'leakage_report': 'reconciliation_audit',
+                'expenditure_audit': 'expense',
+                'variance_report': 'financial_variance',
+                'consumption_audit': 'inventory_discrepancy',
+                'grn_audit': 'procurement_analysis',
+                'compliance_audit': 'compliance'
+            }
+            report_type = aliases.get(report_type, report_type)
+            
             fetchers = {
                 'daily_sales': self._fetch_daily_sales,
                 'occupancy': self._fetch_occupancy,
@@ -2197,3 +2211,225 @@ class DatabaseFetcher:
             logger.error(f"Error fetching procurement intelligence: {e}")
             
         return data
+    def fetch_stock_levels_data(self, branch_id: Any = None) -> Dict[str, Any]:
+        """
+        Fetch and calculate stock levels with variances (Theoretical vs Actual)
+        Matches logic from Node.js getStockLevelsVerification
+        """
+        if not self.client:
+            return {'stock_items': [], 'total_stock_value': 0, 'total_variance_value': 0}
+            
+        try:
+            # 1. Fetch current stock levels
+            query = self.client.table('branch_stock').select('*')
+            if branch_id and str(branch_id) != '0':
+                try:
+                    query = query.eq('branch_id', int(branch_id))
+                except:
+                    query = query.eq('branch_id', branch_id)
+            
+            stock_res = query.execute()
+            raw_stock = stock_res.data or []
+            
+            if not raw_stock:
+                return {'stock_items': [], 'total_stock_value': 0, 'total_variance_value': 0}
+            
+            # 2. Fetch related items
+            item_skus = list(set([s.get('item_sku') for s in raw_stock if s.get('item_sku')]))
+            items_res = self.client.table('simple_items').select('id, item_name, sku, unit_of_measure, category, cost_price').in_('sku', item_skus).execute()
+            item_map = {i['sku']: i for i in (items_res.data or [])}
+            
+            # 3. Fetch movements for last 7 days for variance analysis
+            seven_days_ago = (datetime.now() - timedelta(days=7)).isoformat()
+            mov_query = self.client.table('branch_stock_movements').select('*').gte('created_at', seven_days_ago)
+            if branch_id and str(branch_id) != '0':
+                try:
+                    mov_query = mov_query.eq('branch_id', int(branch_id))
+                except:
+                    mov_query = mov_query.eq('branch_id', branch_id)
+            
+            mov_res = mov_query.execute()
+            movements = mov_res.data or []
+            
+            # 4. Perform analysis
+            stock_analysis = []
+            total_stock_value = 0
+            total_variance_value = 0
+            
+            for stock in raw_stock:
+                sku = stock.get('item_sku')
+                item = item_map.get(sku, {})
+                
+                # Filter movements for this item/branch
+                item_movs = [m for m in movements if m.get('item_sku') == sku and m.get('branch_id') == stock.get('branch_id')]
+                
+                total_in = sum(float(m.get('quantity') or 0) for m in item_movs if m.get('movement_type') in ['RECEIPT', 'ADJUSTMENT_IN', 'TRANSFER_IN'])
+                total_out = sum(float(m.get('quantity') or 0) for m in item_movs if m.get('movement_type') in ['USAGE', 'SALE', 'WASTAGE', 'ADJUSTMENT_OUT', 'TRANSFER_OUT'])
+                
+                current_qty = float(stock.get('quantity') or 0)
+                theoretical_stock = current_qty - total_out + total_in
+                variance = current_qty - theoretical_stock
+                
+                cost = float(item.get('cost_price') or 0)
+                value = current_qty * cost
+                variance_value = variance * cost
+                
+                total_stock_value += value
+                total_variance_value += abs(variance_value)
+                
+                stock_analysis.append({
+                    'item_name': item.get('item_name', 'Unknown Item'),
+                    'item_sku': sku,
+                    'current_stock': current_qty,
+                    'theoretical_stock': theoretical_stock,
+                    'variance': variance,
+                    'variance_value': variance_value,
+                    'unit': item.get('unit_of_measure', 'pcs'),
+                    'cost': cost,
+                    'value': value,
+                    'has_discrepancy': abs(variance) > 0
+                })
+                
+            return {
+                'stock_items': stock_analysis,
+                'total_stock_value': total_stock_value,
+                'total_variance_value': total_variance_value
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in fetch_stock_levels_data: {e}")
+            return {'stock_items': [], 'total_stock_value': 0, 'total_variance_value': 0, 'error': str(e)}
+
+    def fetch_sales_verification_data(self, branch_id: Any, start_date: str, end_date: str) -> Dict[str, Any]:
+        """Fetch sales data for auditor verification"""
+        if not self.client:
+            return {}
+            
+        try:
+            filters = {
+                'branch_id': branch_id,
+                'start_date': start_date,
+                'end_date': end_date
+            }
+            
+            # Fetch daily sales using existing method
+            sales_data = self._fetch_daily_sales(filters)
+            
+            # Add restaurant specific summary
+            rest_query = self.client.table('restaurant_orders').select('total_amount, status, payment_status')
+            rest_query = self._apply_branch_filter(rest_query, filters)
+            rest_query = rest_query.gte('created_at', f'{start_date}T00:00:00')\
+                                   .lte('created_at', f'{end_date}T23:59:59')
+            rest_res = rest_query.execute()
+            rest_orders = rest_res.data or []
+            
+            # Add bar specific summary
+            bar_query = self.client.table('bar_orders').select('total_amount, status, payment_status')
+            bar_query = self._apply_branch_filter(bar_query, filters)
+            bar_query = bar_query.gte('created_at', f'{start_date}T00:00:00')\
+                                 .lte('created_at', f'{end_date}T23:59:59')
+            bar_res = bar_query.execute()
+            bar_orders = bar_res.data or []
+            
+            return {
+                'total_revenue': sales_data.get('total_revenue', 0),
+                'total_collected': sales_data.get('total_revenue', 0), # Simplified
+                'restaurant': {
+                    'total_value': sum(o.get('total_amount', 0) or 0 for o in rest_orders if o.get('payment_status') == 'paid'),
+                    'count': len(rest_orders),
+                    'voided': len([o for o in rest_orders if o.get('status') == 'voided'])
+                },
+                'bar': {
+                    'total_value': sum(o.get('total_amount', 0) or 0 for o in bar_orders if o.get('payment_status') == 'paid'),
+                    'count': len(bar_orders),
+                    'voided': len([o for o in bar_orders if o.get('status') == 'voided'])
+                },
+                'pos': {
+                    'total_value': sales_data.get('total_revenue', 0),
+                    'count': sales_data.get('total_transactions', 0)
+                }
+            }
+        except Exception as e:
+            logger.error(f"Error in fetch_sales_verification_data: {e}")
+            return {'error': str(e)}
+
+    def fetch_branch_orders_data(self, branch_id: Any, start_date: str, end_date: str) -> Dict[str, Any]:
+        """Fetch branch orders/requisitions data for auditor"""
+        if not self.client:
+            return {}
+            
+        try:
+            query = self.client.table('stock_requisitions').select('*, items:stock_requisition_items(*)')
+            if branch_id and str(branch_id) != '0':
+                query = query.eq('branch_id', branch_id)
+            
+            query = query.gte('created_at', f'{start_date}T00:00:00')\
+                         .lte('created_at', f'{end_date}T23:59:59')
+            
+            res = query.execute()
+            requests = res.data or []
+            
+            return {
+                'requests': requests,
+                'total_requests': len(requests),
+                'pending': len([r for r in requests if r.get('status') == 'pending']),
+                'approved': len([r for r in requests if r.get('status') == 'approved']),
+                'rejected': len([r for r in requests if r.get('status') == 'rejected']),
+                'dispatched': len([r for r in requests if r.get('status') == 'dispatched'])
+            }
+        except Exception as e:
+            logger.error(f"Error in fetch_branch_orders_data: {e}")
+            return {'error': str(e)}
+
+    def fetch_sold_items_data(self, branch_id: Any, start_date: str, end_date: str) -> List[Dict[str, Any]]:
+        """Fetch aggregated sold items data"""
+        if not self.client:
+            return []
+            
+        filters = {'branch_id': branch_id, 'start_date': start_date, 'end_date': end_date}
+        data = self._fetch_sold_items_agg(filters)
+        return data.get('items', [])
+
+    def fetch_financial_verification_data(self, branch_id: Any, audit_date: str) -> Dict[str, Any]:
+        """Fetch financial verification data"""
+        if not self.client:
+            return {}
+            
+        filters = {'branch_id': branch_id, 'start_date': audit_date, 'end_date': audit_date}
+        sales = self._fetch_daily_sales(filters)
+        
+        # Fetch payment data
+        payment_query = self.client.table('payments').select('*, cashier:users(full_name)')
+        payment_query = self._apply_branch_filter(payment_query, filters)
+        payment_query = payment_query.gte('created_at', f'{audit_date}T00:00:00')\
+                                     .lte('created_at', f'{audit_date}T23:59:59')\
+                                     .eq('status', 'completed')
+        
+        pay_res = payment_query.execute()
+        payments = pay_res.data or []
+        
+        # Group by cashier
+        cashier_map = {}
+        for p in payments:
+            name = p.get('cashier', {}).get('full_name', 'System')
+            if name not in cashier_map:
+                cashier_map[name] = {'cashier_name': name, 'total_amount': 0, 'payment_count': 0}
+            cashier_map[name]['total_amount'] += float(p.get('amount') or 0)
+            cashier_map[name]['payment_count'] += 1
+            
+        return {
+            'total_payments': sum(float(p.get('amount') or 0) for p in payments),
+            'sales': sales.get('total_revenue', 0),
+            'variance': sum(float(p.get('amount') or 0) for p in payments) - sales.get('total_revenue', 0),
+            'payments_by_mode': {
+                'cash': sales.get('cash_sales', 0),
+                'mpesa': sales.get('mpesa_sales', 0),
+                'card': sales.get('card_sales', 0)
+            },
+            'cashier_summaries': list(cashier_map.values())
+        }
+
+    def fetch_revenue_oversight_data(self, branch_id: Any, start_date: str, end_date: str) -> Dict[str, Any]:
+        """Fetch revenue oversight data"""
+        filters = {'branch_id': branch_id, 'start_date': start_date, 'end_date': end_date}
+        return self._fetch_revenue_reconciliation(filters)

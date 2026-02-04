@@ -33,12 +33,11 @@ def generate_sales_verification_report():
         # Fetch sales data from database
         sales_data = db_fetcher.fetch_sales_verification_data(branch_id, start_date, end_date)
         
-        # Generate PDF
-        pdf_buffer = branded_pdf.generate_sales_verification_pdf(
-            sales_data=sales_data,
-            branch_name=branch_name,
-            start_date=start_date,
-            end_date=end_date
+        # Use comprehensive template as it's better than non-existent simple one
+        pdf_buffer = audit_templates.generate_sales_audit_report(
+            audit_data=sales_data,
+            branch_info={'name': branch_name},
+            date_range={'start_date': start_date, 'end_date': end_date}
         )
         
         filename = f"sales_verification_{branch_id}_{datetime.now().strftime('%Y%m%d')}.pdf"
@@ -66,10 +65,10 @@ def generate_stock_reconciliation_report():
         # Fetch stock data from database
         stock_data = db_fetcher.fetch_stock_levels_data(branch_id)
         
-        # Generate PDF
-        pdf_buffer = branded_pdf.generate_stock_reconciliation_pdf(
+        # Use comprehensive template
+        pdf_buffer = audit_templates.generate_stock_audit_report(
             stock_data=stock_data,
-            branch_name=branch_name
+            branch_info={'name': branch_name}
         )
         
         filename = f"stock_reconciliation_{branch_id}_{datetime.now().strftime('%Y%m%d')}.pdf"
@@ -99,15 +98,11 @@ def generate_branch_orders_report():
         # Fetch orders data from database
         orders_data = db_fetcher.fetch_branch_orders_data(branch_id, start_date, end_date)
         
-        # Get branch info
-        branch_info = {'name': branch_name}
-        date_range = {'start_date': start_date, 'end_date': end_date}
-        
         # Generate comprehensive report using template
         pdf_buffer = audit_templates.generate_branch_orders_report(
             orders_data=orders_data,
-            branch_info=branch_info,
-            date_range=date_range
+            branch_info={'name': branch_name},
+            date_range={'start_date': start_date, 'end_date': end_date}
         )
         
         filename = f"branch_orders_audit_{branch_id or 'all'}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
@@ -137,12 +132,17 @@ def generate_sold_items_analysis_report():
         # Fetch sold items data from database
         sold_items_data = db_fetcher.fetch_sold_items_data(branch_id, start_date, end_date)
         
-        # Generate PDF
-        pdf_buffer = branded_pdf.generate_sold_items_pdf(
-            sold_items_data=sold_items_data,
-            branch_name=branch_name,
-            start_date=start_date,
-            end_date=end_date
+        # Use existing inventory report generator as fallback/closest match
+        report_data = {
+            'items': sold_items_data,
+            'total_items': len(sold_items_data),
+            'total_value': sum(float(i.get('total_amount') or 0) for i in sold_items_data)
+        }
+        
+        # _generate_inventory_report is close enough for a table of items
+        pdf_buffer = branded_pdf._generate_inventory_report(
+            report_data, 
+            {'branch_name': branch_name, 'start_date': start_date, 'end_date': end_date}
         )
         
         filename = f"sold_items_analysis_{branch_id}_{datetime.now().strftime('%Y%m%d')}.pdf"
@@ -165,17 +165,17 @@ def generate_financial_verification_report():
     try:
         data = request.get_json()
         branch_id = data.get('branch_id')
-        date = data.get('date')
+        audit_date = data.get('date')
         branch_name = data.get('branch_name', f'Branch #{branch_id}')
         
         # Fetch financial data from database
-        financial_data = db_fetcher.fetch_financial_verification_data(branch_id, date)
+        financial_data = db_fetcher.fetch_financial_verification_data(branch_id, audit_date)
         
-        # Generate PDF
-        pdf_buffer = branded_pdf.generate_financial_verification_pdf(
+        # Use comprehensive template
+        pdf_buffer = audit_templates.generate_financial_verification_report(
             financial_data=financial_data,
-            branch_name=branch_name,
-            date=date
+            branch_info={'name': branch_name},
+            audit_date=audit_date
         )
         
         filename = f"financial_verification_{branch_id}_{datetime.now().strftime('%Y%m%d')}.pdf"
@@ -205,12 +205,10 @@ def generate_revenue_oversight_report():
         # Fetch revenue data from database
         revenue_data = db_fetcher.fetch_revenue_oversight_data(branch_id, start_date, end_date)
         
-        # Generate PDF
-        pdf_buffer = branded_pdf.generate_revenue_oversight_pdf(
-            revenue_data=revenue_data,
-            branch_name=branch_name,
-            start_date=start_date,
-            end_date=end_date
+        # Use existing financial report generator
+        pdf_buffer = branded_pdf._generate_financial_report(
+            revenue_data, 
+            {'branch_name': branch_name, 'start_date': start_date, 'end_date': end_date}
         )
         
         filename = f"revenue_oversight_{branch_id}_{datetime.now().strftime('%Y%m%d')}.pdf"
@@ -221,6 +219,7 @@ def generate_revenue_oversight_report():
             as_attachment=True,
             download_name=filename
         )
+
         
     except Exception as e:
         logger.error(f"Error generating revenue oversight report: {str(e)}")

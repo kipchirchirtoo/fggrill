@@ -141,31 +141,31 @@ export default function OrdersAuditPage() {
                     {/* Stats Overview */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
                         <div className="stat-card">
-                            <div className="stat-icon text-amber-500 bg-amber-50">
+                            <div className="stat-icon">
                                 <Clock className="h-5 w-5" />
                             </div>
-                            <p className="stat-value">{auditData?.summary?.overview?.pending || 0}</p>
+                            <p className="stat-value">{auditData?.summary?.pending || 0}</p>
                             <p className="stat-label">Pending Approval</p>
                         </div>
                         <div className="stat-card">
-                            <div className="stat-icon text-blue-500 bg-blue-50">
+                            <div className="stat-icon">
                                 <CheckCircle2 className="h-5 w-5" />
                             </div>
-                            <p className="stat-value">{auditData?.summary?.overview?.approved || 0}</p>
+                            <p className="stat-value">{auditData?.summary?.approved || 0}</p>
                             <p className="stat-label">Verified Orders</p>
                         </div>
-                        <div className="stat-card bg-stone-900 border-none shadow-xl shadow-stone-900/10">
-                            <div className="stat-icon text-white bg-white/10 border-none">
+                        <div className="stat-card">
+                            <div className="stat-icon">
                                 <Truck className="h-5 w-5" />
                             </div>
-                            <p className="stat-value text-white">{auditData?.summary?.overview?.dispatched || 0}</p>
-                            <p className="stat-label text-stone-400">Total Dispatched</p>
+                            <p className="stat-value">{auditData?.summary?.dispatched || 0}</p>
+                            <p className="stat-label">Total Dispatched</p>
                         </div>
                         <div className="stat-card">
-                            <div className="stat-icon text-rose-500 bg-rose-50">
+                            <div className="stat-icon">
                                 <XCircle className="h-5 w-5" />
                             </div>
-                            <p className="stat-value">{auditData?.summary?.overview?.rejected || 0}</p>
+                            <p className="stat-value">{auditData?.summary?.rejected || 0}</p>
                             <p className="stat-label">Stock Rejections</p>
                         </div>
                     </div>
@@ -422,8 +422,8 @@ export default function OrdersAuditPage() {
                                                     {selectedOrder.items.map((item: any, idx: number) => (
                                                         <tr key={idx} className="hover:bg-stone-50">
                                                             <td className="px-4 py-3 font-bold text-gray-900">{item.item_name || item.name || 'Unknown Item'}</td>
-                                                            <td className="px-4 py-3 text-right font-bold text-gray-900">{item.quantity_requested || item.quantity || 0}</td>
-                                                            <td className="px-4 py-3 text-right font-bold text-gray-900">{item.quantity_approved || item.quantity || 0}</td>
+                                                            <td className="px-4 py-3 text-right font-bold text-gray-900">{item.requested_quantity || item.quantity_requested || item.quantity || 0}</td>
+                                                            <td className="px-4 py-3 text-right font-bold text-gray-900">{item.approved_quantity || item.quantity_approved || item.quantity || 0}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>

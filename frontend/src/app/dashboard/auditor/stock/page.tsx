@@ -10,7 +10,7 @@ import {
     AlertTriangle, Package, Filter, Download,
     ArrowLeft, Check, X, RefreshCw, Eye,
     Building2, Activity, ShieldCheck, ChevronRight,
-    Search, Boxes, Thermometer, TrendingDown, FileDown
+    Search, Boxes, Thermometer, TrendingDown, FileDown, DollarSign
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { auditorReportsAPI } from '@/lib/api';
@@ -80,7 +80,7 @@ const StockItemDetailsModal = ({ item, isOpen, onClose }: { item: any, isOpen: b
 };
 
 export default function StockAuditPage() {
-    const { activeBranchId, setActiveBranch } = useBranch();
+    const { activeBranchId, setActiveBranch, activeBranch } = useBranch();
     const [auditData, setAuditData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -119,13 +119,13 @@ export default function StockAuditPage() {
     const handleExport = async () => {
         try {
             toast.loading("Generating stock ledger...");
-            await auditorReportsAPI.exportBrandedPdf('inventory_status_report', {
-                branch_id: activeBranchId || 0,
-                start_date: new Date().toISOString().split('T')[0],
-                end_date: new Date().toISOString().split('T')[0]
+            // Use the comprehensive audit report which contains theorertical vs actual analysis
+            await auditorReportsAPI.exportComprehensiveStockAudit({
+                branch_id: activeBranchId || undefined,
+                branch_name: activeBranch?.name
             });
             toast.dismiss();
-            toast.success("Export completed successfully");
+            toast.success("Stock ledger generated successfully");
         } catch (error) {
             console.error(error);
             toast.dismiss();
@@ -173,28 +173,17 @@ export default function StockAuditPage() {
             <DashboardLayout>
                 <div className="space-y-8 pb-12">
                     {/* Header */}
-                    <div className="page-header flex flex-col md:flex-row md:items-end justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-stone-900 flex items-center justify-center text-white shadow-lg">
-                                <Boxes className="h-6 w-6" />
-                            </div>
-                            <div>
-                                <h1 className="page-title text-stone-900">
-                                    {activeBranchId !== 0 ? `Inventory Health: Branch Audit` : `System Stock Oversight`}
-                                </h1>
-                                <p className="page-subtitle">Monitor stock integrity, variances, and operational health across nodes</p>
-                            </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                            <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">
+                                {activeBranchId === 0 || activeBranchId === null ? "System Stock Oversight" : `Stock Audit: ${activeBranch?.name}`}
+                            </h1>
+                            <p className="text-stone-500 mt-0.5">Monitor stock integrity, variances, and operational health</p>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                            <div className="hidden md:flex items-center gap-2 bg-stone-100/50 border border-stone-200 rounded-xl px-3 py-1.5 shadow-sm h-[42px]">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">Live Audit Mode</span>
-                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                            </div>
+                        <div className="flex items-center gap-2">
                             <BranchSelector />
-                            <button className="btn-secondary h-[42px]">
-                                <FileDown className="h-4 w-4" />
-                            </button>
-                            <button onClick={fetchData} className="btn-primary h-[42px] shadow-lg shadow-stone-900/10">
+                            <div className="h-8 w-[1px] bg-stone-200 mx-1 hidden sm:block" />
+                            <button onClick={fetchData} className="btn-secondary">
                                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                                 <span className="ml-2">Sync</span>
                             </button>
@@ -202,154 +191,177 @@ export default function StockAuditPage() {
                     </div>
 
                     {/* High-level Scorecards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="stat-card bg-stone-900 text-white border-none shadow-xl shadow-stone-900/10 relative overflow-hidden group">
-                            <Activity className="absolute -right-4 -bottom-4 w-24 h-24 opacity-10 group-hover:scale-110 transition-transform" />
-                            <div className="relative z-10">
-                                <div className="flex items-center justify-between mb-2">
-                                    <p className="stat-label text-stone-400">System Integrity</p>
-                                    <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                                </div>
-                                <p className="stat-value text-white text-4xl">98.4%</p>
-                                <p className="text-[10px] text-stone-400 mt-2 font-medium">Weighted score across all active nodes</p>
-                            </div>
-                        </div>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div className="stat-card">
-                            <div className={`stat-icon ${(auditData?.summary?.total_discrepancies || 0) > 0 ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-500'}`}>
+                            <div className="stat-icon bg-stone-50 text-stone-600">
+                                <Package className="h-5 w-5" />
+                            </div>
+                            <p className="stat-value">{auditData?.summary?.total_items || 0}</p>
+                            <p className="stat-label">Total Items</p>
+                        </div>
+
+                        <div className="stat-card">
+                            <div className={`stat-icon ${(auditData?.summary?.items_with_discrepancies || 0) > 0 ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-500'}`}>
                                 <AlertTriangle className="h-5 w-5" />
                             </div>
-                            <p className={`stat-value ${(auditData?.summary?.total_discrepancies || 0) > 0 ? 'text-rose-600' : ''}`}>
-                                {auditData?.summary?.total_discrepancies || 0}
+                            <p className={`stat-value ${(auditData?.summary?.items_with_discrepancies || 0) > 0 ? 'text-rose-600' : ''}`}>
+                                {auditData?.summary?.items_with_discrepancies || 0}
                             </p>
-                            <p className="stat-label">Critical Variances</p>
+                            <p className="stat-label">Discrepancies</p>
                         </div>
+
                         <div className="stat-card">
                             <div className="stat-icon bg-amber-50 text-amber-500">
                                 <TrendingDown className="h-5 w-5" />
                             </div>
-                            <p className="stat-value">{auditData?.summary?.total_low_stock || 0}</p>
-                            <p className="stat-label">Low Stock Points</p>
+                            <p className="stat-value">{auditData?.summary?.low_stock_items || 0}</p>
+                            <p className="stat-label">Low Stock Items</p>
+                        </div>
+
+                        <div className="stat-card">
+                            <div className="stat-icon bg-blue-50 text-blue-500">
+                                <DollarSign className="h-5 w-5" />
+                            </div>
+                            <p className="stat-value font-mono text-[18px]">
+                                KES {auditData?.summary?.total_variance_value?.toLocaleString() || 0}
+                            </p>
+                            <p className="stat-label">Variance Value</p>
                         </div>
                     </div>
 
-                    {activeBranchId === 0 ? (
+                    {activeBranchId === 0 || activeBranchId === null ? (
                         /* BRANCH HEALTH GRID */
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {(auditData?.branch_summaries || []).map((branch: any) => (
-                                <div
-                                    key={branch.branch_id}
-                                    onClick={() => setActiveBranch(branch.branch_id)}
-                                    className="card-elevated border border-stone-100 bg-white hover:border-stone-300 transition-all cursor-pointer group flex flex-col shadow-xl shadow-stone-200/20 overflow-hidden"
-                                >
-                                    <div className="p-8 flex items-start justify-between border-b border-stone-50">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-14 h-14 rounded-2xl bg-stone-100 flex items-center justify-center text-stone-600 group-hover:bg-stone-900 group-hover:text-white transition-all shadow-inner">
-                                                <Building2 className="h-7 w-7" />
-                                            </div>
-                                            <div>
-                                                <h4 className="text-[18px] font-black text-stone-900 tracking-tight">{branch.branch_name}</h4>
-                                                <p className="text-[10px] font-extrabold text-stone-400 uppercase tracking-widest">Node ID: {branch.branch_id}</p>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-[22px] font-black text-stone-900 italic tracking-tighter">{branch.health_score || 0}%</div>
-                                            <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Audit Score</p>
-                                        </div>
-                                    </div>
-                                    <div className="p-8 grid grid-cols-3 gap-6 bg-stone-50/40">
-                                        <div>
-                                            <p className="text-[10px] font-black text-stone-400 uppercase tracking-tighter mb-1.5">Tracked Items</p>
-                                            <p className="text-[16px] font-black text-stone-800">{branch.total_items.toLocaleString()}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] font-black text-stone-400 uppercase tracking-tighter mb-1.5">Variances</p>
-                                            <p className={`text-[16px] font-black ${branch.discrepancies > 0 ? 'text-rose-600' : 'text-stone-800'}`}>
-                                                {branch.discrepancies}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] font-black text-stone-400 uppercase tracking-tighter mb-1.5">Low Stock</p>
-                                            <p className="text-[16px] font-black text-amber-600 italic">{branch.low_stock_items}</p>
-                                        </div>
-                                    </div>
-                                    <div className="px-8 py-4 border-t border-stone-50 flex items-center justify-between group-hover:bg-stone-900 group-hover:text-white transition-all duration-300">
-                                        <span className="text-[10px] font-black text-stone-400 group-hover:text-stone-500 uppercase tracking-widest">Click to audit branch inventory</span>
-                                        <ChevronRight className="h-4 w-4 text-stone-300 group-hover:text-white group-hover:translate-x-1 transition-all" />
-                                    </div>
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-[18px] font-semibold text-stone-900">Branch Health</h2>
+                                    <p className="text-stone-500 text-sm">Overview of stock integrity per operational node</p>
                                 </div>
-                            ))}
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {(auditData?.summary?.branch_summaries || []).map((branch: any) => (
+                                    <div
+                                        key={branch.branch_id}
+                                        onClick={() => setActiveBranch(branch.branch_id)}
+                                        className="card-elevated hover:border-stone-300 transition-all cursor-pointer group flex flex-col p-5"
+                                    >
+                                        <div className="flex items-start justify-between mb-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-stone-100 flex items-center justify-center text-stone-600 group-hover:bg-stone-900 group-hover:text-white transition-all">
+                                                    <Building2 className="h-5 w-5" />
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-semibold text-stone-900">{branch.branch_name}</h4>
+                                                    <p className="text-[11px] text-stone-400">Node ID: {branch.branch_id}</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-[18px] font-bold text-stone-900">{branch.health_score || 0}%</div>
+                                                <p className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest">Score</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-2 mt-auto">
+                                            <div className="bg-stone-50 rounded-lg p-2 text-center">
+                                                <p className="text-[9px] text-stone-400 uppercase font-bold">Items</p>
+                                                <p className="text-sm font-bold text-stone-800">{branch.total_items}</p>
+                                            </div>
+                                            <div className="bg-stone-50 rounded-lg p-2 text-center">
+                                                <p className="text-[9px] text-stone-400 uppercase font-bold">Variances</p>
+                                                <p className={`text-sm font-bold ${branch.items_with_discrepancies > 0 ? 'text-rose-600' : 'text-stone-800'}`}>
+                                                    {branch.items_with_discrepancies}
+                                                </p>
+                                            </div>
+                                            <div className="bg-stone-50 rounded-lg p-2 text-center">
+                                                <p className="text-[9px] text-stone-400 uppercase font-bold">Value</p>
+                                                <p className="text-[10px] font-bold text-blue-600 leading-tight">
+                                                    KES {branch.total_variance_value > 1000 ? (branch.total_variance_value / 1000).toFixed(1) + 'k' : branch.total_variance_value}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center justify-between mt-4 pt-4 border-t border-stone-100 text-[11px] font-medium text-stone-400 group-hover:text-stone-900 transition-colors">
+                                            <span>Enter Branch Audit</span>
+                                            <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     ) : (
                         <div className="space-y-6 animate-in slide-in-from-right duration-300">
                             <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-                                <div className="flex items-center gap-3 bg-white border border-stone-100 rounded-xl px-4 h-12 w-full md:w-96 shadow-sm group focus-within:ring-2 focus-within:ring-stone-900/5 transition-all">
-                                    <Search className="h-4 w-4 text-stone-300 group-focus-within:text-stone-900 transition-colors" />
+                                <div className="flex items-center gap-3 bg-white border border-stone-200 rounded-lg px-3 h-10 w-full md:w-80 transition-all focus-within:border-stone-400 focus-within:ring-4 focus-within:ring-stone-900/5">
+                                    <Search className="h-4 w-4 text-stone-400" />
                                     <input
                                         type="text"
-                                        placeholder="Search inventory by name or SKU..."
+                                        placeholder="Search inventory..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="text-sm font-bold text-stone-900 outline-none w-full placeholder:text-stone-300 placeholder:font-semibold"
+                                        className="text-[13px] text-stone-900 outline-none w-full placeholder:text-stone-400"
                                     />
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <button onClick={handleFlagVariance} className="btn-secondary h-12 px-5">
-                                        <Activity className="h-4 w-4 mr-2" /> Flag Variances
+                                    <button onClick={handleFlagVariance} className="btn-secondary h-10">
+                                        <Activity className="h-4 w-4" />
+                                        <span>Flag Variances</span>
                                     </button>
-                                    <button onClick={handleExport} className="btn-primary h-12 px-5 shadow-lg shadow-stone-900/10">
-                                        <FileDown className="h-4 w-4 mr-2" /> Export Ledger
+                                    <button onClick={handleExport} className="btn-primary h-10">
+                                        <FileDown className="h-4 w-4" />
+                                        <span>Export Ledger</span>
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="table-container shadow-sm border border-stone-100">
-                                <div className="table-responsive">
-                                    <table className="w-full text-left">
+                            <div className="card-elevated overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
                                         <thead>
-                                            <tr className="table-header">
-                                                <th className="table-header-cell">Inventory Item</th>
-                                                <th className="table-header-cell text-center">System Stock</th>
-                                                <th className="table-header-cell text-center">Theoretical</th>
-                                                <th className="table-header-cell text-center">Variance</th>
-                                                <th className="table-header-cell text-center">Audit Status</th>
-                                                <th className="table-header-cell"></th>
+                                            <tr className="bg-stone-50/50 border-b border-stone-100">
+                                                <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest">Inventory Item</th>
+                                                <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-center">System Stock</th>
+                                                <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-center">Theoretical</th>
+                                                <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-center">Variance</th>
+                                                <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-center">Status</th>
+                                                <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest"></th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-stone-50">
                                             {filteredInventory.map((item: any, idx: number) => {
-                                                const hasDiscrepancy = item.variance !== 0;
+                                                const hasDiscrepancy = Math.abs(item.variance || 0) > 0.01;
                                                 return (
-                                                    <tr key={idx} className="table-row group">
-                                                        <td className="table-cell">
+                                                    <tr key={idx} className="hover:bg-stone-50/50 transition-colors group">
+                                                        <td className="px-5 py-3">
                                                             <div className="flex flex-col">
-                                                                <span className="font-black text-stone-900 tracking-tight">{item.item?.name || item.item_name}</span>
-                                                                <span className="text-[10px] text-stone-400 font-mono tracking-tighter uppercase mt-0.5">{item.item_sku}</span>
+                                                                <span className="text-[13px] font-semibold text-stone-900">{item.item?.name || item.item_name}</span>
+                                                                <span className="text-[11px] text-stone-400 font-medium">{item.item_sku}</span>
                                                             </div>
                                                         </td>
-                                                        <td className="table-cell text-center font-mono font-bold text-stone-700">
-                                                            {item.current_quantity ?? item.quantity}
+                                                        <td className="px-5 py-3 text-center text-[13px] font-medium text-stone-600">
+                                                            {item.current_quantity ?? item.quantity ?? 0}
                                                         </td>
-                                                        <td className="table-cell text-center font-mono font-medium text-stone-400">
-                                                            {item.theoretical_quantity?.toFixed(1) || item.theoretical?.toFixed(1) || '0.0'}
+                                                        <td className="px-5 py-3 text-center text-[13px] font-medium text-stone-400">
+                                                            {item.theoretical_quantity?.toFixed(2) || item.theoretical?.toFixed(2) || '0.00'}
                                                         </td>
-                                                        <td className="table-cell text-center">
-                                                            <span className={`font-mono font-black py-1 px-2 rounded-lg ${hasDiscrepancy ? 'text-rose-600 bg-rose-50' : 'text-emerald-600 bg-emerald-50/50'}`}>
-                                                                {item.variance > 0 ? '+' : ''}{item.variance?.toFixed(1) || '0.0'}
+                                                        <td className="px-5 py-3 text-center">
+                                                            <span className={`text-[12px] font-bold px-2 py-0.5 rounded ${hasDiscrepancy ? 'text-rose-600 bg-rose-50' : 'text-emerald-600 bg-emerald-50'}`}>
+                                                                {item.variance > 0 ? '+' : ''}{item.variance?.toFixed(2) || '0.00'}
                                                             </span>
                                                         </td>
-                                                        <td className="table-cell text-center">
+                                                        <td className="px-5 py-3 text-center">
                                                             {hasDiscrepancy ? (
-                                                                <span className="badge-danger">Flagged</span>
+                                                                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 bg-rose-50 px-2 py-1 rounded-full border border-rose-100">Flagged</span>
                                                             ) : (
-                                                                <span className="badge-success">Balanced</span>
+                                                                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-100">Balanced</span>
                                                             )}
                                                         </td>
-                                                        <td className="table-cell text-right">
+                                                        <td className="px-5 py-3 text-right">
                                                             <button
                                                                 onClick={() => setSelectedItem(item)}
-                                                                className="w-8 h-8 rounded-lg hover:bg-stone-900 hover:text-white transition-all flex items-center justify-center text-stone-300"
+                                                                className="p-1.5 hover:bg-white hover:shadow-sm border border-transparent hover:border-stone-200 rounded-md transition-all text-stone-300 hover:text-stone-600"
                                                             >
-                                                                <Eye className="h-4 w-4" />
+                                                                <Eye className="h-3.5 w-3.5" />
                                                             </button>
                                                         </td>
                                                     </tr>

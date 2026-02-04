@@ -154,42 +154,38 @@ export default function BranchSalesDetailPage() {
             <DashboardLayout>
                 <div className="space-y-6 pb-12">
                     {/* Header */}
-                    <div className="page-header flex flex-col md:flex-row md:items-end justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                            <button onClick={() => router.back()} className="w-12 h-12 rounded-xl bg-stone-100 hover:bg-stone-200 flex items-center justify-center text-stone-600 transition-colors">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <button onClick={() => router.back()} className="p-2 hover:bg-stone-100 rounded-lg transition-all text-stone-400 hover:text-stone-900 border border-transparent hover:border-stone-200">
                                 <ArrowLeft className="h-5 w-5" />
                             </button>
-                            <div className="w-12 h-12 rounded-xl bg-stone-900 flex items-center justify-center text-white shadow-lg">
-                                <ShoppingBag className="h-6 w-6" />
-                            </div>
                             <div>
-                                <h1 className="page-title text-stone-900">
-                                    Branch Sales Detail
-                                </h1>
-                                <p className="page-subtitle">Comprehensive financial audit for Branch #{branchId}</p>
+                                <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Branch Sales Audit</h1>
+                                <p className="text-stone-500 mt-0.5">Comprehensive financial verification for Branch #{branchId}</p>
                             </div>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                            <div className="flex items-center gap-2 bg-stone-100/50 border border-stone-200 rounded-xl px-3 py-1.5 shadow-sm h-10">
-                                <Filter className="h-3.5 w-3.5 text-stone-400" />
+                        <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-lg px-3 h-10 shadow-sm transition-all focus-within:border-stone-400">
+                                <Filter className="h-4 w-4 text-stone-400" />
                                 <input
                                     type="date"
                                     value={dateRange.startDate}
                                     onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-                                    className="text-[12px] font-semibold text-stone-700 bg-transparent outline-none w-28"
+                                    className="text-[13px] font-medium text-stone-700 bg-transparent outline-none w-28"
                                 />
                                 <span className="text-stone-300 mx-1">→</span>
                                 <input
                                     type="date"
                                     value={dateRange.endDate}
                                     onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-                                    className="text-[12px] font-semibold text-stone-700 bg-transparent outline-none w-28"
+                                    className="text-[13px] font-medium text-stone-700 bg-transparent outline-none w-28"
                                 />
                             </div>
-                            <button onClick={handleExport} disabled={isExporting} className="btn-secondary">
+                            <div className="h-8 w-[1px] bg-stone-200 mx-1 hidden sm:block" />
+                            <button onClick={handleExport} disabled={isExporting} className="btn-secondary h-10">
                                 <Download className={`h-4 w-4 ${isExporting ? 'animate-bounce' : ''}`} />
                             </button>
-                            <button onClick={fetchData} className="btn-primary">
+                            <button onClick={fetchData} className="btn-secondary h-10">
                                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                             </button>
                         </div>
@@ -197,62 +193,62 @@ export default function BranchSalesDetailPage() {
 
                     {/* Statistics */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="stat-card bg-stone-900 border-none shadow-xl shadow-stone-900/10">
-                            <div className="stat-icon bg-white/10 text-white">
+                        <div className="stat-card">
+                            <div className="stat-icon bg-stone-900 text-white">
                                 <TrendingUp className="h-5 w-5" />
                             </div>
-                            <p className="stat-value text-white">KES {totalExpected.toLocaleString()}</p>
-                            <p className="stat-label text-stone-400">Total Revenue</p>
+                            <p className="stat-value">KES {totalExpected.toLocaleString()}</p>
+                            <p className="stat-label">Total Revenue</p>
                         </div>
                         <div className="stat-card">
-                            <div className="stat-icon bg-stone-50 text-stone-500">
+                            <div className="stat-icon bg-emerald-50 text-emerald-600">
                                 <Utensils className="h-5 w-5" />
                             </div>
                             <p className="stat-value">{auditData?.data?.restaurant?.total_orders || 0}</p>
                             <p className="stat-label">Restaurant Orders</p>
                         </div>
                         <div className="stat-card">
-                            <div className="stat-icon bg-stone-50 text-stone-500">
+                            <div className="stat-icon bg-amber-50 text-amber-600">
                                 <Beer className="h-5 w-5" />
                             </div>
                             <p className="stat-value">{auditData?.data?.bar?.total_orders || 0}</p>
                             <p className="stat-label">Bar Orders</p>
                         </div>
                         <div className="stat-card">
-                            <div className={`stat-icon ${voidedCount > 0 ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-500'}`}>
-                                {voidedCount > 0 ? <AlertTriangle className="h-5 w-5" /> : <ShieldCheck className="h-5 w-5" />}
+                            <div className={`stat-icon ${voidedCount > 0 ? 'bg-rose-50 text-rose-500' : 'bg-stone-50 text-stone-500'}`}>
+                                <AlertTriangle className="h-5 w-5" />
                             </div>
                             <p className={`stat-value ${voidedCount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{voidedCount}</p>
-                            <p className="stat-label">Voided Transactions</p>
+                            <p className="stat-label">Voids</p>
                         </div>
                     </div>
 
                     {/* Tabs */}
-                    <div className="flex gap-2 border-b border-stone-200">
+                    <div className="flex gap-2 border-b border-stone-200 px-1 overflow-x-auto no-scrollbar">
                         <button
                             onClick={() => setActiveTab('restaurant')}
-                            className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${activeTab === 'restaurant' ? 'border-stone-900 text-stone-900' : 'border-transparent text-stone-400 hover:text-stone-600'}`}
+                            className={`px-4 py-3 font-semibold text-sm transition-all border-b-2 whitespace-nowrap ${activeTab === 'restaurant' ? 'border-stone-900 text-stone-900' : 'border-transparent text-stone-400 hover:text-stone-600 hover:border-stone-200'}`}
                         >
                             <Utensils className="h-4 w-4 inline mr-2" />
                             Restaurant ({restaurantOrders.length})
                         </button>
                         <button
                             onClick={() => setActiveTab('bar')}
-                            className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${activeTab === 'bar' ? 'border-stone-900 text-stone-900' : 'border-transparent text-stone-400 hover:text-stone-600'}`}
+                            className={`px-4 py-3 font-semibold text-sm transition-all border-b-2 whitespace-nowrap ${activeTab === 'bar' ? 'border-stone-900 text-stone-900' : 'border-transparent text-stone-400 hover:text-stone-600 hover:border-stone-200'}`}
                         >
                             <Beer className="h-4 w-4 inline mr-2" />
                             Bar & Lounge ({barOrders.length})
                         </button>
                         <button
                             onClick={() => setActiveTab('pos')}
-                            className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${activeTab === 'pos' ? 'border-stone-900 text-stone-900' : 'border-transparent text-stone-400 hover:text-stone-600'}`}
+                            className={`px-4 py-3 font-semibold text-sm transition-all border-b-2 whitespace-nowrap ${activeTab === 'pos' ? 'border-stone-900 text-stone-900' : 'border-transparent text-stone-400 hover:text-stone-600 hover:border-stone-200'}`}
                         >
                             <Smartphone className="h-4 w-4 inline mr-2" />
                             POS Transactions ({posTransactions.length})
                         </button>
                         <button
                             onClick={() => setActiveTab('payments')}
-                            className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${activeTab === 'payments' ? 'border-stone-900 text-stone-900' : 'border-transparent text-stone-400 hover:text-stone-600'}`}
+                            className={`px-4 py-3 font-semibold text-sm transition-all border-b-2 whitespace-nowrap ${activeTab === 'payments' ? 'border-stone-900 text-stone-900' : 'border-transparent text-stone-400 hover:text-stone-600 hover:border-stone-200'}`}
                         >
                             <CreditCard className="h-4 w-4 inline mr-2" />
                             Payments ({payments.length})
@@ -260,189 +256,169 @@ export default function BranchSalesDetailPage() {
                     </div>
 
                     {/* Transactions Table */}
-                    <div className="table-container shadow-sm border border-stone-100">
-                        <div className="section-header p-5 border-b border-stone-100 flex items-center justify-between">
-                            <div>
-                                <h2 className="section-title">
-                                    {activeTab === 'restaurant' && 'Restaurant Transactions'}
-                                    {activeTab === 'bar' && 'Bar & Lounge Transactions'}
-                                    {activeTab === 'pos' && 'POS Transactions'}
-                                    {activeTab === 'payments' && 'Payment Records'}
-                                </h2>
-                                <p className="section-subtitle">Real-time verification of operational checks</p>
-                            </div>
-                        </div>
-                        <div className="table-responsive">
-                            <table className="w-full text-left">
+                    <div className="card-elevated overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
                                 <thead>
-                                    <tr className="table-header">
-                                        <th className="table-header-cell">Reference</th>
-                                        <th className="table-header-cell">{activeTab === 'payments' ? 'Description' : 'Guest & Time'}</th>
-                                        <th className="table-header-cell text-center">{activeTab === 'payments' ? 'Method' : 'Type'}</th>
-                                        <th className="table-header-cell text-right">Amount</th>
-                                        <th className="table-header-cell text-center">Status</th>
-                                        <th className="table-header-cell text-right"></th>
+                                    <tr className="bg-stone-50/50 border-b border-stone-100">
+                                        <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest">Reference</th>
+                                        <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest">{activeTab === 'payments' ? 'Description' : 'Guest & Time'}</th>
+                                        <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-center">{activeTab === 'payments' ? 'Method' : 'Type'}</th>
+                                        <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-right">Amount</th>
+                                        <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-center">Status</th>
+                                        <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest"></th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-stone-50">
                                     {activeTab === 'restaurant' && restaurantOrders.map((order: any) => (
-                                        <tr key={order.id} className="table-row group">
-                                            <td className="table-cell">
-                                                <span className="font-mono font-bold text-stone-900 tracking-tight">
+                                        <tr key={order.id} className="hover:bg-stone-50/50 transition-colors group">
+                                            <td className="px-5 py-4">
+                                                <span className="text-[13px] font-bold text-stone-900 tracking-tight">
                                                     {order.order_number || `#${order.id?.substr(0, 6)}`}
                                                 </span>
                                             </td>
-                                            <td className="table-cell">
+                                            <td className="px-5 py-4">
                                                 <div className="flex flex-col">
-                                                    <span className="font-bold text-stone-900">{order.guest_name || 'Walk-in'}</span>
-                                                    <span className="text-[10px] text-stone-400 uppercase font-black tracking-widest">
+                                                    <span className="text-[13px] font-semibold text-stone-900">{order.guest_name || 'Walk-in'}</span>
+                                                    <span className="text-[10px] text-stone-400 uppercase font-bold tracking-widest">
                                                         {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                     </span>
                                                 </div>
                                             </td>
-                                            <td className="table-cell text-center">
-                                                <span className="badge-info">Restaurant</span>
+                                            <td className="px-5 py-4 text-center">
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-100">Restaurant</span>
                                             </td>
-                                            <td className="table-cell text-right font-bold text-stone-900">
-                                                KES {(order.total_amount || 0).toLocaleString()}
+                                            <td className="px-5 py-4 text-right">
+                                                <span className="text-[13px] font-bold text-stone-900">KES {(order.total_amount || 0).toLocaleString()}</span>
                                             </td>
-                                            <td className="table-cell text-center">
-                                                <span className={
-                                                    order.status === 'cancelled' ? 'badge-danger' :
-                                                        order.status === 'completed' || order.status === 'paid' ? 'badge-success' :
-                                                            'badge-info'
-                                                }>
+                                            <td className="px-5 py-4 text-center">
+                                                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full border ${order.status === 'cancelled' ? 'text-rose-500 bg-rose-50 border-rose-100' :
+                                                        order.status === 'completed' || order.status === 'paid' ? 'text-emerald-500 bg-emerald-50 border-emerald-100' :
+                                                            'text-blue-500 bg-blue-50 border-blue-100'
+                                                    }`}>
                                                     {order.status}
                                                 </span>
                                             </td>
-                                            <td className="table-cell text-right">
-                                                <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button
-                                                        onClick={() => { setSelectedOrder(order); setIsModalOpen(true); }}
-                                                        className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors text-stone-400"
-                                                    >
-                                                        <Eye className="h-4 w-4" />
-                                                    </button>
-                                                </div>
+                                            <td className="px-5 py-4 text-right">
+                                                <button
+                                                    onClick={() => { setSelectedOrder(order); setIsModalOpen(true); }}
+                                                    className="p-1.5 hover:bg-white hover:shadow-sm border border-transparent hover:border-stone-200 rounded-md transition-all text-stone-300 hover:text-stone-600"
+                                                >
+                                                    <Eye className="h-3.5 w-3.5" />
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}
 
                                     {activeTab === 'bar' && barOrders.map((order: any) => (
-                                        <tr key={order.id} className="table-row group">
-                                            <td className="table-cell">
-                                                <span className="font-mono font-bold text-stone-900 tracking-tight">
+                                        <tr key={order.id} className="hover:bg-stone-50/50 transition-colors group">
+                                            <td className="px-5 py-4">
+                                                <span className="text-[13px] font-bold text-stone-900 tracking-tight">
                                                     {order.order_number || `#${order.id?.substr(0, 6)}`}
                                                 </span>
                                             </td>
-                                            <td className="table-cell">
+                                            <td className="px-5 py-4">
                                                 <div className="flex flex-col">
-                                                    <span className="font-bold text-stone-900">{order.customer_name || 'Walk-in'}</span>
-                                                    <span className="text-[10px] text-stone-400 uppercase font-black tracking-widest">
+                                                    <span className="text-[13px] font-semibold text-stone-900">{order.customer_name || 'Walk-in'}</span>
+                                                    <span className="text-[10px] text-stone-400 uppercase font-bold tracking-widest">
                                                         {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                     </span>
                                                 </div>
                                             </td>
-                                            <td className="table-cell text-center">
-                                                <span className="badge-warning">Bar</span>
+                                            <td className="px-5 py-4 text-center">
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 bg-amber-50 px-2 py-1 rounded-full border border-amber-100">Bar</span>
                                             </td>
-                                            <td className="table-cell text-right font-bold text-stone-900">
-                                                KES {(order.total || 0).toLocaleString()}
+                                            <td className="px-5 py-4 text-right">
+                                                <span className="text-[13px] font-bold text-stone-900">KES {(order.total || 0).toLocaleString()}</span>
                                             </td>
-                                            <td className="table-cell text-center">
-                                                <span className={
-                                                    order.status === 'cancelled' ? 'badge-danger' :
-                                                        order.status === 'completed' || order.status === 'paid' ? 'badge-success' :
-                                                            'badge-info'
-                                                }>
+                                            <td className="px-5 py-4 text-center">
+                                                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full border ${order.status === 'cancelled' ? 'text-rose-500 bg-rose-50 border-rose-100' :
+                                                        order.status === 'completed' || order.status === 'paid' ? 'text-emerald-500 bg-emerald-50 border-emerald-100' :
+                                                            'text-blue-500 bg-blue-50 border-blue-100'
+                                                    }`}>
                                                     {order.status}
                                                 </span>
                                             </td>
-                                            <td className="table-cell text-right">
-                                                <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button
-                                                        onClick={() => { setSelectedOrder(order); setIsModalOpen(true); }}
-                                                        className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors text-stone-400"
-                                                    >
-                                                        <Eye className="h-4 w-4" />
-                                                    </button>
-                                                </div>
+                                            <td className="px-5 py-4 text-right">
+                                                <button
+                                                    onClick={() => { setSelectedOrder(order); setIsModalOpen(true); }}
+                                                    className="p-1.5 hover:bg-white hover:shadow-sm border border-transparent hover:border-stone-200 rounded-md transition-all text-stone-300 hover:text-stone-600"
+                                                >
+                                                    <Eye className="h-3.5 w-3.5" />
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}
 
                                     {activeTab === 'pos' && posTransactions.map((txn: any) => (
-                                        <tr key={txn.id} className="table-row group">
-                                            <td className="table-cell">
-                                                <span className="font-mono font-bold text-stone-900 tracking-tight">
+                                        <tr key={txn.id} className="hover:bg-stone-50/50 transition-colors group">
+                                            <td className="px-5 py-4">
+                                                <span className="text-[13px] font-bold text-stone-900 tracking-tight">
                                                     {txn.transaction_id || `#${txn.id?.substr(0, 6)}`}
                                                 </span>
                                             </td>
-                                            <td className="table-cell">
+                                            <td className="px-5 py-4">
                                                 <div className="flex flex-col">
-                                                    <span className="font-bold text-stone-900">{txn.customer_name || 'POS Sale'}</span>
-                                                    <span className="text-[10px] text-stone-400 uppercase font-black tracking-widest">
+                                                    <span className="text-[13px] font-semibold text-stone-900">{txn.customer_name || 'POS Sale'}</span>
+                                                    <span className="text-[10px] text-stone-400 uppercase font-bold tracking-widest">
                                                         {new Date(txn.transaction_date || txn.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                     </span>
                                                 </div>
                                             </td>
-                                            <td className="table-cell text-center">
-                                                <span className="badge-success">POS</span>
+                                            <td className="px-5 py-4 text-center">
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 bg-blue-50 px-2 py-1 rounded-full border border-blue-100">POS</span>
                                             </td>
-                                            <td className="table-cell text-right font-bold text-stone-900">
-                                                KES {(txn.amount || 0).toLocaleString()}
+                                            <td className="px-5 py-4 text-right">
+                                                <span className="text-[13px] font-bold text-stone-900">KES {(txn.amount || 0).toLocaleString()}</span>
                                             </td>
-                                            <td className="table-cell text-center">
-                                                <span className="badge-success">Completed</span>
+                                            <td className="px-5 py-4 text-center">
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-100">Completed</span>
                                             </td>
-                                            <td className="table-cell text-right">
-                                                <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button
-                                                        onClick={() => { setSelectedOrder(txn); setIsModalOpen(true); }}
-                                                        className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors text-stone-400"
-                                                    >
-                                                        <Eye className="h-4 w-4" />
-                                                    </button>
-                                                </div>
+                                            <td className="px-5 py-4 text-right">
+                                                <button
+                                                    onClick={() => { setSelectedOrder(txn); setIsModalOpen(true); }}
+                                                    className="p-1.5 hover:bg-white hover:shadow-sm border border-transparent hover:border-stone-200 rounded-md transition-all text-stone-300 hover:text-stone-600"
+                                                >
+                                                    <Eye className="h-3.5 w-3.5" />
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}
 
                                     {activeTab === 'payments' && payments.map((payment: any) => (
-                                        <tr key={payment.id} className="table-row group">
-                                            <td className="table-cell">
-                                                <span className="font-mono font-bold text-stone-900 tracking-tight">
+                                        <tr key={payment.id} className="hover:bg-stone-50/50 transition-colors group">
+                                            <td className="px-5 py-4">
+                                                <span className="text-[13px] font-bold text-stone-900 tracking-tight">
                                                     {payment.payment_reference || `#${payment.id?.substr(0, 6)}`}
                                                 </span>
                                             </td>
-                                            <td className="table-cell">
+                                            <td className="px-5 py-4">
                                                 <div className="flex flex-col">
-                                                    <span className="font-bold text-stone-900">{payment.description || payment.payment_type || 'Payment'}</span>
-                                                    <span className="text-[10px] text-stone-400 uppercase font-black tracking-widest">
+                                                    <span className="text-[13px] font-semibold text-stone-900">{payment.description || payment.payment_type || 'Payment'}</span>
+                                                    <span className="text-[10px] text-stone-400 uppercase font-bold tracking-widest">
                                                         {new Date(payment.payment_date || payment.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                     </span>
                                                 </div>
                                             </td>
-                                            <td className="table-cell text-center">
-                                                <span className="badge-info">{payment.payment_method || payment.payment_mode || 'N/A'}</span>
+                                            <td className="px-5 py-4 text-center">
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-500 bg-purple-50 px-2 py-1 rounded-full border border-purple-100">{payment.payment_method || payment.payment_mode || 'N/A'}</span>
                                             </td>
-                                            <td className="table-cell text-right font-bold text-stone-900">
-                                                KES {(payment.amount || 0).toLocaleString()}
+                                            <td className="px-5 py-4 text-right">
+                                                <span className="text-[13px] font-bold text-stone-900">KES {(payment.amount || 0).toLocaleString()}</span>
                                             </td>
-                                            <td className="table-cell text-center">
-                                                <span className={payment.status === 'completed' ? 'badge-success' : 'badge-info'}>
+                                            <td className="px-5 py-4 text-center">
+                                                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full border ${payment.status === 'completed' ? 'text-emerald-500 bg-emerald-50 border-emerald-100' : 'text-blue-500 bg-blue-50 border-blue-100'
+                                                    }`}>
                                                     {payment.status || 'Recorded'}
                                                 </span>
                                             </td>
-                                            <td className="table-cell text-right">
-                                                <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button
-                                                        onClick={() => { setSelectedOrder(payment); setIsModalOpen(true); }}
-                                                        className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors text-stone-400"
-                                                    >
-                                                        <Eye className="h-4 w-4" />
-                                                    </button>
-                                                </div>
+                                            <td className="px-5 py-4 text-right">
+                                                <button
+                                                    onClick={() => { setSelectedOrder(payment); setIsModalOpen(true); }}
+                                                    className="p-1.5 hover:bg-white hover:shadow-sm border border-transparent hover:border-stone-200 rounded-md transition-all text-stone-300 hover:text-stone-600"
+                                                >
+                                                    <Eye className="h-3.5 w-3.5" />
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}

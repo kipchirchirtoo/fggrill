@@ -143,39 +143,33 @@ export default function SalesAuditPage() {
             <DashboardLayout>
                 <div className="space-y-6 pb-12">
                     {/* Header */}
-                    <div className="page-header flex flex-col md:flex-row md:items-end justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-stone-900 flex items-center justify-center text-white shadow-lg">
-                                <ShoppingBag className="h-6 w-6" />
-                            </div>
-                            <div>
-                                <h1 className="page-title text-stone-900">
-                                    System Sales Audit
-                                </h1>
-                                <p className="page-subtitle">Verify transactions and departmental reconciled revenue totals</p>
-                            </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                            <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">System Sales Audit</h1>
+                            <p className="text-stone-500 mt-0.5">Verify transactions and departmental reconciled revenue totals</p>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                            <div className="flex items-center gap-2 bg-stone-100/50 border border-stone-200 rounded-xl px-3 py-1.5 shadow-sm h-10">
-                                <Filter className="h-3.5 w-3.5 text-stone-400" />
+                        <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-lg px-3 h-10 shadow-sm transition-all focus-within:border-stone-400">
+                                <Filter className="h-4 w-4 text-stone-400" />
                                 <input
                                     type="date"
                                     value={dateRange.startDate}
                                     onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-                                    className="text-[12px] font-semibold text-stone-700 bg-transparent outline-none w-28"
+                                    className="text-[13px] font-medium text-stone-700 bg-transparent outline-none w-28"
                                 />
                                 <span className="text-stone-300 mx-1">→</span>
                                 <input
                                     type="date"
                                     value={dateRange.endDate}
                                     onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-                                    className="text-[12px] font-semibold text-stone-700 bg-transparent outline-none w-28"
+                                    className="text-[13px] font-medium text-stone-700 bg-transparent outline-none w-28"
                                 />
                             </div>
-                            <button onClick={handleExport} disabled={isExporting} className="btn-secondary">
+                            <div className="h-8 w-[1px] bg-stone-200 mx-1 hidden sm:block" />
+                            <button onClick={handleExport} disabled={isExporting} className="btn-secondary h-10">
                                 <Download className={`h-4 w-4 ${isExporting ? 'animate-bounce' : ''}`} />
                             </button>
-                            <button onClick={fetchData} className="btn-primary">
+                            <button onClick={fetchData} className="btn-secondary h-10">
                                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                             </button>
                         </div>
@@ -183,55 +177,55 @@ export default function SalesAuditPage() {
 
                     {/* Bird's Eye Statistics */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="stat-card bg-stone-900 border-none shadow-xl shadow-stone-900/10">
-                            <div className="stat-icon bg-white/10 text-white">
+                        <div className="stat-card">
+                            <div className="stat-icon bg-stone-900 text-white">
                                 <TrendingUp className="h-5 w-5" />
                             </div>
-                            <p className="stat-value text-white">KES {totalExpected.toLocaleString()}</p>
-                            <p className="stat-label text-stone-400">Total Sales Reconciled</p>
+                            <p className="stat-value">KES {totalExpected.toLocaleString()}</p>
+                            <p className="stat-label">Total Revenue</p>
                         </div>
                         <div className="stat-card">
-                            <div className="stat-icon bg-stone-50 text-stone-500">
-                                <BarChart3 className="h-5 w-5" />
+                            <div className="stat-icon bg-emerald-50 text-emerald-600">
+                                <Utensils className="h-5 w-5" />
                             </div>
                             <p className="stat-value text-stone-900">KES {(auditData?.restaurant?.total_value || 0).toLocaleString()}</p>
-                            <p className="stat-label">Restaurant Revenue</p>
+                            <p className="stat-label">Restaurant</p>
                         </div>
                         <div className="stat-card">
-                            <div className="stat-icon bg-stone-50 text-stone-500">
-                                <BarChart3 className="h-5 w-5" />
+                            <div className="stat-icon bg-amber-50 text-amber-600">
+                                <Beer className="h-5 w-5" />
                             </div>
                             <p className="stat-value text-stone-900">KES {(auditData?.bar?.total_value || 0).toLocaleString()}</p>
-                            <p className="stat-label">Bar & Lounge Revenue</p>
+                            <p className="stat-label">Bar & Lounge</p>
                         </div>
                         <div className="stat-card">
                             <div className={`stat-icon ${voidedCount > 0 ? 'bg-rose-50 text-rose-500' : 'bg-stone-50 text-stone-500'}`}>
                                 <AlertTriangle className="h-5 w-5" />
                             </div>
                             <p className={`stat-value ${voidedCount > 0 ? 'text-rose-600' : 'text-stone-900'}`}>{voidedCount}</p>
-                            <p className="stat-label">Voided Alerts</p>
+                            <p className="stat-label">Voided Orders</p>
                         </div>
                     </div>
 
 
                     {/* BRANCH SUMMARIES VIEW */}
-                    <div className="table-container shadow-sm border border-stone-100">
-                        <div className="section-header p-5 border-b border-stone-100">
+                    <div className="card-elevated overflow-hidden">
+                        <div className="p-5 border-b border-stone-100 flex items-center justify-between bg-stone-50/30">
                             <div>
-                                <h2 className="section-title">Branch Performance</h2>
-                                <p className="section-subtitle">Comparative revenue analysis across operational nodes</p>
+                                <h2 className="text-[15px] font-semibold text-stone-900">Branch Performance</h2>
+                                <p className="text-[12px] text-stone-500">Comparative revenue analysis across nodes</p>
                             </div>
                         </div>
-                        <div className="table-responsive">
-                            <table className="w-full text-left">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
                                 <thead>
-                                    <tr className="table-header">
-                                        <th className="table-header-cell">Branch</th>
-                                        <th className="table-header-cell text-center">Restaurant</th>
-                                        <th className="table-header-cell text-center">Bar & Lounge</th>
-                                        <th className="table-header-cell text-center">Voided</th>
-                                        <th className="table-header-cell text-right">Gross Total</th>
-                                        <th className="table-header-cell"></th>
+                                    <tr className="bg-stone-50/50 border-b border-stone-100">
+                                        <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest">Branch</th>
+                                        <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-center">Restaurant</th>
+                                        <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-center">Bar & Lounge</th>
+                                        <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-center">Voided</th>
+                                        <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-right">Gross Total</th>
+                                        <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest"></th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-stone-50">
@@ -239,37 +233,37 @@ export default function SalesAuditPage() {
                                         <tr
                                             key={branch.branch_id}
                                             onClick={() => router.push(`/dashboard/auditor/sales/${branch.branch_id}`)}
-                                            className="table-row cursor-pointer group hover:bg-stone-50 transition-colors"
+                                            className="hover:bg-stone-50/50 transition-colors group cursor-pointer"
                                         >
-                                            <td className="table-cell">
+                                            <td className="px-5 py-4">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-8 h-8 rounded-lg bg-stone-100 flex items-center justify-center text-stone-500 group-hover:bg-stone-900 group-hover:text-white transition-colors">
                                                         <Building2 className="h-4 w-4" />
                                                     </div>
-                                                    <span className="font-semibold text-stone-900">{branch.branch_name}</span>
+                                                    <span className="text-[13px] font-semibold text-stone-900">{branch.branch_name}</span>
                                                 </div>
                                             </td>
-                                            <td className="table-cell text-center">
+                                            <td className="px-5 py-4 text-center">
                                                 <div className="flex flex-col">
-                                                    <span className="font-semibold text-stone-900">KES {branch.restaurant.total_value.toLocaleString()}</span>
+                                                    <span className="text-[13px] font-bold text-stone-900">KES {branch.restaurant.total_value.toLocaleString()}</span>
                                                     <span className="text-[10px] text-stone-400 font-medium">{branch.restaurant.total_orders} orders</span>
                                                 </div>
                                             </td>
-                                            <td className="table-cell text-center">
+                                            <td className="px-5 py-4 text-center">
                                                 <div className="flex flex-col">
-                                                    <span className="font-semibold text-stone-900">KES {branch.bar.total_value.toLocaleString()}</span>
+                                                    <span className="text-[13px] font-bold text-stone-900">KES {branch.bar.total_value.toLocaleString()}</span>
                                                     <span className="text-[10px] text-stone-400 font-medium">{branch.bar.total_orders} orders</span>
                                                 </div>
                                             </td>
-                                            <td className="table-cell text-center">
-                                                <span className={`font-bold ${branch.restaurant.voided + branch.bar.voided > 0 ? 'text-rose-600' : 'text-stone-300'}`}>
+                                            <td className="px-5 py-4 text-center">
+                                                <span className={`text-[13px] font-bold ${branch.restaurant.voided + branch.bar.voided > 0 ? 'text-rose-600' : 'text-stone-300'}`}>
                                                     {branch.restaurant.voided + branch.bar.voided}
                                                 </span>
                                             </td>
-                                            <td className="table-cell text-right">
-                                                <span className="font-bold text-stone-900">KES {branch.total_revenue.toLocaleString()}</span>
+                                            <td className="px-5 py-4 text-right">
+                                                <span className="text-[13px] font-bold text-stone-900">KES {branch.total_revenue.toLocaleString()}</span>
                                             </td>
-                                            <td className="table-cell text-right">
+                                            <td className="px-5 py-4 text-right">
                                                 <ChevronRight className="h-4 w-4 text-stone-300 group-hover:text-stone-900 transition-colors" />
                                             </td>
                                         </tr>

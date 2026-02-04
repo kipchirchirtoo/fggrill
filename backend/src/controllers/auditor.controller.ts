@@ -740,104 +740,139 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
 export const getRevenueOversight = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { branch_id, start_date, end_date } = req.query;
-    const start = (start_date as string) || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const end = (end_date as string) || new Date().toISOString().split('T')[0];
+    const start = (start_date as string) || new Date(new Date().setDate(new Date().getDate() - 30)).toISOString();
+    const end = (end_date as string) || new Date().toISOString();
 
-    // 1. Departmental Revenue Queries
-    let restQuery = supabase.from('restaurant_orders').select('total_amount, created_at')
-      .eq('status', 'completed')
+    // 1. Fetch Revenue Streams
+    let restQuery = supabase.from('restaurant_orders').select('total_amount, created_at, status')
+      .in('status', ['completed', 'paid', 'delivered'])
       .gte('created_at', start)
       .lte('created_at', end);
 
-    let barQuery = supabase.from('bar_orders').select('total, created_at')
-      .eq('status', 'completed')
+    let barQuery = supabase.from('bar_orders').select('total, created_at, status')
+      .in('status', ['completed', 'paid', 'closed'])
       .gte('created_at', start)
       .lte('created_at', end);
 
-    let roomQuery = supabase.from('reservations').select('total_amount, created_at')
+    let roomQuery = supabase.from('reservations').select('total_amount, created_at, status')
       .in('status', ['confirmed', 'checked_in', 'checked_out'])
       .gte('created_at', start)
       .lte('created_at', end);
 
-    let eventQuery = supabase.from('outside_catering_bookings').select('total_amount, created_at')
+    let eventQuery = supabase.from('outside_catering_bookings').select('total_amount, event_date, status')
       .in('status', ['confirmed', 'completed'])
       .gte('event_date', start)
       .lte('event_date', end);
+
+    let posQuery = supabase.from('pos_transactions').select('amount, created_at')
+      .gte('created_at', start)
+      .lte('created_at', end);
+
+    let billQuery = supabase.from('unpaid_bills').select('total_amount, paid_amount, created_at, status')
+      .gte('created_at', start)
+      .lte('created_at', end);
 
     if (branch_id && branch_id !== '0') {
       restQuery = restQuery.eq('branch_id', branch_id);
       barQuery = barQuery.eq('branch_id', branch_id);
       roomQuery = roomQuery.eq('branch_id', branch_id);
       eventQuery = eventQuery.eq('branch_id', branch_id);
+      posQuery = posQuery.eq('branch_id', branch_id);
+      billQuery = billQuery.eq('branch_id', branch_id);
     }
 
-    const [restRes, barRes, roomRes, eventRes] = await Promise.all([restQuery, barQuery, roomQuery, eventQuery]);
+    const [restRes, barRes, roomRes, eventRes, posRes, billRes] = await Promise.all([
+      restQuery, barQuery, roomQuery, eventQuery, posQuery, billQuery
+    ]);
 
     const restRev = restRes.data?.reduce((sum, o) => sum + Number(o.total_amount || 0), 0) || 0;
     const barRev = barRes.data?.reduce((sum, o) => sum + Number(o.total || 0), 0) || 0;
     const roomRev = roomRes.data?.reduce((sum, o) => sum + Number(o.total_amount || 0), 0) || 0;
     const eventRev = eventRes.data?.reduce((sum, o) => sum + Number(o.total_amount || 0), 0) || 0;
+    const posRev = posRes.data?.reduce((sum, o) => sum + Number(o.amount || 0), 0) || 0;
+    const billsTotal = billRes.data?.reduce((sum, o) => sum + Number(o.total_amount || 0), 0) || 0;
+    const billsPaid = billRes.data?.reduce((sum, o) => sum + Number(o.paid_amount || 0), 0) || 0;
 
     // 2. Daily Trends
     const trendsMap: Record<string, number> = {};
-    const processTrends = (items: any[] | null, key: string) => {
+    const processTrends = (items: any[] | null, key: string, dateKey: string = 'created_at') => {
       items?.forEach(i => {
-        const date = i.created_at?.split('T')[0] || i.event_date;
-        trendsMap[date] = (trendsMap[date] || 0) + Number(i[key] || 0);
+        const date = (i[dateKey] || '').split('T')[0];
+        if (date) {
+          trendsMap[date] = (trendsMap[date] || 0) + Number(i[key] || 0);
+        }
       });
     };
     processTrends(restRes.data, 'total_amount');
     processTrends(barRes.data, 'total');
     processTrends(roomRes.data, 'total_amount');
-    processTrends(eventRes.data, 'total_amount');
+    processTrends(eventRes.data, 'total_amount', 'event_date');
+    processTrends(posRes.data, 'amount');
 
     const dailyTrends = Object.keys(trendsMap).sort().map(date => ({
       day: date.slice(5), // MM-DD
       amount: trendsMap[date]
-    }));
+    })).slice(-15); // Show last 15 days
 
     // 3. Yield Optimization Stats
-    // Occupancy
     const { count: totalRooms } = await supabase.from('rooms').select('*', { count: 'exact', head: true });
     const { count: occupiedRooms } = await supabase.from('rooms').select('*', { count: 'exact', head: true }).eq('status', 'occupied');
     const occupancy = totalRooms ? Math.round((occupiedRooms || 0) / totalRooms * 100) : 0;
 
-    // AVG Order Value (F&B)
     const fbOrders = (restRes.data?.length || 0) + (barRes.data?.length || 0);
     const avgOrderValue = fbOrders ? Math.round((restRev + barRev) / fbOrders) : 0;
 
-    // 4. Leakage & Anomalies
+    // 4. Leakage & Anomalies Detection
     const { data: exceptions } = await supabase.from('audit_exceptions')
       .select('*')
       .gte('detected_at', start)
       .lte('detected_at', end)
-      .limit(5);
+      .order('detected_at', { ascending: false })
+      .limit(10);
 
-    const { data: cancelledRest } = await supabase.from('restaurant_orders')
-      .select('total_amount, order_number')
+    const { data: voidedOrders } = await supabase.from('restaurant_orders')
+      .select('total_amount, order_number, table_number, created_at')
+      .eq('status', 'cancelled')
+      .gte('created_at', start)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    const { data: voidedBarOrders } = await supabase.from('bar_orders')
+      .select('total, order_number, created_at')
       .eq('status', 'cancelled')
       .gte('created_at', start)
       .limit(5);
 
+    const pendingBills = billRes.data?.filter(b => b.status === 'unpaid' || b.status === 'partial') || [];
+
     const anomalies = [
-      ...(exceptions || []).map(e => ({ type: 'AUDIT_EXCEPTION', detail: e.description, severity: e.severity })),
-      ...(cancelledRest || []).map(o => ({ type: 'VOIDED_ORDER', detail: `Rest Order ${o.order_number} cancelled`, severity: 'MEDIUM' }))
-    ].slice(0, 10);
+      ...(exceptions || []).map(e => ({ type: 'EXCEPTION', detail: e.description, severity: e.severity, time: e.detected_at })),
+      ...(voidedOrders || []).map(o => ({ type: 'VOID', detail: `Rest Order ${o.order_number} (T-${o.table_number}) voided`, severity: 'MEDIUM', time: o.created_at })),
+      ...(voidedBarOrders || []).map(o => ({ type: 'VOID', detail: `Bar Order ${o.order_number} voided`, severity: 'MEDIUM', time: o.created_at })),
+      ...pendingBills.map(b => ({ type: 'UNPAID', detail: `Bill pending collection: KES ${Number(b.total_amount) - Number(b.paid_amount)}`, severity: 'LOW', time: b.created_at }))
+    ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 15);
 
     res.status(200).json({
       success: true,
       data: {
-        total_revenue: restRev + barRev + roomRev + eventRev,
+        total_revenue: restRev + barRev + roomRev + eventRev + posRev,
+        collected_revenue: restRev + barRev + roomRev + eventRev + posRev + billsPaid,
+        pending_revenue: billsTotal - billsPaid,
         revenue_by_dept: {
           restaurant: restRev,
           bar: barRev,
           rooms: roomRev,
-          events: eventRev
+          events: eventRev,
+          pos: posRev
         },
         daily_trends: dailyTrends,
         hotel_occupancy: `${occupancy}%`,
         avg_order_value: avgOrderValue,
-        anomalies: anomalies
+        anomalies: anomalies,
+        summary: {
+          total_voids: (voidedOrders?.length || 0) + (voidedBarOrders?.length || 0),
+          void_value: [...(voidedOrders || []), ...(voidedBarOrders || [])].reduce((sum, o) => sum + Number((o as any).total_amount || (o as any).total || 0), 0)
+        }
       }
     });
   } catch (error) {
@@ -888,10 +923,10 @@ export const getStockLevelsVerification = async (req: Request, res: Response, ne
     const { data: rawStock, error: stockError } = await stockQuery;
     if (stockError) throw stockError;
 
-    // Fetch related items manually
+    // Fetch related items from simple_items (the active inventory table)
     const itemSkus = [...new Set(rawStock?.map(s => s.item_sku).filter(Boolean))];
-    const { data: items } = await supabase.from('items').select('id, name, sku, unit, category').in('sku', itemSkus);
-    const itemMap = Object.fromEntries(items?.map(i => [i.sku, i]) || []);
+    const { data: items } = await supabase.from('simple_items').select('id, item_name, sku, unit_of_measure, category').in('sku', itemSkus);
+    const itemMap = Object.fromEntries(items?.map(i => [i.sku, { ...i, name: i.item_name, unit: i.unit_of_measure }]) || []);
 
     const currentStock = rawStock?.map(s => ({
       ...s,
@@ -946,12 +981,21 @@ export const getStockLevelsVerification = async (req: Request, res: Response, ne
     const branchSummaries: Record<string, any> = {};
     if (!branch_id || branch_id === '0') {
       branches?.forEach(b => {
-        const branchStock = stockAnalysis.filter(s => s.branch_id === b.id);
+        const branchStock = stockAnalysis.filter(s => Number(s.branch_id) === Number(b.id));
+        const discrepancies = branchStock.filter(s => s.is_discrepancy).length;
+        const totalItems = branchStock.length;
+
+        // Calculate a basic health score (percentage of items without discrepancies)
+        const healthScore = totalItems > 0
+          ? Math.max(0, Math.round(((totalItems - discrepancies) / totalItems) * 100))
+          : 100;
+
         branchSummaries[b.id] = {
           branch_id: b.id,
           branch_name: b.name,
-          total_items: branchStock.length,
-          items_with_discrepancies: branchStock.filter(s => s.is_discrepancy).length,
+          total_items: totalItems,
+          items_with_discrepancies: discrepancies,
+          health_score: healthScore,
           total_variance_value: branchStock.reduce((sum, s) => sum + Math.abs(s.variance || 0), 0),
           low_stock_items: branchStock.filter(s => (s.current_quantity || 0) < (s.min_quantity || 0)).length
         };
@@ -1023,15 +1067,18 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
 
     // Fetch item details for all requested items
     const itemSkus = [...new Set(reqItems?.map(i => i.item_sku).filter(Boolean))];
-    const { data: itemsData } = await supabase.from('items').select('sku, name, unit, category').in('sku', itemSkus);
+    const { data: itemsData } = await supabase.from('simple_items').select('sku, item_name, unit_of_measure, category').in('sku', itemSkus);
     const itemDetailsMap = Object.fromEntries(itemsData?.map(i => [i.sku, i]) || []);
 
     // Enrich request items with item details
     const enrichedReqItems = reqItems?.map(item => ({
       ...item,
-      item_name: itemDetailsMap[item.item_sku]?.name || 'Unknown Item',
-      item_unit: itemDetailsMap[item.item_sku]?.unit || '',
-      item_category: itemDetailsMap[item.item_sku]?.category || ''
+      item_name: itemDetailsMap[item.item_sku]?.item_name || 'Unknown Item',
+      item_unit: itemDetailsMap[item.item_sku]?.unit_of_measure || '',
+      item_category: itemDetailsMap[item.item_sku]?.category || '',
+      quantity_requested: item.requested_quantity,
+      quantity_approved: item.approved_quantity,
+      quantity: item.requested_quantity // Fallback for some views
     })) || [];
 
     const itemsMap = enrichedReqItems.reduce((acc: any, item) => {
