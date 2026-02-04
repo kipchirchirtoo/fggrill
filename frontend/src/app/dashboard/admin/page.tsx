@@ -8,13 +8,19 @@ import { financeAPI, staffAPI, systemAPI } from '@/lib/api';
 import {
   DollarSign, Users, Building2, Bed, RefreshCw,
   UserCog, Package, FileText, Wrench, Utensils, ClipboardList, Settings,
-  TrendingUp, ArrowUpRight, ChevronRight, Truck, Car
+  TrendingUp, ArrowUpRight, ChevronRight, Truck, Car, ShieldCheck, Activity, FileCheck, Landmark
 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminDashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState({ staff: 0, branches: 0, rooms: 0 });
+  const [stats, setStats] = useState({
+    staff: 0,
+    branches: 0,
+    rooms: 0,
+    totalRevenue: 0,
+    netProfit: 0
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -29,158 +35,231 @@ export default function AdminDashboard() {
         staff: staffRes.data?.length || 0,
         branches: branchesRes.data?.length || 0,
         rooms: 0,
+        totalRevenue: financeRes.data?.totalRevenue || 0,
+        netProfit: financeRes.data?.netProfit || 0
       });
-    } catch (error) { console.error('Error:', error); }
+    } catch (error) { console.error('Error fetching admin stats:', error); }
     finally { setIsLoading(false); }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const quickLinks = [
-    { href: '/dashboard/admin/users', icon: UserCog, label: 'Users', description: 'Manage accounts' },
-    { href: '/dashboard/admin/staff', icon: Users, label: 'Staff', description: 'Team management' },
-    { href: '/dashboard/admin/finance', icon: DollarSign, label: 'Finance', description: 'Financial overview' },
-    { href: '/dashboard/admin/rooms', icon: Bed, label: 'Rooms', description: 'Room inventory' },
-    { href: '/dashboard/admin/storekeeping', icon: Package, label: 'Inventory', description: 'Stock control' },
-    { href: '/dashboard/admin/restaurant', icon: Utensils, label: 'Restaurant', description: 'F&B operations' },
-    { href: '/dashboard/admin/housekeeping', icon: ClipboardList, label: 'Housekeeping', description: 'Task management' },
-    { href: '/dashboard/admin/maintenance', icon: Wrench, label: 'Maintenance', description: 'Facility upkeep' },
-    { href: '/dashboard/admin/reports', icon: FileText, label: 'Reports', description: 'Analytics & data' },
-    { href: '/dashboard/admin/settings', icon: Settings, label: 'Settings', description: 'System config' },
+  const overviewModules = [
+    {
+      href: '/dashboard/auditor/revenue-oversight',
+      icon: TrendingUp,
+      label: 'Revenue Oversight',
+      desc: 'Real-time revenue streams & anomalies',
+      color: 'text-amber-600',
+      bg: 'bg-amber-50'
+    },
+    {
+      href: '/dashboard/auditor/financial-verification',
+      icon: ShieldCheck,
+      label: 'Financial Verification',
+      desc: 'Gateway reconciliation & variance',
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-50'
+    },
+    {
+      href: '/dashboard/auditor/sales',
+      icon: Activity,
+      label: 'Sales Audit',
+      desc: 'Confirm operational sales records',
+      color: 'text-blue-600',
+      bg: 'bg-blue-50'
+    }
   ];
 
-  const statCards = [
-    { label: 'Total Staff', value: stats.staff.toString(), icon: Users },
-    { label: 'Branches', value: stats.branches.toString(), icon: Building2 },
-    { label: 'Total Rooms', value: stats.rooms.toString(), icon: Bed },
+  const coreModules = [
+    { href: '/dashboard/admin/finance', icon: Landmark, label: 'Financials', desc: 'P&L and budgeting' },
+    { href: '/dashboard/admin/users', icon: UserCog, label: 'Accounts', desc: 'User roles & access' },
+    { href: '/dashboard/admin/staff', icon: Users, label: 'HR/Staff', desc: 'Team & payroll' },
+    { href: '/dashboard/admin/storekeeping', icon: Package, label: 'Inventory', desc: 'Master stock control' },
+    { href: '/dashboard/central-store/reports', icon: FileText, label: 'Analytics', desc: 'System-wide reports' }
   ];
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN]}>
       <DashboardLayout>
-        <div className="space-y-6">
+        <div className="space-y-8 animate-ios-fade-in">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Admin Dashboard</h1>
-              <p className="text-stone-500 mt-0.5">System administration and overview</p>
+              <h1 className="text-[28px] font-bold text-stone-900 tracking-tight font-sf-pro-display">Command Center</h1>
+              <p className="text-stone-500">Superadmin oversight and system control</p>
             </div>
             <button
               onClick={fetchData}
               disabled={isLoading}
-              className="btn-secondary self-start sm:self-auto"
+              className="px-4 py-2 rounded-full bg-white border border-stone-200 text-stone-600 text-sm font-medium hover:bg-stone-50 transition-all flex items-center gap-2 shadow-sm active:scale-95"
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              <span>Refresh</span>
+              <span>Refresh Pulse</span>
             </button>
           </div>
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-            {statCards.map((stat, i) => (
-              <div key={i} className="stat-card">
-                <div className="stat-icon">
-                  <stat.icon className="h-5 w-5" />
+          {/* Quick Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="stat-card border-l-4 border-l-stone-900">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="stat-label uppercase tracking-widest text-[10px]">Total Revenue</p>
+                  <p className="stat-value text-2xl">KES {stats.totalRevenue.toLocaleString()}</p>
                 </div>
-                <p className="stat-value">{stat.value}</p>
-                <p className="stat-label mt-1">{stat.label}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Quick Access */}
-          <div className="card-elevated p-6">
-            <div className="section-header">
-              <div>
-                <h2 className="section-title">Quick Access</h2>
-                <p className="section-subtitle">Navigate to key modules</p>
+                <div className="w-8 h-8 rounded-full bg-stone-50 flex items-center justify-center">
+                  <DollarSign className="h-4 w-4 text-stone-400" />
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-              {quickLinks.map((link) => (
-                <Link key={link.href} href={link.href}>
-                  <div className="action-card group">
-                    <div className="action-card-icon">
-                      <link.icon className="h-5 w-5" />
+            <div className="stat-card border-l-4 border-l-emerald-500">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="stat-label uppercase tracking-widest text-[10px]">Net Profit</p>
+                  <p className={`stat-value text-2xl ${stats.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    KES {stats.netProfit.toLocaleString()}
+                  </p>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center">
+                  <TrendingUp className="h-4 w-4 text-emerald-400" />
+                </div>
+              </div>
+            </div>
+            <div className="stat-card border-l-4 border-l-blue-500">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="stat-label uppercase tracking-widest text-[10px]">Operational Branches</p>
+                  <p className="stat-value text-2xl">{stats.branches}</p>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
+                  <Building2 className="h-4 w-4 text-blue-400" />
+                </div>
+              </div>
+            </div>
+            <div className="stat-card border-l-4 border-l-stone-400">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="stat-label uppercase tracking-widest text-[10px]">System Users</p>
+                  <p className="stat-value text-2xl">{stats.staff}</p>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-stone-50 flex items-center justify-center">
+                  <Users className="h-4 w-4 text-stone-400" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Executive Oversight Section */}
+          <div>
+            <div className="flex items-center gap-2 mb-4 px-1">
+              <ShieldCheck className="h-5 w-5 text-amber-500" />
+              <h2 className="text-[17px] font-bold text-stone-900 font-sf-pro-display">Executive Oversight</h2>
+            </div>
+            <div className="grid md:grid-cols-3 gap-4">
+              {overviewModules.map((module) => (
+                <Link key={module.href} href={module.href}>
+                  <div className="card-elevated-hover p-5 border border-stone-100 h-full group">
+                    <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110", module.bg)}>
+                      <module.icon className={cn("h-6 w-6", module.color)} />
                     </div>
-                    <p className="action-card-label">{link.label}</p>
-                    <p className="text-[11px] text-stone-400 mt-0.5">{link.description}</p>
+                    <h3 className="text-[15px] font-bold text-stone-900 mb-1">{module.label}</h3>
+                    <p className="text-[13px] text-stone-500 leading-relaxed">{module.desc}</p>
                   </div>
                 </Link>
               ))}
             </div>
           </div>
 
-          {/* Bottom Grid */}
-          <div className="grid lg:grid-cols-2 gap-5">
-            {/* System Links */}
-            <div className="card-elevated p-5">
-              <h3 className="text-[15px] font-semibold text-stone-900 mb-4">System Management</h3>
-              <div className="space-y-2">
-                {[
-                  { href: '/dashboard/admin/system/branches', icon: Building2, label: 'Branches', desc: 'Manage locations' },
-                  { href: '/dashboard/admin/system/departments', icon: Users, label: 'Departments', desc: 'Organizational structure' },
-                  { href: '/dashboard/admin/audit', icon: ClipboardList, label: 'Audit Logs', desc: 'Activity tracking' },
-                ].map((item) => (
-                  <Link key={item.href} href={item.href}>
-                    <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-stone-50 transition-colors group cursor-pointer">
-                      <div className="w-9 h-9 rounded-lg bg-stone-100 flex items-center justify-center group-hover:bg-stone-200 transition-colors">
-                        <item.icon className="h-4 w-4 text-stone-600" />
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Core Management Cards */}
+            <div className="lg:col-span-2 space-y-6">
+              <div className="card-elevated p-6">
+                <h3 className="text-[15px] font-bold text-stone-900 mb-6 flex items-center gap-2">
+                  <Landmark className="h-4 w-4 text-stone-400" />
+                  System Core Modules
+                </h3>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {coreModules.map((module) => (
+                    <Link key={module.href} href={module.href}>
+                      <div className="flex items-center gap-4 p-4 rounded-xl border border-stone-50 hover:bg-stone-50 hover:border-stone-200 transition-all group cursor-pointer h-full">
+                        <div className="w-10 h-10 rounded-lg bg-stone-100 flex items-center justify-center group-hover:bg-white border border-transparent group-hover:border-stone-200 transition-all">
+                          <module.icon className="h-5 w-5 text-stone-600" />
+                        </div>
+                        <div>
+                          <p className="text-[14px] font-bold text-stone-900">{module.label}</p>
+                          <p className="text-[12px] text-stone-500">{module.desc}</p>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-stone-300 ml-auto group-hover:translate-x-1 transition-transform" />
                       </div>
-                      <div className="flex-1">
-                        <p className="text-[13px] font-medium text-stone-800">{item.label}</p>
-                        <p className="text-[11px] text-stone-500">{item.desc}</p>
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-stone-300 group-hover:text-stone-400 transition-colors" />
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+
+              {/* Operations Quicklinks */}
+              <div className="card-elevated p-6">
+                <h3 className="text-[15px] font-bold text-stone-900 mb-6 flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-stone-400" />
+                  Operational Control
+                </h3>
+                <div className="flex flex-wrap gap-3">
+                  {[
+                    { label: 'Restaurant Ops', href: '/dashboard/admin/restaurant' },
+                    { label: 'Housekeeping', href: '/dashboard/admin/housekeeping' },
+                    { label: 'Maintenance', href: '/dashboard/admin/maintenance' },
+                    { label: 'Asset Register', href: '/dashboard/facilities/maintenance/assets' },
+                    { label: 'Kitchen Controls', href: '/dashboard/kitchen-operations' },
+                    { label: 'Daily Wastage', href: '/dashboard/admin/wastage' },
+                  ].map((btn) => (
+                    <Link key={btn.href} href={btn.href}>
+                      <span className="px-4 py-2 rounded-lg bg-stone-50 text-stone-600 text-[13px] font-medium border border-stone-100 hover:bg-stone-100 transition-colors shadow-sm inline-block">
+                        {btn.label}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
               </div>
             </div>
 
-            {/* Fleet & Logistics */}
-            <div className="card-elevated p-5">
-              <h3 className="text-[15px] font-semibold text-stone-900 mb-4">Fleet & Logistics</h3>
-              <div className="space-y-2">
-                {[
-                  { href: '/dashboard/admin/vehicles', icon: Car, label: 'Vehicles', desc: 'Fleet management' },
-                  { href: '/dashboard/admin/drivers', icon: Truck, label: 'Drivers', desc: 'Delivery staff' },
-                  { href: '/dashboard/admin/suppliers', icon: Building2, label: 'Suppliers', desc: 'Vendor management' },
-                ].map((item) => (
-                  <Link key={item.href} href={item.href}>
-                    <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-stone-50 transition-colors group cursor-pointer">
-                      <div className="w-9 h-9 rounded-lg bg-stone-100 flex items-center justify-center group-hover:bg-stone-200 transition-colors">
-                        <item.icon className="h-4 w-4 text-stone-600" />
+            {/* Sidebar Column */}
+            <div className="space-y-6">
+              {/* System Utilities */}
+              <div className="card-elevated border-l-4 border-l-stone-300 overflow-hidden shadow-soft-lg">
+                <div className="p-5 bg-stone-50/50 border-b border-stone-100">
+                  <h3 className="text-[14px] font-bold text-stone-900 uppercase tracking-tight">System Utilities</h3>
+                </div>
+                <div className="p-2 space-y-1">
+                  {[
+                    { href: '/dashboard/admin/system/branches', icon: Building2, label: 'Manage Branches' },
+                    { href: '/dashboard/admin/system/departments', icon: Users, label: 'Internal Structure' },
+                    { href: '/dashboard/admin/audit', icon: ClipboardList, label: 'Global Audit Logs' },
+                    { href: '/dashboard/admin/settings', icon: Settings, label: 'System Configuration' },
+                  ].map((item) => (
+                    <Link key={item.href} href={item.href}>
+                      <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-stone-100 transition-all font-medium group cursor-pointer text-[13px] text-stone-600 hover:text-stone-900">
+                        <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                        <span>{item.label}</span>
                       </div>
-                      <div className="flex-1">
-                        <p className="text-[13px] font-medium text-stone-800">{item.label}</p>
-                        <p className="text-[11px] text-stone-500">{item.desc}</p>
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-stone-300 group-hover:text-stone-400 transition-colors" />
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            {/* Quick Stats */}
-            <div className="card-elevated p-5">
-              <h3 className="text-[15px] font-semibold text-stone-900 mb-4">System Status</h3>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-stone-50 rounded-lg">
-                  <span className="text-[13px] text-stone-600">Active Users</span>
-                  <span className="text-[14px] font-semibold text-stone-900">{stats.staff}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-stone-50 rounded-lg">
-                  <span className="text-[13px] text-stone-600">Active Branches</span>
-                  <span className="text-[14px] font-semibold text-stone-900">{stats.branches}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-stone-50 rounded-lg">
-                  <span className="text-[13px] text-stone-600">System Status</span>
-                  <span className="flex items-center gap-1.5 text-[13px] font-semibold text-stone-700">
-                    <span className="w-2 h-2 rounded-full bg-stone-400" />
-                    Online
-                  </span>
+              {/* Logistics Tracking */}
+              <div className="card-elevated p-5">
+                <h3 className="text-[14px] font-bold text-stone-900 mb-4 flex items-center gap-2">
+                  <Truck className="h-4 w-4 text-stone-400" />
+                  Logistics
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <Link href="/dashboard/admin/vehicles" className="p-3 rounded-xl bg-stone-50 text-center hover:bg-stone-100 transition-colors">
+                    <Car className="h-5 w-5 mx-auto mb-1 text-stone-600" />
+                    <p className="text-[11px] font-bold text-stone-700">Fleet</p>
+                  </Link>
+                  <Link href="/dashboard/admin/suppliers" className="p-3 rounded-xl bg-stone-50 text-center hover:bg-stone-100 transition-colors">
+                    <Landmark className="h-5 w-5 mx-auto mb-1 text-stone-600" />
+                    <p className="text-[11px] font-bold text-stone-700">Suppliers</p>
+                  </Link>
                 </div>
               </div>
             </div>
@@ -189,4 +268,8 @@ export default function AdminDashboard() {
       </DashboardLayout>
     </ProtectedRoute>
   );
+}
+
+function cn(...classes: any[]) {
+  return classes.filter(Boolean).join(' ');
 }

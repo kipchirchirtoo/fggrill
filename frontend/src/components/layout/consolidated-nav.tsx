@@ -1284,6 +1284,9 @@ export function ConsolidatedNav() {
         <>
           {adminNav}
           <hr className="my-4 border-stone-100" />
+          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Oversight & Audit</p>
+          {auditorNav}
+          <hr className="my-4 border-stone-100" />
           <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Inventory & Logistics</p>
           {centralStoreNav}
           <hr className="my-4 border-stone-100" />

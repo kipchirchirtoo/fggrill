@@ -57,7 +57,13 @@ export default function AuditorKitchenRequisitionsPage() {
                 status: statusFilter !== 'all' ? statusFilter : undefined
             });
             if (res.success && Array.isArray(res.data)) {
-                setRequisitions(res.data);
+                // Transform data for frontend compatibility
+                const transformed = res.data.map((req: any) => ({
+                    ...req,
+                    request_date: req.requested_at || req.created_at,
+                    requested_by_name: req.requester ? `${req.requester.first_name} ${req.requester.last_name}` : 'Unknown'
+                }));
+                setRequisitions(transformed);
             } else {
                 setRequisitions([]);
             }
@@ -68,6 +74,18 @@ export default function AuditorKitchenRequisitionsPage() {
             setLoading(false);
         }
     }, [activeBranchId, statusFilter]);
+
+    // Use safe date formatting to prevent RangeError: Invalid time value
+    const safeFormat = (dateStr: string | undefined | null, formatStr: string) => {
+        if (!dateStr) return '--';
+        try {
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return '--';
+            return format(date, formatStr);
+        } catch (e) {
+            return '--';
+        }
+    };
 
     useEffect(() => {
         fetchRequisitions();
@@ -221,7 +239,7 @@ export default function AuditorKitchenRequisitionsPage() {
                                                     </div>
                                                 </td>
                                                 <td className="table-cell font-semibold text-stone-600">
-                                                    {format(new Date(req.request_date), 'MMM dd, yyyy')}
+                                                    {safeFormat(req.request_date || req.requested_at, 'MMM dd, yyyy')}
                                                 </td>
                                                 <td className="table-cell">
                                                     <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest bg-stone-100 px-2 py-1 rounded-lg">
@@ -304,7 +322,7 @@ export default function AuditorKitchenRequisitionsPage() {
                                     <div className="space-y-1 text-right">
                                         <p className="caption uppercase tracking-widest">Fulfillment</p>
                                         <div className="text-[11px] font-black text-stone-900">
-                                            {selectedRequisition?.needed_by_date ? format(new Date(selectedRequisition.needed_by_date), 'MMM dd') : '--'}
+                                            {safeFormat(selectedRequisition?.needed_by_date || selectedRequisition?.requested_at, 'MMM dd')}
                                         </div>
                                     </div>
                                 </div>

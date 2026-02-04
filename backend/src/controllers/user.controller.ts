@@ -315,17 +315,56 @@ export const deleteUser = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { error } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', req.params.id);
+    const { id } = req.params;
 
-    if (error) throw error;
+    // Check if user exists
+    const { data: user, error: fetchError } = await supabase
+      .from('users')
+      .select('id, email, role')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !user) {
+      res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+      return;
+    }
+
+    // Don't allow deleting yourself
+    if (req.user?.id === id) {
+      res.status(400).json({
+        success: false,
+        message: 'You cannot delete your own account'
+      });
+      return;
+    }
+
+    // 1. Delete from Supabase Auth (admin)
+    // Note: Due to our ON DELETE CASCADE migration, deleting from auth.users
+    // will automatically delete from public.users and other dependent tables.
+    const { error: authError } = await supabase.auth.admin.deleteUser(id);
+
+    if (authError) {
+      // Fallback: Try to delete from public.users directly if auth delete fails
+      // (e.g. if the user only exists in public.users)
+      console.error('Auth deletion failed, trying direct profile deletion:', authError.message);
+
+      const { error: profileError } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', id);
+
+      if (profileError) throw profileError;
+    }
 
     res.status(200).json({
       success: true,
-      data: {}
+      message: 'User deleted successfully'
     });
+
+    logger.info(`User deleted: ${user.email} (${user.role}) by admin ${req.user?.id}`);
   } catch (error) {
     next(error);
   }

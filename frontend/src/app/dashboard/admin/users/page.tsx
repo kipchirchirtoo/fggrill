@@ -11,7 +11,7 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { userAPI, systemAPI } from '@/lib/api';
-import { Users, RefreshCw, Plus, Search, Edit2, Trash2, User, Mail, Building2, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Users, RefreshCw, Plus, Search, Edit2, Trash2, User, Mail, Building2, ChevronRight, ChevronLeft, ShieldCheck, Activity } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -370,16 +370,80 @@ export default function AdminUsersPage() {
   return (
     <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN]}>
       <DashboardLayout>
-        <div className="space-y-6">
+        <div className="space-y-8 animate-ios-fade-in">
+          {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div><h1 className="text-2xl font-bold text-gray-900">Users</h1><p className="text-gray-500">Manage system users</p></div>
-            <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchUsers} leftIcon={<RefreshCw />}>Refresh</IOSButton>
-              <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>Add User</IOSButton>
+            <div>
+              <h1 className="text-[28px] font-bold text-stone-900 tracking-tight font-sf-pro-display">Access Control</h1>
+              <p className="text-stone-500">Manage system credentials, security roles, and branch permissions</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={fetchUsers}
+                disabled={isLoading}
+                className="px-4 py-2 rounded-full bg-white border border-stone-200 text-stone-600 text-sm font-medium hover:bg-stone-50 transition-all flex items-center gap-2 shadow-sm active:scale-95"
+              >
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                <span>Sync Directory</span>
+              </button>
+              <button
+                onClick={() => setAddModalOpen(true)}
+                className="px-5 py-2 rounded-full bg-stone-900 text-white text-sm font-medium hover:bg-stone-800 transition-all flex items-center gap-2 shadow-sm active:scale-95"
+              >
+                <Plus className="h-4 w-4" />
+                <span>New Account</span>
+              </button>
             </div>
           </div>
 
-          <IOSCard className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="stat-card border-l-4 border-l-stone-900">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="stat-label uppercase tracking-widest text-[10px]">Total Users</p>
+                  <p className="stat-value text-2xl">{users.length}</p>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-stone-50 flex items-center justify-center">
+                  <Users className="h-4 w-4 text-stone-400" />
+                </div>
+              </div>
+            </div>
+            <div className="stat-card border-l-4 border-l-amber-500">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="stat-label uppercase tracking-widest text-[10px]">Super Admins</p>
+                  <p className="stat-value text-2xl">{users.filter(u => u.role === UserRole.SUPER_ADMIN).length}</p>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center">
+                  <ShieldCheck className="h-4 w-4 text-amber-400" />
+                </div>
+              </div>
+            </div>
+            <div className="stat-card border-l-4 border-l-blue-500">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="stat-label uppercase tracking-widest text-[10px]">Active Today</p>
+                  <p className="stat-value text-2xl">{users.filter(u => u.status === 'active').length}</p>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
+                  <Activity className="h-4 w-4 text-blue-400" />
+                </div>
+              </div>
+            </div>
+            <div className="stat-card border-l-4 border-l-emerald-500">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="stat-label uppercase tracking-widest text-[10px]">Branch Staff</p>
+                  <p className="stat-value text-2xl">{users.filter(u => BRANCH_REQUIRED_ROLES.includes(u.role as UserRole)).length}</p>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center">
+                  <Building2 className="h-4 w-4 text-emerald-400" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card-elevated p-4 border border-stone-100">
             <div className="grid md:grid-cols-3 gap-4">
               <div className="md:col-span-2 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
@@ -407,7 +471,7 @@ export default function AdminUsersPage() {
                 </select>
               </div>
             </div>
-          </IOSCard>
+          </div>
 
           {isLoading ? (
             <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>

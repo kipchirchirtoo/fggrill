@@ -1065,21 +1065,36 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
       supabase.from('branches').select('id, name').in('id', branchIds)
     ]);
 
-    // Fetch item details for all requested items
+    // Fetch item details for all requested items from multiple possible tables
     const itemSkus = [...new Set(reqItems?.map(i => i.item_sku).filter(Boolean))];
-    const { data: itemsData } = await supabase.from('simple_items').select('sku, item_name, unit_of_measure, category').in('sku', itemSkus);
-    const itemDetailsMap = Object.fromEntries(itemsData?.map(i => [i.sku, i]) || []);
+    const [
+      { data: simpleItems },
+      { data: inventoryItems }
+    ] = await Promise.all([
+      supabase.from('simple_items').select('sku, item_name, unit_of_measure, category').in('sku', itemSkus),
+      supabase.from('inventory_items').select('item_code, name, unit, category').in('item_code', itemSkus)
+    ]);
+
+    const simpleDetailsMap = Object.fromEntries(simpleItems?.map(i => [i.sku, i]) || []);
+    const inventoryDetailsMap = Object.fromEntries(inventoryItems?.map(i => [i.item_code, i]) || []);
 
     // Enrich request items with item details
-    const enrichedReqItems = reqItems?.map(item => ({
-      ...item,
-      item_name: itemDetailsMap[item.item_sku]?.item_name || 'Unknown Item',
-      item_unit: itemDetailsMap[item.item_sku]?.unit_of_measure || '',
-      item_category: itemDetailsMap[item.item_sku]?.category || '',
-      quantity_requested: item.requested_quantity,
-      quantity_approved: item.approved_quantity,
-      quantity: item.requested_quantity // Fallback for some views
-    })) || [];
+    const enrichedReqItems = reqItems?.map(item => {
+      const sItem = simpleDetailsMap[item.item_sku];
+      const iItem = inventoryDetailsMap[item.item_sku];
+
+      return {
+        ...item,
+        item_name: sItem?.item_name || iItem?.name || item.name || item.item_name || item.item_sku || 'Unknown Item',
+        item_unit: sItem?.unit_of_measure || iItem?.unit || item.unit || '',
+        item_category: sItem?.category || iItem?.category || item.category || '',
+        requested_quantity: item.requested_quantity || item.quantity_requested || item.quantity || 0,
+        approved_quantity: item.approved_quantity !== undefined && item.approved_quantity !== null ? item.approved_quantity : (item.quantity_approved || 0),
+        quantity_requested: item.requested_quantity || item.quantity_requested || item.quantity || 0,
+        quantity_approved: item.approved_quantity !== undefined && item.approved_quantity !== null ? item.approved_quantity : (item.quantity_approved || 0),
+        quantity: item.requested_quantity || item.quantity_requested || item.quantity || 0
+      };
+    }) || [];
 
     const itemsMap = enrichedReqItems.reduce((acc: any, item) => {
       if (!acc[item.request_id]) acc[item.request_id] = [];
@@ -1108,10 +1123,10 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
           branch_id: b.id,
           branch_name: b.name,
           total_requests: branchReqs.length,
-          pending: branchReqs.filter(r => r.status === 'PENDING').length,
-          approved: branchReqs.filter(r => r.status === 'APPROVED').length,
+          pending: branchReqs.filter(r => ['PENDING_AUDIT', 'PENDING', 'UNDER_REVIEW'].includes(r.status)).length,
+          approved: branchReqs.filter(r => ['APPROVED', 'PARTIALLY_APPROVED', 'READY', 'VERIFIED'].includes(r.status)).length,
           rejected: branchReqs.filter(r => r.status === 'REJECTED').length,
-          dispatched: branchReqs.filter(r => r.status === 'DISPATCHED').length,
+          dispatched: branchReqs.filter(r => ['DISPATCHED', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'RECEIVED', 'CONFIRMED'].includes(r.status)).length,
           total_items: branchReqs.reduce((sum, r) => sum + (r.items?.length || 0), 0)
         };
       });
@@ -1120,10 +1135,10 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
     // Calculate overall summary statistics
     const summary = {
       total_requests: requests?.length || 0,
-      pending: requests?.filter(r => r.status === 'PENDING').length || 0,
-      approved: requests?.filter(r => r.status === 'APPROVED').length || 0,
+      pending: requests?.filter(r => ['PENDING_AUDIT', 'PENDING', 'UNDER_REVIEW'].includes(r.status)).length || 0,
+      approved: requests?.filter(r => ['APPROVED', 'PARTIALLY_APPROVED', 'READY', 'VERIFIED'].includes(r.status)).length || 0,
       rejected: requests?.filter(r => r.status === 'REJECTED').length || 0,
-      dispatched: requests?.filter(r => r.status === 'DISPATCHED').length || 0,
+      dispatched: requests?.filter(r => ['DISPATCHED', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'RECEIVED', 'CONFIRMED'].includes(r.status)).length || 0,
       total_items_requested: requests?.reduce((sum, r) => sum + (r.items?.length || 0), 0) || 0,
       branch_summaries: Object.values(branchSummaries)
     };

@@ -69,6 +69,18 @@ export default function FoodControlsPage() {
         end: format(new Date(), 'yyyy-MM-dd')
     });
 
+    // Use safe date formatting to prevent RangeError: Invalid time value
+    const safeFormat = (dateStr: string | undefined | null, formatStr: string) => {
+        if (!dateStr) return '--';
+        try {
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return '--';
+            return format(date, formatStr);
+        } catch (e) {
+            return '--';
+        }
+    };
+
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const tab = params.get('tab');
@@ -584,7 +596,7 @@ export default function FoodControlsPage() {
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 text-stone-400 text-sm">
-                                                    {format(new Date(item.last_updated), 'MMM d, HH:mm')}
+                                                    {safeFormat(item.last_updated, 'MMM d, HH:mm')}
                                                 </td>
                                             </tr>
                                         ))}
@@ -625,7 +637,7 @@ export default function FoodControlsPage() {
                                         {variances.map((v) => (
                                             <tr key={v.id} className="hover:bg-stone-50/50 transition-colors">
                                                 <td className="px-6 py-4 text-stone-600 text-[13px]">
-                                                    {format(new Date(v.variance_date), 'MMM d, yyyy')}
+                                                    {safeFormat(v.variance_date, 'MMM d, yyyy')}
                                                 </td>
                                                 <td className="px-6 py-4 font-semibold text-stone-900">{v.item_name}</td>
                                                 <td className="px-6 py-4 text-right tabular-nums text-[13px]">

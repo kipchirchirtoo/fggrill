@@ -320,9 +320,9 @@ export default function OrdersAuditPage() {
                                                     </td>
                                                     <td className="table-cell text-center">
                                                         <span className={
-                                                            req.status === 'pending' || req.status === 'PENDING_AUDIT' ? 'badge-warning' :
-                                                                req.status === 'approved' || req.status === 'APPROVED' ? 'badge-info' :
-                                                                    req.status === 'dispatched' || req.status === 'SHIPPED' ? 'badge-success' :
+                                                            ['pending', 'PENDING', 'PENDING_AUDIT', 'UNDER_REVIEW'].includes(req.status) ? 'badge-warning' :
+                                                                ['approved', 'APPROVED', 'READY', 'PARTIALLY_APPROVED'].includes(req.status) ? 'badge-info' :
+                                                                    ['dispatched', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'RECEIVED', 'CONFIRMED'].includes(req.status) ? 'badge-success' :
                                                                         'badge-danger'
                                                         }>
                                                             {req.status?.replace('_', ' ')}
@@ -387,9 +387,9 @@ export default function OrdersAuditPage() {
                                     <div>
                                         <p className="text-xs font-bold text-gray-400 uppercase mb-1">Status</p>
                                         <span className={
-                                            selectedOrder.status === 'pending' || selectedOrder.status === 'PENDING_AUDIT' ? 'badge-warning' :
-                                                selectedOrder.status === 'approved' || selectedOrder.status === 'APPROVED' ? 'badge-info' :
-                                                    selectedOrder.status === 'dispatched' || selectedOrder.status === 'SHIPPED' ? 'badge-success' :
+                                            ['pending', 'PENDING', 'PENDING_AUDIT', 'UNDER_REVIEW'].includes(selectedOrder.status) ? 'badge-warning' :
+                                                ['approved', 'APPROVED', 'READY', 'PARTIALLY_APPROVED'].includes(selectedOrder.status) ? 'badge-info' :
+                                                    ['dispatched', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'RECEIVED', 'CONFIRMED'].includes(selectedOrder.status) ? 'badge-success' :
                                                         'badge-danger'
                                         }>
                                             {selectedOrder.status?.replace('_', ' ')}
@@ -421,9 +421,9 @@ export default function OrdersAuditPage() {
                                                 <tbody className="divide-y divide-stone-50">
                                                     {selectedOrder.items.map((item: any, idx: number) => (
                                                         <tr key={idx} className="hover:bg-stone-50">
-                                                            <td className="px-4 py-3 font-bold text-gray-900">{item.item_name || item.name || 'Unknown Item'}</td>
-                                                            <td className="px-4 py-3 text-right font-bold text-gray-900">{item.requested_quantity || item.quantity_requested || item.quantity || 0}</td>
-                                                            <td className="px-4 py-3 text-right font-bold text-gray-900">{item.approved_quantity || item.quantity_approved || item.quantity || 0}</td>
+                                                            <td className="px-4 py-3 font-bold text-gray-900">{item.item_name || item.name || item.item_sku || 'Unknown Item'}</td>
+                                                            <td className="px-4 py-3 text-right font-bold text-gray-900">{item.requested_quantity ?? 0}</td>
+                                                            <td className="px-4 py-3 text-right font-bold text-gray-900">{item.approved_quantity ?? 0}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
