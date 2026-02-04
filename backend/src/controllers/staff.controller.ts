@@ -1490,3 +1490,72 @@ export const getAttendanceReports = async (
     next(error);
   }
 };
+
+// @desc    Upload staff profile photo
+// @route   POST /api/staff/:id/photo
+// @access  Private (Admin, Manager)
+export const uploadStaffPhoto = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const file = req.file as Express.Multer.File;
+
+    if (!file) {
+      res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+      return;
+    }
+
+    logger.debug('Uploading staff photo:', { staffId: req.params.id, filename: file.originalname });
+
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('profile-photos')
+      .upload(
+        `staff/${req.params.id}/${Date.now()}-${file.originalname}`,
+        file.buffer,
+        {
+          contentType: file.mimetype,
+          upsert: true
+        }
+      );
+
+    if (error) {
+      logger.error('Error uploading to storage:', error);
+      throw error;
+    }
+
+    logger.info('Photo uploaded to storage:', data.path);
+
+    // Update staff_profiles with photo path
+    const { data: staff, error: updateError } = await supabase
+      .from('staff_profiles')
+      .update({ profile_photo: data.path })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (updateError) {
+      logger.error('Error updating staff profile:', updateError);
+      throw updateError;
+    }
+
+    logger.info(`Staff photo updated successfully for ${req.params.id}`);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ...staff,
+        profile_photo_url: `${process.env.SUPABASE_PROJECT_URL}/storage/v1/object/public/profile-photos/${data.path}`
+      },
+      message: 'Photo uploaded successfully'
+    });
+  } catch (error) {
+    logger.error('Error in uploadStaffPhoto:', error);
+    next(error);
+  }
+};

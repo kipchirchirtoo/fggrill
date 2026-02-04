@@ -783,6 +783,17 @@ export const staffAPI = {
       body: data
     }).then(r => r.json()),
 
+  // Photo Upload
+  uploadStaffPhoto: (staffId: string, file: File) => {
+    const formData = new FormData();
+    formData.append('photo', file);
+    return fetch(`${API_URL}/api/staff/${staffId}/photo`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      body: formData
+    }).then(r => r.json());
+  },
+
   // Training
   getTrainings: (staffId?: string) => {
     const query = staffId ? `?staff_id=${staffId}` : '';

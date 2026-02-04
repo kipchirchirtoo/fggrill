@@ -184,19 +184,18 @@ export default function IDCardsManagementPage() {
 
         setIsUploading(true);
         try {
-            const formData = new FormData();
-            formData.append('photo', selectedFile);
-
-            const res = await staffAPI.updateStaffMember(uploadEmployee.id, formData);
+            const res = await staffAPI.uploadStaffPhoto(uploadEmployee.id, selectedFile);
 
             if (res.success) {
-                toast.success('Photo updated!');
+                toast.success('Photo uploaded successfully!');
                 setIsUploadOpen(false);
-                fetchEmployees();
+                setSelectedFile(null);
+                fetchEmployees(); // Refresh the list
             } else {
-                throw new Error(res.message);
+                throw new Error(res.message || 'Upload failed');
             }
         } catch (error: any) {
+            console.error('Photo upload error:', error);
             toast.error(error.message || 'Upload failed');
         } finally {
             setIsUploading(false);

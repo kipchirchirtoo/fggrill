@@ -19,12 +19,17 @@ import {
   rejectLeaveRequest,
   updateAttendance,
   approveAttendance,
-  getAttendanceReports
+  getAttendanceReports,
+  uploadStaffPhoto
 } from '../controllers/staff.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
+import multer from 'multer';
 
 const router = express.Router();
+
+// Configure multer for memory storage
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Public reference data (no authentication needed)
 router.get('/roles', getRoles);
@@ -99,6 +104,13 @@ router.route('/leave')
 router.get('/attendance/reports',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER]),
   getAttendanceReports
+);
+
+// Photo upload route (must come before /:id)
+router.post('/:id/photo',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER]),
+  upload.single('photo'),
+  uploadStaffPhoto
 );
 
 // Parameterized routes
