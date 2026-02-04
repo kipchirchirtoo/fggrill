@@ -132,7 +132,7 @@ export default function IDCardsManagementPage() {
                 join_date: emp.start_date ? new Date(emp.start_date).toLocaleDateString() : 'N/A',
                 expire_date: '31/12/2026',
                 photo_url: emp.profile_photo
-                    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/profile-photos/${emp.profile_photo}`
+                    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/profile/${emp.profile_photo}`
                     : emp.profile_photo_url
             };
 
@@ -160,7 +160,7 @@ export default function IDCardsManagementPage() {
                 join_date: emp.start_date ? new Date(emp.start_date).toLocaleDateString() : 'N/A',
                 expire_date: '31/12/2026',
                 photo_url: emp.profile_photo
-                    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/profile-photos/${emp.profile_photo}`
+                    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/profile/${emp.profile_photo}`
                     : emp.profile_photo_url
             };
 
