@@ -595,14 +595,10 @@ export default function AdminUsersPage() {
           if (!open) resetForm();
           setAddModalOpen(open);
         }}>
-          <DialogContent className="max-w-md p-0 overflow-hidden border-none bg-ios-system-background">
-            <div className="bg-[#F2F2F7] px-4 py-3 border-b flex items-center justify-between">
-              <button onClick={() => setAddModalOpen(false)} className="text-[#007AFF] text-lg">Cancel</button>
-              <DialogTitle className="text-lg font-semibold">New User</DialogTitle>
-              <div className="w-12"></div>
-            </div>
+          <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+            <DialogTitle className="text-xl font-semibold border-b pb-4">Add New User</DialogTitle>
 
-            <div className="p-4 bg-white min-h-[500px]">
+            <div className="flex-1 overflow-y-auto px-1">
               {/* Wizard Step Indicator */}
               <WizardStepIndicator
                 steps={[
@@ -622,50 +618,51 @@ export default function AdminUsersPage() {
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
-                    className="space-y-4"
+                    className="space-y-4 py-4"
                   >
-                    <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
-                      <div className="p-4 border-b border-gray-50">
-                        <label className="text-xs font-medium text-gray-400 uppercase tracking-wider block mb-1">First Name</label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">First Name <span className="text-red-500">*</span></label>
                         <Input
                           value={formData.first_name}
                           onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                          className={`border-none p-0 h-auto focus-visible:ring-0 text-lg ${formErrors.first_name ? 'text-red-500 placeholder:text-red-300' : ''}`}
-                          placeholder="Required"
+                          className={formErrors.first_name ? 'border-red-500' : ''}
+                          placeholder="Enter first name"
                         />
+                        {formErrors.first_name && <p className="text-red-500 text-xs mt-1">Required</p>}
                       </div>
-                      <div className="p-4">
-                        <label className="text-xs font-medium text-gray-400 uppercase tracking-wider block mb-1">Last Name</label>
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">Last Name</label>
                         <Input
                           value={formData.last_name}
                           onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                          className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
-                          placeholder="Optional"
+                          placeholder="Enter last name"
                         />
                       </div>
                     </div>
 
-                    <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
-                      <div className="p-4 border-b border-gray-50">
-                        <label className="text-xs font-medium text-gray-400 uppercase tracking-wider block mb-1">Email Address</label>
-                        <Input
-                          type="email"
-                          value={formData.email}
-                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                          className={`border-none p-0 h-auto focus-visible:ring-0 text-lg ${formErrors.email ? 'text-red-500 placeholder:text-red-300' : ''}`}
-                          placeholder="user@example.com"
-                        />
-                      </div>
-                      <div className="p-4">
-                        <label className="text-xs font-medium text-gray-400 uppercase tracking-wider block mb-1">Password</label>
-                        <Input
-                          type="password"
-                          value={formData.password}
-                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                          className={`border-none p-0 h-auto focus-visible:ring-0 text-lg ${formErrors.password ? 'text-red-500 placeholder:text-red-300' : ''}`}
-                          placeholder="Min 6 characters"
-                        />
-                      </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">Email Address <span className="text-red-500">*</span></label>
+                      <Input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        className={formErrors.email ? 'border-red-500' : ''}
+                        placeholder="user@example.com"
+                      />
+                      {formErrors.email && <p className="text-red-500 text-xs mt-1">Required</p>}
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">Password <span className="text-red-500">*</span></label>
+                      <Input
+                        type="password"
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        className={formErrors.password ? 'border-red-500' : ''}
+                        placeholder="Minimum 6 characters"
+                      />
+                      {formErrors.password && <p className="text-red-500 text-xs mt-1">Required</p>}
                     </div>
                   </motion.div>
                 )}
@@ -676,53 +673,50 @@ export default function AdminUsersPage() {
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
-                    className="space-y-4"
+                    className="space-y-4 py-4"
                   >
-                    <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
-                      <div className="p-4 border-b border-gray-50">
-                        <label className="text-xs font-medium text-gray-400 uppercase tracking-wider block mb-1">System Role</label>
-                        <select
-                          value={formData.role}
-                          onChange={(e) => {
-                            const newRole = e.target.value;
-                            if (CENTRAL_ROLES.includes(newRole as UserRole)) {
-                              setFormData({ ...formData, role: newRole, branch_id: '' });
-                            } else {
-                              setFormData({ ...formData, role: newRole });
-                            }
-                          }}
-                          className="w-full bg-transparent border-none p-0 h-auto focus:ring-0 text-lg appearance-none cursor-pointer"
-                        >
-                          <option value="">Select role</option>
-                          {availableRoles.map((r) => <option key={r.id} value={r.name}>{r.displayName}</option>)}
-                        </select>
-                      </div>
-                      <div className="p-4">
-                        <label className="text-xs font-medium text-gray-400 uppercase tracking-wider block mb-1">Branch Access</label>
-                        <select
-                          value={formData.branch_id}
-                          onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })}
-                          className="w-full bg-transparent border-none p-0 h-auto focus:ring-0 text-lg appearance-none cursor-pointer disabled:opacity-50"
-                          disabled={selectedRoleIsCentral}
-                        >
-                          <option value="">{selectedRoleIsCentral ? 'N/A - Central Role' : 'All Branches'}</option>
-                          {branches.filter(b => b.status !== 'inactive').map((b) => <option key={b.id} value={b.id}>{b.name} ({b.code})</option>)}
-                        </select>
-                      </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">System Role <span className="text-red-500">*</span></label>
+                      <select
+                        value={formData.role}
+                        onChange={(e) => {
+                          const newRole = e.target.value;
+                          if (CENTRAL_ROLES.includes(newRole as UserRole)) {
+                            setFormData({ ...formData, role: newRole, branch_id: '' });
+                          } else {
+                            setFormData({ ...formData, role: newRole });
+                          }
+                        }}
+                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">Select role</option>
+                        {availableRoles.map((r) => <option key={r.id} value={r.name}>{r.displayName}</option>)}
+                      </select>
                     </div>
 
-                    <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100 p-4">
-                      <div className="flex items-center justify-between">
-                        <label className="text-sm font-medium text-gray-700">Account Status</label>
-                        <select
-                          value={formData.status}
-                          onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
-                          className="bg-transparent border-none p-0 h-auto focus:ring-0 text-[#007AFF] font-semibold text-right appearance-none cursor-pointer"
-                        >
-                          <option value="active">Active</option>
-                          <option value="inactive">Inactive</option>
-                        </select>
-                      </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">Branch Access</label>
+                      <select
+                        value={formData.branch_id}
+                        onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })}
+                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                        disabled={selectedRoleIsCentral}
+                      >
+                        <option value="">{selectedRoleIsCentral ? 'N/A - Central Role' : 'All Branches'}</option>
+                        {branches.filter(b => b.status !== 'inactive').map((b) => <option key={b.id} value={b.id}>{b.name} ({b.code})</option>)}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">Account Status</label>
+                      <select
+                        value={formData.status}
+                        onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
+                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
                     </div>
                   </motion.div>
                 )}
@@ -733,30 +727,28 @@ export default function AdminUsersPage() {
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
-                    className="space-y-4"
+                    className="space-y-4 py-4"
                   >
-                    <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
-                      <div className="p-4 border-b border-gray-50">
-                        <label className="text-xs font-medium text-gray-400 uppercase tracking-wider block mb-1">Phone Number</label>
-                        <Input
-                          type="tel"
-                          value={formData.phone_number}
-                          onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-                          className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
-                          placeholder="+254 7XX XXX XXX"
-                        />
-                      </div>
-                      <div className="p-4">
-                        <label className="text-xs font-medium text-[#007AFF] uppercase tracking-wider block mb-1">POS PIN</label>
-                        <Input
-                          value={formData.pos_pin}
-                          onChange={(e) => setFormData({ ...formData, pos_pin: e.target.value.toUpperCase() })}
-                          className={`border-none p-0 h-auto focus-visible:ring-0 text-lg font-mono ${formErrors.pos_pin ? 'text-red-500' : ''}`}
-                          placeholder="e.g. R123"
-                          maxLength={4}
-                        />
-                        <p className="text-[10px] text-gray-400 mt-1 italic">Waiters: RXXX, Bar: BXXX</p>
-                      </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">Phone Number</label>
+                      <Input
+                        type="tel"
+                        value={formData.phone_number}
+                        onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                        placeholder="+254 7XX XXX XXX"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">POS PIN (Optional)</label>
+                      <Input
+                        value={formData.pos_pin}
+                        onChange={(e) => setFormData({ ...formData, pos_pin: e.target.value.toUpperCase() })}
+                        className={`font-mono ${formErrors.pos_pin ? 'border-red-500' : ''}`}
+                        placeholder="e.g. R123"
+                        maxLength={4}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Waiters: RXXX, Bar: BXXX</p>
                     </div>
                   </motion.div>
                 )}
@@ -764,48 +756,50 @@ export default function AdminUsersPage() {
                 {/* Removed Step 4 and 5 - managed in HR module */}
               </AnimatePresence>
 
-              {/* Navigation Bar */}
-              <div className="flex gap-4 mt-8">
-                {wizardStep > 1 && (
-                  <button
-                    onClick={() => setWizardStep(prev => prev - 1)}
-                    className="flex-1 py-3 px-4 rounded-xl bg-white border border-gray-200 text-gray-700 font-semibold active:bg-gray-50 transition-colors"
-                  >
-                    Back
-                  </button>
-                )}
+            </div>
 
-                {wizardStep < (formData.role === UserRole.EMPLOYEE ? 5 : 3) ? (
-                  <button
-                    onClick={() => {
-                      if (wizardStep === 1) {
-                        const errors: any = {};
-                        if (!formData.first_name) errors.first_name = true;
-                        if (!formData.email) errors.email = true;
-                        if (!formData.password) errors.password = true;
-                        if (Object.keys(errors).length > 0) {
-                          setFormErrors(errors);
-                          toast.error("Please fill in required fields");
-                          return;
-                        }
+            {/* Sticky Footer with Navigation */}
+            <div className="border-t bg-white p-4 flex gap-3 sticky bottom-0">
+              {wizardStep > 1 && (
+                <IOSButton
+                  variant="secondary"
+                  onClick={() => setWizardStep(prev => prev - 1)}
+                  className="flex-1"
+                >
+                  Previous
+                </IOSButton>
+              )}
+
+              {wizardStep < 3 ? (
+                <IOSButton
+                  onClick={() => {
+                    if (wizardStep === 1) {
+                      const errors: any = {};
+                      if (!formData.first_name) errors.first_name = true;
+                      if (!formData.email) errors.email = true;
+                      if (!formData.password) errors.password = true;
+                      if (Object.keys(errors).length > 0) {
+                        setFormErrors(errors);
+                        toast.error("Please fill in required fields");
+                        return;
                       }
-                      setFormErrors({});
-                      setWizardStep(prev => prev + 1);
-                    }}
-                    className="flex-1 py-3 px-4 rounded-xl bg-[#007AFF] text-white font-semibold active:bg-[#0062CC] shadow-md transition-shadow"
-                  >
-                    Next
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleCreateUser}
-                    className="flex-1 py-3 px-4 rounded-xl bg-[#34C759] text-white font-semibold active:bg-[#2EB150] shadow-md"
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? 'Syncing...' : 'Create User'}
-                  </button>
-                )}
-              </div>
+                    }
+                    setFormErrors({});
+                    setWizardStep(prev => prev + 1);
+                  }}
+                  className="flex-1"
+                >
+                  Next
+                </IOSButton>
+              ) : (
+                <IOSButton
+                  onClick={handleCreateUser}
+                  className="flex-1"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Creating...' : 'Create User'}
+                </IOSButton>
+              )}
             </div>
           </DialogContent>
         </Dialog>

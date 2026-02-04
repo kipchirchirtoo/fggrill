@@ -12,7 +12,8 @@ export default function CentralReportsPage() {
         <ReportsPageComponent
           userRole="central_store"
           showBranchSelector={true}
-          showScheduling={true}
+          showScheduling={false}
+          showHistory={false}
           showKPI={false}
           title="Central Store Reports"
           subtitle="Generate branded inventory and stock reports with PDF/Excel export"

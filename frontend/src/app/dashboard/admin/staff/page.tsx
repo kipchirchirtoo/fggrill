@@ -413,14 +413,10 @@ export default function AdminStaffPage() {
           if (!open) resetForm();
           setAddModalOpen(open);
         }}>
-          <DialogContent className="max-w-2xl p-0 overflow-hidden border-none">
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b flex items-center justify-between">
-              <button onClick={() => setAddModalOpen(false)} className="text-blue-600 hover:text-blue-700 font-medium">Cancel</button>
-              <DialogTitle className="text-xl font-bold text-gray-800">Add Staff Member</DialogTitle>
-              <div className="w-16"></div>
-            </div>
+          <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+            <DialogTitle className="text-xl font-semibold border-b pb-4">Add Staff Member</DialogTitle>
 
-            <div className="p-6 bg-white min-h-[550px]">
+            <div className="flex-1 overflow-y-auto px-1">
               {/* Wizard Step Indicator */}
               <WizardStepIndicator
                 steps={[
@@ -549,40 +545,37 @@ export default function AdminStaffPage() {
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
-                    className="mt-6"
+                    className="py-4"
                   >
-                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
-                      <h3 className="font-bold text-lg text-gray-800 mb-4 flex items-center gap-2">
-                        <User className="h-5 w-5 text-blue-600" />
-                        Review Staff Details
-                      </h3>
+                    <div className="border rounded-lg p-6">
+                      <h3 className="font-semibold text-lg text-gray-800 mb-4">Review Staff Details</h3>
                       <div className="space-y-3 text-sm">
-                        <div className="flex justify-between py-2 border-b border-blue-100">
+                        <div className="flex justify-between py-2 border-b">
                           <span className="text-gray-600">Name:</span>
-                          <span className="font-semibold text-gray-800">{formData.first_name} {formData.last_name}</span>
+                          <span className="font-medium text-gray-900">{formData.first_name} {formData.last_name}</span>
                         </div>
-                        <div className="flex justify-between py-2 border-b border-blue-100">
+                        <div className="flex justify-between py-2 border-b">
                           <span className="text-gray-600">Email:</span>
-                          <span className="font-medium text-gray-800">{formData.email}</span>
+                          <span className="font-medium text-gray-900">{formData.email}</span>
                         </div>
                         {formData.phone && (
-                          <div className="flex justify-between py-2 border-b border-blue-100">
+                          <div className="flex justify-between py-2 border-b">
                             <span className="text-gray-600">Phone:</span>
-                            <span className="font-medium text-gray-800">{formData.phone}</span>
+                            <span className="font-medium text-gray-900">{formData.phone}</span>
                           </div>
                         )}
-                        <div className="flex justify-between py-2 border-b border-blue-100">
+                        <div className="flex justify-between py-2 border-b">
                           <span className="text-gray-600">Role:</span>
-                          <span className="font-semibold text-blue-600">{formData.role}</span>
+                          <span className="font-medium text-gray-900">{formData.role}</span>
                         </div>
-                        <div className="flex justify-between py-2 border-b border-blue-100">
+                        <div className="flex justify-between py-2 border-b">
                           <span className="text-gray-600">Department:</span>
-                          <span className="font-semibold text-indigo-600">{formData.department}</span>
+                          <span className="font-medium text-gray-900">{formData.department}</span>
                         </div>
                         {formData.branch_id && (
-                          <div className="flex justify-between py-2 border-b border-blue-100">
+                          <div className="flex justify-between py-2 border-b">
                             <span className="text-gray-600">Branch:</span>
-                            <span className="font-medium text-gray-800">{branches.find(b => b.id.toString() === formData.branch_id)?.name}</span>
+                            <span className="font-medium text-gray-900">{branches.find(b => b.id.toString() === formData.branch_id)?.name}</span>
                           </div>
                         )}
                         <div className="flex justify-between py-2">
@@ -597,59 +590,61 @@ export default function AdminStaffPage() {
                 )}
               </AnimatePresence>
 
-              {/* Navigation Buttons */}
-              <div className="flex gap-3 mt-8">
-                {wizardStep > 1 && (
-                  <button
-                    onClick={() => setWizardStep(prev => prev - 1)}
-                    className="flex-1 py-3 px-4 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 active:bg-gray-300 transition-colors"
-                  >
-                    Previous
-                  </button>
-                )}
+            </div>
 
-                {wizardStep < 3 ? (
-                  <button
-                    onClick={() => {
-                      if (wizardStep === 1) {
-                        const errors: any = {};
-                        if (!formData.first_name) errors.first_name = 'First name is required';
-                        if (!formData.last_name) errors.last_name = 'Last name is required';
-                        if (!formData.email) errors.email = 'Email is required';
-                        else if (!/\S+@\S+\.\S+/.test(formData.email)) errors.email = 'Email is invalid';
-                        if (Object.keys(errors).length > 0) {
-                          setFormErrors(errors);
-                          toast.error('Please fill in required fields');
-                          return;
-                        }
+            {/* Sticky Footer with Navigation */}
+            <div className="border-t bg-white p-4 flex gap-3 sticky bottom-0">
+              {wizardStep > 1 && (
+                <IOSButton
+                  variant="secondary"
+                  onClick={() => setWizardStep(prev => prev - 1)}
+                  className="flex-1"
+                >
+                  Previous
+                </IOSButton>
+              )}
+
+              {wizardStep < 3 ? (
+                <IOSButton
+                  onClick={() => {
+                    if (wizardStep === 1) {
+                      const errors: any = {};
+                      if (!formData.first_name) errors.first_name = 'First name is required';
+                      if (!formData.last_name) errors.last_name = 'Last name is required';
+                      if (!formData.email) errors.email = 'Email is required';
+                      else if (!/\S+@\S+\.\S+/.test(formData.email)) errors.email = 'Email is invalid';
+                      if (Object.keys(errors).length > 0) {
+                        setFormErrors(errors);
+                        toast.error('Please fill in required fields');
+                        return;
                       }
-                      if (wizardStep === 2) {
-                        const errors: any = {};
-                        if (!formData.role) errors.role = 'Role is required';
-                        if (!formData.department) errors.department = 'Department is required';
-                        if (Object.keys(errors).length > 0) {
-                          setFormErrors(errors);
-                          toast.error('Please fill in required fields');
-                          return;
-                        }
+                    }
+                    if (wizardStep === 2) {
+                      const errors: any = {};
+                      if (!formData.role) errors.role = 'Role is required';
+                      if (!formData.department) errors.department = 'Department is required';
+                      if (Object.keys(errors).length > 0) {
+                        setFormErrors(errors);
+                        toast.error('Please fill in required fields');
+                        return;
                       }
-                      setFormErrors({});
-                      setWizardStep(prev => prev + 1);
-                    }}
-                    className="flex-1 py-3 px-4 rounded-xl bg-blue-500 text-white font-semibold hover:bg-blue-600 active:bg-blue-700 shadow-md transition-all"
-                  >
-                    Next
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleCreateStaff}
-                    className="flex-1 py-3 px-4 rounded-xl bg-emerald-500 text-white font-semibold hover:bg-emerald-600 active:bg-emerald-700 shadow-md transition-all"
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? 'Creating...' : 'Create Staff Member'}
-                  </button>
-                )}
-              </div>
+                    }
+                    setFormErrors({});
+                    setWizardStep(prev => prev + 1);
+                  }}
+                  className="flex-1"
+                >
+                  Next
+                </IOSButton>
+              ) : (
+                <IOSButton
+                  onClick={handleCreateStaff}
+                  className="flex-1"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Creating...' : 'Create Staff Member'}
+                </IOSButton>
+              )}
             </div>
           </DialogContent>
         </Dialog>

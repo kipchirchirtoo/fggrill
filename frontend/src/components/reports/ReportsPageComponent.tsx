@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import {
-  BarChart3, FileText, DollarSign, Users, Calendar, Clock, Download, 
+  BarChart3, FileText, DollarSign, Users, Calendar, Clock, Download,
   Bed, TrendingUp, Package, Home, Wrench, CreditCard, PieChart,
   LineChart, Plus, Play, Pause, RefreshCw, Trash2,
   CheckCircle, XCircle, Mail, Building2, UtensilsCrossed, Wine, X,
@@ -70,6 +70,7 @@ interface ReportsPageComponentProps {
   showBranchSelector?: boolean;
   showScheduling?: boolean;
   showKPI?: boolean;
+  showHistory?: boolean;
   title?: string;
   subtitle?: string;
 }
@@ -116,6 +117,7 @@ export function ReportsPageComponent({
   showBranchSelector = true,
   showScheduling = true,
   showKPI = true,
+  showHistory = true,
   title = 'Reports & Analytics',
   subtitle = 'Generate branded reports, schedule automation, and view KPIs'
 }: ReportsPageComponentProps) {
@@ -123,7 +125,7 @@ export function ReportsPageComponent({
   const [activeTab, setActiveTab] = useState<'reports' | 'scheduled' | 'history' | 'kpi'>('reports');
   const [isLoading, setIsLoading] = useState(false);
   const [serviceStatus, setServiceStatus] = useState<'online' | 'offline' | 'checking'>('checking');
-  
+
   // Date range state
   const [dateRange, setDateRange] = useState({
     start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -131,24 +133,24 @@ export function ReportsPageComponent({
   });
   const [selectedBranch, setSelectedBranch] = useState<string>(branchId ? branchId.toString() : 'all');
   const [branches, setBranches] = useState<any[]>([]);
-  
+
   // Scheduled reports state
   const [scheduledReports, setScheduledReports] = useState<ScheduledReport[]>([]);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  
+
   // Report history state
   const [reportHistory, setReportHistory] = useState<ReportHistory[]>([]);
-  
+
   // KPI state
   const [kpiData, setKpiData] = useState<KPIData | null>(null);
-  
+
   // Generate report modal state
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState<string>('');
   const [generating, setGenerating] = useState(false);
 
   // Filter report categories based on user role
-  const REPORT_CATEGORIES = ALL_REPORT_CATEGORIES.filter(cat => 
+  const REPORT_CATEGORIES = ALL_REPORT_CATEGORIES.filter(cat =>
     cat.roles.includes(userRole)
   );
 
@@ -174,7 +176,7 @@ export function ReportsPageComponent({
   useEffect(() => {
     if (activeTab === 'scheduled' && showScheduling) {
       fetchScheduledReports();
-    } else if (activeTab === 'history') {
+    } else if (activeTab === 'history' && showHistory) {
       fetchReportHistory();
     } else if (activeTab === 'kpi' && showKPI) {
       fetchKPIData();
@@ -195,7 +197,7 @@ export function ReportsPageComponent({
       const res = await systemAPI.getBranches();
       const branchData = res.data || res.branches || [];
       setBranches(branchData);
-      
+
       // Log for debugging
       console.log('Fetched branches:', branchData);
     } catch (error) {
@@ -266,12 +268,12 @@ export function ReportsPageComponent({
 
     setGenerating(true);
     try {
-      const effectiveBranchId = isBranchLocked 
-        ? branchId 
+      const effectiveBranchId = isBranchLocked
+        ? branchId
         : (selectedBranch !== 'all' ? parseInt(selectedBranch) : undefined);
-      
-      const effectiveBranchName = isBranchLocked 
-        ? branchName 
+
+      const effectiveBranchName = isBranchLocked
+        ? branchName
         : (selectedBranch !== 'all' ? branches.find(b => b.id.toString() === selectedBranch)?.name : 'All Branches');
 
       const filters = {
@@ -281,7 +283,7 @@ export function ReportsPageComponent({
       };
 
       console.log('Generating report with filters:', filters);
-      
+
       await reportsService.downloadReport(reportType, filters, format);
       toast.success(`${reportType.replace('_', ' ')} report downloaded successfully!`);
       setShowGenerateModal(false);
@@ -305,7 +307,7 @@ export function ReportsPageComponent({
 
   const handleDeleteSchedule = async (scheduleId: string) => {
     if (!confirm('Are you sure you want to delete this scheduled report?')) return;
-    
+
     try {
       await reportsService.deleteScheduledReport(scheduleId);
       toast.success('Schedule deleted');
@@ -341,7 +343,7 @@ export function ReportsPageComponent({
   const availableTabs = [
     { id: 'reports', label: 'Report Library', icon: FileText, show: true },
     { id: 'scheduled', label: 'Scheduled Reports', icon: Clock, show: showScheduling },
-    { id: 'history', label: 'Report History', icon: BarChart3, show: true },
+    { id: 'history', label: 'Report History', icon: BarChart3, show: showHistory },
     { id: 'kpi', label: 'KPI Dashboard', icon: PieChart, show: showKPI }
   ].filter(tab => tab.show);
 
@@ -361,17 +363,16 @@ export function ReportsPageComponent({
         </div>
         <div className="flex items-center gap-3">
           {/* Service Status */}
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
-            serviceStatus === 'online' ? 'bg-green-100 text-green-700' :
-            serviceStatus === 'offline' ? 'bg-red-100 text-red-700' :
-            'bg-gray-100 text-gray-600'
-          }`}>
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${serviceStatus === 'online' ? 'bg-green-100 text-green-700' :
+              serviceStatus === 'offline' ? 'bg-red-100 text-red-700' :
+                'bg-gray-100 text-gray-600'
+            }`}>
             {serviceStatus === 'online' ? <CheckCircle className="h-4 w-4" /> :
-             serviceStatus === 'offline' ? <XCircle className="h-4 w-4" /> :
-             <Loader2 className="h-4 w-4 animate-spin" />}
+              serviceStatus === 'offline' ? <XCircle className="h-4 w-4" /> :
+                <Loader2 className="h-4 w-4 animate-spin" />}
             Report Service: {serviceStatus}
           </div>
-          
+
           <IOSButton onClick={checkServiceStatus} variant="secondary" size="sm">
             <RefreshCw className="h-4 w-4" />
           </IOSButton>
@@ -397,7 +398,7 @@ export function ReportsPageComponent({
               className="px-3 py-2 border border-gray-200 rounded-ios-lg text-sm"
             />
           </div>
-          
+
           {showBranchSelector && !isBranchLocked && (
             <select
               value={selectedBranch}
@@ -412,7 +413,7 @@ export function ReportsPageComponent({
           )}
 
           <div className="flex-1" />
-          
+
           <div className="flex gap-2">
             <button
               onClick={() => {
@@ -457,24 +458,25 @@ export function ReportsPageComponent({
       </IOSCard>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="flex gap-8">
-          {availableTabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 py-4 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === tab.id
-                  ? 'border-[#3C3C43] text-[#3C3C43]'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <tab.icon className="h-4 w-4" />
-              {tab.label}
-            </button>
-          ))}
-        </nav>
-      </div>
+      {availableTabs.length > 1 && (
+        <div className="border-b border-gray-200">
+          <nav className="flex gap-8">
+            {availableTabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center gap-2 py-4 border-b-2 font-medium text-sm transition-colors ${activeTab === tab.id
+                    ? 'border-[#3C3C43] text-[#3C3C43]'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+              >
+                <tab.icon className="h-4 w-4" />
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+      )}
 
       {/* Reports Library Tab */}
       {activeTab === 'reports' && (
@@ -573,7 +575,7 @@ export function ReportsPageComponent({
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
-                        {schedule.next_run_at 
+                        {schedule.next_run_at
                           ? new Date(schedule.next_run_at).toLocaleDateString()
                           : 'Not scheduled'}
                       </td>
@@ -617,7 +619,7 @@ export function ReportsPageComponent({
       )}
 
       {/* Report History Tab */}
-      {activeTab === 'history' && (
+      {activeTab === 'history' && showHistory && (
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold font-sf-pro-display">Generated Reports History</h2>
@@ -655,7 +657,7 @@ export function ReportsPageComponent({
                       <td className="px-6 py-4 text-sm text-gray-600 capitalize">{report.type?.replace('_', ' ')}</td>
                       <td className="px-6 py-4 text-sm text-gray-600 capitalize">{report.category}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">
-                        {report.generated_at 
+                        {report.generated_at
                           ? new Date(report.generated_at).toLocaleString()
                           : new Date(report.created_at).toLocaleString()}
                       </td>
@@ -675,7 +677,7 @@ export function ReportsPageComponent({
 
       {/* KPI Dashboard Tab */}
       {activeTab === 'kpi' && showKPI && (
-        <KPIDashboard 
+        <KPIDashboard
           branchId={isBranchLocked ? branchId : (selectedBranch !== 'all' ? parseInt(selectedBranch) : undefined)}
           branchName={isBranchLocked ? branchName : (selectedBranch !== 'all' ? branches.find(b => b.id.toString() === selectedBranch)?.name : undefined)}
         />
@@ -791,8 +793,8 @@ export function ReportsPageComponent({
             isBranchLocked
               ? branchId
               : selectedBranch !== 'all'
-              ? parseInt(selectedBranch)
-              : undefined
+                ? parseInt(selectedBranch)
+                : undefined
           }
           reportCategories={REPORT_CATEGORIES}
         />
@@ -802,15 +804,15 @@ export function ReportsPageComponent({
 }
 
 // Schedule Report Modal Component
-function ScheduleReportModal({ 
-  isOpen, 
-  onClose, 
+function ScheduleReportModal({
+  isOpen,
+  onClose,
   onSuccess,
   branchId,
   reportCategories
-}: { 
-  isOpen: boolean; 
-  onClose: () => void; 
+}: {
+  isOpen: boolean;
+  onClose: () => void;
   onSuccess: () => void;
   branchId?: number | null;
   reportCategories: typeof ALL_REPORT_CATEGORIES;
