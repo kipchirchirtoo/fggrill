@@ -211,19 +211,27 @@ export const getStaffMember = async (
     const { data: staff, error } = await query.maybeSingle();
 
     if (error) {
-      logger.error('Database error in getStaffMember:', {
+      // Hyper-granular logging for diagnosis
+      logger.error('CRITICAL DATABASE ERROR in getStaffMember:', {
         message: error.message,
         code: error.code,
         details: error.details,
         hint: error.hint,
-        lookupId: id
+        lookupId: id,
+        stack: new Error().stack
       });
-      res.status(500).json({
+
+      // Provide more info in dev, but keep it safe in prod
+      return res.status(500).json({
         success: false,
-        message: 'Database error loading staff member',
-        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        message: 'Database error loading staff member details',
+        error: process.env.NODE_ENV === 'development' ? {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        } : undefined
       });
-      return;
     }
 
     if (!staff) {
