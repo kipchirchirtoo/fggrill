@@ -352,7 +352,12 @@ export default function BranchFinancialVerificationPage() {
                                                 <td className="px-4 py-3">
                                                     <div>
                                                         <p className="font-mono text-sm font-bold text-gray-900">{tx.reference_number || 'Internal Transfer'}</p>
-                                                        <p className="text-xs text-gray-400 uppercase">{tx.payment_method}</p>
+                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                            <p className="text-xs text-gray-400 uppercase">{tx.payment_method}</p>
+                                                            {tx.is_pool_token && (
+                                                                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded uppercase">Pool Token</span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-gray-600">{tx.branch_name}</td>

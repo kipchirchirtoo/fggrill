@@ -75,6 +75,7 @@ export default function RevenueOversightPage() {
     const departments = [
         { name: 'Restaurant', color: 'bg-emerald-500', icon: Utensils, field: 'restaurant' },
         { name: 'Bar & Lounge', color: 'bg-stone-900', icon: Beer, field: 'bar' },
+        { name: 'Pool Table', color: 'bg-indigo-600', icon: ShieldCheck, field: 'pool' },
         { name: 'Rooms & Lodging', color: 'bg-blue-600', icon: Building2, field: 'rooms' },
         { name: 'Catering & Events', color: 'bg-amber-500', icon: Users, field: 'events' },
         { name: 'POS Transactions', color: 'bg-indigo-500', icon: CreditCard, field: 'pos' },

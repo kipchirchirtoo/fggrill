@@ -114,6 +114,12 @@ export default function AuditorDashboard() {
             desc: 'Back-of-house requests',
             icon: ShoppingBag,
             href: '/dashboard/auditor/kitchen-requisitions',
+        },
+        {
+            title: 'Financial Sync',
+            desc: 'Gateway reconciliation',
+            icon: CreditCard,
+            href: '/dashboard/auditor/financial-verification',
         }
     ];
 

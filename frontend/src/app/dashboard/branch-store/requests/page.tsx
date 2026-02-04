@@ -86,7 +86,14 @@ export default function BranchRequestsPage() {
     };
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_MANAGER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
+        <ProtectedRoute allowedRoles={[
+            UserRole.BRANCH_STOREKEEPER,
+            UserRole.BRANCH_MANAGER,
+            UserRole.SUPER_ADMIN,
+            UserRole.GENERAL_MANAGER,
+            UserRole.BARTENDER,
+            UserRole.RESTAURANT
+        ]}>
             <DashboardLayout>
                 <div className="space-y-6">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -322,8 +329,8 @@ export default function BranchRequestsPage() {
                                                         </td>
                                                         <td className="px-4 py-3 text-center">
                                                             <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${item.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600' :
-                                                                    item.status === 'REJECTED' ? 'bg-rose-50 text-rose-600' :
-                                                                        'bg-amber-50 text-amber-600'
+                                                                item.status === 'REJECTED' ? 'bg-rose-50 text-rose-600' :
+                                                                    'bg-amber-50 text-amber-600'
                                                                 }`}>
                                                                 {item.status}
                                                             </span>

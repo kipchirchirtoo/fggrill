@@ -307,73 +307,74 @@ CREATE INDEX idx_grn_supplier ON store_grn(supplier_id);
 CREATE INDEX idx_grn_date ON store_grn(grn_date);
 
 -- Create function to generate requisition number
-CREATE OR REPLACE FUNCTION generate_requisition_number()
-RETURNS TEXT AS $$
-DECLARE
-  req_date TEXT;
-  next_seq INT;
-  req_number TEXT;
-BEGIN
-  req_date := TO_CHAR(NOW(), 'YYMMDD');
-  
-  WITH seq AS (
-    SELECT COUNT(*) + 1 as next_seq
-    FROM store_purchase_requisitions
-    WHERE requisition_number LIKE 'REQ' || req_date || '%'
-  )
-  SELECT next_seq INTO next_seq FROM seq;
-  
-  req_number := 'REQ' || req_date || LPAD(next_seq::TEXT, 4, '0');
-  
-  RETURN req_number;
-END;
-$$ LANGUAGE plpgsql;
+-- DROP FUNCTION IF EXISTS generate_requisition_number();
+-- CREATE OR REPLACE FUNCTION generate_requisition_number()
+-- RETURNS TEXT AS $$
+-- DECLARE
+--   req_date TEXT;
+--   next_seq INT;
+--   req_number TEXT;
+-- BEGIN
+--   req_date := TO_CHAR(NOW(), 'YYMMDD');
+--   
+--   WITH seq AS (
+--     SELECT COUNT(*) + 1 as next_seq
+--     FROM store_purchase_requisitions
+--     WHERE requisition_number LIKE 'REQ' || req_date || '%'
+--   )
+--   SELECT next_seq INTO next_seq FROM seq;
+--   
+--   req_number := 'REQ' || req_date || LPAD(next_seq::TEXT, 4, '0');
+--   
+--   RETURN req_number;
+-- END;
+-- $$ LANGUAGE plpgsql;
 
 -- Create function to generate PO number
-CREATE OR REPLACE FUNCTION generate_po_number()
-RETURNS TEXT AS $$
-DECLARE
-  po_date TEXT;
-  next_seq INT;
-  po_number TEXT;
-BEGIN
-  po_date := TO_CHAR(NOW(), 'YYMMDD');
-  
-  WITH seq AS (
-    SELECT COUNT(*) + 1 as next_seq
-    FROM store_purchase_orders
-    WHERE po_number LIKE 'PO' || po_date || '%'
-  )
-  SELECT next_seq INTO next_seq FROM seq;
-  
-  po_number := 'PO' || po_date || LPAD(next_seq::TEXT, 4, '0');
-  
-  RETURN po_number;
-END;
-$$ LANGUAGE plpgsql;
+-- CREATE OR REPLACE FUNCTION generate_po_number()
+-- RETURNS TEXT AS $$
+-- DECLARE
+--   po_date TEXT;
+--   next_seq INT;
+--   po_number TEXT;
+-- BEGIN
+--   po_date := TO_CHAR(NOW(), 'YYMMDD');
+--   
+--   WITH seq AS (
+--     SELECT COUNT(*) + 1 as next_seq
+--     FROM store_purchase_orders
+--     WHERE po_number LIKE 'PO' || po_date || '%'
+--   )
+--   SELECT next_seq INTO next_seq FROM seq;
+--   
+--   po_number := 'PO' || po_date || LPAD(next_seq::TEXT, 4, '0');
+--   
+--   RETURN po_number;
+-- END;
+-- $$ LANGUAGE plpgsql;
 
 -- Create function to generate GRN number
-CREATE OR REPLACE FUNCTION generate_grn_number()
-RETURNS TEXT AS $$
-DECLARE
-  grn_date TEXT;
-  next_seq INT;
-  grn_number TEXT;
-BEGIN
-  grn_date := TO_CHAR(NOW(), 'YYMMDD');
-  
-  WITH seq AS (
-    SELECT COUNT(*) + 1 as next_seq
-    FROM store_grn
-    WHERE grn_number LIKE 'GRN' || grn_date || '%'
-  )
-  SELECT next_seq INTO next_seq FROM seq;
-  
-  grn_number := 'GRN' || grn_date || LPAD(next_seq::TEXT, 4, '0');
-  
-  RETURN grn_number;
-END;
-$$ LANGUAGE plpgsql;
+-- CREATE OR REPLACE FUNCTION generate_grn_number()
+-- RETURNS TEXT AS $$
+-- DECLARE
+--   grn_date TEXT;
+--   next_seq INT;
+--   grn_number TEXT;
+-- BEGIN
+--   grn_date := TO_CHAR(NOW(), 'YYMMDD');
+--   
+--   WITH seq AS (
+--     SELECT COUNT(*) + 1 as next_seq
+--     FROM store_grn
+--     WHERE grn_number LIKE 'GRN' || grn_date || '%'
+--   )
+--   SELECT next_seq INTO next_seq FROM seq;
+--   
+--   grn_number := 'GRN' || grn_date || LPAD(next_seq::TEXT, 4, '0');
+--   
+--   RETURN grn_number;
+-- END;
+-- $$ LANGUAGE plpgsql;
 
 -- Create triggers for timestamp updates
 CREATE TRIGGER update_requisitions_timestamp

@@ -345,12 +345,14 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
     // 2. Fetch orders, payments, and POS transactions
     let restQuery = supabase.from('restaurant_orders').select('*, items:restaurant_order_items(*, menu_item:menu_items(name))'); // Fetch items for details
     let barQuery = supabase.from('bar_orders').select('*, items:bar_order_items(*, stock_item:bar_inventory(item_name))'); // Fetch items for details
+    let poolQuery = supabase.from('restaurant_pool_token_sales').select('*');
     let paymentsQuery = supabase.from('payments').select('*');
     let posQuery = supabase.from('pos_transactions').select('*');
 
     if (branch_id && branch_id !== '0') {
       restQuery = restQuery.eq('branch_id', branch_id);
       barQuery = barQuery.eq('branch_id', branch_id);
+      poolQuery = poolQuery.eq('branch_id', branch_id);
       // payments table doesn't have branch_id directly, inferred in frontend or handled by previous fix. 
       // However, for this specific report, we might need to rely on the previously implemented getFinancialReconciliation logic if we want strict branch filtering on payments.
       // But for "Sales Verification", orders are the primary source of truth for *Sales*. Payments are for *Collection*.
@@ -364,17 +366,19 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
     if (start_date) {
       restQuery = restQuery.gte('created_at', start_date);
       barQuery = barQuery.gte('created_at', start_date);
+      poolQuery = poolQuery.gte('created_at', start_date);
       paymentsQuery = paymentsQuery.gte('payment_date', start_date);
       posQuery = posQuery.gte('transaction_date', start_date);
     }
     if (end_date) {
       restQuery = restQuery.lte('created_at', end_date);
       barQuery = barQuery.lte('created_at', end_date);
+      poolQuery = poolQuery.lte('created_at', end_date);
       paymentsQuery = paymentsQuery.lte('payment_date', end_date);
       posQuery = posQuery.lte('transaction_date', end_date);
     }
 
-    const [restRes, barRes, payRes, posRes] = await Promise.all([restQuery, barQuery, paymentsQuery, posQuery]);
+    const [restRes, barRes, poolRes, payRes, posRes] = await Promise.all([restQuery, barQuery, poolQuery, paymentsQuery, posQuery]);
 
     // 3. Group by branch if no specific branch requested
     // 3. Group by branch if no specific branch requested
@@ -386,6 +390,7 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
           branch_name: b.name,
           restaurant: { total_orders: 0, total_value: 0, voided: 0 },
           bar: { total_orders: 0, total_value: 0, voided: 0 },
+          pool: { total_sales: 0, total_value: 0 },
           pos: { total_transactions: 0, total_value: 0 },
           total_revenue: 0, // Sales (Orders)
           total_collected: 0 // Collections (Payments + POS)
@@ -415,6 +420,18 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
           } else {
             bSummary.bar.voided++;
           }
+        }
+      });
+
+      poolRes.data?.forEach(s => {
+        const bSummary = branchSummaries[s.branch_id];
+        if (bSummary) {
+          bSummary.pool.total_sales++;
+          const saleValue = Number(s.quantity || 0) * Number(s.amount_per_token || 0);
+          bSummary.pool.total_value += saleValue;
+          bSummary.total_revenue += saleValue;
+          // Pool tokens are usually immediate cash/mpesa collection
+          bSummary.total_collected += saleValue;
         }
       });
 
@@ -472,6 +489,10 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
         total_value: barRes.data?.filter(o => o.status !== 'cancelled').reduce((sum, o) => sum + Number(o.total || 0), 0) || 0,
         voided: barRes.data?.filter(o => o.status === 'cancelled').length || 0
       },
+      pool: {
+        total_sales: poolRes.data?.length || 0,
+        total_value: poolRes.data?.reduce((sum, s) => sum + (Number(s.quantity || 0) * Number(s.amount_per_token || 0)), 0) || 0
+      },
       pos: {
         total_transactions: posRes.data?.length || 0,
         total_value: posRes.data?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0
@@ -489,7 +510,8 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
       data: summary,
       orders: {
         restaurant: restRes.data,
-        bar: barRes.data
+        bar: barRes.data,
+        pool_tokens: poolRes.data
       },
       pos_transactions: posRes.data,
       payments: payRes.data
@@ -511,6 +533,11 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
 
     // 1. Get all payments for the date (remove branch_id filter as it doesn't exist on payments)
     const { data: rawPayments, error: payError } = await supabase.from('payments').select('*')
+      .gte('created_at', `${targetDate}T00:00:00`)
+      .lte('created_at', `${targetDate}T23:59:59`);
+
+    const { data: poolSales } = await supabase.from('restaurant_pool_token_sales')
+      .select('*, cashier:users(id, first_name, last_name)')
       .gte('created_at', `${targetDate}T00:00:00`)
       .lte('created_at', `${targetDate}T23:59:59`);
 
@@ -578,6 +605,24 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
     if (branch_id && branch_id !== '0') {
       enrichedPayments = enrichedPayments.filter(p => String(p.branch_id) === String(branch_id));
     }
+
+    // 6b. Add pool token sales as virtual payments
+    const virtualPoolPayments = (poolSales || [])
+      .filter(s => !branch_id || branch_id === '0' || String(s.branch_id) === String(branch_id))
+      .map(s => ({
+        id: s.id,
+        amount: Number(s.quantity || 0) * Number(s.amount_per_token || 0),
+        payment_method: s.payment_method,
+        status: 'completed',
+        reference: `POOL-TOKEN-${s.id.slice(0, 8)}`,
+        created_at: s.created_at,
+        branch_id: s.branch_id,
+        created_by: s.cashier_id,
+        is_pool_token: true,
+        cashier: s.cashier
+      }));
+
+    enrichedPayments = [...enrichedPayments, ...virtualPoolPayments];
 
     // 7. Fetch user and branch details for display
     const userIds = [...new Set(enrichedPayments.map(p => p.created_by).filter(Boolean))];
@@ -651,9 +696,11 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
 
     const { data: restSales } = await restSalesQuery;
     const { data: barSales } = await barSalesQuery;
+    // poolSales already fetched earlier
 
     const totalSales = (restSales?.reduce((sum, o) => sum + Number(o.total_amount || 0), 0) || 0) +
-      (barSales?.reduce((sum, o) => sum + Number(o.total || 0), 0) || 0);
+      (barSales?.reduce((sum, o) => sum + Number(o.total || 0), 0) || 0) +
+      (poolSales?.reduce((sum, s) => sum + (Number(s.quantity || 0) * Number(s.amount_per_token || 0)), 0) || 0);
 
     // 11. Build recent transactions list
     const recentTransactions = payments.map(p => ({
@@ -663,6 +710,7 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
       status: p.status,
       cashier_name: p.cashier ? `${p.cashier.first_name} ${p.cashier.last_name}` : 'System',
       branch_name: p.branch?.name || 'Main',
+      is_pool_token: (p as any).is_pool_token || false,
       created_at: p.created_at
     })).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 50);
 
@@ -772,6 +820,10 @@ export const getRevenueOversight = async (req: Request, res: Response, next: Nex
       .gte('created_at', start)
       .lte('created_at', end);
 
+    let poolQuery = supabase.from('restaurant_pool_token_sales').select('quantity, amount_per_token, created_at')
+      .gte('created_at', start)
+      .lte('created_at', end);
+
     if (branch_id && branch_id !== '0') {
       restQuery = restQuery.eq('branch_id', branch_id);
       barQuery = barQuery.eq('branch_id', branch_id);
@@ -779,14 +831,16 @@ export const getRevenueOversight = async (req: Request, res: Response, next: Nex
       eventQuery = eventQuery.eq('branch_id', branch_id);
       posQuery = posQuery.eq('branch_id', branch_id);
       billQuery = billQuery.eq('branch_id', branch_id);
+      poolQuery = poolQuery.eq('branch_id', branch_id);
     }
 
-    const [restRes, barRes, roomRes, eventRes, posRes, billRes] = await Promise.all([
-      restQuery, barQuery, roomQuery, eventQuery, posQuery, billQuery
+    const [restRes, barRes, roomRes, eventRes, posRes, billRes, poolRes] = await Promise.all([
+      restQuery, barQuery, roomQuery, eventQuery, posQuery, billQuery, poolQuery
     ]);
 
     const restRev = restRes.data?.reduce((sum, o) => sum + Number(o.total_amount || 0), 0) || 0;
     const barRev = barRes.data?.reduce((sum, o) => sum + Number(o.total || 0), 0) || 0;
+    const poolRev = poolRes.data?.reduce((sum, o) => sum + (Number(o.quantity || 0) * Number(o.amount_per_token || 0)), 0) || 0;
     const roomRev = roomRes.data?.reduce((sum, o) => sum + Number(o.total_amount || 0), 0) || 0;
     const eventRev = eventRes.data?.reduce((sum, o) => sum + Number(o.total_amount || 0), 0) || 0;
     const posRev = posRes.data?.reduce((sum, o) => sum + Number(o.amount || 0), 0) || 0;
@@ -808,6 +862,12 @@ export const getRevenueOversight = async (req: Request, res: Response, next: Nex
     processTrends(roomRes.data, 'total_amount');
     processTrends(eventRes.data, 'total_amount', 'event_date');
     processTrends(posRes.data, 'amount');
+    poolRes.data?.forEach(i => {
+      const date = (i.created_at || '').split('T')[0];
+      if (date) {
+        trendsMap[date] = (trendsMap[date] || 0) + (Number(i.quantity || 0) * Number(i.amount_per_token || 0));
+      }
+    });
 
     const dailyTrends = Object.keys(trendsMap).sort().map(date => ({
       day: date.slice(5), // MM-DD
@@ -819,8 +879,8 @@ export const getRevenueOversight = async (req: Request, res: Response, next: Nex
     const { count: occupiedRooms } = await supabase.from('rooms').select('*', { count: 'exact', head: true }).eq('status', 'occupied');
     const occupancy = totalRooms ? Math.round((occupiedRooms || 0) / totalRooms * 100) : 0;
 
-    const fbOrders = (restRes.data?.length || 0) + (barRes.data?.length || 0);
-    const avgOrderValue = fbOrders ? Math.round((restRev + barRev) / fbOrders) : 0;
+    const fbOrders = (restRes.data?.length || 0) + (barRes.data?.length || 0) + (poolRes.data?.length || 0);
+    const avgOrderValue = fbOrders ? Math.round((restRev + barRev + poolRev) / fbOrders) : 0;
 
     // 4. Leakage & Anomalies Detection
     const { data: exceptions } = await supabase.from('audit_exceptions')
@@ -855,15 +915,16 @@ export const getRevenueOversight = async (req: Request, res: Response, next: Nex
     res.status(200).json({
       success: true,
       data: {
-        total_revenue: restRev + barRev + roomRev + eventRev + posRev,
-        collected_revenue: restRev + barRev + roomRev + eventRev + posRev + billsPaid,
+        total_revenue: restRev + barRev + roomRev + eventRev + posRev + poolRev,
+        collected_revenue: restRev + barRev + roomRev + eventRev + posRev + billsPaid + poolRev,
         pending_revenue: billsTotal - billsPaid,
         revenue_by_dept: {
           restaurant: restRev,
           bar: barRev,
           rooms: roomRev,
           events: eventRev,
-          pos: posRev
+          pos: posRev,
+          pool: poolRev
         },
         daily_trends: dailyTrends,
         hotel_occupancy: `${occupancy}%`,

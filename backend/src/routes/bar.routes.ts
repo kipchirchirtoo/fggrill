@@ -8,6 +8,7 @@ import * as inventoryController from '../controllers/bar/inventory.controller';
 import * as reportController from '../controllers/bar/reports.controller';
 import * as stockRequestController from '../controllers/bar/stock-requests.controller';
 import * as syncController from '../controllers/bar/sync.controller';
+import * as poolTokenController from '../controllers/bar/pool-tokens.controller';
 
 const router = express.Router();
 
@@ -75,5 +76,11 @@ router.get('/stock-requests/:id', stockRequestController.getStockRequest);
 router.put('/stock-requests/:id/status', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER]), stockRequestController.updateRequestStatus);
 router.put('/stock-requests/:id/fulfill', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER]), stockRequestController.fulfillStockRequest);
 router.delete('/stock-requests/:id', stockRequestController.deleteStockRequest);
+
+// ====================
+// POOL TABLE TOKENS
+// ====================
+router.get('/pool-table/earnings', poolTokenController.getSales);
+router.post('/pool-table/tokens', poolTokenController.recordSale);
 
 export default router;

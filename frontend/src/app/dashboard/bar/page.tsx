@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { PoolTokenModal } from '@/components/bar/PoolTokenModal';
 
 interface Order {
   id: string;
@@ -34,6 +35,7 @@ export default function BarDashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState({ todayOrders: 0, todayRevenue: 0, openTabs: 0, avgOrder: 0 });
   const [isLoading, setIsLoading] = useState(true);
+  const [isPoolModalOpen, setIsPoolModalOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -186,20 +188,10 @@ export default function BarDashboard() {
                     </div>
                   </div>
                   <button
-                    onClick={() => {
-                      const count = prompt('How many tokens sold?');
-                      if (count) {
-                        barAPI.recordPoolTokens({
-                          tokens_sold: parseInt(count),
-                          amount: parseInt(count) * 100, // Assuming 100 per token
-                          branch_id: activeBranchId || undefined
-                        }).then(() => toast.success('Tokens recorded successfully'))
-                          .catch(() => toast.error('Failed to record tokens'));
-                      }
-                    }}
+                    onClick={() => setIsPoolModalOpen(true)}
                     className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-[12px] font-bold shadow-sm active:scale-95 transition-all"
                   >
-                    + Add Sold
+                    + Record Sales
                   </button>
                 </div>
 
@@ -223,6 +215,11 @@ export default function BarDashboard() {
               </div>
             </div>
           </div>
+          <PoolTokenModal
+            isOpen={isPoolModalOpen}
+            onClose={() => setIsPoolModalOpen(false)}
+            branchId={activeBranchId || undefined}
+          />
         </div>
       </DashboardLayout>
     </ProtectedRoute>

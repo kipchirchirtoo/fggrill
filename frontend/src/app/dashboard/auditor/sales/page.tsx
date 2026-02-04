@@ -136,8 +136,8 @@ export default function SalesAuditPage() {
         fetchData();
     }, [fetchData]);
 
-    const totalExpected = auditData?.restaurant?.total_value + auditData?.bar?.total_value || 0;
-    const voidedCount = auditData?.restaurant?.voided + auditData?.bar?.voided || 0;
+    const totalExpected = (auditData?.restaurant?.total_value || 0) + (auditData?.bar?.total_value || 0) + (auditData?.pool?.total_value || 0);
+    const voidedCount = (auditData?.restaurant?.voided || 0) + (auditData?.bar?.voided || 0);
 
     return (
         <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN]}>
@@ -200,6 +200,13 @@ export default function SalesAuditPage() {
                             <p className="stat-label">Bar & Lounge</p>
                         </div>
                         <div className="stat-card">
+                            <div className="stat-icon bg-indigo-50 text-indigo-600">
+                                <ShieldCheck className="h-5 w-5" />
+                            </div>
+                            <p className="stat-value text-stone-900">KES {(auditData?.pool?.total_value || 0).toLocaleString()}</p>
+                            <p className="stat-label">Pool Table</p>
+                        </div>
+                        <div className="stat-card">
                             <div className={`stat-icon ${voidedCount > 0 ? 'bg-rose-50 text-rose-500' : 'bg-stone-50 text-stone-500'}`}>
                                 <AlertTriangle className="h-5 w-5" />
                             </div>
@@ -228,6 +235,7 @@ export default function SalesAuditPage() {
                                         <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest">Branch</th>
                                         <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-center">Restaurant</th>
                                         <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-center">Bar & Lounge</th>
+                                        <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-center">Pool Table</th>
                                         <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-center">Voided</th>
                                         <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest text-right">Gross Total</th>
                                         <th className="px-5 py-3.5 text-[11px] font-bold text-stone-400 uppercase tracking-widest"></th>
@@ -256,8 +264,14 @@ export default function SalesAuditPage() {
                                             </td>
                                             <td className="px-5 py-4 text-center">
                                                 <div className="flex flex-col">
-                                                    <span className="text-[13px] font-bold text-stone-900">KES {branch.bar.total_value.toLocaleString()}</span>
-                                                    <span className="text-[10px] text-stone-400 font-medium">{branch.bar.total_orders} orders</span>
+                                                    <span className="text-[13px] font-bold text-stone-900">KES {(branch.bar?.total_value || 0).toLocaleString()}</span>
+                                                    <span className="text-[10px] text-stone-400 font-medium">{branch.bar?.total_orders || 0} orders</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-5 py-4 text-center">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[13px] font-bold text-stone-900">KES {(branch.pool?.total_value || 0).toLocaleString()}</span>
+                                                    <span className="text-[10px] text-stone-400 font-medium">{branch.pool?.total_sales || 0} sales</span>
                                                 </div>
                                             </td>
                                             <td className="px-5 py-4 text-center">
