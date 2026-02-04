@@ -1960,6 +1960,53 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
                 success: true,
                 message: 'STK Push initiated'
             });
+        } else if (method === 'MPESA_MANUAL') {
+            const { reference } = req.body;
+            if (!reference) throw new AppError('M-Pesa reference required', 400);
+
+            // 1. Update Transaction
+            await supabase
+                .from('pos_transactions')
+                .update({
+                    status: 'PAID',
+                    payment_method: 'MPESA',
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', id);
+
+            // 2. Record Payment
+            await supabase.from('payments').insert({
+                pos_transaction_id: transaction.id,
+                amount: transaction.total_amount,
+                currency: 'KES',
+                payment_method: 'mpesa',
+                status: 'completed',
+                reference: reference,
+                metadata: {
+                    manual_entry: true,
+                    transaction_ref: transaction.transaction_ref,
+                    verified_at: new Date().toISOString()
+                }
+            });
+
+            // 3. Record Logbook Transaction
+            await supabase.from('cashier_transactions').insert({
+                transaction_number: `POS-${transaction.transaction_ref}`,
+                branch_id: transaction.branch_id,
+                cashier_id: req.user?.id || transaction.cashier_id,
+                transaction_type: 'payment',
+                revenue_type: 'POS_SALE',
+                reference_type: 'pos_transaction',
+                reference_id: transaction.id,
+                payment_method: 'mpesa',
+                amount: transaction.total_amount,
+                customer_name: transaction.customer_name
+            });
+
+            res.json({
+                success: true,
+                message: 'M-Pesa payment verified and transaction completed'
+            });
         } else if (method === 'CASH') {
             // Cashier confirms amount received
             await supabase
