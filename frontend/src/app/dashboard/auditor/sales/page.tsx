@@ -12,6 +12,7 @@ import {
     Building2, TrendingUp, BarChart3, ChevronRight,
     Utensils, Beer, ShieldCheck
 } from 'lucide-react';
+import { CashierLogbookVerification } from '@/components/auditor/CashierLogbookVerification';
 import { toast } from 'sonner';
 
 const OrderDetailsModal = ({ order, isOpen, onClose }: { order: any, isOpen: boolean, onClose: () => void }) => {
@@ -206,6 +207,10 @@ export default function SalesAuditPage() {
                             <p className="stat-label">Voided Orders</p>
                         </div>
                     </div>
+
+                    <CashierLogbookVerification
+                        title="Sales Verification Queue"
+                    />
 
 
                     {/* BRANCH SUMMARIES VIEW */}

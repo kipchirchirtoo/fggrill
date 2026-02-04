@@ -9,6 +9,7 @@ import {
     Search, FileText, CheckCircle2, History,
     Clock, Smartphone, ShieldAlert, Users
 } from 'lucide-react';
+import { CashierLogbookVerification } from '@/components/auditor/CashierLogbookVerification';
 import { auditAPI } from '@/lib/api';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { ProtectedRoute } from '@/components/auth/protected-route';
@@ -145,6 +146,10 @@ export default function FinancialVerificationPage() {
                         </div>
                     </div>
 
+                    <CashierLogbookVerification
+                        title="Financial Logbook Audits"
+                    />
+
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {/* Branch Reconciliation List */}
                         <div className="lg:col-span-2 space-y-4">
@@ -255,8 +260,8 @@ export default function FinancialVerificationPage() {
                                             <div className="flex items-start justify-between mb-2">
                                                 <div className="flex items-center gap-2">
                                                     <div className={`p-1.5 rounded-lg ${tx.payment_method === 'cash' ? 'bg-stone-100 text-stone-600' :
-                                                            tx.payment_method?.includes('mpesa') ? 'bg-emerald-50 text-emerald-600' :
-                                                                'bg-blue-50 text-blue-600'
+                                                        tx.payment_method?.includes('mpesa') ? 'bg-emerald-50 text-emerald-600' :
+                                                            'bg-blue-50 text-blue-600'
                                                         }`}>
                                                         {tx.payment_method === 'cash' ? <Wallet className="h-3.5 w-3.5" /> :
                                                             tx.payment_method?.includes('mpesa') ? <Smartphone className="h-3.5 w-3.5" /> :

@@ -143,3 +143,109 @@ export const getStockLogs = async (req: Request, res: Response, next: NextFuncti
     next(error);
   }
 };
+
+export const submitStockTake = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { branch_id, items, notes, count_type } = req.body;
+    const userId = (req as any).user?.id;
+
+    if (!items || !Array.isArray(items)) {
+      throw new Error('Items array is required');
+    }
+
+    // 1. Create the stock count session
+    const { data: session, error: sessionError } = await supabase
+      .from('stock_counts')
+      .insert([{
+        branch_id: branch_id || (req as any).user?.branch_id,
+        count_date: new Date().toISOString().split('T')[0],
+        count_type: count_type || 'daily',
+        status: 'submitted',
+        counted_by: userId,
+        notes: notes || 'Bar Daily Stock Take'
+      }])
+      .select()
+      .single();
+
+    if (sessionError) throw sessionError;
+
+    // 2. Prepare items with variance logic
+    const countItems = await Promise.all(items.map(async (item: any) => {
+      // Get current system stock
+      const { data: currentItem } = await supabase
+        .from('restaurant_bar_inventory')
+        .select('current_bottles, cost_per_bottle')
+        .eq('id', item.drink_id)
+        .single();
+
+      const systemQty = currentItem?.current_bottles || 0;
+      const physicalQty = Number(item.physical_quantity);
+      const unitCost = currentItem?.cost_per_bottle || 0;
+
+      return {
+        stock_count_id: session.id,
+        item_id: item.drink_id, // Note: stock_count_items expects store_items(id), we might need to cast or ensure compatibility if schemas differ
+        system_quantity: systemQty,
+        physical_quantity: physicalQty,
+        unit_cost: unitCost,
+        reason: item.reason
+      };
+    }));
+
+    // Insert count items
+    const { error: itemsError } = await supabase
+      .from('stock_count_items')
+      .insert(countItems);
+
+    if (itemsError) throw itemsError;
+
+    res.status(201).json({ success: true, data: session });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getConsumptionReport = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { branch_id, date } = req.query;
+    const targetDate = date || new Date().toISOString().split('T')[0];
+
+    // 1. Fetch all bar inventory items
+    const { data: inventory } = await supabase
+      .from('restaurant_bar_inventory')
+      .select('*');
+
+    // 2. Fetch sales for the day from bar_order_items
+    const { data: sales } = await supabase
+      .from('bar_order_items')
+      .select(`
+        drink_id,
+        quantity,
+        order:bar_orders(branch_id, created_at)
+      `)
+      .gte('created_at', `${targetDate}T00:00:00`)
+      .lte('created_at', `${targetDate}T23:59:59`);
+
+    // 3. Filter sales by branch if needed
+    const filteredSales = (sales || []).filter((s: any) =>
+      !branch_id || String(s.order?.branch_id) === String(branch_id)
+    );
+
+    // 4. Aggregate sales by drink_id
+    const salesMap: Record<string, number> = {};
+    filteredSales.forEach((s: any) => {
+      salesMap[s.drink_id] = (salesMap[s.drink_id] || 0) + Number(s.quantity);
+    });
+
+    // 5. Build report
+    const report = (inventory || []).map(item => ({
+      ...item,
+      sold_qty: salesMap[item.id] || 0,
+      expected_remaining: (item.current_bottles || 0) // This is simplified; assumes current_bottles is opening
+    }));
+
+    res.status(200).json({ success: true, data: report });
+  } catch (error) {
+    next(error);
+  }
+};

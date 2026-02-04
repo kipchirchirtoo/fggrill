@@ -627,6 +627,12 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/auditor/sold-items'}
         />
         <NavItem
+          href="/dashboard/auditor/bar-stock"
+          icon={Wine}
+          label="Bar Stock Audits"
+          active={pathname === '/dashboard/auditor/bar-stock'}
+        />
+        <NavItem
           href="/dashboard/auditor/audit-reports"
           icon={Scale}
           label="Compare items sold against requisitions"

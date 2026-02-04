@@ -1294,3 +1294,90 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
     next(error);
   }
 };
+
+/**
+ * H. Bar Stock Audits
+ * Fetch physical stock counts from bar and compare with theoretical stock.
+ */
+export const getBarStockAudits = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { branch_id, status } = req.query;
+
+    let query = supabase
+      .from('stock_counts')
+      .select('*, items:stock_count_items(*), branch:branches(name), user:users(first_name, last_name)')
+      .order('created_at', { ascending: false });
+
+    if (branch_id) query = query.eq('branch_id', branch_id);
+    if (status) query = query.eq('status', status);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    res.status(200).json({ success: true, count: data?.length || 0, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Verify a Bar Stock Take
+ * Auditor approves the count and it updates the system inventory.
+ */
+export const verifyBarStockTake = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+    const auditorId = (req as any).user?.id;
+
+    // 1. Get the stock count and its items
+    const { data: count, error: countError } = await supabase
+      .from('stock_counts')
+      .select('*, items:stock_count_items(*)')
+      .eq('id', id)
+      .single();
+
+    if (countError || !count) throw new Error('Stock count not found');
+    if (count.status === 'verified') throw new Error('Stock count already verified');
+
+    // 2. Update restaurant_bar_inventory for each item
+    for (const item of count.items) {
+      const { error: updateError } = await supabase
+        .from('restaurant_bar_inventory')
+        .update({
+          current_bottles: item.physical_quantity,
+          last_counted_at: new Date().toISOString()
+        })
+        .eq('id', item.drink_id)
+        .eq('branch_id', count.branch_id);
+
+      if (updateError) {
+        console.error(`Error updating inventory item ${item.drink_id}:`, updateError);
+      }
+
+      // Also log movement
+      await supabase.from('stock_movements').insert([{
+        item_sku: item.drink_id, // For bar items, we use ID as SKU in movements for now or join
+        branch_id: count.branch_id,
+        quantity: item.physical_quantity - item.system_quantity,
+        movement_type: 'adjustment',
+        reference_type: 'stock_count',
+        reference_id: id,
+        notes: `Bar Audit Adjustment: ${notes || ''}`,
+        created_by: auditorId
+      }]);
+    }
+
+    // 3. Mark the count as verified
+    await supabase.from('stock_counts').update({
+      status: 'verified',
+      verified_by: auditorId,
+      verified_at: new Date().toISOString(),
+      audit_notes: notes
+    }).eq('id', id);
+
+    res.status(200).json({ success: true, message: 'Stock count verified and inventory updated' });
+  } catch (error) {
+    next(error);
+  }
+};

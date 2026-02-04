@@ -10,6 +10,7 @@ import {
     ArrowUpRight, Clock, ChevronRight, AlertCircle,
     Wallet, TrendingDown, Eye, CreditCard
 } from 'lucide-react';
+import { CashierLogbookVerification } from '@/components/auditor/CashierLogbookVerification';
 import { auditAPI, auditorReportsAPI } from '@/lib/api';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { BranchSelector, useBranch } from '@/lib/branch-context';
@@ -177,6 +178,10 @@ export default function RevenueOversightPage() {
                         </div>
                     </div>
 
+                    <CashierLogbookVerification
+                        title="Revenue Logbook Compliance"
+                    />
+
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {/* Departmental Progress */}
                         <div className="lg:col-span-2 card-elevated p-8 bg-white overflow-hidden relative">
@@ -254,8 +259,8 @@ export default function RevenueOversightPage() {
                                         <div key={i} className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm hover:border-stone-400 transition-all group cursor-pointer">
                                             <div className="flex items-start gap-4">
                                                 <div className={`p-2 rounded-lg ${anomaly.severity === 'HIGH' ? 'bg-rose-50 text-rose-600' :
-                                                        anomaly.severity === 'MEDIUM' ? 'bg-amber-50 text-amber-600' :
-                                                            'bg-blue-50 text-blue-600'
+                                                    anomaly.severity === 'MEDIUM' ? 'bg-amber-50 text-amber-600' :
+                                                        'bg-blue-50 text-blue-600'
                                                     }`}>
                                                     {anomaly.type === 'VOID' ? <TrendingDown className="h-4 w-4" /> :
                                                         anomaly.type === 'EXCEPTION' ? <ShieldAlert className="h-4 w-4" /> :
@@ -271,8 +276,8 @@ export default function RevenueOversightPage() {
                                                     </p>
                                                     <div className="flex items-center gap-1.5 mt-2">
                                                         <div className={`w-1.5 h-1.5 rounded-full ${anomaly.severity === 'HIGH' ? 'bg-rose-500' :
-                                                                anomaly.severity === 'MEDIUM' ? 'bg-amber-500' :
-                                                                    'bg-emerald-500'
+                                                            anomaly.severity === 'MEDIUM' ? 'bg-amber-500' :
+                                                                'bg-emerald-500'
                                                             }`} />
                                                         <span className="text-[10px] font-bold text-stone-500 uppercase">{anomaly.severity} PRIORITY</span>
                                                     </div>

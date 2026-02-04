@@ -18,7 +18,8 @@ import {
   getTaxSummary,
   getFinancialForecast,
   getAccountsReceivablePayable,
-  getFinancialKPIs
+  getFinancialKPIs,
+  getBranchFinancialProfile
 } from '../controllers/finance.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -134,6 +135,12 @@ router.get('/ar-ap',
 router.get('/kpis',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getFinancialKPIs
+);
+
+// Unified Branch Financials
+router.get('/branch-financials/:branchId',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  getBranchFinancialProfile
 );
 
 // ============== ADVANCED ACCOUNTING FEATURES ==============

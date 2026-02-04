@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { fetchAPI } from '@/lib/api';
 import { toast } from 'sonner';
-import { Plus, Trash2, Save, Calculator, AlertCircle, FileText, Check, TrendingUp } from 'lucide-react';
+import { Plus, Trash2, Save, Calculator, AlertCircle, FileText, Check, TrendingUp, Shield, Clock } from 'lucide-react';
 import { IOSCard } from '@/components/ui/ios-card';
 import { Input } from '@/components/ui/input';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -26,6 +26,8 @@ interface LogbookData {
     total_mpesa: number;
     total_swipe: number;
     notes: string;
+    status: 'open' | 'pending_audit' | 'approved' | 'rejected';
+    audit_notes?: string;
 
     // Virtual/Calculated
     credit_bills: LogbookLine[];
@@ -50,6 +52,7 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
         total_mpesa: 0,
         total_swipe: 0,
         notes: '',
+        status: 'open',
         credit_bills: [],
         unpaid_bills: [],
         paid_bills: []
@@ -85,12 +88,12 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
         }
     };
 
-    const handleSave = async (status: 'open' | 'closed') => {
+    const handleSave = async (status: 'open' | 'pending_audit') => {
         setIsSaving(true);
         try {
             const payload = {
-                type,
                 ...logbook,
+                type,
                 status
             };
 
@@ -100,8 +103,8 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
             }) as any;
 
             if (response.success) {
-                toast.success('Logbook saved successfully');
-                if (response.data) setLogbook(prev => ({ ...prev, id: response.data.id }));
+                toast.success(status === 'pending_audit' ? 'Logbook submitted for audit' : 'Logbook saved successfully');
+                if (response.data) setLogbook(prev => ({ ...prev, ...response.data }));
             }
         } catch (error: any) {
             toast.error(error.message || 'Failed to save logbook');
@@ -160,8 +163,34 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
         setLogbook(prev => ({ ...prev, [section]: newLines }));
     };
 
+    const isReadOnly = logbook.status === 'approved' || logbook.status === 'pending_audit';
+
     return (
         <div className="space-y-6 animate-in slide-in-from-bottom-4">
+            {/* Status Header */}
+            {logbook.status !== 'open' && (
+                <div className={`p-4 rounded-2xl flex items-center justify-between border ${logbook.status === 'approved' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' :
+                    logbook.status === 'rejected' ? 'bg-rose-50 border-rose-100 text-rose-800' :
+                        'bg-amber-50 border-amber-100 text-amber-800'
+                    }`}>
+                    <div className="flex items-center gap-3">
+                        <Shield size={20} />
+                        <div>
+                            <p className="text-[13px] font-bold uppercase tracking-widest">
+                                Status: {logbook.status?.replace('_', ' ')}
+                            </p>
+                            {logbook.status === 'rejected' && logbook.audit_notes && (
+                                <p className="text-[12px] font-medium mt-0.5">Note: {logbook.audit_notes}</p>
+                            )}
+                        </div>
+                    </div>
+                    {isReadOnly && (
+                        <div className="flex items-center gap-2 text-[11px] font-bold px-3 py-1 bg-white/50 rounded-full text-stone-600">
+                            <Clock size={12} /> READ ONLY
+                        </div>
+                    )}
+                </div>
+            )}
             {/* Top Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <IOSCard className="p-4 bg-blue-600 text-white border-none shadow-lg shadow-blue-900/20">
@@ -185,6 +214,7 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                         type="number"
                         className="h-8 bg-stone-50 font-bold"
                         value={logbook.opening_float}
+                        disabled={isReadOnly}
                         onChange={e => setLogbook({ ...logbook, opening_float: parseFloat(e.target.value) || 0 })}
                     />
                 </IOSCard>
@@ -206,6 +236,7 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                         type="number"
                                         className="w-32 h-9 bg-stone-50 text-right font-medium"
                                         value={logbook.sales_breakdown[col] || ''}
+                                        disabled={isReadOnly}
                                         onChange={e => setLogbook({
                                             ...logbook,
                                             sales_breakdown: { ...logbook.sales_breakdown, [col]: parseFloat(e.target.value) || 0 }
@@ -229,6 +260,7 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                     type="number"
                                     className="bg-stone-50 font-bold"
                                     value={logbook.total_mpesa || ''}
+                                    disabled={isReadOnly}
                                     onChange={e => setLogbook({ ...logbook, total_mpesa: parseFloat(e.target.value) || 0 })}
                                 />
                             </div>
@@ -238,6 +270,7 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                     type="number"
                                     className="bg-stone-50 font-bold"
                                     value={logbook.total_swipe || ''}
+                                    disabled={isReadOnly}
                                     onChange={e => setLogbook({ ...logbook, total_swipe: parseFloat(e.target.value) || 0 })}
                                 />
                             </div>
@@ -253,6 +286,7 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                     type="number"
                                     className="bg-stone-50 font-bold text-lg"
                                     value={logbook.closing_float || ''}
+                                    disabled={isReadOnly}
                                     onChange={e => setLogbook({ ...logbook, closing_float: parseFloat(e.target.value) || 0 })}
                                 // Using closing_float as "Cash Actual" for now based on logic above, or we can add specific field later.
                                 // For now, let's treat 'closing_float' as the Cash Counted.
@@ -272,7 +306,9 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                 <FileText size={16} className="text-orange-600" />
                                 Credit Bills (Staff/House)
                             </h3>
-                            <button onClick={() => addLine('credit_bills')} className="p-1 rounded bg-stone-100 hover:bg-stone-200"><Plus size={16} /></button>
+                            {!isReadOnly && (
+                                <button onClick={() => addLine('credit_bills')} className="p-1 rounded bg-stone-100 hover:bg-stone-200"><Plus size={16} /></button>
+                            )}
                         </div>
                         <div className="space-y-2">
                             {logbook.credit_bills.map((line, i) => (
@@ -281,6 +317,7 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                         placeholder="Name"
                                         className="h-8 text-xs flex-1"
                                         value={line.customer_name}
+                                        disabled={isReadOnly}
                                         onChange={e => updateLine('credit_bills', i, 'customer_name', e.target.value)}
                                     />
                                     <Input
@@ -288,9 +325,12 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                         type="number"
                                         className="h-8 text-xs w-24 text-right"
                                         value={line.amount || ''}
+                                        disabled={isReadOnly}
                                         onChange={e => updateLine('credit_bills', i, 'amount', parseFloat(e.target.value))}
                                     />
-                                    <button onClick={() => removeLine('credit_bills', i)} className="text-stone-400 hover:text-red-500"><Trash2 size={14} /></button>
+                                    {!isReadOnly && (
+                                        <button onClick={() => removeLine('credit_bills', i)} className="text-stone-400 hover:text-red-500"><Trash2 size={14} /></button>
+                                    )}
                                 </div>
                             ))}
                             <div className="flex justify-end font-bold text-sm pt-2 border-t border-stone-50">
@@ -306,7 +346,9 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                 <AlertCircle size={16} className="text-rose-600" />
                                 Unpaid Bills (Pending)
                             </h3>
-                            <button onClick={() => addLine('unpaid_bills')} className="p-1 rounded bg-stone-100 hover:bg-stone-200"><Plus size={16} /></button>
+                            {!isReadOnly && (
+                                <button onClick={() => addLine('unpaid_bills')} className="p-1 rounded bg-stone-100 hover:bg-stone-200"><Plus size={16} /></button>
+                            )}
                         </div>
                         <div className="space-y-2">
                             {logbook.unpaid_bills.map((line, i) => (
@@ -315,6 +357,7 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                         placeholder="Customer/Room"
                                         className="h-8 text-xs flex-1"
                                         value={line.customer_name}
+                                        disabled={isReadOnly}
                                         onChange={e => updateLine('unpaid_bills', i, 'customer_name', e.target.value)}
                                     />
                                     <Input
@@ -322,9 +365,12 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                         type="number"
                                         className="h-8 text-xs w-24 text-right"
                                         value={line.amount || ''}
+                                        disabled={isReadOnly}
                                         onChange={e => updateLine('unpaid_bills', i, 'amount', parseFloat(e.target.value))}
                                     />
-                                    <button onClick={() => removeLine('unpaid_bills', i)} className="text-stone-400 hover:text-red-500"><Trash2 size={14} /></button>
+                                    {!isReadOnly && (
+                                        <button onClick={() => removeLine('unpaid_bills', i)} className="text-stone-400 hover:text-red-500"><Trash2 size={14} /></button>
+                                    )}
                                 </div>
                             ))}
                             <div className="flex justify-end font-bold text-sm pt-2 border-t border-stone-50">
@@ -340,7 +386,9 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                 <Calculator size={16} className="text-emerald-600" />
                                 Paid Bills (Debt Clearance)
                             </h3>
-                            <button onClick={() => addLine('paid_bills')} className="p-1 rounded bg-stone-100 hover:bg-stone-200"><Plus size={16} /></button>
+                            {!isReadOnly && (
+                                <button onClick={() => addLine('paid_bills')} className="p-1 rounded bg-stone-100 hover:bg-stone-200"><Plus size={16} /></button>
+                            )}
                         </div>
                         <div className="space-y-2">
                             {logbook.paid_bills.map((line, i) => (
@@ -349,6 +397,7 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                         placeholder="Payer Name"
                                         className="h-8 text-xs flex-1"
                                         value={line.customer_name}
+                                        disabled={isReadOnly}
                                         onChange={e => updateLine('paid_bills', i, 'customer_name', e.target.value)}
                                     />
                                     <Input
@@ -356,9 +405,12 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                         type="number"
                                         className="h-8 text-xs w-24 text-right"
                                         value={line.amount || ''}
+                                        disabled={isReadOnly}
                                         onChange={e => updateLine('paid_bills', i, 'amount', parseFloat(e.target.value))}
                                     />
-                                    <button onClick={() => removeLine('paid_bills', i)} className="text-stone-400 hover:text-red-500"><Trash2 size={14} /></button>
+                                    {!isReadOnly && (
+                                        <button onClick={() => removeLine('paid_bills', i)} className="text-stone-400 hover:text-red-500"><Trash2 size={14} /></button>
+                                    )}
                                 </div>
                             ))}
                             <div className="flex justify-end font-bold text-sm pt-2 border-t border-stone-50">
@@ -370,13 +422,18 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
             </div>
 
             {/* Actions */}
-            <div className="flex justify-end gap-4 p-4 bg-white rounded-xl shadow-sm border border-stone-100">
-                <IOSButton className="bg-stone-200 text-stone-800 hover:bg-stone-300">Detailed Report</IOSButton>
-                <IOSButton onClick={() => handleSave('open')} className="bg-orange-600 hover:bg-orange-700 text-white gap-2">
-                    <Save size={16} />
-                    {isSaving ? 'Saving...' : 'Save Logbook'}
-                </IOSButton>
-            </div>
+            {!isReadOnly && (
+                <div className="flex justify-end gap-4 p-4 bg-white rounded-xl shadow-sm border border-stone-100">
+                    <IOSButton onClick={() => handleSave('open')} className="bg-stone-100 text-stone-800 hover:bg-stone-200 gap-2">
+                        <Save size={16} />
+                        Save Draft
+                    </IOSButton>
+                    <IOSButton onClick={() => handleSave('pending_audit')} className="bg-stone-900 hover:bg-black text-white gap-2 shadow-lg shadow-stone-900/20">
+                        <Check size={16} />
+                        Submit for Audit
+                    </IOSButton>
+                </div>
+            )}
         </div>
     );
 }

@@ -1,33 +1,39 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { financeAPI, storeAPI, accountingAPI, auditAPI } from '@/lib/api';
+import { financeAPI, storeAPI, accountingAPI, auditAPI, api } from '@/lib/api';
 import {
     DollarSign, TrendingUp, TrendingDown, FileText,
     PieChart, CreditCard, RefreshCw, Calendar, ArrowUpRight,
     ArrowDownRight, CheckCircle, Clock, AlertTriangle, Receipt,
-    Landmark, History, Book, Shield, FileSpreadsheet, ArrowRightLeft
+    Landmark, History, Book, Shield, FileSpreadsheet, ArrowRightLeft,
+    ArrowRight
 } from 'lucide-react';
+import { toast } from 'sonner';
 import Link from 'next/link';
 import { format } from 'date-fns';
 
 export default function BranchAccountingDashboard() {
+    const router = useRouter();
     const { user } = useAuth();
     const { activeBranchId, activeBranch } = useBranch();
     const [stats, setStats] = useState({
         totalRevenue: 0,
         totalExpenses: 0,
         netProfit: 0,
-        pendingInvoices: 0,
-        dailyTransactions: 0
+        pendingApprovals: 0,
+        receivables: 0,
+        payables: 0
     });
     const [isLoading, setIsLoading] = useState(true);
-    const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+    const [financials, setFinancials] = useState<any>(null);
     const [pendingAlerts, setPendingAlerts] = useState<any[]>([]);
+    const [rejectedLogbooks, setRejectedLogbooks] = useState<any[]>([]);
 
     // Use active branch from context, fallback to user's branch
     const currentBranchId = activeBranchId || user?.branch_id;
@@ -37,38 +43,60 @@ export default function BranchAccountingDashboard() {
 
         setIsLoading(true);
         try {
-            // Fetch real data from accounting and audit APIs
-            const [plRes, auditRes, invoicesRes] = await Promise.allSettled([
-                accountingAPI.getProfitAndLoss({ branch_id: currentBranchId }),
-                auditAPI.getPendingApprovals(currentBranchId),
-                financeAPI.getInvoices({ branch_id: currentBranchId, status: 'pending' })
+            // Fetch comprehensive branch financials
+            const [profileRes, pendingAuditRes] = await Promise.allSettled([
+                financeAPI.getBranchFinancials(currentBranchId),
+                auditAPI.getPendingApprovals(currentBranchId)
             ]);
 
-            const plData = plRes.status === 'fulfilled' ? plRes.value?.data || {} : {};
-            const auditData = auditRes.status === 'fulfilled' ? auditRes.value?.data || [] : [];
-            const pendingInvoicesList = invoicesRes.status === 'fulfilled' ? invoicesRes.value?.data || [] : [];
+            if (profileRes.status === 'fulfilled' && profileRes.value.success) {
+                const data = profileRes.value.data;
+                setFinancials(data);
 
-            setStats({
-                totalRevenue: plData.revenue_total || 0,
-                totalExpenses: plData.expense_total || 0,
-                netProfit: plData.net_profit || 0,
-                pendingInvoices: auditData.length,
-                dailyTransactions: plData.transaction_count || 0
-            });
+                setStats({
+                    totalRevenue: data.summary?.totalRevenue || 0,
+                    totalExpenses: data.summary?.totalExpenses || 0,
+                    netProfit: data.summary?.netProfit || 0,
+                    pendingApprovals: pendingAuditRes.status === 'fulfilled' ? pendingAuditRes.value?.data?.length || 0 : 0,
+                    receivables: data.receivables || 0,
+                    payables: data.payables || 0
+                });
 
-            setRecentTransactions(pendingInvoicesList.slice(0, 5));
+                setRejectedLogbooks(data.logbooks?.filter((l: any) => l.status === 'rejected') || []);
 
-            const newAlerts = [];
-            if (auditData.length > 0) {
-                newAlerts.push({ type: 'warning', message: `${auditData.length} records requiring audit approval`, time: 'Action required' });
+                const newAlerts = [];
+                const pendingAuditCount = pendingAuditRes.status === 'fulfilled' ? pendingAuditRes.value?.data?.length || 0 : 0;
+
+                if (pendingAuditCount > 0) {
+                    newAlerts.push({
+                        type: 'warning',
+                        message: `${pendingAuditCount} items awaiting audit`,
+                        time: 'Action required'
+                    });
+                }
+
+                const rejectedCount = data.logbooks?.filter((l: any) => l.status === 'rejected').length || 0;
+                if (rejectedCount > 0) {
+                    newAlerts.push({
+                        type: 'danger',
+                        message: `${rejectedCount} rejected logbooks`,
+                        time: 'Critical'
+                    });
+                }
+
+                if (data.receivables > 0) {
+                    newAlerts.push({
+                        type: 'info',
+                        message: `KES ${data.receivables.toLocaleString()} in pending receivables`,
+                        time: 'Summary'
+                    });
+                }
+
+                setPendingAlerts(newAlerts);
             }
-            if (pendingInvoicesList.length > 5) {
-                newAlerts.push({ type: 'info', message: `${pendingInvoicesList.length} invoices pending payment`, time: 'Ongoing' });
-            }
-            setPendingAlerts(newAlerts);
-
         } catch (error) {
             console.error('Error fetching accounting data:', error);
+            toast.error('Failed to load financial data');
         } finally {
             setIsLoading(false);
         }
@@ -90,8 +118,8 @@ export default function BranchAccountingDashboard() {
         { label: 'Total Revenue', value: stats.totalRevenue.toLocaleString() + ' KES', icon: DollarSign, color: 'text-emerald-600' },
         { label: 'Total Expenses', value: stats.totalExpenses.toLocaleString() + ' KES', icon: ArrowDownRight, color: 'text-rose-600' },
         { label: 'Net Profit', value: stats.netProfit.toLocaleString() + ' KES', icon: TrendingUp, color: 'text-amber-600' },
-        { label: 'Pending Approvals', value: stats.pendingInvoices.toString(), icon: CheckCircle, color: 'text-blue-600' },
-        { label: 'Daily Transactions', value: stats.dailyTransactions.toString(), icon: History, color: 'text-stone-500' },
+        { label: 'Receivables', value: stats.receivables.toLocaleString() + ' KES', icon: ArrowUpRight, color: 'text-blue-600' },
+        { label: 'Pending Approvals', value: stats.pendingApprovals.toString(), icon: CheckCircle, color: 'text-stone-500' },
     ];
     const accountingModules = [
         {
@@ -231,41 +259,186 @@ export default function BranchAccountingDashboard() {
                         </div>
                     </div>
 
-                    {/* Bottom Section */}
-                    <div className="grid lg:grid-cols-3 gap-5">
-                        {/* Recent Activity/Transactions */}
-                        <div className="lg:col-span-2 card-elevated p-5">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-[15px] font-semibold text-stone-900">Recent Transactions</h3>
-                                <Link href="/dashboard/branch-accounting/payments">
-                                    <span className="text-[12px] font-medium text-stone-500 hover:text-stone-900 cursor-pointer">View All</span>
-                                </Link>
+                    {/* Revenue Breakdown */}
+                    {financials?.summary?.breakdown && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                            <div className="card-elevated p-5">
+                                <h3 className="text-[14px] font-bold text-stone-900 mb-4 border-l-4 border-amber-500 pl-3 uppercase tracking-wider">Revenue Sources</h3>
+                                <div className="space-y-3">
+                                    {Object.entries(financials.summary.breakdown)
+                                        .filter(([key]) => ['restaurant', 'bar', 'room', 'other_income'].includes(key))
+                                        .map(([key, value]: [string, any]) => (
+                                            <div key={key} className="space-y-1.5">
+                                                <div className="flex justify-between text-[12px] font-semibold">
+                                                    <span className="capitalize text-stone-600">{key.replace('_', ' ')}</span>
+                                                    <span className="text-stone-900">KES {value.toLocaleString()}</span>
+                                                </div>
+                                                <div className="h-1.5 w-full bg-stone-100 rounded-full overflow-hidden">
+                                                    <div
+                                                        className={`h-full rounded-full ${key === 'restaurant' ? 'bg-emerald-500' :
+                                                                key === 'bar' ? 'bg-amber-500' :
+                                                                    key === 'room' ? 'bg-blue-500' : 'bg-stone-400'
+                                                            }`}
+                                                        style={{ width: `${(value / financials.summary.totalRevenue) * 100}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))
+                                    }
+                                </div>
                             </div>
 
-                            {recentTransactions.length === 0 ? (
-                                <div className="text-center py-10 bg-stone-50/50 rounded-xl border border-dashed border-stone-200">
-                                    <Receipt className="h-10 w-10 mx-auto mb-2 text-stone-300" />
-                                    <p className="text-sm text-stone-500 font-medium">No recent transactions</p>
-                                </div>
-                            ) : (
+                            <div className="card-elevated p-5">
+                                <h3 className="text-[14px] font-bold text-stone-900 mb-4 border-l-4 border-rose-500 pl-3 uppercase tracking-wider">Expense Analysis</h3>
                                 <div className="space-y-3">
-                                    {recentTransactions.map((tx, i) => (
-                                        <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-stone-50 border border-stone-100">
-                                            <div className="flex items-center gap-3">
-                                                <div className="h-9 w-9 rounded-full bg-white border border-stone-200 flex items-center justify-center">
-                                                    <FileText className="h-4 w-4 text-stone-500" />
+                                    {Object.entries(financials.summary.breakdown)
+                                        .filter(([key]) => ['operational_expenses', 'other_expenses'].includes(key))
+                                        .map(([key, value]: [string, any]) => (
+                                            <div key={key} className="space-y-1.5">
+                                                <div className="flex justify-between text-[12px] font-semibold">
+                                                    <span className="capitalize text-stone-600">{key.replace('_', ' ')}</span>
+                                                    <span className="text-stone-900">KES {value.toLocaleString()}</span>
                                                 </div>
-                                                <div>
-                                                    <p className="text-[13px] font-semibold text-stone-900">{tx.invoice_number || 'Transaction'}</p>
-                                                    <p className="text-[11px] text-stone-500">{tx.supplier?.name || 'Unknown Supplier'}</p>
+                                                <div className="h-1.5 w-full bg-stone-100 rounded-full overflow-hidden">
+                                                    <div
+                                                        className={`h-full rounded-full ${key === 'operational_expenses' ? 'bg-rose-500' : 'bg-stone-500'}`}
+                                                        style={{ width: `${(value / financials.summary.totalExpenses) * 100}%` }}
+                                                    />
                                                 </div>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-[13px] font-bold text-stone-900">KES {(tx.amount || 0).toLocaleString()}</p>
-                                                <p className="text-[10px] text-amber-600 font-medium">{tx.status || 'Pending'}</p>
+                                        ))
+                                    }
+                                    {/* Net Margin indicator */}
+                                    <div className="mt-6 pt-4 border-t border-stone-100">
+                                        <div className="flex justify-between items-end">
+                                            <div>
+                                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Net Profit Margin</p>
+                                                <p className="text-[20px] font-bold text-stone-900">{financials.summary.profitMargin?.toFixed(1)}%</p>
+                                            </div>
+                                            <div className={`px-2 py-1 rounded text-[10px] font-bold ${financials.summary.profitMargin > 20 ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                                                {financials.summary.profitMargin > 20 ? 'HEALTHY' : 'MONITOR'}
                                             </div>
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Bottom Section */}
+                    <div className="grid lg:grid-cols-3 gap-5">
+                        {/* Action Required / Rejected Logbooks */}
+                        {rejectedLogbooks.length > 0 && (
+                            <div className="card-elevated p-5 border-l-4 border-l-rose-500 bg-rose-50/30 mb-5">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-[15px] font-bold text-rose-900 flex items-center gap-2">
+                                        <Shield className="h-4 w-4" /> Action Required: Audit Rejections
+                                    </h3>
+                                    <span className="bg-rose-500 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                        {rejectedLogbooks.length}
+                                    </span>
+                                </div>
+                                <div className="space-y-3">
+                                    {rejectedLogbooks.map((log) => (
+                                        <div key={log.id} className="bg-white p-3 rounded-xl border border-rose-100 shadow-sm flex items-center justify-between group hover:border-rose-300 transition-colors">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-9 w-9 rounded-lg bg-rose-50 flex items-center justify-center text-rose-600">
+                                                    <AlertTriangle className="h-5 w-5" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[13px] font-bold text-stone-900">
+                                                        {log.type === 'reception' ? 'Reception' : 'Bar'} Log - {format(new Date(log.log_date), 'MMM d')}
+                                                    </p>
+                                                    <p className="text-[11px] text-rose-600 font-medium truncate max-w-[200px]">
+                                                        Reason: {log.audit_notes || 'Instruction pending'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                className="p-2 hover:bg-rose-50 rounded-lg text-rose-600 flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all"
+                                                onClick={() => {
+                                                    router.push('/dashboard/cashier?tab=logbook');
+                                                }}
+                                            >
+                                                Fix <ArrowRight className="h-3 w-3" />
+                                            </button>
+                                        </div>
                                     ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Recent Activity/Transactions */}
+                        <div className="lg:col-span-2 card-elevated p-5">
+                            <div className="flex items-start justify-between mb-6">
+                                <div>
+                                    <h3 className="text-[15px] font-bold text-stone-900 border-l-4 border-emerald-500 pl-3">Financial Activities</h3>
+                                    <p className="text-[11px] text-stone-500 pl-3 mt-1">Recent payments and POS orders</p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <Link href="/dashboard/branch-accounting/payments">
+                                        <span className="text-[11px] font-bold text-stone-400 hover:text-stone-900 cursor-pointer uppercase tracking-wider bg-stone-50 px-3 py-1.5 rounded-lg transition-colors">View All</span>
+                                    </Link>
+                                </div>
+                            </div>
+
+                            {!financials || (financials.recentPayments?.length === 0 && financials.recentTransactions?.length === 0) ? (
+                                <div className="text-center py-10 bg-stone-50/50 rounded-xl border border-dashed border-stone-200">
+                                    <Receipt className="h-10 w-10 mx-auto mb-2 text-stone-300" />
+                                    <p className="text-sm text-stone-500 font-medium">No recent activities</p>
+                                </div>
+                            ) : (
+                                <div className="grid md:grid-cols-2 gap-6">
+                                    {/* Recent Payments */}
+                                    <div>
+                                        <h4 className="text-[12px] font-bold text-stone-400 uppercase tracking-widest mb-3 px-1">Recent Payments</h4>
+                                        <div className="space-y-2">
+                                            {financials.recentPayments?.slice(0, 5).map((pay: any) => (
+                                                <div key={pay.id} className="flex items-center justify-between p-3 rounded-xl bg-white border border-stone-100 shadow-sm hover:border-emerald-200 transition-colors">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="h-8 w-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+                                                            <CreditCard className="h-4 w-4 text-emerald-600" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[12px] font-bold text-stone-900">{pay.payment_method}</p>
+                                                            <p className="text-[10px] text-stone-500">{format(new Date(pay.created_at), 'MMM d, h:mm a')}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-[12px] font-bold text-emerald-600">+{pay.amount.toLocaleString()}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* POS Activity */}
+                                    <div>
+                                        <h4 className="text-[12px] font-bold text-stone-400 uppercase tracking-widest mb-3 px-1">POS Activity</h4>
+                                        <div className="space-y-2">
+                                            {[...(financials.posActivity?.restaurant || []), ...(financials.posActivity?.bar || [])]
+                                                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                                                .slice(0, 5)
+                                                .map((order: any, i: number) => (
+                                                    <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white border border-stone-100 shadow-sm hover:border-blue-200 transition-colors">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                                                                <FileSpreadsheet className="h-4 w-4 text-blue-600" />
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-[12px] font-bold text-stone-900">Order #{order.order_number}</p>
+                                                                <p className="text-[10px] text-stone-500 capitalize">{order.status}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className="text-[12px] font-bold text-stone-900">
+                                                                {(order.total_amount || order.total || 0).toLocaleString()}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>

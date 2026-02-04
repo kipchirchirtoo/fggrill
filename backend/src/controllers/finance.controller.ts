@@ -1422,3 +1422,124 @@ export const getFinancialKPIs = async (
   }
 };
 
+// @desc    Get detailed branch financial profile
+// @route   GET /api/finance/branch-financials/:branchId
+// @access  Private (Finance Staff, Branch Accountant)
+export const getBranchFinancialProfile = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { branchId } = req.params;
+    const { days = 30 } = req.query;
+    const branch_id = parseInt(branchId);
+
+    if (isNaN(branch_id)) {
+      res.status(400).json({ success: false, message: 'Invalid branch ID' });
+      return;
+    }
+
+    const endDate = new Date().toISOString();
+    const startDate = new Date(Date.now() - (parseInt(days as string) * 24 * 60 * 60 * 1000)).toISOString();
+    const dateRange = { startDate, endDate };
+
+    // 1. Get Aggregated P&L Data
+    const aggregatedData = await aggregationService.getAggregatedData(dateRange, branch_id);
+
+    // 2. Get Recent Payments from central table
+    // We fetch more to allow for filtering of branch_id from joined tables
+    const { data: payments } = await supabase
+      .from('payments')
+      .select(`
+        *,
+        restaurant_orders ( order_number, branch_id ),
+        bar_orders ( order_number, branch_id ),
+        reservations ( room_id, rooms ( branch_id ) )
+      `)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    // Filter payments manually due to deep join branch_id requirement
+    const filteredPayments = (payments || []).filter(p => {
+      // Check for branch_id in any of the potential related tables
+      const restaurantBranchId = (p.restaurant_orders as any)?.branch_id;
+      const barBranchId = (p.bar_orders as any)?.branch_id;
+
+      // Handle potential array or object response from Supabase joins
+      let roomBranchId: number | undefined;
+      const resData = p.reservations as any;
+      if (resData) {
+        if (Array.isArray(resData)) {
+          roomBranchId = resData[0]?.rooms?.branch_id;
+        } else {
+          roomBranchId = resData.rooms?.branch_id;
+        }
+      }
+
+      const pBranchId = restaurantBranchId || barBranchId || roomBranchId;
+      return pBranchId === branch_id;
+    }).slice(0, 10);
+
+    // 3. Get Recent Finance Transactions
+    const { data: transactions } = await supabase
+      .from('finance_transactions')
+      .select('*')
+      .eq('branch_id', branch_id)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    // 4. Get POS Activity Summary (Restaurant & Bar)
+    const [restaurantOrders, barOrders] = await Promise.all([
+      supabase
+        .from('restaurant_orders')
+        .select('id, order_number, status, total_amount, created_at')
+        .eq('branch_id', branch_id)
+        .order('created_at', { ascending: false })
+        .limit(5),
+      supabase
+        .from('bar_orders')
+        .select('id, order_number, status, total, created_at')
+        .eq('branch_id', branch_id)
+        .order('created_at', { ascending: false })
+        .limit(5)
+    ]);
+
+    // 5. Get Cashier Logbooks status
+    const { data: logbooks } = await supabase
+      .from('cashier_logbooks')
+      .select('id, status, log_date, audit_notes, type')
+      .eq('branch_id', branch_id)
+      .order('log_date', { ascending: false })
+      .limit(5);
+
+    // 6. AR/AP Summary
+    const [{ data: invoices }, { data: bills }] = await Promise.all([
+      supabase.from('accounting_ar_invoices').select('balance').eq('branch_id', branch_id).neq('status', 'paid'),
+      supabase.from('accounting_ap_bills').select('balance').eq('branch_id', branch_id).neq('status', 'paid')
+    ]);
+
+    const arTotal = invoices?.reduce((sum, inv) => sum + Number(inv.balance || 0), 0) || 0;
+    const apTotal = bills?.reduce((sum, bill) => sum + Number(bill.balance || 0), 0) || 0;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        summary: aggregatedData,
+        receivables: arTotal,
+        payables: apTotal,
+        recentPayments: filteredPayments,
+        recentTransactions: transactions,
+        posActivity: {
+          restaurant: restaurantOrders.data || [],
+          bar: barOrders.data || []
+        },
+        logbooks: logbooks || [],
+        period: dateRange
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

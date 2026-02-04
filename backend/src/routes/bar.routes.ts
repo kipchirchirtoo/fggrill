@@ -53,6 +53,8 @@ router.post('/tabs/:id/close', tabController.closeTab);
 // ====================
 router.get('/stock', inventoryController.getStock);
 router.get('/stock/logs', inventoryController.getStockLogs);
+router.get('/stock/consumption-report', inventoryController.getConsumptionReport);
+router.post('/stock/take', inventoryController.submitStockTake);
 router.put('/stock/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER]), inventoryController.updateStock);
 
 // ====================

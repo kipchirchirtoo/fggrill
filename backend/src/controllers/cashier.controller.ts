@@ -1494,6 +1494,21 @@ export const saveCashierLogbook = async (req: Request, res: Response, next: Next
 
         const today = new Date().toISOString().split('T')[0];
 
+        // If updating existing logbook, check if it's approved
+        if (id) {
+            const { data: existing, error: checkError } = await supabase
+                .from('cashier_logbooks')
+                .select('status')
+                .eq('id', id)
+                .single();
+
+            if (checkError) throw checkError;
+
+            if (existing?.status === 'approved') {
+                throw new AppError('Cannot edit an approved logbook', 403);
+            }
+        }
+
         // 1. Upsert the main logbook record
         const { data: logbook, error: logbookError } = await supabase
             .from('cashier_logbooks')
@@ -1539,6 +1554,164 @@ export const saveCashierLogbook = async (req: Request, res: Response, next: Next
             success: true,
             message: 'Logbook saved successfully',
             data: logbook
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Submit cashier logbook for audit
+ */
+export const submitLogbookForAudit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const cashier_id = req.user?.id;
+
+        if (!id || !cashier_id) {
+            throw new AppError('Logbook ID and Cashier ID are required', 400);
+        }
+
+        // Verify the logbook belongs to the cashier
+        const { data: logbook, error: fetchError } = await supabase
+            .from('cashier_logbooks')
+            .select('*')
+            .eq('id', id)
+            .eq('cashier_id', cashier_id)
+            .single();
+
+        if (fetchError || !logbook) {
+            throw new AppError('Logbook not found or access denied', 404);
+        }
+
+        if (logbook.status !== 'open') {
+            throw new AppError('Only open logbooks can be submitted for audit', 400);
+        }
+
+        // Update status to pending_audit
+        const { data: updated, error: updateError } = await supabase
+            .from('cashier_logbooks')
+            .update({
+                status: 'pending_audit',
+                submitted_at: new Date(),
+                updated_at: new Date()
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateError) throw updateError;
+
+        res.json({
+            success: true,
+            message: 'Logbook submitted for audit successfully',
+            data: updated
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Get logbooks pending audit (for auditors)
+ */
+export const getLogbooksForAudit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const branch_id = req.headers['x-branch-id'];
+        const { status = 'pending_audit', from_date, to_date } = req.query;
+
+        let query = supabase
+            .from('cashier_logbooks')
+            .select(`
+                *,
+                branch:branches(id, name),
+                cashier:users!cashier_id(id, first_name, last_name, email),
+                auditor:users!auditor_id(id, first_name, last_name, email),
+                lines:cashier_logbook_lines!logbook_id(id, section, customer_name, amount, reference)
+            `)
+            .eq('status', status)
+            .order('log_date', { ascending: false });
+
+        if (branch_id) {
+            query = query.eq('branch_id', branch_id);
+        }
+
+        if (from_date) {
+            query = query.gte('log_date', from_date);
+        }
+
+        if (to_date) {
+            query = query.lte('log_date', to_date);
+        }
+
+        const { data: logbooks, error } = await query;
+
+        if (error) throw error;
+
+        res.json({
+            success: true,
+            data: logbooks
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Audit a logbook (approve or reject)
+ */
+export const auditLogbook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { action, notes } = req.body;
+        const auditor_id = req.user?.id;
+
+        if (!id || !auditor_id) {
+            throw new AppError('Logbook ID and Auditor ID are required', 400);
+        }
+
+        if (!['approve', 'reject'].includes(action)) {
+            throw new AppError('Action must be either "approve" or "reject"', 400);
+        }
+
+        // Verify the logbook is pending audit
+        const { data: logbook, error: fetchError } = await supabase
+            .from('cashier_logbooks')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !logbook) {
+            throw new AppError('Logbook not found', 404);
+        }
+
+        if (logbook.status !== 'pending_audit') {
+            throw new AppError('Only pending logbooks can be audited', 400);
+        }
+
+        // Update logbook with audit decision
+        const { data: updated, error: updateError } = await supabase
+            .from('cashier_logbooks')
+            .update({
+                status: action === 'approve' ? 'approved' : 'rejected',
+                auditor_id,
+                audited_at: new Date(),
+                audit_notes: notes || null,
+                updated_at: new Date()
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateError) throw updateError;
+
+        res.json({
+            success: true,
+            message: `Logbook ${action}d successfully`,
+            data: updated
         });
 
     } catch (error) {

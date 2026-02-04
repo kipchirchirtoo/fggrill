@@ -16,7 +16,9 @@ import {
   getExpenditureVerification,
   getStockLevelsVerification,
   getBranchOrdersVerification,
-  getSoldItemsAnalysis
+  getSoldItemsAnalysis,
+  getBarStockAudits,
+  verifyBarStockTake
 } from '../controllers/auditor.controller';
 import {
   getConsumptionConfigs,
@@ -133,5 +135,7 @@ router.get('/verify/expenditure', authorize([UserRole.AUDITOR, UserRole.SUPER_AD
 router.get('/verify/stock-levels', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getStockLevelsVerification);
 router.get('/verify/branch-orders', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getBranchOrdersVerification);
 router.get('/verify/sold-items', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getSoldItemsAnalysis);
+router.get('/verify/bar-stock', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getBarStockAudits);
+router.post('/verify/bar-stock/:id/verify', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), verifyBarStockTake);
 
 export default router;

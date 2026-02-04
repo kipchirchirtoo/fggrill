@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
     CheckCircle, XCircle, Search, AlertCircle, Receipt, Clock,
     User, DollarSign, CreditCard, Scan, Printer, Loader2,
@@ -31,8 +32,19 @@ import {
 } from '@/lib/indexedDB';
 import { POSReceipt } from '@/components/cashier/POSReceipt';
 
-export default function CashierPage() {
-    const [activeTab, setActiveTab] = useState<'station' | 'logbook' | 'insights'>('station');
+function CashierPageContent() {
+    const searchParams = useSearchParams();
+    const tabParam = searchParams.get('tab') as any;
+    const [activeTab, setActiveTab] = useState<'station' | 'logbook' | 'insights'>(
+        ['station', 'logbook', 'insights'].includes(tabParam) ? tabParam : 'station'
+    );
+
+    useEffect(() => {
+        if (['station', 'logbook', 'insights'].includes(tabParam)) {
+            setActiveTab(tabParam);
+        }
+    }, [tabParam]);
+
     const [scanInput, setScanInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [billData, setBillData] = useState<any>(null);
@@ -1201,5 +1213,13 @@ export default function CashierPage() {
                 </div>
             </DashboardLayout>
         </ProtectedRoute >
+    );
+}
+
+export default function CashierPage() {
+    return (
+        <Suspense fallback={<div className="p-8 text-center text-stone-400">Loading Station...</div>}>
+            <CashierPageContent />
+        </Suspense>
     );
 }

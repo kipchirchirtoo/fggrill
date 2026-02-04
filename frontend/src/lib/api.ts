@@ -2450,6 +2450,11 @@ export const financeAPI = {
   generateReport: (data: { report_type: string; branch_id?: number }) =>
     fetchPythonAPI<any>('/finance/reports/generate', { method: 'POST', body: JSON.stringify(data) }),
   getBranches: () => fetchAPI<any>('/finance/branches'),
+
+  // Unified Branch Financials
+  getBranchFinancials: (branchId: number | string, days: number = 30) => {
+    return fetchAPI<any>(`/finance/branch-financials/${branchId}?days=${days}`);
+  }
 };
 
 // receiptsAPI is defined above with Python microservice integration
@@ -2783,6 +2788,14 @@ export const auditAPI = {
     if (params.end_date) query.append('end_date', params.end_date);
     return fetchAPI<any>(`/auditor/verify/sold-items?${query}`);
   },
+  getBarStockAudits: (params?: { branch_id?: number | string; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.status) query.append('status', params.status);
+    return fetchAPI<any>(`/auditor/verify/bar-stock?${query}`);
+  },
+  verifyBarStockTake: (id: string, data: { notes?: string }) =>
+    fetchAPI<any>(`/auditor/verify/bar-stock/${id}/verify`, { method: 'POST', body: JSON.stringify(data) }),
 };
 
 export const auditorReportsAPI = {
@@ -3521,6 +3534,14 @@ export const barInventoryAPI = {
     if (params?.end_date) query.append('end_date', params.end_date);
     return fetchAPI<any>(`/bar/stock/logs?${query}`);
   },
+  getConsumptionReport: (params?: { branch_id?: number | string; date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.date) query.append('date', params.date);
+    return fetchAPI<any>(`/bar/stock/consumption-report?${query}`);
+  },
+  submitStockTake: (data: { branch_id?: number | string; items: any[]; notes?: string; count_type?: string }) =>
+    fetchAPI<any>('/bar/stock/take', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 
@@ -3678,6 +3699,19 @@ export const cashierAPI = {
 
   // Stats
   getStats: (branch_id?: number) => fetchAPI<any>(`/cashier/stats${branch_id ? `?branch_id=${branch_id}` : ''}`),
+
+  // Logbook
+  saveLogbook: (data: any) => fetchAPI<any>('/cashier/logbook', { method: 'POST', body: JSON.stringify(data) }),
+  submitLogbookForAudit: (id: string) => fetchAPI<any>(`/cashier/logbook/${id}/submit`, { method: 'POST' }),
+  getPendingLogbooks: (params?: { branch_id?: string; from_date?: string; to_date?: string; status?: string }) => {
+    const query = new URLSearchParams(params as any).toString();
+    return fetchAPI<any>(`/cashier/logbook/pending?${query}`);
+  },
+  auditLogbook: (id: string, action: 'approve' | 'reject', notes?: string) =>
+    fetchAPI<any>(`/cashier/logbook/${id}/audit`, {
+      method: 'POST',
+      body: JSON.stringify({ action, notes })
+    }),
 };
 
 // =====================================================
