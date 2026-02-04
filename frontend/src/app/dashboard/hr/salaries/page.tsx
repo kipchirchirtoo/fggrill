@@ -220,9 +220,9 @@ export default function HRSalariesPage() {
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-9 h-9 rounded-full bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-600 font-bold text-xs">
-                                                            {s.first_name[0]}{s.last_name[0]}
+                                                            {s.first_name?.[0] || '?'}{s.last_name?.[0] || '?'}
                                                         </div>
-                                                        <span className="text-[13px] font-bold text-stone-900">{s.first_name} {s.last_name}</span>
+                                                        <span className="text-[13px] font-bold text-stone-900">{s.first_name || 'Unknown'} {s.last_name || 'Staff'}</span>
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4">
@@ -269,7 +269,7 @@ export default function HRSalariesPage() {
                                 <DollarSign className="h-7 w-7 text-emerald-500" />
                             </div>
                             <h3 className="text-xl font-bold text-stone-900 tracking-tight">Contract Adjustment</h3>
-                            <p className="text-stone-500 text-[13px] mt-1.5 font-bold uppercase tracking-widest">{selectedStaff?.first_name} {selectedStaff?.last_name}</p>
+                            <p className="text-stone-500 text-[13px] mt-1.5 font-bold uppercase tracking-widest">{selectedStaff?.first_name || 'Unknown'} {selectedStaff?.last_name || 'Staff'}</p>
                         </div>
 
                         <div className="p-8 space-y-6">

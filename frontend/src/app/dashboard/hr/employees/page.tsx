@@ -374,7 +374,7 @@ export default function HREmployeesPage() {
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-9 h-9 rounded-full bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-600 font-bold text-xs">
-                                                            {member.first_name?.[0]}{member.last_name?.[0]}
+                                                            {member.first_name?.[0] || '?'}{member.last_name?.[0] || '?'}
                                                         </div>
                                                         <div>
                                                             <p className="text-[14px] font-bold text-stone-900 leading-none">{member.first_name} {member.last_name}</p>

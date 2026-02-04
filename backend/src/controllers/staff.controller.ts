@@ -161,6 +161,11 @@ export const getStaff = async (
 
     const formattedData = staff.map((s: any) => ({
       ...s,
+      first_name: s.user?.first_name || '',
+      last_name: s.user?.last_name || '',
+      email: s.user?.email || '',
+      phone_number: s.user?.phone_number || '',
+      avatar: s.user?.avatar || '',
       profile_photo: s.user?.avatar || s.profile_photo
     }));
 
@@ -255,6 +260,11 @@ export const getStaffMember = async (
       success: true,
       data: {
         ...staff,
+        first_name: staff.user?.first_name || '',
+        last_name: staff.user?.last_name || '',
+        email: staff.user?.email || '',
+        phone_number: staff.user?.phone_number || '',
+        avatar: staff.user?.avatar || '',
         profile_photo: staff.user?.avatar || staff.profile_photo
       }
     });
