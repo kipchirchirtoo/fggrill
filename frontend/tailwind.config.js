@@ -120,7 +120,7 @@ module.exports = {
       borderRadius: {
         // iOS specific border radii
         'ios-sm': '6px',
-        'ios-md': '10px',  
+        'ios-md': '10px',
         'ios-lg': '14px',
         'ios-xl': '20px',
         'ios-2xl': '24px',
@@ -136,7 +136,8 @@ module.exports = {
         'ios-lg': '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
       },
       fontFamily: {
-        'sf-pro': ['SF Pro Text', 'system-ui', 'sans-serif'],
+        'sans': ['SF Pro Display', 'system-ui', 'sans-serif'],
+        'sf-pro': ['SF Pro Display', 'SF Pro Text', 'system-ui', 'sans-serif'],
         'sf-pro-display': ['SF Pro Display', 'system-ui', 'sans-serif'],
         'sf-mono': ['SF Mono', 'ui-monospace', 'monospace'],
       },

@@ -1,19 +1,24 @@
 /* Minimal Light Theme CSS Variables */
 
 :root {
-  /* Fonts - Using Roboto as primary */
-  --font-primary: 'Roboto', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --font-display: 'DM Serif Text', Georgia, serif;
+  /* Fonts - Using SF Pro Display as primary */
+  --font-primary: 'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-display: 'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-mono: 'SF Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  
+
   /* Minimal Color Palette - Light Only */
-  --color-primary: #F59E0B; /* Amber */
+  --color-primary: #F59E0B;
+  /* Amber */
   --color-primary-hover: #D97706;
-  --color-secondary: #1C1917; /* Stone 900 */
-  --color-destructive: #EF4444; /* Red 500 */
-  --color-success: #10B981; /* Emerald 500 */
-  --color-warning: #F59E0B; /* Amber 500 */
-  
+  --color-secondary: #1C1917;
+  /* Stone 900 */
+  --color-destructive: #EF4444;
+  /* Red 500 */
+  --color-success: #10B981;
+  /* Emerald 500 */
+  --color-warning: #F59E0B;
+  /* Amber 500 */
+
   /* Stone color scale */
   --stone-50: #FAFAF9;
   --stone-100: #F5F5F4;
@@ -25,25 +30,25 @@
   --stone-700: #44403C;
   --stone-800: #292524;
   --stone-900: #1C1917;
-  
+
   /* UI Elements */
   --background: #FAFAF9;
   --card-bg: #FFFFFF;
   --text-primary: #1C1917;
   --text-secondary: #78716C;
   --text-muted: #A8A29E;
-  
+
   /* Shadows - Subtle */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.08);
-  
+
   /* Border radius */
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 20px;
-  
+
   /* Animation */
   --transition-fast: 0.15s;
   --transition-default: 0.2s;
@@ -108,13 +113,25 @@
 }
 
 @keyframes fadeIn {
-  0% { opacity: 0; }
-  100% { opacity: 1; }
+  0% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
 }
 
 @keyframes slideUp {
-  0% { transform: translateY(8px); opacity: 0; }
-  100% { transform: translateY(0); opacity: 1; }
+  0% {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 /* Minimal Button Styles */
