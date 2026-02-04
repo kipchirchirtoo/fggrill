@@ -1110,7 +1110,7 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
 
     const [restItemsRes, barItemsRes, stockItemsRes] = await Promise.all([
       supabase.from('restaurant_order_items').select('*, menu_item:menu_items(name)').in('order_id', restIds),
-      supabase.from('bar_order_items').select('*, stock_item:bar_inventory(product_name)').in('order_id', barIds), // Check proper column for bar items
+      supabase.from('bar_order_items').select('*, stock_item:bar_inventory(name)').in('order_id', barIds), // Correct column is usually 'name'
       supabase.from('stock_request_items').select('*').in('request_id', stockIds)
     ]);
 
@@ -1155,7 +1155,7 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
           // Determine name
           let name = item.item_name;
           if (type === 'restaurant') name = item.menu_item?.name || item.item_name || 'Unknown Item';
-          else name = item.stock_item?.product_name || item.item_name || 'Unknown Item';
+          else name = item.stock_item?.name || item.item_name || 'Unknown Item';
 
           const key = `${order.branch_id}_${name}`; // Aggregate by name + branch
           if (!soldItemsMap[key]) {
