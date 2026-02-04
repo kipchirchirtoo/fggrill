@@ -3,16 +3,16 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
-    CheckCircle, XCircle, Search, AlertCircle, Receipt, Clock,
     User, DollarSign, CreditCard, Scan, Printer, Loader2,
-    Banknote, AlertTriangle, Layout, Calculator, BarChart3, TrendingUp, Activity
+    Banknote, AlertTriangle, Layout, Calculator, BarChart3, TrendingUp, Activity,
+    History, Trash2, ShoppingCart, Search, Receipt, Clock, AlertCircle, CheckCircle
 } from 'lucide-react';
 import {
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
     Tooltip, LineChart, Line, AreaChart, Area
 } from 'recharts';
 import { toast } from 'sonner';
-import { fetchAPI } from '@/lib/api';
+import { fetchAPI, receiptsAPI, restaurantAPI } from '@/lib/api';
 import { PYTHON_API_URL } from '@/lib/config';
 import { IOSButton } from '@/components/ui/ios-button';
 import { Input } from '@/components/ui/input';
@@ -47,6 +47,7 @@ function CashierPageContent() {
 
     const [scanInput, setScanInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isGeneratingBill, setIsGeneratingBill] = useState(false);
     const [billData, setBillData] = useState<any>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [paymentAmount, setPaymentAmount] = useState('');
@@ -483,10 +484,16 @@ function CashierPageContent() {
                     setSelectedTransaction({
                         ...response.data,
                         created_at: new Date().toISOString(),
-                        cashier_name: 'Current Cashier',
+                        cashier_name: 'Staff',
                         payment_method: 'CASH',
                         items: [...cart],
-                        total_amount: response.data.total_amount
+                        total_amount: total,
+                        businessInfo: {
+                            name: 'FAMOUS GATE HOTEL',
+                            address: 'Kericho, Kenya',
+                            phone: '+254 700 000 000',
+                            email: 'info@famousgate.co.ke'
+                        }
                     });
                     setShowReceipt(true);
                     setCart([]);
@@ -557,144 +564,160 @@ function CashierPageContent() {
         }
     };
 
-    const handlePrint = () => {
+    const handlePrint = async () => {
         if (!selectedTransaction) return;
 
-        const printWindow = window.open('', '', 'width=600,height=600');
-        if (!printWindow) return;
+        setIsGeneratingBill(true);
+        try {
+            const items = selectedTransaction.items || [];
+            const totalAmount = selectedTransaction.total_amount || selectedTransaction.total || 0;
+            const receiptNumber = selectedTransaction.transaction_ref || selectedTransaction.receipt_number || 'POS-' + Date.now().toString().slice(-6);
 
-        // Dynamically create receipt HTML
-        const items = selectedTransaction.items || cart || [];
-        const businessInfo = {
-            name: 'FG GRILL & LOUNGE',
-            address: '123 Avenue, Nairobi',
-            phone: '0700 000 000',
-            pin: 'P051234567X'
-        };
+            // Calculate VAT breakdown (16% included in prices)
+            const vatRate = 0.16;
+            const subtotal = Math.round(totalAmount / (1 + vatRate));
+            const vatAmount = totalAmount - subtotal;
 
-        const totalAmount = selectedTransaction.total_amount || selectedTransaction.total || 0;
-        const subtotal = totalAmount / 1.16;
-        const tax = totalAmount - subtotal;
-        const receiptNumber = selectedTransaction.transaction_ref || selectedTransaction.receipt_number || 'N/A';
-        const formatDate = (date: any) => {
-            try {
-                if (!date) return new Date().toLocaleString();
-                return new Date(date).toLocaleString('en-US', {
-                    month: 'numeric',
-                    day: 'numeric',
-                    year: 'numeric',
-                    hour: 'numeric',
-                    minute: 'numeric',
-                    second: 'numeric',
-                    hour12: true
-                });
-            } catch (e) {
-                return new Date().toLocaleString();
+            const receiptData = {
+                receipt_type: 'sale' as const,
+                receipt_number: receiptNumber,
+                date: selectedTransaction.created_at || new Date().toISOString(),
+                customer_name: selectedTransaction.customer_name || 'Walk-in',
+                cashier_name: selectedTransaction.cashier_name || 'Staff',
+                items: items.map((item: any) => ({
+                    name: item.name || item.item_name || 'Item',
+                    quantity: item.qty || item.quantity || 1,
+                    unit_price: item.unit_price || 0,
+                    total: item.line_total || (item.unit_price * (item.qty || item.quantity || 1))
+                })),
+                subtotal: subtotal,
+                tax_amount: vatAmount,
+                total_amount: totalAmount,
+                payment_method: selectedTransaction.payment_method || 'CASH',
+                amount_paid: totalAmount,
+                change_amount: 0,
+                payment_reference: selectedTransaction.mpesa_code || undefined
+            };
+
+            const response = await receiptsAPI.generateReceipt(receiptData);
+
+            if (response.success && response.data?.pdf_base64) {
+                // Convert base64 to blob
+                const byteCharacters = atob(response.data.pdf_base64);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const blob = new Blob([byteArray], { type: 'application/pdf' });
+
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = `receipt_${receiptNumber}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                toast.success('Receipt generated successfully');
+            } else {
+                throw new Error(response.message || 'Failed to generate receipt');
             }
-        };
+        } catch (error: any) {
+            console.error('Print error:', error);
+            toast.error(error.message || 'Failed to generate receipt with Python service');
+        } finally {
+            setIsGeneratingBill(false);
+        }
+    };
 
-        const receiptHTML = `
-            <html>
-            <head>
-                <title>Print Receipt</title>
-                <style>
-                    body { font-family: monospace; padding: 20px; }
-                    .receipt { width: 80mm; margin: 0 auto; font-size: 10px; line-height: 1.2; }
-                    .center { text-align: center; }
-                    .bold { font-weight: bold; }
-                    .border-top { border-top: 1px dashed black; padding-top: 8px; }
-                    .border-bottom { border-bottom: 1px dashed black; padding-bottom: 8px; }
-                    table { width: 100%; border-collapse: collapse; }
-                    th, td { text-align: left; padding: 2px 0; }
-                    .text-right { text-align: right; }
-                    .logo { width: 48px; height: 48px; margin: 0 auto 8px; }
-                </style>
-            </head>
-            <body>
-                <div class="receipt">
-                    <div class="center">
-                        <h1 class="bold" style="font-size: 12px; margin: 8px 0;">${businessInfo.name}</h1>
-                        <p>${businessInfo.address}</p>
-                        <p>Tel: ${businessInfo.phone}</p>
-                        <p style="font-size: 9px; margin-top: 4px;">CASH RECEIPT</p>
-                    </div>
-                    
-                    <div class="border-top border-bottom" style="margin: 8px 0; padding: 4px 0;">
-                        <p>Receipt #: ${receiptNumber}</p>
-                        <p>Date: ${formatDate(selectedTransaction.created_at || selectedTransaction.date)}</p>
-                        ${selectedTransaction.table_number ? `<p>Table: ${selectedTransaction.table_number}</p>` : ''}
-                        ${selectedTransaction.room_number ? `<p>Room: ${selectedTransaction.room_number}</p>` : ''}
-                        ${selectedTransaction.customer_name ? `<p>Customer: ${selectedTransaction.customer_name}</p>` : ''}
-                        <p>Cashier: ${selectedTransaction.cashier_name || selectedTransaction.served_by || 'Staff'}</p>
-                    </div>
-                    
-                    <table>
-                        <thead>
-                            <tr style="border-bottom: 1px solid black;">
-                                <th style="width: 32px;">Qty</th>
-                                <th>Description</th>
-                                <th class="text-right">Price</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${items.map((item: any) => {
-            const qty = item.qty || item.quantity || 1;
-            const name = item.name || item.item_name || 'Item';
-            const price = item.line_total || item.total || (item.unit_price * qty) || 0;
-            return `
-                                    <tr>
-                                        <td>${qty}</td>
-                                        <td>${name}</td>
-                                        <td class="text-right">${price.toLocaleString()}</td>
-                                    </tr>
-                                `;
-        }).join('')}
-                        </tbody>
-                    </table>
-                    
-                    <div class="border-top" style="margin-top: 8px; padding-top: 4px;">
-                        <div style="display: flex; justify-content: space-between;">
-                            <span>SUBTOTAL</span>
-                            <span>KES ${Math.round(subtotal).toLocaleString()}</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <span>TAX (16% incl.)</span>
-                            <span>KES ${Math.round(tax).toLocaleString()}</span>
-                        </div>
-                        <div class="bold border-top" style="display: flex; justify-content: space-between; margin-top: 4px; padding-top: 4px; font-size: 11px;">
-                            <span>TOTAL:</span>
-                            <span>KES ${totalAmount.toLocaleString()}</span>
-                        </div>
-                    </div>
-                    
-                    <div style="margin: 12px 0;">
-                        <div style="display: flex; justify-content: space-between;">
-                            <span>Payment:</span>
-                            <span style="text-transform: uppercase;">${selectedTransaction.payment_method || 'Cash'}</span>
-                        </div>
-                        ${selectedTransaction.mpesa_code ? `<p style="margin-top: 4px;">Ref: ${selectedTransaction.mpesa_code}</p>` : ''}
-                    </div>
-                    
-                    <div class="center border-top" style="padding-top: 8px;">
-                        <p class="bold" style="font-size: 11px;">THANK YOU!</p>
-                        <p style="font-size: 9px;">Please come again</p>
-                        <p style="font-size: 9px;">${businessInfo.name.toLowerCase().replace(/\s+/g, '')}@email.com</p>
-                    </div>
-                    
-                    <div class="center" style="font-size: 7px; color: #666; margin-top: 8px;">
-                        <p class="bold">System managed and made by Hirall</p>
-                        <p>+254 710 944 249 | admin@hirall.com</p>
-                    </div>
-                </div>
-            </body>
-            </html>
-        `;
+    const handlePrintBill = async () => {
+        if (!billData) return;
 
-        printWindow.document.write(receiptHTML);
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
-        printWindow.close();
+        setIsGeneratingBill(true);
+        try {
+            let receiptData: any = {};
+            const totalAmount = billData.financials.total_amount;
+            const vatRate = 0.16;
+            const subtotal = Math.round(totalAmount / (1 + vatRate));
+            const vatAmount = totalAmount - subtotal;
+
+            if (billData.type === 'restaurant' || billData.type === 'bar') {
+                receiptData = {
+                    receipt_type: 'sale' as const,
+                    receipt_number: billData.order.order_number,
+                    date: billData.order.created_at || new Date().toISOString(),
+                    table_number: billData.order.table_number,
+                    customer_name: billData.order.guest_name || 'Walk-in',
+                    cashier_name: 'Staff',
+                    items: (billData.order.items || []).map((item: any) => ({
+                        name: item.name,
+                        quantity: item.quantity,
+                        unit_price: item.unit_price,
+                        total: item.total
+                    })),
+                    subtotal: subtotal,
+                    tax_amount: vatAmount,
+                    total_amount: totalAmount,
+                    payment_method: 'PENDING',
+                    amount_paid: billData.financials.amount_paid,
+                    change_amount: 0
+                };
+            } else {
+                // Hotel bill
+                receiptData = {
+                    receipt_type: 'invoice' as const,
+                    invoice_number: billData.booking.id.slice(0, 8).toUpperCase(),
+                    date: new Date().toISOString(),
+                    customer_name: billData.booking.guest_name,
+                    room_number: billData.booking.room_number,
+                    items: [
+                        {
+                            description: `Room Stay (${billData.booking.room_number})`,
+                            quantity: 1,
+                            unit_price: billData.financials.total_amount,
+                        }
+                    ],
+                    subtotal: subtotal,
+                    tax: vatAmount,
+                    amount: totalAmount,
+                    notes: `Stay from ${new Date(billData.booking.check_in).toLocaleDateString()} to ${new Date(billData.booking.check_out).toLocaleDateString()}`
+                };
+            }
+
+            const response = billData.type === 'hotel'
+                ? await restaurantAPI.generateBill(receiptData)
+                : await receiptsAPI.generateReceipt(receiptData);
+
+            if (response.success && response.data?.pdf_base64) {
+                const byteCharacters = atob(response.data.pdf_base64);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const blob = new Blob([byteArray], { type: 'application/pdf' });
+
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = `bill_${receiptData.receipt_number || receiptData.invoice_number}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                toast.success('Bill generated successfully');
+            } else {
+                throw new Error(response.message || 'Failed to generate bill');
+            }
+        } catch (error: any) {
+            console.error('Bill error:', error);
+            toast.error('Bill generation failed');
+        } finally {
+            setIsGeneratingBill(false);
+        }
     };
 
     return (
@@ -708,7 +731,14 @@ function CashierPageContent() {
                                 <p className="text-center text-xs text-stone-500">A new tab will open for printing</p>
                             </div>
                             <div className="flex gap-4">
-                                <IOSButton onClick={handlePrint} className="flex-1 bg-stone-900">Print Receipt</IOSButton>
+                                <IOSButton
+                                    onClick={handlePrint}
+                                    className="flex-1 bg-stone-900"
+                                    disabled={isGeneratingBill}
+                                >
+                                    {isGeneratingBill ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}
+                                    Print Receipt
+                                </IOSButton>
                                 <IOSButton onClick={() => setShowReceipt(false)} className="flex-1 bg-stone-200 text-stone-900 border-none">Close</IOSButton>
                             </div>
                         </IOSCard>
@@ -799,12 +829,25 @@ function CashierPageContent() {
                                             {cart.length === 0 ? (
                                                 <p className="text-stone-400 text-sm italic">Cart is empty</p>
                                             ) : (
-                                                cart.map((item, idx) => (
-                                                    <div key={idx} className="flex justify-between items-center text-sm p-2 bg-stone-50 rounded-lg">
-                                                        <span>{item.name} x {item.qty}</span>
-                                                        <span className="font-bold">KES {item.line_total.toLocaleString()}</span>
-                                                    </div>
-                                                ))
+                                                <div className="space-y-2">
+                                                    {cart.map((item, idx) => (
+                                                        <div key={idx} className="flex justify-between items-center text-sm p-3 bg-stone-50 rounded-xl border border-stone-100 group">
+                                                            <div className="flex flex-col">
+                                                                <span className="font-bold text-stone-800">{item.name}</span>
+                                                                <span className="text-[10px] text-stone-400 font-mono">KES {item.unit_price.toLocaleString()} x {item.qty}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="font-black text-stone-900">KES {item.line_total.toLocaleString()}</span>
+                                                                <button
+                                                                    onClick={() => setCart(cart.filter((_, i) => i !== idx))}
+                                                                    className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             )}
                                         </div>
                                         <div className="grid grid-cols-2 gap-4 mb-4">
@@ -863,11 +906,12 @@ function CashierPageContent() {
                                                     Bill Details
                                                 </h2>
                                                 <button
-                                                    onClick={() => toast.info('Printing receipt...')}
-                                                    className="flex items-center gap-1.5 px-3 py-1 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-lg text-xs font-bold transition-colors"
+                                                    onClick={handlePrintBill}
+                                                    disabled={isGeneratingBill}
+                                                    className="flex items-center gap-1.5 px-3 py-1 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
                                                 >
-                                                    <Printer size={14} />
-                                                    Print
+                                                    {isGeneratingBill ? <Loader2 className="animate-spin h-3 w-3" /> : <Printer size={14} />}
+                                                    Print Bill
                                                 </button>
                                             </div>
                                             <span className={`px-3 py-1 rounded-full font-bold text-[10px] uppercase tracking-wider ${billData.financials.balance === 0
