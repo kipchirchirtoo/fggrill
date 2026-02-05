@@ -95,14 +95,20 @@ export default function ClockInTerminal() {
                     </p>
                 </div>
 
-                {/* Back Button */}
-                <div className="text-center mb-6">
+                {/* Navigation Buttons */}
+                <div className="flex items-center justify-center gap-4 mb-6">
                     <button
                         onClick={() => window.location.href = '/terminal'}
-                        className="px-6 py-3 bg-white/80 backdrop-blur-sm border border-stone-200 rounded-2xl text-stone-600 hover:text-stone-900 hover:border-stone-300 transition-all text-sm font-bold flex items-center gap-2 mx-auto shadow-sm hover:shadow-md"
+                        className="px-6 py-3 bg-white/80 backdrop-blur-sm border border-stone-200 rounded-2xl text-stone-600 hover:text-stone-900 hover:border-stone-300 transition-all text-sm font-bold flex items-center gap-2 shadow-sm hover:shadow-md"
                     >
                         <ArrowRight className="h-4 w-4 rotate-180" />
-                        Back to Selection
+                        Back
+                    </button>
+                    <button
+                        onClick={() => window.location.href = '/dashboard'}
+                        className="px-6 py-3 bg-stone-900 text-white rounded-2xl hover:bg-black transition-all text-sm font-bold flex items-center gap-2 shadow-lg"
+                    >
+                        Dashboard
                     </button>
                 </div>
 
@@ -119,7 +125,7 @@ export default function ClockInTerminal() {
                                     className="w-full h-16 bg-stone-50 border border-stone-100 rounded-2xl text-stone-900 text-2xl font-bold text-center tracking-[0.1em] focus:outline-none focus:ring-2 focus:ring-stone-900/5 focus:border-stone-400 transition-all placeholder:text-stone-200"
                                     placeholder="ID NUMBER"
                                     value={staffId}
-                                    onChange={e => setStaffId(e.target.value)}
+                                    onChange={e => setStaffId(e.target.value.toUpperCase())}
                                     autoFocus
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') handleIdentify();

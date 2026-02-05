@@ -67,8 +67,8 @@ export default function MasterTerminalPage() {
         if (view !== 'pinpad') return;
 
         const handleKeyPress = (e: KeyboardEvent) => {
-            if (e.key >= '0' && e.key <= '9') {
-                handleNumberClick(e.key);
+            if (/^[0-9a-zA-Z]$/.test(e.key)) {
+                handleNumberClick(e.key.toUpperCase());
             } else if (e.key === 'Backspace') {
                 handleDelete();
             } else if (e.key === 'Enter' && pin.length === 4) {
