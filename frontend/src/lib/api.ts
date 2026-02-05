@@ -666,6 +666,7 @@ export const staffAPI = {
     return fetchAPI<any>(`/staff${queryString}`);
   },
   getStaffMember: (id: string) => fetchAPI<any>(`/staff/${id}`),
+  getStaffByIdentifier: (identifier: string) => fetchAPI<any>(`/staff/by-identifier/${identifier}`),
   createStaffMember: (data: any) => fetchAPI<any>('/staff', { method: 'POST', body: JSON.stringify(data) }),
   updateStaffMember: (id: string, data: any) => fetchAPI<any>(`/staff/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteStaffMember: (id: string) => fetchAPI<any>(`/staff/${id}`, { method: 'DELETE' }),
@@ -725,10 +726,23 @@ export const staffAPI = {
   getPayslips: (staffId: string) => fetchAPI<any>(`/staff/${staffId}/payslips`),
 
   // Attendance
-  getAttendance: (params?: { branch_id?: number; date?: string }) => {
+  getAttendance: (params?: {
+    staff_id?: string;
+    branch_id?: number;
+    date?: string;
+    startDate?: string;
+    endDate?: string;
+    status?: string;
+    limit?: number;
+  }) => {
     const query = new URLSearchParams();
+    if (params?.staff_id) query.append('staff_id', params.staff_id);
     if (params?.branch_id) query.append('branch_id', String(params.branch_id));
     if (params?.date) query.append('date', params.date);
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    if (params?.status) query.append('status', params.status);
+    if (params?.limit) query.append('limit', String(params.limit));
     return fetchAPI<any>(`/staff/attendance?${query}`);
   },
   getAttendanceReports: (params?: { staffId?: string; startDate?: string; endDate?: string; branchId?: string }) => {

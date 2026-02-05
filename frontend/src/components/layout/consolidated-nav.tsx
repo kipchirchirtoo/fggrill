@@ -1208,9 +1208,15 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/hr/employees'}
         />
         <NavItem
+          href="/dashboard/hr/staff-attendance"
+          icon={CheckCircle}
+          label="Staff Attendance"
+          active={pathname.includes('/dashboard/hr/staff-attendance')}
+        />
+        <NavItem
           href="/dashboard/hr/attendance"
           icon={CalendarClock}
-          label="Attendance"
+          label="Attendance Logs"
           active={pathname === '/dashboard/hr/attendance'}
         />
         <NavItem

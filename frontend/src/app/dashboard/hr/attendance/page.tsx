@@ -6,6 +6,7 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { staffAPI } from '@/lib/api';
+import Link from 'next/link';
 import {
     Calendar,
     RefreshCw,
@@ -17,7 +18,8 @@ import {
     ChevronLeft,
     ChevronRight,
     Filter,
-    Info
+    Info,
+    ArrowLeft
 } from 'lucide-react';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -310,18 +312,21 @@ export default function HRAttendancePage() {
                                             return (
                                                 <tr key={record.id} className="hover:bg-stone-50/50 transition-colors group">
                                                     <td className="px-6 py-5">
-                                                        <div className="flex items-center gap-3">
+                                                        <Link
+                                                            href={`/dashboard/hr/attendance/${record.staff_id}`}
+                                                            className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                                                        >
                                                             <div className="w-9 h-9 rounded-full bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-600 font-bold text-[10px] uppercase">
                                                                 {staffName.split(' ').map((n: string) => n[0]).join('')}
                                                             </div>
                                                             <div>
-                                                                <p className="text-[14px] font-bold text-stone-900 leading-none">{staffName}</p>
+                                                                <p className="text-[14px] font-bold text-stone-900 leading-none group-hover:text-[#007AFF] transition-colors">{staffName}</p>
                                                                 <p className="text-[11px] text-stone-400 font-bold mt-1.5 uppercase tracking-tighter">
                                                                     {new Date(record.clock_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                                     {record.clock_out ? ` — ${new Date(record.clock_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ' (On-Duty)'}
                                                                 </p>
                                                             </div>
-                                                        </div>
+                                                        </Link>
                                                     </td>
                                                     <td className="px-6 py-5">
                                                         <div className="flex flex-col gap-1.5">

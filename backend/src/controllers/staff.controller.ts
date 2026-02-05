@@ -1975,3 +1975,42 @@ export const getStaffDocuments = async (
     next(error);
   }
 };
+
+// @desc    Get staff member by National ID or Staff ID
+// @route   GET /api/staff/by-identifier/:identifier
+// @access  Private
+export const getStaffByIdentifier = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { identifier } = req.params;
+
+    if (!identifier) {
+      res.status(400).json({ success: false, message: 'Identifier is required' });
+      return;
+    }
+
+    const { data: staff, error } = await supabase
+      .from('staff_profiles')
+      .select(`
+        *,
+        user: users!user_id(id, first_name, last_name, email, phone_number, role, department)
+      `)
+      .or(`id_number.eq."${identifier}",national_id.eq."${identifier}"`)
+      .single();
+
+    if (error || !staff) {
+      res.status(404).json({ success: false, message: 'Staff member not found with this identifier' });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: staff
+    });
+  } catch (error) {
+    next(error);
+  }
+};

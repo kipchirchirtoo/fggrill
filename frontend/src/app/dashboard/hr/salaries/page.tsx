@@ -17,7 +17,8 @@ import {
     Edit2,
     Wallet,
     Building2,
-    CreditCard
+    CreditCard,
+    ArrowLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -105,6 +106,13 @@ export default function HRSalariesPage() {
                     {/* Header */}
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
                         <div>
+                            <button
+                                onClick={() => window.location.href = '/dashboard/hr'}
+                                className="flex items-center gap-2 text-sm font-medium text-stone-600 hover:text-stone-900 mb-3 transition-colors"
+                            >
+                                <ArrowLeft className="h-4 w-4" />
+                                <span>Back to HR</span>
+                            </button>
                             <h1 className="text-[28px] font-bold text-stone-900 tracking-tight font-sf-pro-display">Payroll Baseline</h1>
                             <p className="text-stone-500 font-medium">Manage employee contract rates and disbursements</p>
                         </div>

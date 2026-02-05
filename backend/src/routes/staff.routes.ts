@@ -26,7 +26,8 @@ import {
   archiveStaff,
   getStaffHistory,
   uploadStaffDocument,
-  getStaffDocuments
+  getStaffDocuments,
+  getStaffByIdentifier
 } from '../controllers/staff.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -39,6 +40,9 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Public reference data (no authentication needed)
 router.get('/roles', getRoles);
+
+// Staff lookup by identifier (must come before parameterized routes)
+router.get('/by-identifier/:identifier', getStaffByIdentifier);
 
 // Protected routes
 router.use(protect);

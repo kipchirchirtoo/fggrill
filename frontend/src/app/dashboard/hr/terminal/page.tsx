@@ -30,12 +30,12 @@ export default function ClockInTerminal() {
         if (!staffId) return;
         setIsLoading(true);
         try {
-            const response = await staffAPI.getStaffMember(staffId);
+            const response = await staffAPI.getStaffByIdentifier(staffId);
             if (response.success) {
                 setStaffInfo(response.data);
-                setStep('method');
+                setStep('action');
             } else {
-                toast.error("Staff ID not found");
+                toast.error("Staff member not found. Please check your ID.");
             }
         } catch (error) {
             toast.error("Failed to identify staff");
@@ -50,8 +50,7 @@ export default function ClockInTerminal() {
             const apiCall = action === 'in' ? staffAPI.clockIn : staffAPI.clockOut;
             const response = await apiCall({
                 staff_id: staffInfo.id,
-                in_method: method,
-                out_method: method,
+                in_method: 'terminal',
                 device_id: 'TERMINAL_01'
             });
 
@@ -103,25 +102,28 @@ export default function ClockInTerminal() {
                         className="px-6 py-3 bg-white/80 backdrop-blur-sm border border-stone-200 rounded-2xl text-stone-600 hover:text-stone-900 hover:border-stone-300 transition-all text-sm font-bold flex items-center gap-2 mx-auto shadow-sm hover:shadow-md"
                     >
                         <ArrowRight className="h-4 w-4 rotate-180" />
-                        Back to Main Terminal
+                        Back to Selection
                     </button>
                 </div>
 
-                <div className="bg-white/80 backdrop-blur-xl border border-stone-200/60 rounded-[32px] p-10 shadow-2xl shadow-stone-200/50 overflow-hidden relative">
+                <div className="bg-white border border-stone-200 rounded-[32px] p-10 shadow-2xl shadow-stone-200/50 overflow-hidden relative">
                     {step === 'id' && (
                         <div className="space-y-8 animate-ios-fade-in">
                             <div className="space-y-2 text-center">
-                                <h2 className="text-2xl font-bold text-stone-900 tracking-tight">Personnel Identity</h2>
-                                <p className="text-stone-500 text-[13px] font-medium">Input National ID or scan staff credential</p>
+                                <h2 className="text-2xl font-bold text-stone-900 tracking-tight">Staff Attendance</h2>
+                                <p className="text-stone-500 text-[13px] font-medium italic">Enter National ID or Employee ID to begin</p>
                             </div>
 
                             <div className="space-y-4">
                                 <input
-                                    className="w-full h-16 bg-stone-50 border border-stone-100 rounded-2xl text-stone-900 text-2xl font-bold text-center tracking-[0.2em] focus:outline-none focus:ring-2 focus:ring-stone-900/5 focus:border-stone-400 transition-all placeholder:text-stone-200"
-                                    placeholder="••••••••"
+                                    className="w-full h-16 bg-stone-50 border border-stone-100 rounded-2xl text-stone-900 text-2xl font-bold text-center tracking-[0.1em] focus:outline-none focus:ring-2 focus:ring-stone-900/5 focus:border-stone-400 transition-all placeholder:text-stone-200"
+                                    placeholder="ID NUMBER"
                                     value={staffId}
                                     onChange={e => setStaffId(e.target.value)}
                                     autoFocus
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleIdentify();
+                                    }}
                                 />
                                 <button
                                     className="w-full h-14 rounded-2xl bg-stone-900 text-white text-md font-bold hover:bg-black transition-all active:scale-95 shadow-lg shadow-stone-200 flex items-center justify-center gap-2 group"
@@ -132,7 +134,7 @@ export default function ClockInTerminal() {
                                         <RefreshCw className="h-5 w-5 animate-spin" />
                                     ) : (
                                         <>
-                                            <span>Initiate Scan</span>
+                                            <span>IDENTIFY PERSONNEL</span>
                                             <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
                                         </>
                                     )}
@@ -141,122 +143,72 @@ export default function ClockInTerminal() {
                         </div>
                     )}
 
-                    {step === 'method' && (
-                        <div className="space-y-8 animate-ios-fade-in">
-                            <div className="space-y-2 text-center">
-                                <h2 className="text-2xl font-bold text-stone-900 tracking-tight">Verification Type</h2>
-                                <p className="text-stone-500 text-[13px] font-medium">System access protocol for <span className="text-stone-900 font-bold">{staffInfo?.first_name}</span></p>
-                            </div>
-
-                            <div className="grid grid-cols-1 gap-3">
-                                <button
-                                    onClick={() => { setMethod('biometric'); setStep('action'); }}
-                                    className="flex items-center gap-4 p-4 rounded-2xl bg-stone-50 border border-stone-100 hover:bg-white hover:border-stone-300 hover:shadow-sm transition-all text-left group"
-                                >
-                                    <div className="w-12 h-12 rounded-xl bg-white border border-stone-100 flex items-center justify-center text-stone-900 shadow-sm group-hover:scale-110 transition-transform">
-                                        <Fingerprint className="h-6 w-6" />
-                                    </div>
-                                    <div>
-                                        <p className="font-bold text-stone-900">Biometric Sensor</p>
-                                        <p className="text-[11px] text-stone-400 font-medium">Digital fingerprint signature</p>
-                                    </div>
-                                </button>
-                                <button
-                                    onClick={() => { setMethod('rfid'); setStep('action'); }}
-                                    className="flex items-center gap-4 p-4 rounded-2xl bg-stone-50 border border-stone-100 hover:bg-white hover:border-stone-300 hover:shadow-sm transition-all text-left group"
-                                >
-                                    <div className="w-12 h-12 rounded-xl bg-white border border-stone-100 flex items-center justify-center text-stone-900 shadow-sm group-hover:scale-110 transition-transform">
-                                        <CreditCard className="h-6 w-6" />
-                                    </div>
-                                    <div>
-                                        <p className="font-bold text-stone-900">Contactless NFC</p>
-                                        <p className="text-[11px] text-stone-400 font-medium">Physical credential card scan</p>
-                                    </div>
-                                </button>
-                                <button
-                                    onClick={() => { setMethod('pin'); setStep('action'); }}
-                                    className="flex items-center gap-4 p-4 rounded-2xl bg-stone-50 border border-stone-100 hover:bg-white hover:border-stone-300 hover:shadow-sm transition-all text-left group"
-                                >
-                                    <div className="w-12 h-12 rounded-xl bg-white border border-stone-100 flex items-center justify-center text-stone-900 shadow-sm group-hover:scale-110 transition-transform">
-                                        <Key className="h-6 w-6" />
-                                    </div>
-                                    <div>
-                                        <p className="font-bold text-stone-900">Manual Override</p>
-                                        <p className="text-[11px] text-stone-400 font-medium italic">Manager verification required</p>
-                                    </div>
-                                </button>
-                            </div>
-                            <button
-                                onClick={() => setStep('id')}
-                                className="w-full py-3 text-[13px] font-bold text-stone-400 hover:text-stone-900 transition-colors"
-                            >
-                                Back to Identification
-                            </button>
-                        </div>
-                    )}
-
                     {step === 'action' && (
                         <div className="space-y-10 animate-ios-fade-in">
                             <div className="text-center space-y-4">
                                 <div className="w-24 h-24 rounded-[32px] bg-stone-900 mx-auto flex items-center justify-center text-white text-3xl font-bold border-4 border-white shadow-xl">
-                                    {(staffInfo?.first_name?.[0] || '?').toUpperCase()}{(staffInfo?.last_name?.[0] || '?').toUpperCase()}
+                                    {(staffInfo?.user?.first_name?.[0] || '?').toUpperCase()}{(staffInfo?.user?.last_name?.[0] || '?').toUpperCase()}
                                 </div>
-                                <div>
-                                    <h2 className="text-2xl font-bold text-stone-900 tracking-tight">{staffInfo?.first_name} {staffInfo?.last_name}</h2>
-                                    <p className="text-stone-400 text-[11px] font-bold uppercase tracking-widest mt-1">{staffInfo?.role} • {staffInfo?.department}</p>
+                                <div className="space-y-1">
+                                    <h2 className="text-2xl font-bold text-stone-900 tracking-tight">{staffInfo?.user?.first_name} {staffInfo?.user?.last_name}</h2>
+                                    <p className="text-stone-500 text-xs font-bold uppercase tracking-widest">{staffInfo?.user?.role || staffInfo?.role} • {staffInfo?.user?.department || staffInfo?.department}</p>
+                                    <p className="text-stone-400 text-[10px] font-bold">STAFF ID: {staffInfo?.id_number}</p>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-6 mt-8">
+                            <div className="grid grid-cols-2 gap-4">
                                 <button
                                     onClick={() => handleClock('in')}
                                     disabled={isLoading}
-                                    className="flex flex-col items-center gap-4 p-6 rounded-3xl bg-stone-50 border border-stone-200 hover:bg-white hover:border-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/20 transition-all text-stone-900 group disabled:opacity-50"
+                                    className="flex flex-col items-center gap-4 p-6 rounded-3xl bg-stone-50 border border-stone-100 hover:bg-white hover:border-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/10 transition-all text-stone-900 group disabled:opacity-50"
                                 >
-                                    <div className="w-16 h-16 rounded-2xl bg-stone-900 flex items-center justify-center text-white group-hover:scale-110 transition-transform shadow-lg group-hover:bg-emerald-600">
-                                        <History className="h-8 w-8" />
+                                    <div className="w-14 h-14 rounded-2xl bg-emerald-500 flex items-center justify-center text-white group-hover:scale-110 transition-transform shadow-lg shadow-emerald-200">
+                                        <History className="h-7 w-7" />
                                     </div>
-                                    <span className="font-bold text-sm uppercase tracking-widest">Entry</span>
+                                    <span className="font-bold text-xs uppercase tracking-widest">Clock In</span>
                                 </button>
                                 <button
                                     onClick={() => handleClock('out')}
                                     disabled={isLoading}
-                                    className="flex flex-col items-center gap-4 p-6 rounded-3xl bg-stone-50 border border-stone-200 hover:bg-white hover:border-rose-500/30 hover:shadow-xl hover:shadow-rose-500/20 transition-all text-stone-900 group disabled:opacity-50"
+                                    className="flex flex-col items-center gap-4 p-6 rounded-3xl bg-stone-50 border border-stone-100 hover:bg-white hover:border-rose-500/30 hover:shadow-xl hover:shadow-rose-500/10 transition-all text-stone-900 group disabled:opacity-50"
                                 >
-                                    <div className="w-16 h-16 rounded-2xl bg-stone-900 flex items-center justify-center text-white group-hover:scale-110 transition-transform shadow-lg group-hover:bg-rose-600">
-                                        <History className="h-8 w-8 rotate-180" />
+                                    <div className="w-14 h-14 rounded-2xl bg-rose-500 flex items-center justify-center text-white group-hover:scale-110 transition-transform shadow-lg shadow-rose-200">
+                                        <History className="h-7 w-7 rotate-180" />
                                     </div>
-                                    <span className="font-bold text-sm uppercase tracking-widest">Exit</span>
+                                    <span className="font-bold text-xs uppercase tracking-widest">Clock Out</span>
                                 </button>
                             </div>
 
                             <button
-                                onClick={() => setStep('method')}
-                                className="w-full py-3 text-[13px] font-bold text-stone-400 hover:text-stone-900 transition-colors"
+                                onClick={reset}
+                                className="w-full py-2 text-[11px] font-bold text-stone-400 hover:text-stone-900 transition-colors uppercase tracking-[0.2em]"
                             >
-                                Change Method
+                                Not you? Sign Out
                             </button>
                         </div>
                     )}
 
                     {step === 'success' && (
                         <div className="text-center py-16 animate-ios-fade-in">
-                            <div className="w-24 h-24 rounded-full bg-emerald-50 mx-auto flex items-center justify-center text-emerald-500 mb-8 border border-emerald-100 shadow-sm">
-                                <CheckCircle2 className="h-12 w-12" />
+                            <div className="w-20 h-20 rounded-full bg-emerald-50 mx-auto flex items-center justify-center text-emerald-500 mb-6 border border-emerald-100">
+                                <CheckCircle2 className="h-10 w-10" />
                             </div>
-                            <h2 className="text-3xl font-bold text-stone-900 tracking-tight mb-2">Authenticated</h2>
-                            <p className="text-stone-500 italic font-medium">Session recorded successfully. Proceed to post.</p>
+                            <h2 className="text-2xl font-bold text-stone-900 tracking-tight mb-2">SUCCESS</h2>
+                            <p className="text-stone-500 font-medium text-sm">Attendance logged for today.</p>
                         </div>
                     )}
                 </div>
 
                 {/* Footer Info */}
-                <div className="mt-12 flex items-center justify-center gap-6 text-[10px] font-bold text-stone-300 uppercase tracking-widest">
-                    <span>Terminal FG-TERM-01</span>
-                    <div className="w-1 h-1 bg-stone-200 rounded-full" />
-                    <span>Secure Node</span>
-                    <div className="w-1 h-1 bg-stone-200 rounded-full" />
-                    <span>Main Branch</span>
+                <div className="mt-12 flex items-center justify-center gap-4 text-[9px] font-bold text-stone-400 uppercase tracking-widest bg-stone-100 py-3 px-6 rounded-full mx-auto w-fit">
+                    <div className="flex items-center gap-1.5 text-emerald-600">
+                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                        SYSTEM ONLINE
+                    </div>
+                    <div className="w-px h-3 bg-stone-200" />
+                    <span>NODE-01</span>
+                    <div className="w-px h-3 bg-stone-200" />
+                    <span>ENCRYPTION ACTIVE</span>
                 </div>
             </div>
         </div>

@@ -47,26 +47,45 @@ export default function MasterTerminalPage() {
     };
 
     const handleDelete = () => {
-        if (pin.length > 1) { // Don't delete the prefix
+        if (pin.length > 0) {
             setPin(prev => prev.slice(0, -1));
         }
     };
 
     const handleClear = () => {
-        const prefix = selectedModule === 'restaurant' ? 'R' : selectedModule === 'bar' ? 'B' : 'C';
-        setPin(prefix);
+        setPin('');
     };
 
     const handleModuleSelect = (module: 'restaurant' | 'bar' | 'cashier') => {
         setSelectedModule(module);
-        setPin(module === 'restaurant' ? 'R' : module === 'bar' ? 'B' : 'C');
+        setPin('');
         setView('pinpad');
     };
 
+    // Keyboard support for PIN entry
+    useEffect(() => {
+        if (view !== 'pinpad') return;
+
+        const handleKeyPress = (e: KeyboardEvent) => {
+            if (e.key >= '0' && e.key <= '9') {
+                handleNumberClick(e.key);
+            } else if (e.key === 'Backspace') {
+                handleDelete();
+            } else if (e.key === 'Enter' && pin.length === 4) {
+                handleLogin();
+            } else if (e.key === 'Escape') {
+                setView('lockscreen');
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyPress);
+        return () => window.removeEventListener('keydown', handleKeyPress);
+    }, [view, pin]);
+
     const handleLogin = async (overridePin?: string) => {
         const finalPin = overridePin || pin;
-        if (finalPin.length < 4) {
-            toast.error('Please enter a full 4-character PIN');
+        if (finalPin.length !== 4) {
+            toast.error('Please enter a 4-digit PIN');
             return;
         }
 
@@ -78,14 +97,26 @@ export default function MasterTerminalPage() {
             }) as any;
 
             if (response.success) {
-                // Store authentication session
+                // Store authentication session in the format expected by auth context
                 if (response.data.session) {
-                    localStorage.setItem('supabase.auth.token', JSON.stringify({
-                        access_token: response.data.session.access_token,
-                        refresh_token: response.data.session.refresh_token,
-                        expires_at: response.data.session.expires_at,
-                        user: response.data.session.user
+                    localStorage.setItem('token', response.data.session.access_token);
+                    localStorage.setItem('user', JSON.stringify({
+                        id: response.data.user.id,
+                        email: response.data.user.email || '',
+                        firstName: response.data.user.first_name,
+                        lastName: response.data.user.last_name,
+                        role: response.data.user.role,
+                        branch_id: response.data.user.branch_id,
+                        branch_name: response.data.user.branch_name,
+                        is_central: response.data.user.is_central,
+                        isPosLogin: true,
+                        department: response.data.user.department
                     }));
+
+                    // Set branch context
+                    if (response.data.user.branch_id) {
+                        localStorage.setItem('activeBranchId', response.data.user.branch_id.toString());
+                    }
                 }
 
                 toast.success(`Welcome, ${response.data.user.first_name}!`);
@@ -99,13 +130,11 @@ export default function MasterTerminalPage() {
                 }
             } else {
                 toast.error(response.message || 'Invalid PIN');
-                const prefix = selectedModule === 'restaurant' ? 'R' : selectedModule === 'bar' ? 'B' : 'C';
-                setPin(prefix);
+                setPin('');
             }
         } catch (error: any) {
             toast.error(error.message || 'Authentication failed');
-            const prefix = selectedModule === 'restaurant' ? 'R' : selectedModule === 'bar' ? 'B' : 'C';
-            setPin(prefix);
+            setPin('');
         } finally {
             setIsAuthenticating(false);
         }
@@ -130,13 +159,13 @@ export default function MasterTerminalPage() {
                         <p className="text-stone-500 font-medium text-lg">Touch an option below to begin your session</p>
                     </div>
 
-                    {/* Admin Login Link */}
+                    {/* Login Link */}
                     <div className="absolute top-8 right-8">
                         <a
                             href="/login"
                             className="px-4 py-2 text-sm font-medium text-stone-400 hover:text-stone-900 transition-colors flex items-center gap-2 group"
                         >
-                            <span>Admin Login</span>
+                            <span>Login</span>
                             <svg className="h-4 w-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                             </svg>
@@ -225,47 +254,38 @@ export default function MasterTerminalPage() {
                         </div>
                     </div>
 
-                    <div className="mt-16 flex justify-center gap-4 text-[11px] text-stone-400 font-bold tracking-widest uppercase">
-                        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-full border border-gray-100 shadow-sm">
-                            <ShieldCheck className="h-3 w-3" />
-                            FAMOUS GATE SECURE SYSTEM
-                        </div>
-                        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-full border border-gray-100 shadow-sm">
-                            <Monitor className="h-3 w-3" />
-                            STANDALONE TERMINAL V1.0
-                        </div>
-                    </div>
+
                 </div>
             ) : (
                 <div className="w-full max-w-4xl grid md:grid-cols-2 gap-12 items-center animate-in slide-in-from-bottom-8 duration-500">
                     <div className="flex flex-col gap-6">
-                        <IOSCard className="p-10 bg-gradient-to-br from-stone-900 to-stone-800 text-white border-none space-y-6">
+                        <IOSCard className="p-10 bg-white border border-stone-200 shadow-lg space-y-6">
                             <button
                                 onClick={() => setView('lockscreen')}
-                                className="flex items-center gap-2 text-stone-400 hover:text-white transition-colors mb-4 text-sm font-bold"
+                                className="flex items-center gap-2 text-stone-600 hover:text-stone-900 transition-colors mb-4 text-sm font-bold"
                             >
                                 <LogOut className="h-4 w-4 rotate-180" />
                                 BACK TO SELECTION
                             </button>
 
-                            <div className="h-16 w-16 bg-white/10 rounded-2xl flex items-center justify-center">
+                            <div className="h-16 w-16 bg-stone-50 border-2 border-stone-200 rounded-2xl flex items-center justify-center">
                                 {selectedModule === 'restaurant' ? (
-                                    <ChefHat className="h-8 w-8 text-orange-400" />
+                                    <ChefHat className="h-8 w-8 text-orange-500" />
                                 ) : selectedModule === 'bar' ? (
-                                    <Wine className="h-8 w-8 text-indigo-400" />
+                                    <Wine className="h-8 w-8 text-indigo-500" />
                                 ) : (
-                                    <Wallet className="h-8 w-8 text-emerald-400" />
+                                    <Wallet className="h-8 w-8 text-emerald-500" />
                                 )}
                             </div>
 
                             <div>
-                                <h2 className="text-3xl font-black tracking-tight capitalize">{selectedModule} Access</h2>
-                                <p className="text-stone-400 text-sm leading-relaxed mt-2 uppercase tracking-widest font-bold">
+                                <h2 className="text-3xl font-black tracking-tight capitalize text-stone-900">{selectedModule} Access</h2>
+                                <p className="text-stone-500 text-sm leading-relaxed mt-2 uppercase tracking-widest font-bold">
                                     Enter {selectedModule === 'restaurant' ? 'Waiter' : selectedModule === 'bar' ? 'Bar' : 'Cashier'} PIN
                                 </p>
                             </div>
 
-                            <div className="pt-6 border-t border-white/10 text-[10px] text-stone-500 font-bold tracking-[0.2em] uppercase">
+                            <div className="pt-6 border-t border-stone-200 text-[10px] text-stone-400 font-bold tracking-[0.2em] uppercase">
                                 System logging active • Secure encryption enabled
                             </div>
                         </IOSCard>
@@ -346,8 +366,8 @@ export default function MasterTerminalPage() {
                 </div>
             )}
 
-            <p className="fixed bottom-8 text-[11px] text-stone-400 font-bold tracking-widest uppercase">
-                Famous Gate Hotel Management System • Standalone v1.0
+            <p className="fixed bottom-8 left-1/2 -translate-x-1/2 text-[11px] text-stone-400 font-medium tracking-wide">
+                Made by <span className="font-bold text-stone-600">Hirall</span>
             </p>
         </div>
     );

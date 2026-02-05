@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { staffAPI, systemAPI } from '@/lib/api';
 import { toast } from 'sonner';
-import { Users, RefreshCw, Plus, Search, User, Building2, Edit2, Trash2, Mail, Phone, FileText, History, UserPlus, Archive } from 'lucide-react';
+import { Users, RefreshCw, Plus, Search, User, Building2, Edit2, Trash2, Mail, Phone, FileText, History, UserPlus, Archive, ArrowLeft } from 'lucide-react';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
@@ -289,6 +289,13 @@ export default function HREmployeesPage() {
                     {/* Header */}
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
                         <div>
+                            <button
+                                onClick={() => window.location.href = '/dashboard/hr'}
+                                className="flex items-center gap-2 text-sm font-medium text-stone-600 hover:text-stone-900 mb-3 transition-colors"
+                            >
+                                <ArrowLeft className="h-4 w-4" />
+                                <span>Back to HR</span>
+                            </button>
                             <h1 className="text-[28px] font-bold text-stone-900 tracking-tight font-sf-pro-display">Personnel Registry</h1>
                             <p className="text-stone-500">Comprehensive directory of all system personnel</p>
                         </div>
