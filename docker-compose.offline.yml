@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  # Local Database mimicking Supabase's Postgres
+  db:
+    image: postgres:15-alpine
+    container_name: fggrill-offline-db
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fggrill_secret}
+    ports:
+      - "5432:5432"
+    volumes:
+      - offline_db_data:/var/lib/postgresql/data
+      # The user will need to export their schema to this folder
+      - ./backend/supabase/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgREST provides the REST API that the Supabase JS client expects
+  postgrest:
+    image: postgrest/postgrest:v12.0.2
+    container_name: fggrill-offline-api
+    ports:
+      - "3000:3000"
+    environment:
+      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD:-fggrill_secret}@db:5432/postgres
+      PGRST_DB_SCHEMA: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET:-famous-gate-hotel-secret-key-2024}
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  offline_db_data:

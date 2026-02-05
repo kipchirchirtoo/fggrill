@@ -1,0 +1,356 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+    User, Clock, ShoppingCart,
+    Wallet, LogOut, Loader2, ShieldCheck,
+    ChefHat, Wine, Monitor, Wifi, WifiOff
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { fetchAPI } from '@/lib/api';
+import { IOSCard } from '@/components/ui/ios-card';
+import { cn } from '@/lib/utils';
+
+export default function MasterTerminalPage() {
+    const router = useRouter();
+    const [pin, setPin] = useState('');
+    const [isAuthenticating, setIsAuthenticating] = useState(false);
+    const [isOnline, setIsOnline] = useState(true);
+    const [terminalTime, setTerminalTime] = useState(new Date());
+    const [mounted, setMounted] = useState(false);
+    const [view, setView] = useState<'lockscreen' | 'pinpad'>('lockscreen');
+    const [selectedModule, setSelectedModule] = useState<'restaurant' | 'bar' | 'cashier' | null>(null);
+
+    // Update clock every second
+    useEffect(() => {
+        setMounted(true);
+        const timer = setInterval(() => setTerminalTime(new Date()), 1000);
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        setIsOnline(navigator.onLine);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
+
+    const handleNumberClick = (num: string) => {
+        if (pin.length < 4) {
+            setPin(prev => prev + num);
+        }
+    };
+
+    const handleDelete = () => {
+        if (pin.length > 1) { // Don't delete the prefix
+            setPin(prev => prev.slice(0, -1));
+        }
+    };
+
+    const handleClear = () => {
+        const prefix = selectedModule === 'restaurant' ? 'R' : selectedModule === 'bar' ? 'B' : 'C';
+        setPin(prefix);
+    };
+
+    const handleModuleSelect = (module: 'restaurant' | 'bar' | 'cashier') => {
+        setSelectedModule(module);
+        setPin(module === 'restaurant' ? 'R' : module === 'bar' ? 'B' : 'C');
+        setView('pinpad');
+    };
+
+    const handleLogin = async (overridePin?: string) => {
+        const finalPin = overridePin || pin;
+        if (finalPin.length < 4) {
+            toast.error('Please enter a full 4-character PIN');
+            return;
+        }
+
+        setIsAuthenticating(true);
+        try {
+            const response = await fetchAPI('/auth/pos-login', {
+                method: 'POST',
+                body: JSON.stringify({ pin: finalPin })
+            }) as any;
+
+            if (response.success) {
+                toast.success(`Welcome, ${response.data.user.first_name}!`);
+
+                if (selectedModule === 'cashier') {
+                    router.push('/dashboard/cashier');
+                } else if (selectedModule === 'bar') {
+                    router.push('/dashboard/pos-kitchen?tab=bar');
+                } else {
+                    router.push('/dashboard/pos-kitchen?tab=restaurant');
+                }
+            } else {
+                toast.error(response.message || 'Invalid PIN');
+                const prefix = selectedModule === 'restaurant' ? 'R' : selectedModule === 'bar' ? 'B' : 'C';
+                setPin(prefix);
+            }
+        } catch (error: any) {
+            toast.error(error.message || 'Authentication failed');
+            const prefix = selectedModule === 'restaurant' ? 'R' : selectedModule === 'bar' ? 'B' : 'C';
+            setPin(prefix);
+        } finally {
+            setIsAuthenticating(false);
+        }
+    };
+
+    // Auto-submit when length reaches 4
+    useEffect(() => {
+        if (pin.length === 4) {
+            handleLogin();
+        }
+    }, [pin]);
+
+    if (!mounted) return null;
+
+    return (
+        <div className="min-h-screen bg-[#F2F2F7] flex flex-col items-center justify-center p-4 font-sf-pro overflow-hidden">
+            {/* Top Status Bar */}
+            <div className="fixed top-0 w-full p-6 flex justify-between items-center bg-white/80 backdrop-blur-md border-b border-gray-200 z-50">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-stone-900 rounded-lg">
+                        <Monitor className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                        <h1 className="text-lg font-bold tracking-tight">FAMOUS GATE TERMINAL</h1>
+                        <p className="text-xs text-stone-500 font-medium">{isOnline ? 'ONLINE GATEWAY' : 'OFFLINE MODE ACTIVE'}</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-6">
+                    <div className="text-right">
+                        <p className="text-sm font-bold">{terminalTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                        <p className="text-[10px] text-stone-500 uppercase font-bold tracking-widest">
+                            {terminalTime.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+                        </p>
+                    </div>
+                    {isOnline ? (
+                        <Wifi className="h-5 w-5 text-emerald-500" />
+                    ) : (
+                        <WifiOff className="h-5 w-5 text-amber-500" />
+                    )}
+                </div>
+            </div>
+
+            {view === 'lockscreen' ? (
+                <div className="w-full max-w-6xl animate-in fade-in zoom-in duration-500">
+                    <div className="text-center mb-12 space-y-2">
+                        <h2 className="text-4xl font-black text-stone-900 tracking-tight">Select Module</h2>
+                        <p className="text-stone-500 font-medium text-lg">Touch an option below to begin your session</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 px-4">
+                        {/* Restaurant Card */}
+                        <div
+                            onClick={() => handleModuleSelect('restaurant')}
+                            className="group relative bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-xl shadow-gray-200/50 hover:shadow-2xl hover:scale-[1.02] transition-all cursor-pointer overflow-hidden"
+                        >
+                            <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                                <ChefHat className="h-32 w-32" />
+                            </div>
+                            <div className="h-16 w-16 rounded-3xl bg-orange-100 flex items-center justify-center mb-6 group-hover:bg-orange-500 transition-colors">
+                                <ChefHat className="h-8 w-8 text-orange-600 group-hover:text-white" />
+                            </div>
+                            <h3 className="text-2xl font-bold text-stone-900 mb-2">Restaurant</h3>
+                            <p className="text-stone-500 text-sm leading-relaxed mb-6">Access tables, orders and kitchen management.</p>
+                            <div className="flex items-center gap-2 text-orange-600 font-bold text-sm">
+                                <span>R-Series Access</span>
+                                <div className="h-1 w-1 rounded-full bg-orange-400" />
+                                <span className="opacity-60 text-[10px] uppercase tracking-widest">Requires PIN</span>
+                            </div>
+                        </div>
+
+                        {/* Bar Card */}
+                        <div
+                            onClick={() => handleModuleSelect('bar')}
+                            className="group relative bg-white rounded-[1.5rem] p-8 border border-gray-100 shadow-xl shadow-gray-200/50 hover:shadow-2xl hover:scale-[1.02] transition-all cursor-pointer overflow-hidden"
+                        >
+                            <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                                <Wine className="h-32 w-32" />
+                            </div>
+                            <div className="h-16 w-16 rounded-3xl bg-indigo-100 flex items-center justify-center mb-6 group-hover:bg-indigo-500 transition-colors">
+                                <Wine className="h-8 w-8 text-indigo-600 group-hover:text-white" />
+                            </div>
+                            <h3 className="text-2xl font-bold text-stone-900 mb-2">Bar & Lounge</h3>
+                            <p className="text-stone-500 text-sm leading-relaxed mb-6">Manage drinks, lounge tabs and inventory.</p>
+                            <div className="flex items-center gap-2 text-indigo-600 font-bold text-sm">
+                                <span>B-Series Access</span>
+                                <div className="h-1 w-1 rounded-full bg-indigo-400" />
+                                <span className="opacity-60 text-[10px] uppercase tracking-widest">Requires PIN</span>
+                            </div>
+                        </div>
+
+                        {/* Cashier Card */}
+                        <div
+                            onClick={() => handleModuleSelect('cashier')}
+                            className="group relative bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-xl shadow-gray-200/50 hover:shadow-2xl hover:scale-[1.02] transition-all cursor-pointer overflow-hidden"
+                        >
+                            <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                                <Wallet className="h-32 w-32" />
+                            </div>
+                            <div className="h-16 w-16 rounded-3xl bg-emerald-100 flex items-center justify-center mb-6 group-hover:bg-emerald-500 transition-colors">
+                                <Wallet className="h-8 w-8 text-emerald-600 group-hover:text-white" />
+                            </div>
+                            <h3 className="text-2xl font-bold text-stone-900 mb-2">Cashier</h3>
+                            <p className="text-stone-500 text-sm leading-relaxed mb-6">Process payments, receipts and daily reports.</p>
+                            <div className="flex items-center gap-2 text-emerald-600 font-bold text-sm">
+                                <span>C-Series Access</span>
+                                <div className="h-1 w-1 rounded-full bg-emerald-400" />
+                                <span className="opacity-60 text-[10px] uppercase tracking-widest">Requires PIN</span>
+                            </div>
+                        </div>
+
+                        {/* HR Terminal Card */}
+                        <div
+                            onClick={() => router.push('/dashboard/hr/terminal')}
+                            className="group relative bg-stone-900 rounded-[2.5rem] p-8 shadow-xl shadow-stone-900/20 hover:shadow-2xl hover:scale-[1.02] transition-all cursor-pointer overflow-hidden"
+                        >
+                            <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <Clock className="h-32 w-32 text-white" />
+                            </div>
+                            <div className="h-16 w-16 rounded-3xl bg-white/10 flex items-center justify-center mb-6 group-hover:bg-white transition-colors">
+                                <Clock className="h-8 w-8 text-white group-hover:text-stone-900" />
+                            </div>
+                            <h3 className="text-2xl font-bold text-white mb-2">Staff Terminal</h3>
+                            <p className="text-stone-400 text-sm leading-relaxed mb-6">Clock-in, clock-out and view your shifts.</p>
+                            <div className="flex items-center gap-2 text-white font-bold text-sm">
+                                <span>Open Access</span>
+                                <div className="h-1 w-1 rounded-full bg-stone-500" />
+                                <span className="opacity-60 text-[10px] uppercase tracking-widest text-emerald-400">No PIN Required</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-16 flex justify-center gap-4 text-[11px] text-stone-400 font-bold tracking-widest uppercase">
+                        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-full border border-gray-100 shadow-sm">
+                            <ShieldCheck className="h-3 w-3" />
+                            FAMOUS GATE SECURE SYSTEM
+                        </div>
+                        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-full border border-gray-100 shadow-sm">
+                            <Monitor className="h-3 w-3" />
+                            STANDALONE TERMINAL V1.0
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <div className="w-full max-w-4xl grid md:grid-cols-2 gap-12 items-center animate-in slide-in-from-bottom-8 duration-500">
+                    <div className="flex flex-col gap-6">
+                        <IOSCard className="p-10 bg-gradient-to-br from-stone-900 to-stone-800 text-white border-none space-y-6">
+                            <button
+                                onClick={() => setView('lockscreen')}
+                                className="flex items-center gap-2 text-stone-400 hover:text-white transition-colors mb-4 text-sm font-bold"
+                            >
+                                <LogOut className="h-4 w-4 rotate-180" />
+                                BACK TO SELECTION
+                            </button>
+
+                            <div className="h-16 w-16 bg-white/10 rounded-2xl flex items-center justify-center">
+                                {selectedModule === 'restaurant' ? (
+                                    <ChefHat className="h-8 w-8 text-orange-400" />
+                                ) : selectedModule === 'bar' ? (
+                                    <Wine className="h-8 w-8 text-indigo-400" />
+                                ) : (
+                                    <Wallet className="h-8 w-8 text-emerald-400" />
+                                )}
+                            </div>
+
+                            <div>
+                                <h2 className="text-3xl font-black tracking-tight capitalize">{selectedModule} Access</h2>
+                                <p className="text-stone-400 text-sm leading-relaxed mt-2 uppercase tracking-widest font-bold">
+                                    Enter {selectedModule === 'restaurant' ? 'Waiter' : selectedModule === 'bar' ? 'Bar' : 'Cashier'} PIN
+                                </p>
+                            </div>
+
+                            <div className="pt-6 border-t border-white/10 text-[10px] text-stone-500 font-bold tracking-[0.2em] uppercase">
+                                System logging active • Secure encryption enabled
+                            </div>
+                        </IOSCard>
+                    </div>
+
+                    {/* PIN Pad UI */}
+                    <div className="flex flex-col items-center gap-10">
+                        <div className="text-center space-y-6">
+                            <div className="flex gap-4 justify-center">
+                                {[0, 1, 2, 3].map((i) => (
+                                    <div
+                                        key={i}
+                                        className={cn(
+                                            "w-5 h-5 rounded-lg border-2 transition-all duration-300",
+                                            pin.length > i
+                                                ? (selectedModule === 'restaurant' ? "bg-orange-500 border-orange-500" : selectedModule === 'bar' ? "bg-indigo-500 border-indigo-500" : "bg-emerald-500 border-emerald-500") + " scale-110 shadow-lg"
+                                                : "bg-white border-gray-200"
+                                        )}
+                                    />
+                                ))}
+                            </div>
+                            <div className="h-8 flex items-center justify-center">
+                                <p className="text-3xl font-black tracking-[0.6em] text-stone-900">
+                                    {pin.padEnd(4, '_')}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-6 w-full max-w-[340px]">
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                                <button
+                                    key={num}
+                                    onClick={() => handleNumberClick(num.toString())}
+                                    className="h-20 w-20 rounded-3xl bg-white border border-gray-200 shadow-sm hover:bg-stone-50 hover:border-stone-300 active:scale-95 transition-all flex items-center justify-center text-3xl font-black text-stone-900"
+                                >
+                                    {num}
+                                </button>
+                            ))}
+                            <button
+                                onClick={handleClear}
+                                className="h-20 w-20 rounded-3xl bg-stone-100 flex items-center justify-center text-xs font-black text-stone-500 hover:bg-stone-200 active:scale-95 transition-all underline decoration-2 underline-offset-4"
+                            >
+                                RESET
+                            </button>
+                            <button
+                                onClick={() => handleNumberClick('0')}
+                                className="h-20 w-20 rounded-3xl bg-white border border-gray-200 shadow-sm hover:bg-stone-50 hover:border-stone-300 active:scale-95 transition-all flex items-center justify-center text-3xl font-black text-stone-900"
+                            >
+                                0
+                            </button>
+                            <button
+                                onClick={handleDelete}
+                                className="h-20 w-20 rounded-3xl bg-stone-100 flex items-center justify-center text-xs font-black text-stone-500 hover:bg-stone-200 active:scale-95 transition-all"
+                            >
+                                DELETE
+                            </button>
+                        </div>
+
+                        <div className="w-full max-w-[340px] pt-4">
+                            <button
+                                onClick={() => handleLogin()}
+                                disabled={pin.length < 4 || isAuthenticating}
+                                className={cn(
+                                    "w-full h-16 rounded-3xl text-white font-black text-lg flex items-center justify-center shadow-2xl active:scale-[0.98] transition-all disabled:opacity-50",
+                                    selectedModule === 'restaurant' ? "bg-orange-600 hover:bg-orange-700 shadow-orange-200" :
+                                        selectedModule === 'bar' ? "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200" :
+                                            "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200"
+                                )}
+                            >
+                                {isAuthenticating ? (
+                                    <Loader2 className="h-6 w-6 animate-spin" />
+                                ) : (
+                                    'AUTHENTICATE'
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <p className="fixed bottom-8 text-[11px] text-stone-400 font-bold tracking-widest uppercase">
+                Famous Gate Hotel Management System • Standalone v1.0
+            </p>
+        </div>
+    );
+}

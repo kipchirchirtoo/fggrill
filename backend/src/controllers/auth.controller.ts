@@ -558,12 +558,12 @@ export const posLogin = async (
       return;
     }
 
-    // Validate PIN format (RXXX or BXXX)
-    const pinRegex = /^[RB]\d{3}$/;
+    // Validate PIN format (RXXX, BXXX, or CXXX)
+    const pinRegex = /^[RBC]\d{3}$/;
     if (!pinRegex.test(pin)) {
       res.status(400).json({
         success: false,
-        message: 'Invalid PIN format. Waiters use RXXX, Bar staff use BXXX'
+        message: 'Invalid PIN format. Waiters use RXXX, Bar staff use BXXX, Cashiers use CXXX'
       });
       return;
     }
@@ -598,6 +598,10 @@ export const posLogin = async (
       'manager', 'branch_manager', 'super_admin', 'cashier'
     ];
 
+    const cashierRoles = [
+      'cashier', 'accountant', 'manager', 'branch_manager', 'super_admin'
+    ];
+
     if (prefix === 'R' && !restaurantRoles.includes(user.role)) {
       res.status(403).json({
         success: false,
@@ -610,6 +614,14 @@ export const posLogin = async (
       res.status(403).json({
         success: false,
         message: 'This PIN is for bar staff only'
+      });
+      return;
+    }
+
+    if (prefix === 'C' && !cashierRoles.includes(user.role)) {
+      res.status(403).json({
+        success: false,
+        message: 'This PIN is for cashier/finance staff only'
       });
       return;
     }

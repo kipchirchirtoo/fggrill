@@ -1,6 +1,78 @@
 {
+  "name": "fggrill-central",
+  "version": "1.0.0",
+  "description": "Famous Gate Hotel Management System",
+  "main": "electron/main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/allan-too/fggrill.git"
+  },
   "dependencies": {
     "dotenv": "^17.2.3",
+    "electron-is-dev": "^2.0.0",
+    "electron-updater": "^6.7.3",
     "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.fggrill.terminal",
+    "productName": "FG Grill Terminal",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": [
+          "dist/**/*",
+          "node_modules/**/*",
+          ".env.offline"
+        ]
+      },
+      {
+        "from": "frontend/.next/standalone",
+        "to": "frontend",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "frontend/public",
+        "to": "frontend/public"
+      },
+      {
+        "from": "frontend/.next/static",
+        "to": "frontend/.next/static"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable",
+        "zip"
+      ],
+      "icon": "frontend/public/fglogo.png",
+      "publish": [
+        {
+          "provider": "github",
+          "owner": "allan-too",
+          "repo": "fggrill"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "FG Grill Terminal"
+    }
   }
 }

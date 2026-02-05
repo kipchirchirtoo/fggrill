@@ -1,0 +1,50 @@
+{
+    "appId": "com.fggrill.terminal",
+    "productName": "FG Grill Terminal",
+    "directories": {
+        "output": "dist-electron"
+    },
+    "files": [
+        "electron/**/*"
+    ],
+    "extraResources": [
+        {
+            "from": "backend",
+            "to": "backend",
+            "filter": [
+                "dist/**/*",
+                "node_modules/**/*",
+                ".env.offline"
+            ]
+        },
+        {
+            "from": "frontend/.next/standalone",
+            "to": "frontend",
+            "filter": [
+                "**/*"
+            ]
+        },
+        {
+            "from": "frontend/public",
+            "to": "frontend/public"
+        },
+        {
+            "from": "frontend/.next/static",
+            "to": "frontend/.next/static"
+        }
+    ],
+    "win": {
+        "target": [
+            "portable",
+            "nsis"
+        ],
+        "icon": "public/icons/icon-512x512.png"
+    },
+    "nsis": {
+        "oneClick": false,
+        "allowToChangeInstallationDirectory": true,
+        "createDesktopShortcut": true,
+        "createStartMenuShortcut": true,
+        "shortcutName": "FG Grill Terminal"
+    }
+}

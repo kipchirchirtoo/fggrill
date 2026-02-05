@@ -47,11 +47,9 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Reports and temporary files
-*.pdf
-*.xlsx
-*.sql
-test_aggregation.ts
-test_verification.ts
-backend/test_aggregation.ts
-backend/test_verification.ts
+# Electron builds
+dist-electron/
+release/
+*.exe
+*.zip
+*.blockmap

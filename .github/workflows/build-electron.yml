@@ -1,0 +1,43 @@
+name: Build and Release Electron App
+
+on:
+  push:
+    branches:
+      - main  # Adjust this to your main branch name
+  workflow_dispatch: # Allow manual triggers
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install Root Dependencies
+        run: npm install
+
+      - name: Build Backend
+        run: |
+          cd backend
+          npm install
+          npm run build
+          cd ..
+
+      - name: Build Frontend
+        run: |
+          cd frontend
+          npm install
+          npm run build
+          cd ..
+
+      - name: Build and Publish Electron
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder build --win --publish always
