@@ -1,6 +1,7 @@
 {
   "name": "fggrill-central",
-  "version": "1.0.3",
+  "version": "1.0.4",
+  "author": "HIRALL",
   "description": "Famous Gate Hotel Management System",
   "main": "electron/main.js",
   "repository": {
@@ -20,6 +21,7 @@
   "build": {
     "appId": "com.fggrill.terminal",
     "productName": "FG Grill Terminal",
+    "publisherName": "HIRALL",
     "directories": {
       "output": "dist-electron"
     },

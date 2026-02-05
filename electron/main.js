@@ -1,8 +1,12 @@
-const { app, BrowserWindow, globalShortcut } = require('electron');
+const { app, BrowserWindow, globalShortcut, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const { spawn } = require('child_process');
 const isDev = !app.isPackaged;
+
+// Configure logging for auto-updater
+// autoUpdater.logger = require('electron-log');
+// autoUpdater.logger.transports.file.level = 'info';
 
 let mainWindow;
 let backendProcess;
@@ -15,7 +19,8 @@ function startBackend() {
 
     backendProcess = spawn('node', [backendPath], {
         env: { ...process.env, NODE_ENV: 'production', PORT: 5000 },
-        stdio: 'inherit'
+        stdio: 'ignore', // Hides terminal output
+        windowsHide: true // Explicitly hide the CMD window on Windows
     });
 
     backendProcess.on('error', (err) => {
@@ -31,7 +36,8 @@ function startFrontend() {
 
     frontendProcess = spawn('node', [frontendPath], {
         env: { ...process.env, NODE_ENV: 'production', PORT: 3000, HOSTNAME: 'localhost' },
-        stdio: 'inherit'
+        stdio: 'ignore', // Hides terminal output
+        windowsHide: true // Explicitly hide the CMD window on Windows
     });
 
     frontendProcess.on('error', (err) => {
@@ -75,6 +81,41 @@ function createWindow() {
         if (frontendProcess) frontendProcess.kill();
     });
 }
+
+// Auto-Updater Events
+autoUpdater.on('checking-for-update', () => {
+    console.log('Checking for update...');
+});
+
+autoUpdater.on('update-available', (info) => {
+    console.log('Update available.');
+});
+
+autoUpdater.on('update-not-available', (info) => {
+    console.log('Update not available.');
+});
+
+autoUpdater.on('error', (err) => {
+    console.error('Error in auto-updater: ' + err);
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+    let log_message = "Download speed: " + progressObj.bytesPerSecond;
+    log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
+    log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
+    console.log(log_message);
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+    dialog.showMessageBox({
+        type: 'info',
+        title: 'Update Ready',
+        message: 'A new version has been downloaded. The application will now restart to apply the update.',
+        buttons: ['Restart Now']
+    }).then(() => {
+        autoUpdater.quitAndInstall();
+    });
+});
 
 app.on('ready', () => {
     startBackend();
