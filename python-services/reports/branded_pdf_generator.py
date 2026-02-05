@@ -1641,14 +1641,14 @@ class BrandedPDFGenerator:
         
         for m in data.get('movements', [])[:30]:
             move_data.append([
-                m.get('date', '')[:10],
-                m.get('item_code', '')[:10],
-                m.get('item_name', '')[:20],
-                m.get('type', '')[:10],
+                (m.get('date') or '')[:10],
+                (m.get('item_code') or '')[:10],
+                (m.get('item_name') or '')[:20],
+                (m.get('type') or '')[:10],
                 self._format_number(m.get('quantity', 0)),
-                m.get('from', '')[:10],
-                m.get('to', '')[:10],
-                m.get('reference', '')[:10]
+                (m.get('from') or '')[:10],
+                (m.get('to') or '')[:10],
+                (m.get('reference') or '')[:10]
             ])
         
         if len(move_data) == 1:
