@@ -2765,6 +2765,8 @@ export const auditAPI = {
     if (filters?.end_date) params.append('end_date', filters.end_date);
     if (filters?.user) params.append('user', filters.user);
     if (filters?.action) params.append('action', filters.action);
+    if (filters?.entity_id) params.append('entity_id', filters.entity_id);
+    if (filters?.entity_type) params.append('entity_type', filters.entity_type);
 
     return fetchPythonAPI<any>(`/audit/trail?${params.toString()}`);
   },
