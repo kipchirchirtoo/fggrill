@@ -78,6 +78,16 @@ export default function MasterTerminalPage() {
             }) as any;
 
             if (response.success) {
+                // Store authentication session
+                if (response.data.session) {
+                    localStorage.setItem('supabase.auth.token', JSON.stringify({
+                        access_token: response.data.session.access_token,
+                        refresh_token: response.data.session.refresh_token,
+                        expires_at: response.data.session.expires_at,
+                        user: response.data.session.user
+                    }));
+                }
+
                 toast.success(`Welcome, ${response.data.user.first_name}!`);
 
                 if (selectedModule === 'cashier') {
@@ -118,6 +128,19 @@ export default function MasterTerminalPage() {
                     <div className="text-center mb-12 space-y-2">
                         <h2 className="text-4xl font-black text-stone-900 tracking-tight">Select Module</h2>
                         <p className="text-stone-500 font-medium text-lg">Touch an option below to begin your session</p>
+                    </div>
+
+                    {/* Admin Login Link */}
+                    <div className="absolute top-8 right-8">
+                        <a
+                            href="/login"
+                            className="px-4 py-2 text-sm font-medium text-stone-400 hover:text-stone-900 transition-colors flex items-center gap-2 group"
+                        >
+                            <span>Admin Login</span>
+                            <svg className="h-4 w-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                        </a>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 px-4">
