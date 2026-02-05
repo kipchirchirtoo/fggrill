@@ -112,31 +112,6 @@ export default function MasterTerminalPage() {
 
     return (
         <div className="min-h-screen bg-[#F2F2F7] flex flex-col items-center justify-center p-4 font-sf-pro overflow-hidden">
-            {/* Top Status Bar */}
-            <div className="fixed top-0 w-full p-6 flex justify-between items-center bg-white/80 backdrop-blur-md border-b border-gray-200 z-50">
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-stone-900 rounded-lg">
-                        <Monitor className="h-5 w-5 text-white" />
-                    </div>
-                    <div>
-                        <h1 className="text-lg font-bold tracking-tight">FAMOUS GATE TERMINAL</h1>
-                        <p className="text-xs text-stone-500 font-medium">{isOnline ? 'ONLINE GATEWAY' : 'OFFLINE MODE ACTIVE'}</p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-6">
-                    <div className="text-right">
-                        <p className="text-sm font-bold">{terminalTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                        <p className="text-[10px] text-stone-500 uppercase font-bold tracking-widest">
-                            {terminalTime.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
-                        </p>
-                    </div>
-                    {isOnline ? (
-                        <Wifi className="h-5 w-5 text-emerald-500" />
-                    ) : (
-                        <WifiOff className="h-5 w-5 text-amber-500" />
-                    )}
-                </div>
-            </div>
 
             {view === 'lockscreen' ? (
                 <div className="w-full max-w-6xl animate-in fade-in zoom-in duration-500">
