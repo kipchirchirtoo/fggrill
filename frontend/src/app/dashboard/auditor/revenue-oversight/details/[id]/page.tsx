@@ -14,6 +14,12 @@ import {
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 export default function AnomalyDetailPage() {
     const router = useRouter();
     const params = useParams();
@@ -23,6 +29,10 @@ export default function AnomalyDetailPage() {
 
     const [isLoading, setIsLoading] = useState(true);
     const [data, setData] = useState<any>(null);
+    const [isFlagModalOpen, setIsFlagModalOpen] = useState(false);
+    const [flagReason, setFlagReason] = useState('');
+    const [flagSeverity, setFlagSeverity] = useState('MEDIUM');
+    const [isSubmittingFlag, setIsSubmittingFlag] = useState(false);
 
     const fetchData = useCallback(async () => {
         if (!id || !type) return;
@@ -45,6 +55,45 @@ export default function AnomalyDetailPage() {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    const handleViewAuditTrail = () => {
+        router.push(`/dashboard/auditor/financial-verification/logs?entity_id=${id}&entity_type=${type}`);
+    };
+
+    const handleFlagSubmit = async () => {
+        if (!flagReason.trim()) {
+            toast.error('Please provide a reason for flagging this record');
+            return;
+        }
+
+        setIsSubmittingFlag(true);
+        try {
+            const payload = {
+                entity_type: type?.toUpperCase() || 'UNKNOWN',
+                entity_id: id,
+                description: flagReason,
+                severity: flagSeverity,
+                detected_at: new Date().toISOString(),
+                status: 'OPEN'
+            };
+
+            // Assuming createException exists or mapping to a generic issue creation
+            const res = await auditAPI.createException(payload);
+
+            if (res.success || res.ok) { // Adjust based on actual API response structure
+                toast.success('Record flagged for review successfully');
+                setIsFlagModalOpen(false);
+                setFlagReason('');
+            } else {
+                toast.error(res.message || 'Failed to flag record');
+            }
+        } catch (error) {
+            console.error('Error flagging record:', error);
+            toast.error('Failed to submit flag request');
+        } finally {
+            setIsSubmittingFlag(false);
+        }
+    };
 
     if (isLoading) {
         return (
@@ -153,7 +202,7 @@ export default function AnomalyDetailPage() {
                                             <div className="p-4 bg-stone-50 rounded-xl">
                                                 <p className="text-xs font-bold text-stone-400 uppercase mb-1">Severity</p>
                                                 <p className={`font-bold ${data.severity === 'HIGH' ? 'text-rose-600' :
-                                                        data.severity === 'MEDIUM' ? 'text-amber-600' : 'text-blue-600'
+                                                    data.severity === 'MEDIUM' ? 'text-amber-600' : 'text-blue-600'
                                                     }`}>{data.severity}</p>
                                             </div>
                                         </div>
@@ -270,10 +319,16 @@ export default function AnomalyDetailPage() {
                             <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm">
                                 <h3 className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-3">Audit Actions</h3>
                                 <div className="space-y-2">
-                                    <button className="w-full btn-secondary justify-start text-xs h-9">
+                                    <button
+                                        onClick={handleViewAuditTrail}
+                                        className="w-full btn-secondary justify-start text-xs h-9"
+                                    >
                                         <FileText className="h-3.5 w-3.5 mr-2" /> View Audit Trail
                                     </button>
-                                    <button className="w-full btn-secondary justify-start text-xs h-9 text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-100">
+                                    <button
+                                        onClick={() => setIsFlagModalOpen(true)}
+                                        className="w-full btn-secondary justify-start text-xs h-9 text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-100"
+                                    >
                                         <ShieldAlert className="h-3.5 w-3.5 mr-2" /> Flag for Review
                                     </button>
                                 </div>
@@ -281,6 +336,49 @@ export default function AnomalyDetailPage() {
                         </div>
                     </div>
                 </div>
+
+                {/* Flag for Review Dialog */}
+                <Dialog open={isFlagModalOpen} onOpenChange={setIsFlagModalOpen}>
+                    <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                            <DialogTitle>Flag for Audit Review</DialogTitle>
+                            <DialogDescription>
+                                Create an exception record for this transaction to alert management or require further investigation.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="severity">Severity Level</Label>
+                                <Select value={flagSeverity} onValueChange={setFlagSeverity}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select severity" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="LOW">Low - Minor Discrepancy</SelectItem>
+                                        <SelectItem value="MEDIUM">Medium - Review Required</SelectItem>
+                                        <SelectItem value="HIGH">High - Critical Issue</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="reason">Detailed Reason</Label>
+                                <Textarea
+                                    id="reason"
+                                    placeholder="Explain why this record is being flagged..."
+                                    className="col-span-3 min-h-[100px]"
+                                    value={flagReason}
+                                    onChange={(e) => setFlagReason(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setIsFlagModalOpen(false)}>Cancel</Button>
+                            <Button variant="destructive" onClick={handleFlagSubmit} disabled={isSubmittingFlag}>
+                                {isSubmittingFlag ? 'Submitting...' : 'Flag Record'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </DashboardLayout>
         </ProtectedRoute>
     );
