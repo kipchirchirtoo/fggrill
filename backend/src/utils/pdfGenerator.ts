@@ -62,9 +62,9 @@ export const generatePayslipPDF = (data: PayslipData): Promise<Buffer> => {
 
         // Company Information (Top Right)
         doc.fillColor(PRIMARY).fontSize(16).font('Helvetica-Bold').text('FAMOUS GATE HOTEL', 120, 40, { align: 'right' });
-        doc.fontSize(10).font('Helvetica').text(data.company_address || 'Kericho-Kisumu Highway, Kericho, Kenya', { align: 'right' });
-        doc.text(`Email: ${data.company_email || 'accounts@famousgate.co.ke'}`, { align: 'right' });
-        doc.text('Tel: +254 (0) 7XX XXX XXX', { align: 'right' });
+        doc.fontSize(10).font('Helvetica').text(data.company_address || 'Bomet, Kenya', { align: 'right' });
+        doc.text(`Email: ${data.company_email || 'famousgatesbmt@gmail.com'}`, { align: 'right' });
+        doc.text('Tel: 0706 782 828', { align: 'right' });
 
         doc.moveDown(1);
         doc.strokeColor(BORDER).lineWidth(1).moveTo(40, 110).lineTo(555, 110).stroke();

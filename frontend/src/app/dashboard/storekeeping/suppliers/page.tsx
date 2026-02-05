@@ -81,7 +81,7 @@ export default function SuppliersPage() {
     }
     try {
       const token = localStorage.getItem('token');
-      const url = selectedSupplier 
+      const url = selectedSupplier
         ? `${API_URL}/api/store/suppliers/${selectedSupplier.id}`
         : `${API_URL}/api/store/suppliers`;
       const res = await fetch(url, {
@@ -150,8 +150,8 @@ export default function SuppliersPage() {
     return null;
   };
 
-  const filteredSuppliers = suppliers.filter(s => 
-    !searchTerm || 
+  const filteredSuppliers = suppliers.filter(s =>
+    !searchTerm ||
     s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.code?.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -253,21 +253,21 @@ export default function SuppliersPage() {
             <DialogHeader><DialogTitle>{selectedSupplier ? 'Edit Supplier' : 'Add Supplier'}</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm font-medium">Name *</label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Company name" /></div>
-                <div><label className="text-sm font-medium">Code</label><Input value={form.code} onChange={e => setForm({...form, code: e.target.value.toUpperCase()})} placeholder="KBL" /></div>
+                <div><label className="text-sm font-medium">Name *</label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Company name" /></div>
+                <div><label className="text-sm font-medium">Code</label><Input value={form.code} onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })} placeholder="KBL" /></div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm font-medium">Contact Person</label><Input value={form.contact_person} onChange={e => setForm({...form, contact_person: e.target.value})} placeholder="Sales Rep" /></div>
-                <div><label className="text-sm font-medium">Phone</label><Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="+254..." /></div>
+                <div><label className="text-sm font-medium">Contact Person</label><Input value={form.contact_person} onChange={e => setForm({ ...form, contact_person: e.target.value })} placeholder="Sales Rep" /></div>
+                <div><label className="text-sm font-medium">Phone</label><Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="+254..." /></div>
               </div>
-              <div><label className="text-sm font-medium">Email</label><Input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} placeholder="supplier@company.com" /></div>
+              <div><label className="text-sm font-medium">Email</label><Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="supplier@company.com" /></div>
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm font-medium">City</label><Input value={form.city} onChange={e => setForm({...form, city: e.target.value})} placeholder="Nairobi" /></div>
-                <div><label className="text-sm font-medium">Address</label><Input value={form.address} onChange={e => setForm({...form, address: e.target.value})} placeholder="Street address" /></div>
+                <div><label className="text-sm font-medium">City</label><Input value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} placeholder="Bomet" /></div>
+                <div><label className="text-sm font-medium">Address</label><Input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Street address" /></div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm font-medium">Payment Terms</label><select value={form.payment_terms} onChange={e => setForm({...form, payment_terms: e.target.value})} className="w-full px-3 py-2 border rounded-ios-lg">{PAYMENT_TERMS.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                <div><label className="text-sm font-medium">Status</label><select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full px-3 py-2 border rounded-ios-lg">{STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                <div><label className="text-sm font-medium">Payment Terms</label><select value={form.payment_terms} onChange={e => setForm({ ...form, payment_terms: e.target.value })} className="w-full px-3 py-2 border rounded-ios-lg">{PAYMENT_TERMS.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                <div><label className="text-sm font-medium">Status</label><select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} className="w-full px-3 py-2 border rounded-ios-lg">{STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
               </div>
               <div className="flex justify-end gap-3 pt-4"><IOSButton variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</IOSButton><IOSButton onClick={handleSave} leftIcon={<Save />}>Save</IOSButton></div>
             </div>

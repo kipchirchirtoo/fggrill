@@ -249,10 +249,10 @@ export default function HomePage() {
   ];
 
   const branches = [
-    { name: 'Famous Gate Bomet', location: 'Bomet Town', phone: '+254 700 000 001' },
-    { name: 'Famous Gate Kericho', location: 'Kericho Town', phone: '+254 700 000 002' },
-    { name: 'Famous Gate Kapsoit', location: 'Kapsoit Center', phone: '+254 700 000 003' },
-    { name: 'Famous Gate Litein', location: 'Litein Town', phone: '+254 700 000 004' },
+    { name: 'Famous Gates Hotels (HQ)', location: 'Bomet, Kenya', phone: '0706 782 828' },
+    { name: 'Famous Gates Kericho', location: 'Kericho Town', phone: '+254 700 000 002' },
+    { name: 'Famous Gates Kapsoit', location: 'Kapsoit Center', phone: '+254 700 000 003' },
+    { name: 'Famous Gates Litein', location: 'Litein Town', phone: '+254 700 000 004' },
   ];
 
   const formatPrice = (price: number) => {
@@ -278,8 +278,8 @@ export default function HomePage() {
           <div className="flex items-center gap-3">
             <Image src="/fglogo.png" alt="Logo" width={48} height={48} className="object-contain" priority />
             <div>
-              <span className="font-semibold text-stone-900 text-lg">Famous Gate</span>
-              <span className="text-xs text-amber-600 block -mt-1 font-medium">HOTEL</span>
+              <span className="font-semibold text-stone-900 text-lg">Famous Gates</span>
+              <span className="text-xs text-amber-600 block -mt-1 font-medium">HOTELS</span>
             </div>
           </div>
 
@@ -303,7 +303,7 @@ export default function HomePage() {
       <section className="relative h-screen" style={{ position: 'relative' }}>
         <Image
           src={galleryImages[0].src}
-          alt="Famous Gate Hotel"
+          alt="Famous Gates Hotels"
           fill
           priority
           className="object-cover"
@@ -320,7 +320,7 @@ export default function HomePage() {
               Welcome to
             </p>
             <h1 className="text-5xl md:text-7xl font-dm-serif text-white mb-4 tracking-tight">
-              Famous Gate <span className="italic">Hotel</span>
+              Famous Gates <span className="italic">Hotels</span>
             </h1>
             <p className="text-xl text-white/80 max-w-xl mx-auto mb-8">
               Experience unmatched hospitality and comfort across our 6 branches in Kenya
@@ -577,8 +577,8 @@ export default function HomePage() {
                 A Place Where <br /><span className="italic">Comfort Meets Excellence</span>
               </h2>
               <p className="text-stone-600 text-lg leading-relaxed mb-8">
-                Famous Gate Hotel offers an exceptional blend of comfort, convenience, and warm Kenyan hospitality.
-                With 6 branches strategically located across the region, we're always close to you.
+                Famous Gates Hotels offer an exceptional blend of comfort, convenience, and warm Kenyan hospitality.
+                With our main headquarters in Bomet, we're always close to you.
               </p>
 
               <div className="grid grid-cols-2 gap-6">
@@ -724,7 +724,7 @@ export default function HomePage() {
                     Featured
                   </span>
                   <h3 className="text-3xl font-dm-serif text-white mb-2">{galleryImages[0].title}</h3>
-                  <p className="text-white/70 text-sm">Experience the beauty of Famous Gate Hotel</p>
+                  <p className="text-white/70 text-sm">Experience the beauty of Famous Gates Hotels</p>
                 </motion.div>
                 {/* Hover overlay */}
                 <div className="absolute inset-0 bg-amber-500/0 group-hover:bg-amber-500/10 transition-colors duration-500" />
@@ -943,7 +943,7 @@ export default function HomePage() {
             Ready for an <span className="italic text-amber-400">Unforgettable</span> Stay?
           </h2>
           <p className="text-stone-400 text-lg mb-8 max-w-2xl mx-auto">
-            Book now and experience the warmth of Kenyan hospitality at Famous Gate Hotel
+            Book now and experience the warmth of Kenyan hospitality at Famous Gates Hotels
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <button
@@ -970,7 +970,7 @@ export default function HomePage() {
             <div className="flex flex-col items-center md:items-start gap-4">
               <div className="flex items-center gap-3">
                 <Image src="/fglogo.png" alt="Logo" width={36} height={36} className="object-contain" />
-                <span className="font-semibold text-white">Famous Gate Hotel</span>
+                <span className="font-semibold text-white">Famous Gates Hotels</span>
               </div>
               <p className="text-stone-500 text-sm max-w-xs text-center md:text-left">
                 Experience the finest hospitality in Kericho. Your comfort is our priority.
@@ -985,7 +985,7 @@ export default function HomePage() {
               </div>
               <div className="text-center md:text-right">
                 <p className="text-stone-500 text-xs mb-1">
-                  © 2024 Famous Gate Hotel. All rights reserved.
+                  © 2024 Famous Gates Hotels. All rights reserved.
                 </p>
 
               </div>

@@ -99,7 +99,7 @@ export default function LoginPage() {
             />
           </div>
           <h1 className="text-2xl font-semibold text-stone-900 tracking-tight mb-2">
-            Famous Gate Hotel
+            Famous Gates Hotels
           </h1>
           <p className="text-stone-500 text-sm">
             Select your preferred login method
@@ -304,7 +304,7 @@ export default function LoginPage() {
         {/* System Info */}
         <div className="mt-8 text-center space-y-2">
           <p className="text-xs text-stone-400">
-            &copy; {new Date().getFullYear()} Famous Gate Hotel. All rights reserved.
+            &copy; {new Date().getFullYear()} Famous Gates Hotels. All rights reserved.
           </p>
 
         </div>

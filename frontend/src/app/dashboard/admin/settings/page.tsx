@@ -16,8 +16,8 @@ export default function AdminSettingsPage() {
   const { user } = useAuth();
   const [settings, setSettings] = useState({
     hotelName: 'Famous Gate Hotel',
-    email: 'info@famousgate.com',
-    phone: '+254 700 000 000',
+    email: 'famousgatesbmt@gmail.com',
+    phone: '0706 782 828',
     website: 'www.famousgate.com',
     address: 'Bomet, Kenya',
     currency: 'KES',

@@ -102,7 +102,7 @@ export function DashboardLayout(props: DashboardLayoutProps) {
                           />
                         </div>
                         <div>
-                          <h1 className="text-[15px] font-semibold text-stone-900">Famous Gate</h1>
+                          <h1 className="text-[15px] font-semibold text-stone-900">Famous Gates</h1>
                           <p className="text-[11px] text-stone-500">Management System</p>
                         </div>
                       </div>
@@ -177,7 +177,7 @@ export function DashboardLayout(props: DashboardLayoutProps) {
                             style={{ objectPosition: 'center 30%', width: 'auto', height: 'auto' }}
                           />
                         </div>
-                        <span className="text-[15px] font-semibold text-stone-900">Famous Gate</span>
+                        <span className="text-[15px] font-semibold text-stone-900">Famous Gates</span>
                       </div>
                       <button
                         onClick={() => setMobileMenuOpen(false)}

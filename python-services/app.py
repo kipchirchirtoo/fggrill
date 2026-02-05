@@ -102,7 +102,7 @@ def health_check():
     """Health check endpoint"""
     return jsonify({
         'status': 'OK',
-        'service': 'Famous Gate Hotel - Report Generation Service',
+        'service': 'Famous Gate Restaurant - Management Services',
         'version': '2.0.0',
         'features': ['branded_reports', 'automated_scheduling', 'real_database'],
         'timestamp': datetime.now().isoformat()
@@ -1474,6 +1474,6 @@ if __name__ == '__main__':
     start_email_scheduler()
     logger.info("Email automation scheduler started")
     
-    logger.info(f"Starting Famous Gate Unified Python Service on port {port}")
+    logger.info(f"Starting Famous Gates Hotels Unified Python Service on port {port}")
     logger.info("Services: Reports, Finance, Accounting, Receipts, Email, Templates, Barcodes, Portals")
     app.run(host='0.0.0.0', port=port, debug=os.getenv('FLASK_ENV') == 'development')

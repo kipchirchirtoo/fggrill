@@ -144,10 +144,10 @@ class BrandedPDFGenerator:
         
         # Company info
         company_info = [
-            Paragraph("<b>FAMOUS GATE HOTEL & LOUNGE</b>", self.styles['Normal']),
-            Paragraph("Kericho-Kisumu Highway", self.styles['SmallText']),
-            Paragraph("Kericho, Kenya", self.styles['SmallText']),
-            Paragraph("Tel: +254 700 000 000 | Email: accounts@famousgate.co.ke", self.styles['SmallText']),
+            Paragraph("<b>FAMOUS GATES HOTELS</b>", self.styles['Normal']),
+            Paragraph("Bomet, Kenya", self.styles['SmallText']),
+            Paragraph("Main Headquarters", self.styles['SmallText']),
+            Paragraph("Tel: 0706 782 828 | Email: famousgatesbmt@gmail.com", self.styles['SmallText']),
         ]
         
         # Date info
@@ -204,7 +204,7 @@ class BrandedPDFGenerator:
         canvas.setFillColor(FG_GRAY)
         
         # Footer text
-        footer_text = f"Famous Gate Hotel & Lounge | Confidential | Generated: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        footer_text = f"Famous Gates Hotels | Confidential | Generated: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
         canvas.drawCentredString(A4[0]/2, 0.4*inch, footer_text)
         
         # Page number
@@ -420,13 +420,13 @@ class BrandedPDFGenerator:
         # In the image, the logo is on the left and PAYSLIP is on the right
         logo = self._get_logo(width=0.8*inch)
         
-        company_name = data.get('company', 'FAMOUS GATE HOTEL')
-        company_email = data.get('company_email', 'accounts@famousgate.co.ke')
-        company_address = data.get('company_address', 'Kericho-Kisumu Highway, Kericho, Kenya')
+        company_name = data.get('company', 'Famous Gates Hotels')
+        company_email = data.get('company_email', 'famousgatesbmt@gmail.com')
+        company_address = data.get('company_address', 'Bomet, Kenya')
         
         header_data = [
             [logo, [
-                Paragraph(f"<font size='10' color='{FG_GRAY}'>SmithBrand</font>", self.styles['Normal']),
+                Paragraph(f"<font size='10' color='{FG_GRAY}'>Famous Gates</font>", self.styles['Normal']),
                 Paragraph("<font size='18' face='Helvetica-Bold'>PAYSLIP</font>", self.styles['Normal']),
                 Paragraph(f"<font size='8' color='{FG_GRAY}'>{company_email} | {company_address}</font>", self.styles['Normal'])
             ]]
@@ -583,13 +583,13 @@ class BrandedPDFGenerator:
         if branch == 'All Branches' and filters.get('branch_id'):
             # Map branch ID to actual branch name
             branch_names = {
-                1: 'Famous Gate Bomet (Central)',
-                2: 'Famous Gate Bomet Town', 
-                3: 'Famous Gate Kericho',
-                4: 'Famous Gate Kapsoit',
-                5: 'Famous Gate Mogogosiek',
-                6: 'Famous Gate Litein',
-                7: 'Famous Gate Grill'
+                1: 'Famous Gates Hotels (HQ)',
+                2: 'Famous Gates Bomet Town', 
+                3: 'Famous Gates Kericho',
+                4: 'Famous Gates Kapsoit',
+                5: 'Famous Gates Mogogosiek',
+                6: 'Famous Gates Litein',
+                7: 'Famous Gates Grill'
             }
             branch_id = int(filters.get('branch_id', 0))
             branch = branch_names.get(branch_id, f'Branch {branch_id}')

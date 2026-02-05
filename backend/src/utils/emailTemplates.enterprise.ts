@@ -25,7 +25,7 @@ export const enterpriseEmailTemplates = {
     </head>
     <body>
       <div class="wrapper">
-        <div class="header"><div class="logo">Famous Gate Hotel</div></div>
+        <div class="header"><div class="logo">Famous Gates Hotels</div></div>
         <div class="content">
           <h1>Booking Confirmed</h1>
           <p>Dear ${bookingDetails.guest_name || 'Guest'}, your stay is confirmed.</p>
@@ -35,7 +35,7 @@ export const enterpriseEmailTemplates = {
             <p>Check-out: ${new Date(bookingDetails.check_out).toLocaleDateString()}</p>
           </div>
         </div>
-        <div class="footer">&copy; ${new Date().getFullYear()} Famous Gate Hotel</div>
+        <div class="footer">&copy; ${new Date().getFullYear()} Famous Gates Hotels</div>
       </div>
     </body>
     </html>
@@ -58,12 +58,12 @@ export const enterpriseEmailTemplates = {
     </head>
     <body>
       <div class="wrapper">
-        <div class="header"><div class="logo">Famous Gate Hotel</div></div>
+        <div class="header"><div class="logo">Famous Gates Hotels</div></div>
         <div class="content">
           <h2>Payslip Available</h2>
           <p>Dear ${staffName}, your payslip for ${month} ${year} is attached.</p>
         </div>
-        <div class="footer">&copy; ${new Date().getFullYear()} Famous Gate Hotel</div>
+        <div class="footer">&copy; ${new Date().getFullYear()} Famous Gates Hotels</div>
       </div>
     </body>
     </html>

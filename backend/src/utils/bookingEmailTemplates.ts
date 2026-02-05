@@ -5,7 +5,7 @@ export const bookingEmailSequence = {
     <html>
     <head>
       <meta charset="utf-8">
-      <title>Your Stay is Almost Here! - FG Grill Hotel</title>
+      <title>Your Stay is Almost Here! - Famous Gates Hotels</title>
       <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
@@ -22,7 +22,7 @@ export const bookingEmailSequence = {
         </div>
         <div class="content">
           <p>Dear ${bookingDetails.guest_name},</p>
-          <p>We're excited to welcome you to FG Grill Hotel in just 7 days!</p>
+          <p>We're excited to welcome you to Famous Gates Hotels in just 7 days!</p>
           
           <div class="section">
             <h3>📅 Your Reservation Reminder</h3>
@@ -56,7 +56,7 @@ export const bookingEmailSequence = {
     <html>
     <head>
       <meta charset="utf-8">
-      <title>Check-in Reminder - FG Grill Hotel</title>
+      <title>Check-in Reminder - Famous Gates Hotels</title>
     </head>
     <body>
       <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
@@ -66,7 +66,7 @@ export const bookingEmailSequence = {
         </div>
         <div style="padding: 20px;">
           <p>Dear ${bookingDetails.guest_name},</p>
-          <p>Your stay at FG Grill Hotel begins in 48 hours!</p>
+          <p>Your stay at Famous Gates Hotels begins in 48 hours!</p>
           
           <div style="background: #f0f8ff; padding: 15px; border-radius: 5px; margin: 15px 0;">
             <h3>📋 What to Bring</h3>
@@ -97,7 +97,7 @@ export const bookingEmailSequence = {
         </div>
         <div style="padding: 20px;">
           <p>Dear ${bookingDetails.guest_name},</p>
-          <p>Welcome to your check-in day! We're ready for you at FG Grill Hotel.</p>
+          <p>Welcome to your check-in day! We're ready for you at Famous Gates Hotels.</p>
           
           <div style="background: #e8f5e8; padding: 15px; border-radius: 5px; text-align: center;">
             <h3>✅ Your Room is Being Prepared</h3>
@@ -170,7 +170,7 @@ export const bookingEmailSequence = {
         </div>
         <div style="padding: 20px;">
           <p>Dear ${bookingDetails.guest_name},</p>
-          <p>Thank you for choosing FG Grill Hotel! We hope you had a wonderful stay.</p>
+          <p>Thank you for choosing Famous Gates Hotels! We hope you had a wonderful stay.</p>
           
           <div style="text-align: center; margin: 20px 0;">
             <a href="#" style="background: #3C3C43; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin: 5px;">Leave a Review</a>
@@ -193,7 +193,7 @@ export const bookingEmailSequence = {
         </div>
         <div style="padding: 20px;">
           <p>Dear ${bookingDetails.guest_name},</p>
-          <p>We'd love to hear about your recent stay at FG Grill Hotel!</p>
+          <p>We'd love to hear about your recent stay at Famous Gates Hotels!</p>
           
           <div style="text-align: center; margin: 20px 0;">
             <a href="#" style="background: #3C3C43; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px;">Leave Review</a>

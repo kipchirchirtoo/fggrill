@@ -20,14 +20,14 @@ import base64
 
 
 class ReceiptGenerator:
-    """Generates thermal-style receipts (Fish & Chips Restaurant style)"""
+    """Generates thermal-style receipts (Famous Gates Hotels style)"""
     
     def __init__(self, logo_path: str = None):
         self.logo_path = logo_path or os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'public', 'fglogo.png')
-        self.company_name = "FAMOUS GATE HOTEL"
-        self.company_address = "Kericho, Kenya"
-        self.company_phone = "+254 700 000 000"
-        self.company_email = "accounts@famousgate.co.ke"
+        self.company_name = "Famous Gates Hotels"
+        self.company_address = "Bomet, Kenya"
+        self.company_phone = "0706 782 828"
+        self.company_email = "famousgatesbmt@gmail.com"
         
     def generate_receipt(self, receipt_data: Dict[str, Any], vat_inclusive: bool = True) -> bytes:
         """Generate a thermal-style receipt PDF"""
@@ -276,11 +276,11 @@ class InvoiceGenerator:
     
     def __init__(self, logo_path: str = None):
         self.logo_path = logo_path or os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'public', 'fglogo.png')
-        self.company_name = "Famous Gate Hotel"
-        self.company_address = "Kericho, Kenya"
-        self.company_phone = "+254 700 000 000"
-        self.company_email = "accounts@famousgate.co.ke"
-        self.company_website = "www.famousgate.co.ke"
+        self.company_name = "Famous Gates Hotels"
+        self.company_address = "Bomet, Kenya"
+        self.company_phone = "0706 782 828"
+        self.company_email = "famousgatesbmt@gmail.com"
+        self.company_website = "www.famousgate.com"
         
     def generate_invoice(self, invoice_data: Dict[str, Any]) -> bytes:
         """Generate a professional invoice PDF"""
@@ -456,7 +456,7 @@ class InvoiceGenerator:
         payment_info = f"""
         <b>Payment Information:</b><br/>
         Bank: Kenya Commercial Bank<br/>
-        Account: Famous Gate Hotel Ltd<br/>
+        Account: Famous Gates Hotels Ltd<br/>
         Account No: 1234567890<br/>
         M-Pesa Paybill: 123456
         """
@@ -495,8 +495,8 @@ class InventoryReceiptGenerator:
     
     def __init__(self, logo_path: str = None):
         self.logo_path = logo_path or os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'public', 'fglogo.png')
-        self.company_name = "Famous Gate Hotel"
-        self.company_address = "Kericho, Kenya"
+        self.company_name = "Famous Gates Hotels"
+        self.company_address = "Bomet, Kenya"
         
     def generate_inventory_receipt(self, receipt_data: Dict[str, Any]) -> bytes:
         """Generate an inventory receipt PDF"""

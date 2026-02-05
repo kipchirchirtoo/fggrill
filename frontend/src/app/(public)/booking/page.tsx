@@ -35,7 +35,7 @@ function BookingContent() {
     idNumber: '',
     specialRequests: ''
   });
-  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'paystack' | 'card'>('mpesa');
+  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'paystack' | 'pay_at_hotel'>('mpesa');
   const [isProcessing, setIsProcessing] = useState(false);
   const [roomDetails, setRoomDetails] = useState<any>(null);
   const [selectedRoomTypeId, setSelectedRoomTypeId] = useState<string | null>(null);
@@ -265,7 +265,7 @@ function BookingContent() {
             <div className="flex items-center gap-3">
               <Image
                 src="/fglogo.png"
-                alt="Famous Gate Hotel"
+                alt="Famous Gates Hotels"
                 width={36}
                 height={36}
                 className="object-contain"
@@ -273,7 +273,7 @@ function BookingContent() {
               />
               <div>
                 <h1 className="text-lg font-semibold text-stone-900">Complete Booking</h1>
-                <p className="text-xs text-stone-500">Famous Gate Hotel</p>
+                <p className="text-xs text-stone-500">Famous Gates Hotels</p>
               </div>
             </div>
           </div>
@@ -418,7 +418,7 @@ function BookingContent() {
                   {[
                     { id: 'mpesa', label: 'M-Pesa', desc: 'Mobile money' },
                     { id: 'paystack', label: 'Paystack', desc: 'Card payment' },
-                    { id: 'card', label: 'Pay at Hotel', desc: 'Cash or card' }
+                    { id: 'pay_at_hotel', label: 'Pay at Hotel', desc: 'Cash or card' }
                   ].map((method) => (
                     <button
                       key={method.id}

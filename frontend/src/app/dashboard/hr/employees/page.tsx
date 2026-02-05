@@ -530,7 +530,7 @@ export default function HREmployeesPage() {
                                                     value={formData.email}
                                                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                                     className={`border-none p-0 h-auto focus-visible:ring-0 text-lg ${formErrors.email ? 'text-red-500' : ''}`}
-                                                    placeholder="staff@fggrill.com"
+                                                    placeholder="famousgatesbmt@gmail.com"
                                                 />
                                             </div>
                                             <div className="p-4">
@@ -634,7 +634,7 @@ export default function HREmployeesPage() {
                                                     value={formData.address}
                                                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                                                     className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
-                                                    placeholder="Nairobi, Kenya"
+                                                    placeholder="Bomet, Kenya"
                                                 />
                                             </div>
                                             <div className="p-4">
@@ -643,7 +643,7 @@ export default function HREmployeesPage() {
                                                     value={formData.phone}
                                                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                                                     className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
-                                                    placeholder="+254..."
+                                                    placeholder="0706 782 828"
                                                 />
                                             </div>
                                         </div>

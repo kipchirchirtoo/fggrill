@@ -165,7 +165,7 @@ function GuestFormModal({
             <Input
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              placeholder="+254 700 000 000"
+              placeholder="0706 782 828"
             />
           </div>
           <div>
@@ -227,7 +227,7 @@ function GuestFormModal({
             <Input
               value={formData.city}
               onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-              placeholder="Nairobi"
+              placeholder="Bomet"
             />
           </div>
           <div>

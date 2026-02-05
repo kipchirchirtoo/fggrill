@@ -6,7 +6,7 @@ export const emailTemplates = {
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Booking Confirmation - Famous Gate Hotel</title>
+      <title>Booking Confirmation - Famous Gates Hotels</title>
       <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
@@ -22,12 +22,12 @@ export const emailTemplates = {
     <body>
       <div class="container">
         <div class="header">
-          <h1>Famous Gate Hotel</h1>
+          <h1>Famous Gates Hotels</h1>
           <h2>Booking Confirmation</h2>
         </div>
         <div class="content">
           <p>Dear ${bookingDetails.guest_name || 'Guest'},</p>
-          <p>Thank you for choosing Famous Gate Hotel! Your booking has been confirmed.</p>
+          <p>Thank you for choosing Famous Gates Hotels! Your booking has been confirmed.</p>
           
           <div class="booking-details">
             <h3>🎉 Booking Confirmed!</h3>
@@ -108,23 +108,23 @@ export const emailTemplates = {
             <table>
               <tr>
                 <td class="highlight">Hotel Name:</td>
-                <td>Famous Gate Hotel</td>
+                <td>Famous Gates Hotels</td>
               </tr>
               <tr>
                 <td class="highlight">Address:</td>
-                <td>123 Hotel Street, Nairobi, Kenya</td>
+                <td>Bomet, Kenya</td>
               </tr>
               <tr>
                 <td class="highlight">Phone:</td>
-                <td>+254 XXX XXX XXX</td>
+                <td>0706 782 828</td>
               </tr>
               <tr>
                 <td class="highlight">Email:</td>
-                <td>info@famousgatehotel.com</td>
+                <td>famousgatesbmt@gmail.com</td>
               </tr>
               <tr>
                 <td class="highlight">Website:</td>
-                <td><a href="#">www.famousgatehotel.com</a></td>
+                <td><a href="#">www.famousgates.hirall.com</a></td>
               </tr>
             </table>
           </div>
@@ -175,13 +175,13 @@ export const emailTemplates = {
 
           <div style="background: linear-gradient(135deg, #3C3C43 0%, #000000 100%); color: white; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
             <h2 style="margin: 0; color: white;">🌟 We're Excited to Welcome You! 🌟</h2>
-            <p style="margin: 10px 0; font-size: 16px;">Thank you for choosing Famous Gate Hotel. We're committed to making your stay exceptional!</p>
+            <p style="margin: 10px 0; font-size: 16px;">Thank you for choosing Famous Gates Hotels. We're committed to making your stay exceptional!</p>
           </div>
         </div>
         <div class="footer">
-          <p>Famous Gate Hotel<br>
-          Email: info@famousgatehotel.com<br>
-          Phone: +254 XXX XXX XXX</p>
+          <p>Famous Gates Hotels<br>
+          Email: famousgatesbmt@gmail.com<br>
+          Phone: 0706 782 828</p>
         </div>
       </div>
     </body>
@@ -195,7 +195,7 @@ export const emailTemplates = {
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Welcome to Famous Gate Hotel</title>
+      <title>Welcome to Famous Gates Hotels</title>
       <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
@@ -210,11 +210,11 @@ export const emailTemplates = {
     <body>
       <div class="container">
         <div class="header">
-          <h1>Welcome to Famous Gate Hotel!</h1>
+          <h1>Welcome to Famous Gates Hotels!</h1>
         </div>
         <div class="content">
           <p>Dear ${name},</p>
-          <p>Welcome to the Famous Gate Hotel team! We're excited to have you on board.</p>
+          <p>Welcome to the Famous Gates Hotels team! We're excited to have you on board.</p>
           
           <div class="features">
             <h3>You now have access to:</h3>
@@ -232,7 +232,7 @@ export const emailTemplates = {
           <p>We look forward to working with you!</p>
         </div>
         <div class="footer">
-          <p>Famous Gate Hotel Management<br>
+          <p>Famous Gates Hotels Management<br>
           HR Department</p>
         </div>
       </div>
@@ -247,7 +247,7 @@ export const emailTemplates = {
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Password Reset - Famous Gate Hotel</title>
+      <title>Password Reset - Famous Gates Hotels</title>
       <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
@@ -272,7 +272,7 @@ export const emailTemplates = {
           <h1>Password Reset Request</h1>
         </div>
         <div class="content">
-          <p>You are receiving this email because you (or someone else) has requested to reset your password for your Famous Gate Hotel account.</p>
+          <p>You are receiving this email because you (or someone else) has requested to reset your password for your Famous Gates Hotels account.</p>
           
           <p>Please click the button below to reset your password:</p>
           
@@ -290,7 +290,7 @@ export const emailTemplates = {
           <p style="word-break: break-all; color: #666;">${resetUrl}</p>
         </div>
         <div class="footer">
-          <p>Famous Gate Hotel Security Team</p>
+          <p>Famous Gates Hotels Security Team</p>
         </div>
       </div>
     </body>
@@ -304,7 +304,7 @@ export const emailTemplates = {
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Maintenance Alert - Famous Gate Hotel</title>
+      <title>Maintenance Alert - Famous Gates Hotels</title>
       <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
@@ -364,7 +364,7 @@ export const emailTemplates = {
           <p>Please log into the maintenance portal to view full details and update the task status.</p>
         </div>
         <div class="footer">
-          <p>Famous Gate Hotel Maintenance Department</p>
+          <p>Famous Gates Hotels Maintenance Department</p>
         </div>
       </div>
     </body>
@@ -378,7 +378,7 @@ export const emailTemplates = {
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Low Stock Alert - Famous Gate Hotel</title>
+      <title>Low Stock Alert - Famous Gates Hotels</title>
       <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
@@ -432,7 +432,7 @@ export const emailTemplates = {
           <p><strong>Action Required:</strong> Please create a purchase order for this item as soon as possible to avoid stockouts.</p>
         </div>
         <div class="footer">
-          <p>Famous Gate Hotel Inventory Management</p>
+          <p>Famous Gates Hotels Inventory Management</p>
         </div>
       </div>
     </body>

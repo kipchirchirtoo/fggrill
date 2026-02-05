@@ -441,7 +441,7 @@ export const processPayrollPayment = async (
         ...payrollRecord,
         month: monthName,
         company: 'Famous Gate Hotel',
-        company_email: 'accounts@famousgate.co.ke'
+        company_email: 'famousgatesbmt@gmail.com'
       });
       await emailService.sendPayslipEmail(payrollRecord.employee, monthName, payrollRecord.year, pdfBuffer);
       logger.info(`Payslip email sent to ${payrollRecord.employee.user.email} after payment`);
@@ -524,8 +524,8 @@ export const generatePayslip = async (
       const pdfBuffer = await generatePayslipPDF({
         ...record,
         company: 'Famous Gate Hotel',
-        company_email: 'accounts@famousgate.co.ke',
-        company_address: 'Kericho-Kisumu Highway, Kericho, Kenya'
+        company_email: 'famousgatesbmt@gmail.com',
+        company_address: 'Bomet, Kenya'
       });
 
       res.setHeader('Content-Type', 'application/pdf');

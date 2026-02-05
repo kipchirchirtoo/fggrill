@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Search, Calendar, MapPin, Phone, Mail, Edit, X, 
+  Search, Calendar, MapPin, Phone, Mail, Edit, X,
   CheckCircle, Clock, AlertCircle, CreditCard, Download
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -38,11 +38,11 @@ export function GuestPortal({ isOpen, onClose }: GuestPortalProps) {
   const [step, setStep] = useState<'search' | 'booking' | 'modify'>('search');
   const [isLoading, setIsLoading] = useState(false);
   const [booking, setBooking] = useState<Booking | null>(null);
-  
+
   // Search form
   const [confirmationNumber, setConfirmationNumber] = useState('');
   const [email, setEmail] = useState('');
-  
+
   // Modification form
   const [modificationData, setModificationData] = useState({
     checkIn: '',
@@ -59,7 +59,7 @@ export function GuestPortal({ isOpen, onClose }: GuestPortalProps) {
     setIsLoading(true);
     try {
       const response = await fetch(`/api/bookings/confirmation/${confirmationNumber}?email=${encodeURIComponent(email)}`);
-      
+
       if (!response.ok) {
         throw new Error('Booking not found or invalid credentials');
       }
@@ -72,7 +72,7 @@ export function GuestPortal({ isOpen, onClose }: GuestPortalProps) {
         specialRequests: result.data.specialRequests || ''
       });
       setStep('booking');
-      
+
     } catch (error: any) {
       toast.error(error.message || 'Failed to find booking');
     } finally {
@@ -105,7 +105,7 @@ export function GuestPortal({ isOpen, onClose }: GuestPortalProps) {
       setBooking(result.data);
       toast.success('Booking modified successfully');
       setStep('booking');
-      
+
     } catch (error: any) {
       toast.error(error.message || 'Failed to modify booking');
     } finally {
@@ -115,7 +115,7 @@ export function GuestPortal({ isOpen, onClose }: GuestPortalProps) {
 
   const cancelBooking = async () => {
     if (!booking) return;
-    
+
     if (!confirm('Are you sure you want to cancel this booking? This action cannot be undone.')) {
       return;
     }
@@ -138,7 +138,7 @@ export function GuestPortal({ isOpen, onClose }: GuestPortalProps) {
 
       toast.success('Booking cancelled successfully');
       setBooking({ ...booking, status: 'cancelled' });
-      
+
     } catch (error: any) {
       toast.error(error.message || 'Failed to cancel booking');
     } finally {
@@ -188,7 +188,7 @@ export function GuestPortal({ isOpen, onClose }: GuestPortalProps) {
             className="text-center text-lg font-mono"
           />
         </div>
-        
+
         <div>
           <label className="block text-sm font-medium mb-2">Email Address</label>
           <Input
@@ -209,7 +209,7 @@ export function GuestPortal({ isOpen, onClose }: GuestPortalProps) {
       </IOSButton>
 
       <div className="text-center text-sm text-gray-500">
-        <p>Need help? Contact us at <a href="tel:+254XXXXXXXXX" className="text-[#3C3C43] underline">+254 XXX XXX XXX</a></p>
+        <p>Need help? Contact us at <a href="tel:0706782828" className="text-[#3C3C43] underline">0706 782 828</a></p>
       </div>
     </motion.div>
   );
@@ -283,8 +283,8 @@ export function GuestPortal({ isOpen, onClose }: GuestPortalProps) {
                   <span className="text-gray-600">Payment Status:</span>
                   <IOSBadge className={
                     booking.paymentStatus === 'paid' ? 'bg-green-100 text-green-700' :
-                    booking.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-red-100 text-red-700'
+                      booking.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-red-100 text-red-700'
                   }>
                     {booking.paymentStatus.toUpperCase()}
                   </IOSBadge>
@@ -306,15 +306,15 @@ export function GuestPortal({ isOpen, onClose }: GuestPortalProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div className="flex items-center gap-2">
               <MapPin className="h-4 w-4 text-gray-500" />
-              <span>123 Hotel Street, Nairobi, Kenya</span>
+              <span>Bomet, Kenya (Headquarters)</span>
             </div>
             <div className="flex items-center gap-2">
               <Phone className="h-4 w-4 text-gray-500" />
-              <span>+254 XXX XXX XXX</span>
+              <span>0706 782 828</span>
             </div>
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-gray-500" />
-              <span>info@fggrillhotel.com</span>
+              <span>famousgatesbmt@gmail.com</span>
             </div>
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-gray-500" />
@@ -387,7 +387,7 @@ export function GuestPortal({ isOpen, onClose }: GuestPortalProps) {
                 <Input
                   type="date"
                   value={modificationData.checkIn}
-                  onChange={(e) => setModificationData({...modificationData, checkIn: e.target.value})}
+                  onChange={(e) => setModificationData({ ...modificationData, checkIn: e.target.value })}
                   min={new Date().toISOString().split('T')[0]}
                 />
               </div>
@@ -396,7 +396,7 @@ export function GuestPortal({ isOpen, onClose }: GuestPortalProps) {
                 <Input
                   type="date"
                   value={modificationData.checkOut}
-                  onChange={(e) => setModificationData({...modificationData, checkOut: e.target.value})}
+                  onChange={(e) => setModificationData({ ...modificationData, checkOut: e.target.value })}
                   min={modificationData.checkIn || new Date().toISOString().split('T')[0]}
                 />
               </div>
@@ -406,7 +406,7 @@ export function GuestPortal({ isOpen, onClose }: GuestPortalProps) {
               <label className="block text-sm font-medium mb-2">Special Requests</label>
               <textarea
                 value={modificationData.specialRequests}
-                onChange={(e) => setModificationData({...modificationData, specialRequests: e.target.value})}
+                onChange={(e) => setModificationData({ ...modificationData, specialRequests: e.target.value })}
                 placeholder="Any special requests or changes..."
                 className="w-full px-3 py-2 border rounded-lg resize-none"
                 rows={3}
@@ -421,7 +421,7 @@ export function GuestPortal({ isOpen, onClose }: GuestPortalProps) {
             <div className="text-sm">
               <p className="font-medium text-yellow-800">Modification Policy</p>
               <p className="text-yellow-700 mt-1">
-                Changes to your booking are subject to availability and may incur additional charges. 
+                Changes to your booking are subject to availability and may incur additional charges.
                 You'll receive an updated confirmation email if the modification is successful.
               </p>
             </div>
