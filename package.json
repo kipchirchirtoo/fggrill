@@ -58,7 +58,7 @@
         "portable",
         "zip"
       ],
-      "icon": "frontend/public/fglogo.png",
+      "icon": "frontend/public/fglogo.ico",
       "publish": [
         {
           "provider": "github",
