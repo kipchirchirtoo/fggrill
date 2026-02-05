@@ -9,6 +9,9 @@ echo NOTE: Please run this script as ADMINISTRATOR to
 echo avoid permission errors during installer creation.
 echo.
 
+:: Ensure we are in the correct directory even when run as administrator
+cd /d "%~dp0"
+
 echo [1/4] Building Backend Engine...
 cd backend
 call npm run build
