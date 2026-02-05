@@ -96,6 +96,17 @@ export default function ClockInTerminal() {
                     </p>
                 </div>
 
+                {/* Back Button */}
+                <div className="text-center mb-6">
+                    <button
+                        onClick={() => window.location.href = '/terminal'}
+                        className="px-6 py-3 bg-white/80 backdrop-blur-sm border border-stone-200 rounded-2xl text-stone-600 hover:text-stone-900 hover:border-stone-300 transition-all text-sm font-bold flex items-center gap-2 mx-auto shadow-sm hover:shadow-md"
+                    >
+                        <ArrowRight className="h-4 w-4 rotate-180" />
+                        Back to Main Terminal
+                    </button>
+                </div>
+
                 <div className="bg-white/80 backdrop-blur-xl border border-stone-200/60 rounded-[32px] p-10 shadow-2xl shadow-stone-200/50 overflow-hidden relative">
                     {step === 'id' && (
                         <div className="space-y-8 animate-ios-fade-in">

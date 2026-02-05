@@ -26,15 +26,19 @@ const normalizeUrl = (url: string | undefined, defaultUrl: string): string => {
     return normalized;
 };
 
-// detect if we are running in a browser on localhost
+// Detect if we are running in Electron or in a browser on localhost
+const isElectron = typeof window !== 'undefined' && window.navigator.userAgent.includes('Electron');
 const isLocalhost = typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-export const API_URL = normalizeUrl(process.env.NEXT_PUBLIC_API_URL, isLocalhost ? 'http://localhost:5000' : 'https://api.hirall.com');
-export const PYTHON_API_URL = normalizeUrl(process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL, isLocalhost ? 'http://localhost:8000' : 'https://services.hirall.com');
+// In Electron app, always use localhost. In browser, check if we're on localhost
+const useLocalhost = isElectron || isLocalhost;
+
+export const API_URL = normalizeUrl(process.env.NEXT_PUBLIC_API_URL, useLocalhost ? 'http://localhost:5000' : 'https://api.hirall.com');
+export const PYTHON_API_URL = normalizeUrl(process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL, useLocalhost ? 'http://localhost:8000' : 'https://services.hirall.com');
 export const PYTHON_SERVICE_URL = PYTHON_API_URL; // Alias for consistency
 export const ROOM_SERVICE_URL = PYTHON_API_URL; // Alias for consistency
-export const REPORTS_SERVICE_URL = normalizeUrl(process.env.NEXT_PUBLIC_REPORTS_SERVICE_URL, isLocalhost ? 'http://localhost:8000' : 'https://services.hirall.com');
+export const REPORTS_SERVICE_URL = normalizeUrl(process.env.NEXT_PUBLIC_REPORTS_SERVICE_URL, useLocalhost ? 'http://localhost:8000' : 'https://services.hirall.com');
 
 // Log the URLs in development for debugging
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {

@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, globalShortcut } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -48,6 +48,13 @@ function createWindow() {
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false
+        }
+    });
+
+    // Register Escape key to toggle fullscreen
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+        if (input.key === 'Escape' && mainWindow.isFullScreen()) {
+            mainWindow.setFullScreen(false);
         }
     });
 
