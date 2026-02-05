@@ -792,7 +792,13 @@ function CashierPageContent() {
     };
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.CASHIER, UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.RECEPTIONIST]}>
+        <ProtectedRoute allowedRoles={[
+            UserRole.CASHIER,
+            UserRole.SUPER_ADMIN,
+            UserRole.ACCOUNTANT,
+            UserRole.BRANCH_ACCOUNTANT,
+            UserRole.RECEPTIONIST
+        ]}>
             <DashboardLayout>
                 {showReceipt && selectedTransaction && (
                     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">

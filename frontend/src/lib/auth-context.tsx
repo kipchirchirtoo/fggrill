@@ -31,6 +31,15 @@ export enum UserRole {
   KITCHEN = 'kitchen',
   KITCHEN_OPERATIONS = 'kitchen_operations',
   BARTENDER = 'bartender',
+  WAITER = 'waiter',
+  WAITRESS = 'waitress',
+  HEAD_WAITER = 'head_waiter',
+  BARMAN = 'barman',
+  BARMAID = 'barmaid',
+  BAR_MANAGER = 'bar_manager',
+  CHEF = 'chef',
+  HEAD_CHEF = 'head_chef',
+  COOK = 'cook',
   ACCOUNTANT = 'accountant',
   BRANCH_ACCOUNTANT = 'branch_accountant',
   AUDITOR = 'auditor',
@@ -308,6 +317,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // New consolidated roles
       [UserRole.BRANCH_OPERATIONS_MANAGER]: '/dashboard/branch-operations',
+      [UserRole.CENTRAL_OPERATIONS_MANAGER]: '/dashboard/central-store',
       [UserRole.FACILITIES_MANAGER]: '/dashboard/facilities',
 
       // Other roles
@@ -316,7 +326,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       [UserRole.POS_KITCHEN]: '/dashboard/pos-kitchen',
       [UserRole.KITCHEN]: '/dashboard/kitchen',
       [UserRole.KITCHEN_OPERATIONS]: '/dashboard/kitchen-operations',
-      [UserRole.BARTENDER]: '/dashboard/bar',
+      [UserRole.BARTENDER]: '/dashboard/pos-kitchen?tab=bar',
+      [UserRole.BARMAN]: '/dashboard/pos-kitchen?tab=bar',
+      [UserRole.BARMAID]: '/dashboard/pos-kitchen?tab=bar',
+      [UserRole.BAR_MANAGER]: '/dashboard/pos-kitchen?tab=bar',
+      [UserRole.WAITER]: '/dashboard/pos-kitchen?tab=restaurant',
+      [UserRole.WAITRESS]: '/dashboard/pos-kitchen?tab=restaurant',
+      [UserRole.HEAD_WAITER]: '/dashboard/pos-kitchen?tab=restaurant',
+      [UserRole.CHEF]: '/dashboard/kitchen',
+      [UserRole.HEAD_CHEF]: '/dashboard/kitchen',
+      [UserRole.COOK]: '/dashboard/kitchen',
       [UserRole.ACCOUNTANT]: '/dashboard/branch-accounting',
       [UserRole.BRANCH_ACCOUNTANT]: '/dashboard/branch-accounting',
       [UserRole.AUDITOR]: '/dashboard/auditor',
@@ -326,6 +345,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       [UserRole.CASHIER]: '/dashboard/cashier',
       [UserRole.HR_MANAGER]: '/dashboard/hr',
       [UserRole.EMPLOYEE]: '/dashboard/employee',
+      [UserRole.DRIVER]: '/dashboard/employee',
       [UserRole.GUEST]: '/dashboard/guest',
     };
 

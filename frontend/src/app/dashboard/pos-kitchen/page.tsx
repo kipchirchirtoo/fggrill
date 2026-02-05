@@ -527,7 +527,19 @@ export default function POSKitchenDashboard() {
   );
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.POS_KITCHEN, UserRole.RESTAURANT, UserRole.BARTENDER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
+    <ProtectedRoute allowedRoles={[
+      UserRole.POS_KITCHEN,
+      UserRole.RESTAURANT,
+      UserRole.BARTENDER,
+      UserRole.BARMAN,
+      UserRole.BARMAID,
+      UserRole.WAITER,
+      UserRole.WAITRESS,
+      UserRole.HEAD_WAITER,
+      UserRole.SUPER_ADMIN,
+      UserRole.GENERAL_MANAGER,
+      UserRole.BRANCH_MANAGER
+    ]}>
       <DashboardLayout
         hideHeader={['restaurant', 'bar'].includes(activeTab)}
         hideSidebar={['restaurant', 'bar'].includes(activeTab)}
