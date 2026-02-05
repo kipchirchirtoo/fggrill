@@ -1,6 +1,6 @@
 {
   "name": "fggrill-central",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Famous Gate Hotel Management System",
   "main": "electron/main.js",
   "repository": {
