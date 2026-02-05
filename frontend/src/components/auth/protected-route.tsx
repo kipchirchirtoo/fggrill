@@ -23,7 +23,7 @@ export function ProtectedRoute({
     if (!isLoading) {
       // If auth is required and user is not logged in
       if (requireAuth && !user) {
-        router.push('/login');
+        router.push('/terminal');
         return;
       }
 

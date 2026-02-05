@@ -80,7 +80,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  posLogin: (pin: string) => Promise<void>;
+  posLogin: (pin: string, redirectTo?: string) => Promise<void>;
   logout: (redirectTo?: string) => void;
   checkAuth: () => Promise<void>;
 }
@@ -235,7 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const posLogin = async (pin: string): Promise<void> => {
+  const posLogin = async (pin: string, redirectTo?: string): Promise<void> => {
     if (isLoading) return;
     setIsLoading(true);
 
@@ -272,8 +272,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(userData);
         toast.success(`Signed in as ${userData.firstName}`);
 
-        // Redirect to appropriate dashboard
-        redirectToDashboard(userData.role, userData.is_central);
+        // Redirect to appropriate dashboard or specific module
+        if (redirectTo) {
+          router.push(redirectTo);
+        } else {
+          redirectToDashboard(userData.role, userData.is_central);
+        }
       } else {
         throw new Error(res.message || 'Login failed');
       }
@@ -286,7 +290,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const logout = async (redirectTo: string = '/login') => {
+  const logout = async (redirectTo: string = '/terminal') => {
     try {
       await api.auth.logout();
     } catch (error) {

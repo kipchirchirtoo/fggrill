@@ -8,12 +8,13 @@ import {
     ChefHat, Wine, Monitor, Wifi, WifiOff
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { fetchAPI } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { IOSCard } from '@/components/ui/ios-card';
 import { cn } from '@/lib/utils';
 
 export default function MasterTerminalPage() {
     const router = useRouter();
+    const { posLogin } = useAuth();
     const [pin, setPin] = useState('');
     const [isAuthenticating, setIsAuthenticating] = useState(false);
     const [isOnline, setIsOnline] = useState(true);
@@ -91,49 +92,15 @@ export default function MasterTerminalPage() {
 
         setIsAuthenticating(true);
         try {
-            const response = await fetchAPI('/auth/pos-login', {
-                method: 'POST',
-                body: JSON.stringify({ pin: finalPin })
-            }) as any;
-
-            if (response.success) {
-                // Store authentication session in the format expected by auth context
-                if (response.data.session) {
-                    localStorage.setItem('token', response.data.session.access_token);
-                    localStorage.setItem('user', JSON.stringify({
-                        id: response.data.user.id,
-                        email: response.data.user.email || '',
-                        firstName: response.data.user.first_name,
-                        lastName: response.data.user.last_name,
-                        role: response.data.user.role,
-                        branch_id: response.data.user.branch_id,
-                        branch_name: response.data.user.branch_name,
-                        is_central: response.data.user.is_central,
-                        isPosLogin: true,
-                        department: response.data.user.department
-                    }));
-
-                    // Set branch context
-                    if (response.data.user.branch_id) {
-                        localStorage.setItem('activeBranchId', response.data.user.branch_id.toString());
-                    }
-                }
-
-                toast.success(`Welcome, ${response.data.user.first_name}!`);
-
-                if (selectedModule === 'cashier') {
-                    router.push('/dashboard/cashier');
-                } else if (selectedModule === 'bar') {
-                    router.push('/dashboard/pos-kitchen?tab=bar');
-                } else {
-                    router.push('/dashboard/pos-kitchen?tab=restaurant');
-                }
-            } else {
-                toast.error(response.message || 'Invalid PIN');
-                setPin('');
+            let targetPath = '/dashboard/pos-kitchen?tab=restaurant';
+            if (selectedModule === 'cashier') {
+                targetPath = '/dashboard/cashier';
+            } else if (selectedModule === 'bar') {
+                targetPath = '/dashboard/pos-kitchen?tab=bar';
             }
+
+            await posLogin(finalPin, targetPath);
         } catch (error: any) {
-            toast.error(error.message || 'Authentication failed');
             setPin('');
         } finally {
             setIsAuthenticating(false);
