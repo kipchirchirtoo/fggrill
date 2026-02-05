@@ -703,7 +703,11 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
       (poolSales?.reduce((sum, s) => sum + (Number(s.quantity || 0) * Number(s.amount_per_token || 0)), 0) || 0);
 
     // 11. Build recent transactions list
-    const recentTransactions = payments.map(p => ({
+    const paramsLimit = req.query.limit as string;
+    const limit = paramsLimit === 'all' ? undefined : (parseInt(paramsLimit) || 50);
+
+    let recentTransactions = payments.map(p => ({
+      id: p.id,
       reference_number: p.reference,
       payment_method: p.payment_method,
       amount: p.amount,
@@ -712,7 +716,11 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
       branch_name: p.branch?.name || 'Main',
       is_pool_token: (p as any).is_pool_token || false,
       created_at: p.created_at
-    })).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 50);
+    })).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    if (limit) {
+      recentTransactions = recentTransactions.slice(0, limit);
+    }
 
     // 12. Group by branch if no specific branch requested
     let branchSummaries: any[] = [];
@@ -816,7 +824,7 @@ export const getRevenueOversight = async (req: Request, res: Response, next: Nex
       .gte('created_at', start)
       .lte('created_at', end);
 
-    let billQuery = supabase.from('unpaid_bills').select('total_amount, paid_amount, created_at, status')
+    let billQuery = supabase.from('unpaid_bills').select('id, total_amount, paid_amount, created_at, status')
       .gte('created_at', start)
       .lte('created_at', end);
 
@@ -891,14 +899,14 @@ export const getRevenueOversight = async (req: Request, res: Response, next: Nex
       .limit(10);
 
     const { data: voidedOrders } = await supabase.from('restaurant_orders')
-      .select('total_amount, order_number, table_number, created_at')
+      .select('id, total_amount, order_number, table_number, created_at')
       .eq('status', 'cancelled')
       .gte('created_at', start)
       .order('created_at', { ascending: false })
       .limit(10);
 
     const { data: voidedBarOrders } = await supabase.from('bar_orders')
-      .select('total, order_number, created_at')
+      .select('id, total, order_number, created_at')
       .eq('status', 'cancelled')
       .gte('created_at', start)
       .limit(5);
@@ -906,10 +914,10 @@ export const getRevenueOversight = async (req: Request, res: Response, next: Nex
     const pendingBills = billRes.data?.filter(b => b.status === 'unpaid' || b.status === 'partial') || [];
 
     const anomalies = [
-      ...(exceptions || []).map(e => ({ type: 'EXCEPTION', detail: e.description, severity: e.severity, time: e.detected_at })),
-      ...(voidedOrders || []).map(o => ({ type: 'VOID', detail: `Rest Order ${o.order_number} (T-${o.table_number}) voided`, severity: 'MEDIUM', time: o.created_at })),
-      ...(voidedBarOrders || []).map(o => ({ type: 'VOID', detail: `Bar Order ${o.order_number} voided`, severity: 'MEDIUM', time: o.created_at })),
-      ...pendingBills.map(b => ({ type: 'UNPAID', detail: `Bill pending collection: KES ${Number(b.total_amount) - Number(b.paid_amount)}`, severity: 'LOW', time: b.created_at }))
+      ...(exceptions || []).map(e => ({ id: e.id, entity_type: 'exception', type: 'EXCEPTION', detail: e.description, severity: e.severity, time: e.detected_at })),
+      ...(voidedOrders || []).map(o => ({ id: o.id, entity_type: 'restaurant_order', type: 'VOID', detail: `Rest Order ${o.order_number} (T-${o.table_number}) voided`, severity: 'MEDIUM', time: o.created_at })),
+      ...(voidedBarOrders || []).map(o => ({ id: o.id, entity_type: 'bar_order', type: 'VOID', detail: `Bar Order ${o.order_number} voided`, severity: 'MEDIUM', time: o.created_at })),
+      ...pendingBills.map(b => ({ id: b.id, entity_type: 'bill', type: 'UNPAID', detail: `Bill pending collection: KES ${Number(b.total_amount) - Number(b.paid_amount)}`, severity: 'LOW', time: b.created_at }))
     ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 15);
 
     res.status(200).json({
@@ -1438,6 +1446,79 @@ export const verifyBarStockTake = async (req: Request, res: Response, next: Next
     }).eq('id', id);
 
     res.status(200).json({ success: true, message: 'Stock count verified and inventory updated' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get detailed information for a specific audit anomaly or transaction.
+ */
+export const getAnomalyDetail = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id, type } = req.query;
+
+    if (!id || !type) {
+      throw new Error('Missing id or type parameter');
+    }
+
+    let data;
+    let error;
+
+    switch (type) {
+      case 'restaurant_order':
+        // Fetch restaurant order with items
+        const { data: restOrder, error: restError } = await supabase
+          .from('restaurant_orders')
+          .select('*, items:restaurant_order_items(*, menu_item:menu_items(name)), branch:branches(name), waiter:users(first_name, last_name)')
+          .eq('id', id)
+          .single();
+        data = restOrder;
+        error = restError;
+        break;
+
+      case 'bar_order':
+        // Fetch bar order with items
+        const { data: barOrder, error: barError } = await supabase
+          .from('bar_orders')
+          .select('*, items:bar_order_items(*, stock_item:bar_inventory(name)), branch:branches(name), waiter:users(first_name, last_name)')
+          .eq('id', id)
+          .single();
+        data = barOrder;
+        error = barError;
+        break;
+
+      case 'bill':
+        // Fetch bill details
+        // Unpaid bills might not have direct items, but we can try to find linked orders if the schema supports it.
+        // For now, just return bill info.
+        const { data: bill, error: billError } = await supabase
+          .from('unpaid_bills')
+          .select('*, branch:branches(name)')
+          .eq('id', id)
+          .single();
+        data = bill;
+        error = billError;
+        break;
+
+      case 'exception':
+        const { data: exception, error: excError } = await supabase
+          .from('audit_exceptions')
+          .select('*')
+          .eq('id', id)
+          .single();
+        data = exception;
+        error = excError;
+        break;
+
+      default:
+        throw new Error('Invalid entity type');
+    }
+
+    if (error) throw error;
+    if (!data) throw new Error('Record not found');
+
+    res.status(200).json({ success: true, data });
   } catch (error) {
     next(error);
   }

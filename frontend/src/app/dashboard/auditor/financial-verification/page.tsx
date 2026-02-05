@@ -256,7 +256,11 @@ export default function FinancialVerificationPage() {
                             <div className="flex-1 overflow-y-auto max-h-[600px] p-4 space-y-3 scrollbar-thin">
                                 {recentTransactions.length > 0 ? (
                                     recentTransactions.map((tx: any, i: number) => (
-                                        <div key={i} className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm hover:ring-1 hover:ring-stone-900/5 transition-all group">
+                                        <div
+                                            key={i}
+                                            onClick={() => tx.id && router.push(`/dashboard/auditor/financial-verification/logs/${tx.id}?date=${selectedDate}`)}
+                                            className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm hover:ring-1 hover:ring-stone-900/5 transition-all group cursor-pointer"
+                                        >
                                             <div className="flex items-start justify-between mb-2">
                                                 <div className="flex items-center gap-2">
                                                     <div className={`p-1.5 rounded-lg ${tx.payment_method === 'cash' ? 'bg-stone-100 text-stone-600' :
@@ -314,7 +318,12 @@ export default function FinancialVerificationPage() {
                                     <ShieldCheck className="h-4 w-4 text-emerald-400" />
                                     <span className="text-[11px] font-bold uppercase tracking-widest">Gateway Verified</span>
                                 </div>
-                                <button className="text-[11px] font-bold hover:underline">Full Log →</button>
+                                <button
+                                    onClick={() => router.push(`/dashboard/auditor/financial-verification/logs?date=${selectedDate}`)}
+                                    className="text-[11px] font-bold hover:underline"
+                                >
+                                    Full Log →
+                                </button>
                             </div>
                         </div>
                     </div>

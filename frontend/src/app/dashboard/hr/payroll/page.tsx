@@ -537,7 +537,7 @@ export default function HRPayrollPage() {
                     <Dialog open={calcModalOpen} onOpenChange={setCalcModalOpen}>
                         <DialogContent className="max-w-[600px] h-[80vh] bg-white p-0 overflow-hidden rounded-ios-3xl border-none shadow-2xl flex flex-col">
                             <div className="px-6 py-4 border-b border-stone-100 flex-none flex items-center justify-between bg-stone-50/50">
-                                <h3 className="text-lg font-bold text-stone-900">Run Payroll Engine</h3>
+                                <DialogTitle className="text-lg font-bold text-stone-900">Run Payroll Engine</DialogTitle>
                                 <button onClick={() => setCalcModalOpen(false)} className="text-[#007AFF] font-semibold text-sm">Close</button>
                             </div>
 

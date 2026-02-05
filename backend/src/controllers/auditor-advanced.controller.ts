@@ -188,26 +188,26 @@ export const getPayrollVariances = async (req: Request, res: Response, next: Nex
 
         const { data: prevPayroll, error: prevError } = await supabase
             .from('payroll_records')
-            .select('employee_id, net_pay, basic_salary')
+            .select('staff_id, net_salary, base_salary')
             .ilike('pay_period_start', `${prevMonthStr}%`);
 
         if (prevError) throw prevError;
 
         const prevMap = new Map();
-        prevPayroll?.forEach(p => prevMap.set(p.employee_id, p));
+        prevPayroll?.forEach(p => prevMap.set(p.staff_id, p));
 
         // 3. Analyze Variances
         const variances: any[] = [];
 
         currentPayroll?.forEach((curr: any) => {
-            const prev = prevMap.get(curr.employee_id);
+            const prev = prevMap.get(curr.staff_id);
             const employeeName = `${curr.employee?.user?.first_name} ${curr.employee?.user?.last_name}`;
             const department = curr.employee?.department;
 
             // Check 1: Net Pay Variance > 10%
             if (prev) {
-                const diff = curr.net_pay - prev.net_pay;
-                const percentChange = (diff / prev.net_pay) * 100;
+                const diff = curr.net_salary - prev.net_salary;
+                const percentChange = (diff / prev.net_salary) * 100;
 
                 if (Math.abs(percentChange) > 10) {
                     variances.push({
@@ -216,8 +216,8 @@ export const getPayrollVariances = async (req: Request, res: Response, next: Nex
                         department,
                         details: `Net pay changed by ${percentChange.toFixed(1)}% (${diff > 0 ? '+' : ''}${diff})`,
                         severity: 'HIGH',
-                        current_value: curr.net_pay,
-                        prev_value: prev.net_pay
+                        current_value: curr.net_salary,
+                        prev_value: prev.net_salary
                     });
                 }
             } else {
@@ -227,13 +227,14 @@ export const getPayrollVariances = async (req: Request, res: Response, next: Nex
                     department,
                     details: `New employee added to payroll`,
                     severity: 'MEDIUM',
-                    current_value: curr.net_pay,
+                    current_value: curr.net_salary,
                     prev_value: 0
                 });
             }
 
             // Check 2: High Overtime (> 30% of basic salary)
-            const otPercent = (curr.overtime / curr.basic_salary) * 100;
+            const overtimePay = (curr.overtime_hours || 0) * (curr.overtime_rate || 0);
+            const otPercent = (overtimePay / curr.base_salary) * 100;
             if (otPercent > 30) {
                 variances.push({
                     type: 'HIGH_OVERTIME',
@@ -241,7 +242,7 @@ export const getPayrollVariances = async (req: Request, res: Response, next: Nex
                     department,
                     details: `Overtime is ${otPercent.toFixed(1)}% of basic salary`,
                     severity: 'HIGH',
-                    current_value: curr.overtime,
+                    current_value: overtimePay,
                     prev_value: 0
                 });
             }

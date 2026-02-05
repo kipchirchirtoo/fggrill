@@ -275,18 +275,20 @@ class AutomationService {
 
       for (const employee of employees || []) {
         // Calculate payroll (simplified)
+        // Calculate payroll (simplified)
         const payrollData = {
-          employee_id: employee.id,
-          pay_period_start: previousMonth.toISOString().split('T')[0],
-          pay_period_end: lastDayOfMonth.toISOString().split('T')[0],
-          basic_salary: employee.basic_salary || 0,
+          staff_id: employee.id,
+          month: previousMonth.getMonth() + 1,
+          year: previousMonth.getFullYear(),
+          base_salary: employee.salary || 0,
           allowances: employee.allowances || 0,
-          gross_pay: (employee.basic_salary || 0) + (employee.allowances || 0),
-          payment_status: 'pending',
+          gross_pay: (employee.salary || 0) + (employee.allowances || 0),
+          status: 'pending',
+          approval_status: 'draft',
           created_at: new Date().toISOString()
         };
 
-        await supabase.from('payroll_records').insert(payrollData);
+        await supabase.from('staff_payroll').upsert(payrollData, { onConflict: 'staff_id, month, year' });
       }
 
       logger.info(`Generated payroll for ${employees?.length || 0} employees`);

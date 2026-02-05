@@ -263,7 +263,7 @@ export const calculatePayroll = async (
       // Bulk Calculation for ALL Active Staff
       const { data: activeStaff, error: staffError } = await supabase
         .from('staff_profiles')
-        .select('id, basic_salary')
+        .select('id, salary')
         .eq('status', 'active');
 
       if (staffError) throw staffError;
@@ -273,7 +273,7 @@ export const calculatePayroll = async (
 
       for (const staff of activeStaff || []) {
         try {
-          await processSingleEmployee(staff.id, parseFloat(staff.basic_salary || 0));
+          await processSingleEmployee(staff.id, parseFloat(staff.salary || 0));
           processedCount++;
         } catch (err: any) {
           logger.error(`Failed to process payroll for staff ${staff.id}:`, err);

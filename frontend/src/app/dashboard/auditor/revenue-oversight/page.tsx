@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
     TrendingUp, BarChart3, Layers,
     RefreshCw, Filter, Download,
@@ -20,6 +21,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 
 export default function RevenueOversightPage() {
+    const router = useRouter();
     const { activeBranchId } = useBranch();
     const [isLoading, setIsLoading] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
@@ -257,7 +259,11 @@ export default function RevenueOversightPage() {
                             <div className="flex-1 overflow-y-auto max-h-[500px] p-4 space-y-3 scrollbar-thin">
                                 {data?.anomalies?.length > 0 ? (
                                     data.anomalies.map((anomaly: any, i: number) => (
-                                        <div key={i} className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm hover:border-stone-400 transition-all group cursor-pointer">
+                                        <div
+                                            key={i}
+                                            onClick={() => router.push(`/dashboard/auditor/revenue-oversight/details/${anomaly.id}?type=${anomaly.entity_type}`)}
+                                            className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm hover:border-stone-400 transition-all group cursor-pointer"
+                                        >
                                             <div className="flex items-start gap-4">
                                                 <div className={`p-2 rounded-lg ${anomaly.severity === 'HIGH' ? 'bg-rose-50 text-rose-600' :
                                                     anomaly.severity === 'MEDIUM' ? 'bg-amber-50 text-amber-600' :

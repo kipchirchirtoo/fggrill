@@ -6,7 +6,7 @@ import fs from 'fs';
 export interface PayslipData {
     month: string;
     year: number;
-    basic_salary: number;
+    base_salary: number;
     overtime_pay: number;
     allowances: number;
     gross_pay: number;
@@ -123,7 +123,7 @@ export const generatePayslipPDF = (data: PayslipData): Promise<Buffer> => {
         const formatCurrency = (amt: number) => amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         const rows = [
-            ['Basic Salary', formatCurrency(data.basic_salary), 'PAYE Tax', formatCurrency(data.paye_tax)],
+            ['Basic Salary', formatCurrency(data.base_salary), 'PAYE Tax', formatCurrency(data.paye_tax)],
             ['Overtime Pay', formatCurrency(data.overtime_pay), 'NSSF (Tier I+II)', formatCurrency(data.nssf_deduction)],
             ['Allowances', formatCurrency(data.allowances), 'SHIF (Health)', formatCurrency(data.shif_deduction)],
             ['Other Bonuses', formatCurrency(0), 'Housing Levy', formatCurrency(data.housing_levy_deduction)],

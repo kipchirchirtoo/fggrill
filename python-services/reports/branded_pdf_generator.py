@@ -3583,4 +3583,4 @@ class BrandedPDFGenerator:
         elements.append(t)
         
         # Build PDF
-        return self._build_pdf(elements)
+        return self._create_pdf(elements)

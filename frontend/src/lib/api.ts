@@ -2777,10 +2777,11 @@ export const auditAPI = {
     if (params.end_date) query.append('end_date', params.end_date);
     return fetchAPI<any>(`/auditor/verify/sales?${query}`);
   },
-  verifyFinances: (params: { branch_id?: number; date?: string }) => {
+  verifyFinances: (params: { branch_id?: number; date?: string; limit?: string | number }) => {
     const query = new URLSearchParams();
     if (params.branch_id) query.append('branch_id', String(params.branch_id));
     if (params.date) query.append('date', params.date);
+    if (params.limit) query.append('limit', String(params.limit));
     return fetchAPI<any>(`/auditor/verify/finances?${query}`);
   },
   verifyRevenue: (params: { branch_id?: number; start_date?: string; end_date?: string }) => {
@@ -2795,6 +2796,9 @@ export const auditAPI = {
     if (params.branch_id) query.append('branch_id', String(params.branch_id));
     if (params.status) query.append('status', params.status);
     return fetchAPI<any>(`/auditor/verify/expenditure?${query}`);
+  },
+  getAnomalyDetail: (params: { id: string; type: string }) => {
+    return fetchAPI<any>(`/auditor/verify/details?id=${params.id}&type=${params.type}`);
   },
   verifyStockLevels: (params: { branch_id?: number }) => {
     const query = new URLSearchParams();
