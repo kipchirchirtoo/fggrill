@@ -10,12 +10,13 @@ import { IOSCard } from '@/components/ui/ios-card';
 import { Input } from '@/components/ui/input';
 import { IOSButton } from '@/components/ui/ios-button';
 
-id ?: string;
-section: 'credit_bill' | 'unpaid_bill' | 'paid_bill';
-customer_name: string;
-staff_id ?: string; // Added to link to staff profile
-amount: number;
-reference: string;
+interface LogbookLine {
+    id?: string;
+    section: 'credit_bill' | 'unpaid_bill' | 'paid_bill';
+    customer_name: string;
+    staff_id?: string; // Added to link to staff profile
+    amount: number;
+    reference: string;
 }
 
 interface LogbookData {
@@ -56,9 +57,10 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
         credit_bills: [],
         unpaid_bills: [],
         paid_bills: []
+    });
     const [staffList, setStaffList] = useState<any[]>([]);
 
-        useEffect(() => {
+    useEffect(() => {
         loadStaff();
     }, []);
 
