@@ -211,11 +211,11 @@ export default function AdminUsersPage() {
     if (!formData.id && !formData.password) errors.password = 'Password is required';
     else if (!formData.id && formData.password.length < 6) errors.password = 'Password must be at least 6 characters';
 
-    // Validate POS PIN format if provided (4-6 digits numeric)
+    // Validate POS PIN format if provided (RXXX, BXXX, or CXXX)
     if (formData.pos_pin) {
-      const pinRegex = /^\d{4,6}$/;
+      const pinRegex = /^[RBC]\d{3}$/;
       if (!pinRegex.test(formData.pos_pin)) {
-        errors.pos_pin = 'PIN must be 4-6 digits';
+        errors.pos_pin = 'PIN must be RXXX, BXXX, or CXXX (e.g. R123)';
       }
     }
 
@@ -755,7 +755,8 @@ export default function AdminUsersPage() {
                         placeholder="e.g. R123"
                         maxLength={4}
                       />
-                      <p className="text-xs text-gray-500 mt-1">Waiters: RXXX, Bar: BXXX, Cashier: CXXX</p>
+                      <p className="text-xs text-gray-500 mt-1">Waiters: RXXX, Bar: BXXX, Cashiers: CXXX</p>
+                      {formErrors.pos_pin && <p className="text-red-500 text-xs mt-1">{formErrors.pos_pin}</p>}
                     </div>
                   </motion.div>
                 )}
