@@ -1945,6 +1945,15 @@ export const restaurantAPI = {
     if (branchId) query.append('branch_id', String(branchId));
     return fetchAPI<any>(`/restaurant/orders?${query}`);
   },
+  getMyOrders: (userId: string, branchId?: number) => {
+    const today = new Date().toISOString().split('T')[0];
+    const query = new URLSearchParams();
+    query.append('from_date', today);
+    query.append('to_date', today);
+    query.append('created_by', userId);
+    if (branchId) query.append('branch_id', String(branchId));
+    return fetchAPI<any>(`/restaurant/orders?${query}`);
+  },
 
   // Menu Categories
   getCategories: () => fetchAPI<any>('/restaurant/menu/categories'),

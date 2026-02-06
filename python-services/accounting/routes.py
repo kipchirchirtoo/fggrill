@@ -570,7 +570,7 @@ def get_audit_trail():
         branch_id = request.args.get('branch_id')
         entity_type = request.args.get('entity_type')
         if supabase:
-            query = supabase.table('financial_audit_logs').select('*, staff(*)')
+            query = supabase.table('financial_audit_logs').select('*, staff:staff_profiles(id, first_name, last_name)')
             if branch_id: query = query.eq('branch_id', branch_id)
             if entity_type: query = query.eq('entity_type', entity_type)
             res = query.order('created_at', desc=True).limit(100).execute()

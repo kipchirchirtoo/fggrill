@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { auditAPI } from '@/lib/api';
+import { auditAPI, auditorReportsAPI } from '@/lib/api';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
@@ -19,6 +19,7 @@ export default function SoldItemsAnalyticsPage() {
     const [auditData, setAuditData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [isExporting, setIsExporting] = useState(false);
 
     const [dateRange, setDateRange] = useState({
         startDate: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0],
@@ -50,6 +51,23 @@ export default function SoldItemsAnalyticsPage() {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    const handleExport = async () => {
+        setIsExporting(true);
+        try {
+            await auditorReportsAPI.exportBrandedPdf('sales_performance', {
+                branch_id: activeBranchId === 0 ? undefined : activeBranchId,
+                start_date: dateRange.startDate,
+                end_date: dateRange.endDate
+            });
+            toast.success("Sales performance report exported successfully");
+        } catch (e) {
+            console.error(e);
+            toast.error("Failed to export sales performance report");
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     const filteredAnalysis = (auditData?.analysis || []).filter((item: any) =>
         item.name?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -227,8 +245,13 @@ export default function SoldItemsAnalyticsPage() {
                                     />
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <button className="btn-primary">
-                                        <FileDown className="h-4 w-4" /> Export Ledger
+                                    <button
+                                        onClick={handleExport}
+                                        disabled={isExporting}
+                                        className="btn-primary"
+                                    >
+                                        <FileDown className={`h-4 w-4 ${isExporting ? 'animate-bounce' : ''}`} />
+                                        {isExporting ? 'Exporting...' : 'Export Ledger'}
                                     </button>
                                 </div>
                             </div>

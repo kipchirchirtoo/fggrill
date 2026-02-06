@@ -92,6 +92,19 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
     const [isVoiding, setIsVoiding] = useState<string | null>(null);
     const [voidReason, setVoidReason] = useState('');
     const [voidConfirmOpen, setVoidConfirmOpen] = useState(false);
+    const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+
+    const toggleOrderExpansion = (orderId: string) => {
+        setExpandedOrders(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(orderId)) {
+                newSet.delete(orderId);
+            } else {
+                newSet.add(orderId);
+            }
+            return newSet;
+        });
+    };
 
     const filteredOrders = useMemo(() => {
         return recentOrders.filter(order => {
@@ -99,20 +112,15 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
             const orderDate = new Date(order.created_at);
             const isSameDate = orderDate.toDateString() === historyDate.toDateString();
 
-            // 2. Filter by Waiter (Current User)
-            // Assuming 'waiter_id' or checking 'cashier_name' matches user. 
-            // Ideally backend filters, but for now client-side:
-            const isMyOrder = order.waiter_id === user?.id || order.cashier_name?.includes(user?.firstName || '');
-
-            // 3. Filter by Status
+            // 2. Filter by Status
             let matchesStatus = false;
             if (historyStatus === 'pending') matchesStatus = order.status === 'pending' || order.status === 'kitchen_ready';
             if (historyStatus === 'cleared') matchesStatus = order.status === 'completed' || order.status === 'paid';
             if (historyStatus === 'voided') matchesStatus = order.status === 'cancelled' || order.status === 'voided';
 
-            return isSameDate && isMyOrder && matchesStatus;
+            return isSameDate && matchesStatus;
         });
-    }, [recentOrders, historyDate, historyStatus, user]);
+    }, [recentOrders, historyDate, historyStatus]);
 
     const handleVoidOrder = async () => {
         if (!isVoiding || !voidReason.trim()) return;
@@ -194,19 +202,18 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                 if (tabsRes.success) setOpenTabs(tabsRes.data || []);
             }
 
-            // Fetch recent orders for history with date filter
-            const ordersRes = isRestaurant
-                ? await restaurantAPI.getOrders({
-                    branchId: Number(currentBranchId) || undefined,
-                    ...dateParams
-                })
-                : await barAPI.getOrders({
-                    branchId: Number(currentBranchId) || undefined,
-                    ...dateParams
-                });
+            // Fetch recent orders for history with date filter - only current user's orders
+            if (user?.id) {
+                const ordersRes = isRestaurant
+                    ? await restaurantAPI.getMyOrders(user.id, Number(currentBranchId) || undefined)
+                    : await barAPI.getOrders({
+                        branchId: Number(currentBranchId) || undefined,
+                        ...dateParams
+                    });
 
-            if (ordersRes.success) {
-                setRecentOrders(ordersRes.data || []);
+                if (ordersRes.success) {
+                    setRecentOrders(ordersRes.data || []);
+                }
             }
         } catch (error) {
             console.error(`Error fetching ${mode} data:`, error);
@@ -1004,70 +1011,110 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                         <p className="font-medium">No {historyStatus} orders found for this date.</p>
                                     </div>
                                 ) : (
-                                    filteredOrders.map(order => (
-                                        <div key={order.id} className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
-                                            <div className="flex justify-between items-start mb-3">
-                                                <div>
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <span className="font-bold text-lg text-stone-900">
-                                                            #{order.order_number || order.id.slice(0, 8).toUpperCase()}
-                                                        </span>
-                                                        <span className={cn(
-                                                            "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase",
-                                                            order.status === 'completed' ? "bg-green-100 text-green-700" :
-                                                                order.status === 'cancelled' ? "bg-red-100 text-red-700" :
-                                                                    "bg-amber-100 text-amber-700"
-                                                        )}>
-                                                            {order.status}
-                                                        </span>
-                                                    </div>
-                                                    <p className="text-xs text-stone-500">
-                                                        {new Date(order.created_at).toLocaleTimeString()} • {order.table_number ? `Table ${order.table_number}` : 'Walk-in'}
-                                                    </p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="font-black text-lg text-stone-900">KES {order.total_amount?.toLocaleString() || order.total?.toLocaleString()}</p>
-                                                    <p className="text-xs text-stone-400 uppercase font-bold">{order.payment_method}</p>
-                                                </div>
-                                            </div>
+                                    filteredOrders.map(order => {
+                                        const isExpanded = expandedOrders.has(order.id);
+                                        const itemCount = order.items?.length || 0;
 
-                                            {/* Items Summary */}
-                                            <div className="bg-stone-50 rounded-lg p-2 mb-3 text-xs text-stone-600 space-y-1">
-                                                {order.items?.map((item: any, idx: number) => (
-                                                    <div key={idx} className="flex justify-between">
-                                                        <span>{item.quantity}x {item.name || item.menu_item?.name}</span>
-                                                        <span>{((item.unit_price || item.price) * item.quantity).toLocaleString()}</span>
+                                        return (
+                                            <div key={order.id} className="bg-white border border-stone-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                                                {/* Order Header - Always Visible */}
+                                                <div
+                                                    onClick={() => toggleOrderExpansion(order.id)}
+                                                    className="p-4 cursor-pointer hover:bg-stone-50 transition-colors"
+                                                >
+                                                    <div className="flex justify-between items-start">
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <span className="font-bold text-lg text-stone-900">
+                                                                    #{order.order_number || order.id.slice(0, 8).toUpperCase()}
+                                                                </span>
+                                                                <span className={cn(
+                                                                    "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase",
+                                                                    order.status === 'completed' ? "bg-green-100 text-green-700" :
+                                                                        order.status === 'cancelled' ? "bg-red-100 text-red-700" :
+                                                                            "bg-amber-100 text-amber-700"
+                                                                )}>
+                                                                    {order.status}
+                                                                </span>
+                                                                <span className="text-xs text-stone-400 font-medium">
+                                                                    {itemCount} {itemCount === 1 ? 'item' : 'items'}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-xs text-stone-500">
+                                                                {new Date(order.created_at).toLocaleTimeString()} • {order.table_number ? `Table ${order.table_number}` : order.room_number ? `Room ${order.room_number}` : 'Walk-in'}
+                                                            </p>
+                                                        </div>
+                                                        <div className="flex items-start gap-3">
+                                                            <div className="text-right">
+                                                                <p className="font-black text-lg text-stone-900">KES {order.total_amount?.toLocaleString() || order.total?.toLocaleString()}</p>
+                                                                <p className="text-xs text-stone-400 uppercase font-bold">{order.payment_method}</p>
+                                                            </div>
+                                                            <ChevronDown className={cn(
+                                                                "w-5 h-5 text-stone-400 transition-transform duration-200 mt-1",
+                                                                isExpanded && "rotate-180"
+                                                            )} />
+                                                        </div>
                                                     </div>
-                                                ))}
-                                            </div>
+                                                </div>
 
-                                            {/* Actions */}
-                                            {historyStatus === 'pending' && (
-                                                <div className="flex gap-2 border-t border-stone-100 pt-3">
-                                                    <button
-                                                        onClick={() => handleEditOrder(order)}
-                                                        className="flex-1 py-2 text-sm font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
-                                                    >
-                                                        Edit / Copy
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            setIsVoiding(order.id);
-                                                            setVoidConfirmOpen(true);
-                                                        }}
-                                                        className="flex-1 py-2 text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
-                                                    >
-                                                        Void Order
-                                                    </button>
-                                                </div>
-                                            )}
-                                            {historyStatus === 'voided' && order.void_reason && (
-                                                <div className="mt-2 text-xs text-red-500 italic bg-red-50 p-2 rounded">
-                                                    Reason: {order.void_reason}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))
+                                                {/* Expandable Items Section */}
+                                                <AnimatePresence>
+                                                    {isExpanded && (
+                                                        <motion.div
+                                                            initial={{ height: 0, opacity: 0 }}
+                                                            animate={{ height: 'auto', opacity: 1 }}
+                                                            exit={{ height: 0, opacity: 0 }}
+                                                            transition={{ duration: 0.2 }}
+                                                            className="overflow-hidden"
+                                                        >
+                                                            <div className="px-4 pb-4 border-t border-stone-100">
+                                                                {/* Items List */}
+                                                                <div className="bg-stone-50 rounded-lg p-3 mt-3 mb-3 text-xs text-stone-600 space-y-2">
+                                                                    <p className="font-bold text-stone-700 uppercase text-[10px] tracking-wider mb-2">Order Items</p>
+                                                                    {order.items?.map((item: any, idx: number) => (
+                                                                        <div key={idx} className="flex justify-between items-center py-1">
+                                                                            <span className="font-medium">{item.quantity}x {item.name || item.menu_item?.name}</span>
+                                                                            <span className="font-bold">KES {((item.unit_price || item.price) * item.quantity).toLocaleString()}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+
+                                                                {/* Actions */}
+                                                                {historyStatus === 'pending' && (
+                                                                    <div className="flex gap-2">
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleEditOrder(order);
+                                                                            }}
+                                                                            className="flex-1 py-2 text-sm font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                                                                        >
+                                                                            Edit / Copy
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                setIsVoiding(order.id);
+                                                                                setVoidConfirmOpen(true);
+                                                                            }}
+                                                                            className="flex-1 py-2 text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                                                                        >
+                                                                            Void Order
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                                {historyStatus === 'voided' && order.void_reason && (
+                                                                    <div className="mt-2 text-xs text-red-500 italic bg-red-50 p-2 rounded">
+                                                                        Reason: {order.void_reason}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                            </div>
+                                        );
+                                    })
                                 )}
                             </div>
                         </motion.div>

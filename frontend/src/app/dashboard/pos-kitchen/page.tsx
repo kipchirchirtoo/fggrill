@@ -137,8 +137,15 @@ export default function POSKitchenDashboard() {
     setIsLoading(true);
     try {
       const currentBranchId = activeBranchId || user?.branch_id;
+
+      if (!user?.id) {
+        console.error('No user ID available for fetching orders');
+        setIsLoading(false);
+        return;
+      }
+
       const [ordersResult, salesResult] = await Promise.allSettled([
-        restaurantAPI.getOrders({ branchId: currentBranchId || undefined }),
+        restaurantAPI.getMyOrders(user.id, currentBranchId || undefined),
         restaurantAPI.getDailySales(currentBranchId || undefined),
       ]);
 
@@ -298,7 +305,7 @@ export default function POSKitchenDashboard() {
       {/* Recent Orders Overview */}
       <IOSCard className="p-4 sm:p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base sm:text-lg font-semibold font-sf-pro-display">Recent Activity</h2>
+          <h2 className="text-base sm:text-lg font-semibold font-sf-pro-display">My Orders</h2>
           <IOSButton variant="ghost" size="sm" onClick={() => handleTabChange('recent')}>
             View All <ArrowRight className="h-4 w-4 ml-1" />
           </IOSButton>
@@ -310,7 +317,7 @@ export default function POSKitchenDashboard() {
         ) : orders.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <UtensilsCrossed className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-            <p>No orders yet today</p>
+            <p>You haven't created any orders today</p>
           </div>
         ) : (
           <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
@@ -471,7 +478,7 @@ export default function POSKitchenDashboard() {
       {/* Orders List - Minimal Design */}
       <div className="bg-white border border-gray-200 rounded-lg">
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h2 className="text-base font-medium text-gray-900">Today's Orders</h2>
+          <h2 className="text-base font-medium text-gray-900">My Orders</h2>
           <button
             onClick={fetchData}
             className="text-sm text-gray-500 hover:text-gray-700 px-2 py-1 rounded"
@@ -486,7 +493,7 @@ export default function POSKitchenDashboard() {
           </div>
         ) : recentOrders.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
-            <p className="text-sm">No orders today</p>
+            <p className="text-sm">You haven't created any orders today</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-200">

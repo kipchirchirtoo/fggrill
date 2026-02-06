@@ -48,11 +48,18 @@ export default function ClockInTerminal() {
         setIsLoading(true);
         try {
             const apiCall = action === 'in' ? staffAPI.clockIn : staffAPI.clockOut;
-            const response = await apiCall({
+            const payload: any = {
                 staff_id: staffInfo.id,
-                in_method: 'terminal',
                 device_id: 'TERMINAL_01'
-            });
+            };
+
+            if (action === 'in') {
+                payload.in_method = 'terminal';
+            } else {
+                payload.out_method = 'terminal';
+            }
+
+            const response = await apiCall(payload);
 
             if (response.success) {
                 setStep('success');

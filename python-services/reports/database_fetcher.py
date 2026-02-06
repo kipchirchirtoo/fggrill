@@ -85,11 +85,24 @@ class DatabaseFetcher:
                 'procurement_intelligence': self._fetch_procurement_intelligence,
                 'supplier_statement': self._fetch_supplier_statement,
                 'revenue_reconciliation': self._fetch_revenue_reconciliation,
+                'sales_performance': self._fetch_sales_performance,
             }
             
             fetcher = fetchers.get(report_type)
             if fetcher:
-                return fetcher(filters)
+                data = fetcher(filters)
+                
+                # Automatically fetch AI insights for the report
+                if data and not data.get('error'):
+                    try:
+                        ai_insights = self._fetch_ai_insights(report_type, data, filters)
+                        if ai_insights:
+                            data['ai_insights'] = ai_insights
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch AI insights: {e}")
+                        # Don't fail the report if AI insights fail
+                
+                return data
             else:
                 logger.warning(f"Unknown report type: {report_type}")
                 return {'error': f'Unknown report type: {report_type}'}
@@ -137,12 +150,74 @@ class DatabaseFetcher:
                 return query.in_(column, branch_ids)
         return query
     
+    def _fetch_ai_insights(self, report_type: str, data: Dict[str, Any], filters: Dict[str, Any]) -> str:
+        """
+        Fetch AI-generated insights for a report.
+        Returns a text summary that can be included in the PDF.
+        """
+        try:
+            import os
+            import google.genai
+            from google import genai
+            
+            api_key = os.getenv('GEMINI_API_KEY')
+            if not api_key:
+                logger.info("GEMINI_API_KEY not set, skipping AI insights")
+                return ""
+            
+            client = genai.Client(api_key=api_key)
+            
+            # Construct a natural language prompt based on report type and data
+            branch_name = filters.get('branch_name', 'All Branches')
+            start_date = filters.get('start_date', 'N/A')
+            end_date = filters.get('end_date', 'N/A')
+            
+            # Extract key metrics from data for context
+            summary_text = ""
+            if 'summary' in data:
+                summary_text = f"Summary metrics: {str(data['summary'])[:300]}"
+            elif 'total_revenue' in data:
+                summary_text = f"Total revenue: {data.get('total_revenue', 0)}"
+            
+            # Create a focused prompt for executive summary
+            prompt = f"""You are a business analyst reviewing a {report_type.replace('_', ' ')} report for {branch_name} covering the period from {start_date} to {end_date}.
+
+{summary_text}
+
+Provide a brief executive summary (2-3 sentences maximum) that:
+1. Highlights the most important finding or trend
+2. Identifies any notable concern or achievement
+3. Suggests one actionable recommendation
+
+Be concise, specific, and business-focused. Do not use bullet points or markdown formatting."""
+
+            response = client.models.generate_content(
+                model='gemini-2.0-flash-exp',
+                contents=prompt
+            )
+            
+            if response and response.text:
+                # Clean up the response
+                insights = response.text.strip()
+                # Remove any markdown formatting that might have slipped through
+                insights = insights.replace('**', '').replace('*', '').replace('#', '')
+                return insights
+            else:
+                logger.warning("AI insights generation returned empty response")
+                return ""
+                
+        except Exception as e:
+            logger.error(f"Error fetching AI insights: {e}")
+            return ""  # Return empty string on error, don't break report generation
+    
     def _fetch_revenue_reconciliation(self, filters: Dict) -> Dict[str, Any]:
         """Fetch comprehensive revenue reconciliation data"""
         start_date, end_date = self._parse_dates(filters)
         
         data = {
             'total_revenue': 0,
+            'sales': 0,
+            'variance': 0,
             'departments': {
                 'restaurant': 0,
                 'bar': 0,
@@ -156,6 +231,7 @@ class DatabaseFetcher:
                 'card': 0,
                 'other': 0
             },
+            'cashier_summaries': {}, # Map of user_id -> summary
             'transactions': []
         }
         
@@ -175,7 +251,44 @@ class DatabaseFetcher:
             # 2. Get Branch IDs to filter
             branch_ids = self._parse_branch_ids(filters)
             
-            # 3. Aggregation and Filtering (In-Memory Branch Filtering logic similar to backend)
+            # 3. Fetch theoretical sales to calculate variance
+            # Restaurant Orders
+            rest_sales_query = self.client.table('restaurant_orders').select('total_amount, branch_id')\
+                .gte('created_at', f'{start_date}T00:00:00')\
+                .lte('created_at', f'{end_date}T23:59:59')\
+                .in_('payment_status', ['paid', 'partial'])
+            if branch_ids:
+                if len(branch_ids) == 1: rest_sales_query = rest_sales_query.eq('branch_id', branch_ids[0])
+                else: rest_sales_query = rest_sales_query.in_('branch_id', branch_ids)
+            
+            rest_sales_res = rest_sales_query.execute()
+            data['sales'] += sum(float(o.get('total_amount', 0) or 0) for o in (rest_sales_res.data or []))
+
+            # Bar Orders
+            bar_sales_query = self.client.table('bar_orders').select('total_amount, branch_id')\
+                .gte('created_at', f'{start_date}T00:00:00')\
+                .lte('created_at', f'{end_date}T23:59:59')\
+                .in_('payment_status', ['paid', 'partial'])
+            if branch_ids:
+                if len(branch_ids) == 1: bar_sales_query = bar_sales_query.eq('branch_id', branch_ids[0])
+                else: bar_sales_query = bar_sales_query.in_('branch_id', branch_ids)
+            
+            bar_sales_res = bar_sales_query.execute()
+            data['sales'] += sum(float(o.get('total_amount', 0) or 0) for o in (bar_sales_res.data or []))
+
+            # Reservations
+            res_sales_query = self.client.table('reservations').select('total_amount, branch_id')\
+                .gte('created_at', f'{start_date}T00:00:00')\
+                .lte('created_at', f'{end_date}T23:59:59')\
+                .in_('status', ['confirmed', 'checked_in', 'checked_out'])
+            if branch_ids:
+                if len(branch_ids) == 1: res_sales_query = res_sales_query.eq('branch_id', branch_ids[0])
+                else: res_sales_query = res_sales_query.in_('branch_id', branch_ids)
+            
+            res_sales_res = res_sales_query.execute()
+            data['sales'] += sum(float(o.get('total_amount', 0) or 0) for o in (res_sales_res.data or []))
+
+            # 4. Aggregation and Filtering (In-Memory Branch Filtering logic similar to backend)
             # Since payments don't have branch_id, we infer from related tables or treat as global if missing
             
             # Fetch related IDs
@@ -186,29 +299,40 @@ class DatabaseFetcher:
             # Fetch mappings
             map_data = {}
             if booking_ids:
-                res = self.client.table('reservations').select('id, branch_id').in_('id', booking_ids).execute()
-                for item in (res.data or []): map_data[f"booking_{item['id']}"] = item.get('branch_id')
+                res = self.client.table('reservations').select('id, branch_id, created_by').in_('id', booking_ids).execute()
+                for item in (res.data or []): 
+                    map_data[f"booking_{item['id']}"] = item.get('branch_id')
+                    map_data[f"booking_user_{item['id']}"] = item.get('created_by')
                 
             if order_ids:
-                res = self.client.table('restaurant_orders').select('id, branch_id').in_('id', order_ids).execute()
-                for item in (res.data or []): map_data[f"rest_{item['id']}"] = item.get('branch_id')
+                res = self.client.table('restaurant_orders').select('id, branch_id, staff_id').in_('id', order_ids).execute()
+                for item in (res.data or []): 
+                    map_data[f"rest_{item['id']}"] = item.get('branch_id')
+                    map_data[f"rest_user_{item['id']}"] = item.get('staff_id')
                 
             if bar_ids:
-                res = self.client.table('bar_orders').select('id, branch_id').in_('id', bar_ids).execute()
-                for item in (res.data or []): map_data[f"bar_{item['id']}"] = item.get('branch_id')
+                res = self.client.table('bar_orders').select('id, branch_id, staff_id').in_('id', bar_ids).execute()
+                for item in (res.data or []): 
+                    map_data[f"bar_{item['id']}"] = item.get('branch_id')
+                    map_data[f"bar_user_{item['id']}"] = item.get('staff_id')
                 
             # Filter and Aggregate
+            active_user_ids = []
             for payment in all_payments:
-                pid = payment.get('branch_id') # Usually None based on prior analysis
+                pid = payment.get('branch_id')
+                uid = payment.get('created_by')
                 
-                # Infer branch if missing
+                # Infer branch and user if missing
                 if not pid:
                     if payment.get('booking_id'):
                         pid = map_data.get(f"booking_{payment.get('booking_id')}")
+                        if not uid: uid = map_data.get(f"booking_user_{payment.get('booking_id')}")
                     elif payment.get('restaurant_order_id'):
                         pid = map_data.get(f"rest_{payment.get('restaurant_order_id')}")
+                        if not uid: uid = map_data.get(f"rest_user_{payment.get('restaurant_order_id')}")
                     elif payment.get('bar_order_id'):
                         pid = map_data.get(f"bar_{payment.get('bar_order_id')}")
+                        if not uid: uid = map_data.get(f"bar_user_{payment.get('bar_order_id')}")
                 
                 # Apply Branch Filter
                 if branch_ids and (pid not in branch_ids):
@@ -232,6 +356,14 @@ class DatabaseFetcher:
                 elif payment.get('bar_order_id'): data['departments']['bar'] += amount
                 else: data['departments']['other'] += amount
                 
+                # Cashier Summary
+                if uid:
+                    if uid not in data['cashier_summaries']:
+                        data['cashier_summaries'][uid] = {'total_amount': 0, 'payment_count': 0, 'cashier_name': 'Unknown'}
+                        active_user_ids.append(uid)
+                    data['cashier_summaries'][uid]['total_amount'] += amount
+                    data['cashier_summaries'][uid]['payment_count'] += 1
+
                 # Add transaction (limit to top 100 for report)
                 if len(data['transactions']) < 100:
                     data['transactions'].append({
@@ -241,6 +373,20 @@ class DatabaseFetcher:
                         'method': method,
                         'type': 'Booking' if payment.get('booking_id') else 'Order' if payment.get('restaurant_order_id') else 'Bar' if payment.get('bar_order_id') else 'Other'
                     })
+
+            # Fetch User Names for summaries
+            if active_user_ids:
+                users_res = self.client.table('users').select('id, first_name, last_name').in_('id', active_user_ids).execute()
+                for u in (users_res.data or []):
+                    name = f"{u.get('first_name', '')} {u.get('last_name', '')}".strip()
+                    if u['id'] in data['cashier_summaries']:
+                        data['cashier_summaries'][u['id']]['cashier_name'] = name
+
+            # Convert map to list for generator
+            data['cashier_summaries'] = sorted(list(data['cashier_summaries'].values()), key=lambda x: x['total_amount'], reverse=True)
+            
+            # Calculate Variance
+            data['variance'] = data['total_revenue'] - data['sales']
                     
         except Exception as e:
             logger.error(f"Error fetching revenue reconciliation: {e}")
@@ -1706,6 +1852,121 @@ class DatabaseFetcher:
 
         except Exception as e:
             logger.error(f"Error in reconciliation audit: {e}")
+            
+        return data
+
+    def _fetch_sales_performance(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch Branch Sales Performance data (Aggregated Sold Items + Efficiency)"""
+        start_date, end_date = self._parse_dates(filters)
+        branch_ids = self._parse_branch_ids(filters)
+        
+        data = {
+            'analysis': [],
+            'summary': {
+                'total_items_sold': 0,
+                'total_quantity_sold': 0,
+                'total_revenue': 0
+            }
+        }
+        
+        if not self.client:
+            return data
+            
+        try:
+            # 1. Fetch Restaurant Sold Items
+            rest_query = self.client.table('restaurant_orders').select('*, items:restaurant_order_items(*, menu_item:restaurant_menu_items(name, category_id))')\
+                .eq('status', 'completed')\
+                .gte('created_at', f'{start_date}T00:00:00')\
+                .lte('created_at', f'{end_date}T23:59:59')
+            if branch_ids:
+                if len(branch_ids) == 1: rest_query = rest_query.eq('branch_id', branch_ids[0])
+                else: rest_query = rest_query.in_('branch_id', branch_ids)
+            
+            rest_res = rest_query.execute()
+            
+            # 2. Fetch Bar Sold Items
+            bar_query = self.client.table('bar_orders').select('*, items:bar_order_items(*, stock_item:bar_inventory(name))')\
+                .eq('status', 'completed')\
+                .gte('created_at', f'{start_date}T00:00:00')\
+                .lte('created_at', f'{end_date}T23:59:59')
+            if branch_ids:
+                if len(branch_ids) == 1: bar_query = bar_query.eq('branch_id', branch_ids[0])
+                else: bar_query = bar_query.in_('branch_id', branch_ids)
+                
+            bar_res = bar_query.execute()
+
+            # 3. Fetch Stock Requested
+            stock_req_query = self.client.table('stock_requests').select('*, items:stock_request_items(item_sku, requested_quantity)')\
+                .gte('created_at', f'{start_date}T00:00:00')\
+                .lte('created_at', f'{end_date}T23:59:59')
+            if branch_ids:
+                if len(branch_ids) == 1: stock_req_query = stock_req_query.eq('requesting_branch_id', branch_ids[0])
+                else: stock_req_query = stock_req_query.in_('requesting_branch_id', branch_ids)
+                
+            stock_res = stock_req_query.execute()
+
+            # Mapping for aggregation
+            sold_items_map = {} # Key: name
+            requested_map = {} # Key: SKU or Name-ish (we'll try to match by name/SKU)
+            
+            # Process Stock Requests
+            for req in (stock_res.data or []):
+                for item in req.get('items', []):
+                    sku = item.get('item_sku')
+                    qty = float(item.get('requested_quantity', 0) or 0)
+                    requested_map[sku] = requested_map.get(sku, 0) + qty
+
+            def process_orders(orders_data, type_label):
+                for order in (orders_data or []):
+                    for item in order.get('items', []):
+                        name = 'Unknown Item'
+                        if type_label == 'restaurant':
+                            name = (item.get('menu_item') or {}).get('name') or item.get('item_name') or 'Unknown'
+                        else:
+                            name = (item.get('stock_item') or {}).get('name') or item.get('item_name') or 'Unknown'
+                        
+                        sku = item.get('item_sku') or name # Use SKU if available, otherwise name
+                        qty = float(item.get('quantity', 0) or 0)
+                        price = float(item.get('unit_price', item.get('price', 0)) or 0)
+                        revenue = qty * price
+                        
+                        if name not in sold_items_map:
+                            sold_items_map[name] = {
+                                'name': name,
+                                'category': type_label.title(),
+                                'quantity': 0,
+                                'revenue': 0,
+                                'skus': set()
+                            }
+                        
+                        sold_items_map[name]['quantity'] += qty
+                        sold_items_map[name]['revenue'] += revenue
+                        if sku: sold_items_map[name]['skus'].add(sku)
+                        
+                        data['summary']['total_quantity_sold'] += qty
+                        data['summary']['total_revenue'] += revenue
+
+            process_orders(rest_res.data, 'restaurant')
+            process_orders(bar_res.data, 'bar')
+            
+            # Final Analysis Assembly
+            for name, sold in sold_items_map.items():
+                # Try to find requested quantity by any associated SKUs
+                requested_qty = 0
+                for sku in sold['skus']:
+                    requested_qty += requested_map.get(sku, 0)
+                
+                sold['stock_requested'] = requested_qty
+                sold['consumption_ratio'] = (sold['quantity'] / requested_qty) if requested_qty > 0 else 0
+                # Remove skus set for serialization
+                del sold['skus']
+                data['analysis'].append(sold)
+                
+            data['summary']['total_items_sold'] = len(data['analysis'])
+            data['analysis'] = sorted(data['analysis'], key=lambda x: x['quantity'], reverse=True)
+            
+        except Exception as e:
+            logger.error(f"Error fetching sales performance: {e}")
             
         return data
 

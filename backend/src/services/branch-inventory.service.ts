@@ -924,18 +924,22 @@ export async function getAllBranches() {
  * Get dashboard stats for central
  */
 export async function getCentralDashboardStats() {
-  const [pendingRequests, inTransit, lowStock, recentDispatches] = await Promise.all([
+  const [pendingRequests, inTransit, lowStock, recentDispatches, totalMaster, globalLowStock] = await Promise.all([
     supabase.from('stock_requests').select('id', { count: 'exact', head: true }).in('status', ['PENDING', 'UNDER_REVIEW']),
     supabase.from('dispatch_notes').select('id', { count: 'exact', head: true }).eq('status', 'IN_TRANSIT'),
-    supabase.from('branch_stock').select('id', { count: 'exact', head: true }).lte('quantity', 10), // Low stock items
-    supabase.from('dispatch_notes').select('id', { count: 'exact', head: true }).gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+    supabase.from('branch_stock').select('id', { count: 'exact', head: true }).lte('quantity', 10), // Low stock items cross-branch
+    supabase.from('dispatch_notes').select('id', { count: 'exact', head: true }).gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+    supabase.from('simple_items').select('sku', { count: 'exact', head: true }).eq('is_active', true),
+    supabase.from('simple_items').select('sku', { count: 'exact', head: true }).eq('is_active', true).lte('quantity', 10)
   ]);
 
   return {
     pendingRequests: pendingRequests.count || 0,
     inTransit: inTransit.count || 0,
     lowStockBranches: lowStock.count || 0,
-    weeklyDispatches: recentDispatches.count || 0
+    weeklyDispatches: recentDispatches.count || 0,
+    totalMasterItems: totalMaster.count || 0,
+    totalLowStockItems: globalLowStock.count || 0
   };
 }
 

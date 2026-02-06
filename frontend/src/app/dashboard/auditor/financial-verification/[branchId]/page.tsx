@@ -51,7 +51,7 @@ export default function BranchFinancialVerificationPage() {
     const handleExport = async () => {
         setIsExporting(true);
         try {
-            await auditorReportsAPI.exportBrandedPdf('expenditure_audit', {
+            await auditorReportsAPI.exportBrandedPdf('revenue_reconciliation', {
                 branch_id: parseInt(branchId),
                 start_date: selectedDate,
                 end_date: selectedDate

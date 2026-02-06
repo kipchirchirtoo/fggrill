@@ -281,6 +281,7 @@ class BrandedPDFGenerator:
             'expense': self._generate_expense_report,
             'stock_movement': self._generate_stock_movement_report,
             'branch_performance': self._generate_branch_performance_report,
+            'sales_performance': self._generate_sales_performance_report,
             'staff_overview': self._generate_staff_overview_report,
             'compliance': self._generate_compliance_report,
             'branch_comparison': self._generate_branch_comparison_report,
@@ -3196,6 +3197,112 @@ class BrandedPDFGenerator:
             
         return self._create_pdf(elements)
 
+    def _generate_sales_performance_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Branch Sales Performance Report PDF"""
+        elements = []
+        
+        start_date = filters.get('start_date', 'N/A')
+        end_date = filters.get('end_date', 'N/A')
+        date_range = f"{start_date} to {end_date}"
+        branch_name = filters.get('branch_name', 'Branch')
+        
+        elements.extend(self._create_header("BRANCH SALES PERFORMANCE REPORT", date_range, branch_name))
+        
+        # AI Insights Section (if available)
+        ai_insights = data.get('ai_insights', '')
+        if ai_insights and ai_insights.strip():
+            elements.append(Paragraph("<b>AI-GENERATED INSIGHTS</b>", self.styles['SectionHeader']))
+            
+            insights_style = ParagraphStyle(
+                'AIInsights',
+                parent=self.styles['Normal'],
+                fontSize=10,
+                leading=14,
+                textColor=colors.HexColor('#6B21A8'),
+                leftIndent=10,
+                rightIndent=10
+            )
+            
+            insights_para = Paragraph(ai_insights, insights_style)
+            insights_table = Table([[insights_para]], colWidths=[7*inch])
+            insights_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F3E8FF')),
+                ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#A78BFA')),
+                ('PADDING', (0, 0), (-1, -1), 12),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ]))
+            elements.append(insights_table)
+            elements.append(Spacer(1, 0.3*inch))
+        
+        # 1. Executive Summary
+        elements.append(Paragraph("<b>PERFORMANCE OVERVIEW</b>", self.styles['SectionHeader']))
+        
+        summary = data.get('summary', {})
+        summary_data = [
+            ['METRIC', 'VALUE'],
+            ['Unique Items Sold', str(summary.get('total_items_sold', 0))],
+            ['Total Quantity Sold', self._format_number(summary.get('total_quantity_sold', 0))],
+            ['Total Gross Revenue', self._format_currency(summary.get('total_revenue', 0))]
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[3*inch, 3*inch])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('PADDING', (0, 0), (-1, -1), 10),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # 2. Detailed Performance Table
+        elements.append(Paragraph("<b>ITEM MOVEMENT & EFFICIENCY ANALYSIS</b>", self.styles['SectionHeader']))
+        
+        headers = ['Item Details', 'Dept.', 'Qty Sold', 'Revenue', 'Stock Req.', 'Efficiency']
+        perf_data = [headers]
+        
+        for item in data.get('analysis', []):
+            ratio = item.get('consumption_ratio', 0) * 100
+            perf_data.append([
+                Paragraph(f"<b>{item.get('name', 'Unknown')}</b>", self.styles['Normal']),
+                item.get('category', '-'),
+                self._format_number(item.get('quantity', 0)),
+                self._format_currency(item.get('revenue', 0)),
+                self._format_number(item.get('stock_requested', 0)) if item.get('stock_requested') else '-',
+                self._format_percent(ratio) if item.get('stock_requested') else 'N/A'
+            ])
+            
+        if not data.get('analysis'):
+            perf_data.append(['No data found', '-', '-', '-', '-', '-'])
+            
+        perf_table = Table(perf_data, colWidths=[1.8*inch, 1*inch, 0.9*inch, 1.2*inch, 1*inch, 0.9*inch])
+        perf_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('ALIGN', (2, 0), (5, -1), 'CENTER'),
+            ('ALIGN', (3, 1), (3, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.2, FG_GRAY),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('PADDING', (0, 0), (-1, -1), 6),
+        ]))
+        
+        # Apply conditional coloring for efficiency
+        for i, item in enumerate(data.get('analysis', []), 1):
+            if item.get('stock_requested'):
+                ratio = item.get('consumption_ratio', 0) * 100
+                color = FG_GREEN if ratio > 90 else colors.orange if ratio > 50 else FG_RED
+                perf_table.setStyle(TableStyle([
+                    ('TEXTCOLOR', (5, i), (5, i), color),
+                    ('FONTNAME', (5, i), (5, i), 'Helvetica-Bold'),
+                ]))
+
+        elements.append(perf_table)
+        
+        return self._create_pdf(elements)
+
     def _generate_stock_usage_report(self, data: Dict, filters: Dict) -> str:
         """Generate Stock Usage Report PDF"""
         elements = []
@@ -3651,33 +3758,63 @@ class BrandedPDFGenerator:
         elements.append(Paragraph("<b>EXECUTIVE SUMMARY</b>", self.styles['SectionHeader']))
         
         total_rev = data.get('total_revenue', 0)
+        theoretical_sales = data.get('sales', 0)
+        variance = data.get('variance', 0)
         
         summary_data = [
-            ['TOTAL VERIFIED REVENUE', self._format_currency(total_rev)],
-            ['Audit Status', 'VERIFIED' if total_rev > 0 else 'NO DATA']
+            ['TOTAL REVENUE (Theoretical Sales)', self._format_currency(theoretical_sales)],
+            ['TOTAL PAYMENTS (Verified Revenue)', self._format_currency(total_rev)],
+            ['SYSTEM VARIANCE', self._format_currency(variance)],
+            ['Audit Status', 'VERIFIED' if abs(variance) < 1 else 'RECONCILIATION REQUIRED' if total_rev > 0 else 'NO DATA']
         ]
         
-        summary_table = Table(summary_data, colWidths=[3*inch, 2*inch])
+        summary_table = Table(summary_data, colWidths=[3*inch, 2.5*inch])
         summary_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (0, -1), HEADER_BLUE),
             ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
             ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
             ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('TEXTCOLOR', (1, 2), (1, 2), FG_RED if abs(variance) > 10 else FG_GREEN),
             ('PADDING', (0, 0), (-1, -1), 12),
         ]))
         elements.append(summary_table)
         elements.append(Spacer(1, 0.2*inch))
         
-        # 2. Revenue Breakdown (Departments & Modes)
-        # Create two tables side-by-side
+        # 2. Cashier Summaries
+        cashier_summaries = data.get('cashier_summaries', [])
+        if cashier_summaries:
+            elements.append(Paragraph("<b>CASHIER SUMMARIES</b>", self.styles['SectionHeader']))
+            headers = ['Cashier Name', 'Transactions', 'Total Collected']
+            c_data = [headers]
+            for c in cashier_summaries:
+                c_data.append([
+                    c.get('cashier_name', 'Unknown'),
+                    str(c.get('payment_count', 0)),
+                    self._format_currency(c.get('total_amount', 0))
+                ])
+            
+            ct = Table(c_data, colWidths=[3*inch, 1.5*inch, 2*inch])
+            ct.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), HEADER_GRAY),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+                ('ALIGN', (1, 0), (2, -1), 'RIGHT'),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, ROW_ALT]),
+            ]))
+            elements.append(ct)
+            elements.append(Spacer(1, 0.3*inch))
+
+        # 3. Revenue Breakdown (Departments & Modes)
+        elements.append(Paragraph("<b>REVENUE BREAKDOWN</b>", self.styles['SectionHeader']))
         
-        # Department Table
+        # Create Department and Mode tables side-by-side (using a container table)
         dept_data = [['DEPARTMENT', 'REVENUE']]
         depts = data.get('departments', {})
         for dept, amount in depts.items():
-            dept_data.append([dept.replace('_', ' ').title(), self._format_currency(amount)])
+            if amount > 0:
+                dept_data.append([dept.replace('_', ' ').title(), self._format_currency(amount)])
             
-        dept_table = Table(dept_data, colWidths=[2.5*inch, 1.5*inch])
+        dept_table = Table(dept_data, colWidths=[2.2*inch, 1.3*inch])
         dept_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), HEADER_GREEN),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
@@ -3685,13 +3822,13 @@ class BrandedPDFGenerator:
             ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
         ]))
         
-        # Mode Table
         mode_data = [['PAYMENT MODE', 'AMOUNT']]
         modes = data.get('payment_modes', {})
         for mode, amount in modes.items():
-            mode_data.append([mode.replace('_', ' ').title(), self._format_currency(amount)])
+            if amount > 0:
+                mode_data.append([mode.replace('_', ' ').title(), self._format_currency(amount)])
             
-        mode_table = Table(mode_data, colWidths=[2.5*inch, 1.5*inch])
+        mode_table = Table(mode_data, colWidths=[2.2*inch, 1.3*inch])
         mode_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), HEADER_YELLOW),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
@@ -3699,13 +3836,15 @@ class BrandedPDFGenerator:
             ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
         ]))
         
-        elements.append(Paragraph("<b>REVENUE BREAKDOWN</b>", self.styles['SectionHeader']))
-        elements.append(dept_table)
-        elements.append(Spacer(1, 0.2*inch))
-        elements.append(mode_table)
+        # Place side by side
+        container_data = [[dept_table, Spacer(0.5*inch, 0), mode_table]]
+        container = Table(container_data, colWidths=[3.5*inch, 0.5*inch, 3.5*inch])
+        container.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP')]))
+        
+        elements.append(container)
         elements.append(Spacer(1, 0.3*inch))
         
-        # 3. Transaction Details
+        # 4. Transaction Details
         elements.append(Paragraph("<b>VERIFIED TRANSACTIONS (Top 100)</b>", self.styles['SectionHeader']))
         
         headers = ['Date', 'Reference', 'Type', 'Method', 'Amount']
@@ -3728,7 +3867,7 @@ class BrandedPDFGenerator:
         if not transactions:
             txn_data.append(['No transactions found', '', '', '', '-'])
             
-        t = Table(txn_data, colWidths=[1.2*inch, 2*inch, 1.5*inch, 1.5*inch, 1.5*inch])
+        t = Table(txn_data, colWidths=[1.2*inch, 2*inch, 1.5*inch, 1.5*inch, 1.3*inch])
         t.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), HEADER_GRAY),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),

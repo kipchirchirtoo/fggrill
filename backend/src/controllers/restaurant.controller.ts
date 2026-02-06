@@ -619,6 +619,9 @@ export const getOrders = async (
     if (req.query.startDate && req.query.endDate) {
       query = query.gte('created_at', req.query.startDate).lte('created_at', req.query.endDate);
     }
+    if (req.query.created_by) {
+      query = query.eq('created_by', req.query.created_by);
+    }
 
     const { data: orders, error, count } = await query;
 

@@ -7,7 +7,7 @@ import {
   Bed, TrendingUp, Package, Home, Wrench, CreditCard, PieChart,
   LineChart, Plus, Play, Pause, RefreshCw, Trash2,
   CheckCircle, XCircle, Mail, Building2, UtensilsCrossed, Wine, X,
-  AlertTriangle, Loader2, Brain
+  AlertTriangle, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { reportsService, systemAPI } from '@/lib/api';
@@ -148,11 +148,6 @@ export function ReportsPageComponent({
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState<string>('');
   const [generating, setGenerating] = useState(false);
-
-  // AI Analysis State
-  const [showAIModal, setShowAIModal] = useState(false);
-  const [aiResult, setAiResult] = useState<any>(null);
-  const [aiLoading, setAiLoading] = useState(false);
 
   // Filter report categories based on user role
   const REPORT_CATEGORIES = ALL_REPORT_CATEGORIES.filter(cat =>
@@ -297,60 +292,6 @@ export function ReportsPageComponent({
       toast.error(error.message || 'Failed to generate report');
     } finally {
       setGenerating(false);
-    }
-  };
-
-  const handleGenerateAIReport = async () => {
-    if (serviceStatus !== 'online') {
-      toast.error('Report service is offline. Please try again later.');
-      return;
-    }
-
-    setAiLoading(true);
-    try {
-      const effectiveBranchId = isBranchLocked
-        ? branchId
-        : (selectedBranch !== 'all' ? parseInt(selectedBranch) : undefined);
-
-      const effectiveBranchName = isBranchLocked
-        ? branchName
-        : (selectedBranch !== 'all' ? branches.find(b => b.id.toString() === selectedBranch)?.name : 'All Branches');
-
-      const reportName = getReportName(selectedReport);
-
-      // Construct Natural Language Prompt
-      const prompt = `Generate a detailed ${reportName} for ${effectiveBranchName} from ${dateRange.start_date} to ${dateRange.end_date}. Provide key metrics, trends, and a detailed breakdown.`;
-
-      const context = {
-        branch_id: effectiveBranchId,
-        branch_name: effectiveBranchName,
-        start_date: dateRange.start_date,
-        end_date: dateRange.end_date,
-        report_type: selectedReport,
-        user_role: userRole
-      };
-
-      const result = await reportsService.generateAIReport(prompt, context);
-
-      if (result.error) throw new Error(result.error);
-
-      setAiResult({
-        ...result,
-        meta: {
-          title: reportName,
-          period: `${dateRange.start_date} to ${dateRange.end_date}`,
-          branch: effectiveBranchName
-        }
-      });
-      setShowGenerateModal(false);
-      setShowAIModal(true);
-      toast.success('AI Analysis Completed');
-
-    } catch (error: any) {
-      console.error('Error generating AI report:', error);
-      toast.error(error.message || 'Failed to generate AI report');
-    } finally {
-      setAiLoading(false);
     }
   };
 
@@ -829,17 +770,6 @@ export function ReportsPageComponent({
               </IOSButton>
             </div>
 
-            <div className="mt-3">
-              <IOSButton
-                onClick={handleGenerateAIReport}
-                disabled={aiLoading || generating || serviceStatus !== 'online'}
-                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white border-0 hover:opacity-90"
-              >
-                {aiLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Brain className="h-4 w-4 mr-2" />}
-                Generate Detailed AI Analysis
-              </IOSButton>
-            </div>
-
             {serviceStatus !== 'online' && (
               <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-ios-lg flex items-center gap-2 text-red-700 text-sm">
                 <AlertTriangle className="h-4 w-4" />
@@ -869,143 +799,6 @@ export function ReportsPageComponent({
           reportCategories={REPORT_CATEGORIES}
         />
       )}
-
-      {/* AI Result Modal */}
-      {showAIModal && aiResult && (
-        <AIResultModal
-          isOpen={showAIModal}
-          onClose={() => setShowAIModal(false)}
-          data={aiResult}
-        />
-      )}
-    </div>
-  );
-}
-
-function AIResultModal({ isOpen, onClose, data }: { isOpen: boolean; onClose: () => void; data: any }) {
-  if (!isOpen) return null;
-
-  const { meta, data: reportData } = data;
-  const queries = Object.keys(reportData || {});
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="p-6 border-b flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <Brain className="h-5 w-5 text-purple-600" />
-              {meta?.title || 'AI Analysis Report'}
-            </h2>
-            <p className="text-sm text-gray-500 mt-1">
-              {meta?.branch} • {meta?.period}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <IOSButton variant="secondary" onClick={() => window.print()}>
-              <FileText className="h-4 w-4 mr-2" />
-              Print
-            </IOSButton>
-            <IOSButton
-              variant="primary"
-              onClick={async () => {
-                const toastId = toast.loading('Generating PDF...');
-                try {
-                  await reportsService.exportReport({
-                    reportType: 'ai_analysis',
-                    format: 'pdf',
-                    data: data, // Pass the full AI result
-                    useRealData: false // Tell backend to use passed data
-                  } as any);
-                  toast.dismiss(toastId);
-                  toast.success('Download started');
-                } catch (e) {
-                  toast.dismiss(toastId);
-                  toast.error('Failed to generate PDF');
-                }
-              }}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Download Official PDF
-            </IOSButton>
-            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6 space-y-8">
-          {/* Generative Text Summary (Mocked for now if not in response) */}
-          <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
-            <h3 className="font-semibold text-purple-900 mb-2 flex items-center gap-2">
-              <Brain className="h-4 w-4" />
-              AI Insights
-            </h3>
-            <p className="text-purple-800 text-sm leading-relaxed">
-              Based on the analysis of {queries.length} data points, here is your report execution plan and results.
-              Each section below represents a specific query dynamically generated to answer your request.
-            </p>
-          </div>
-
-          {queries.map((queryName) => {
-            const queryResult = reportData[queryName];
-            const isError = queryResult?.error;
-
-            return (
-              <IOSCard key={queryName} className="p-0 overflow-hidden">
-                <div className="bg-gray-50 px-4 py-3 border-b flex items-center justify-between">
-                  <h3 className="font-medium text-gray-900 font-mono text-sm">{queryName}</h3>
-                  {isError ? (
-                    <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">Error</span>
-                  ) : (
-                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Success</span>
-                  )}
-                </div>
-                <div className="p-4 overflow-x-auto">
-                  {isError ? (
-                    <div className="text-red-600 text-sm">{queryResult.error}</div>
-                  ) : (
-                    Array.isArray(queryResult) && queryResult.length > 0 ? (
-                      <table className="w-full text-sm text-left">
-                        <thead className="bg-gray-50 text-gray-500 font-medium">
-                          <tr>
-                            {Object.keys(queryResult[0]).map(key => (
-                              <th key={key} className="px-4 py-2">{key.replace(/_/g, ' ')}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {queryResult.map((row: any, i: number) => (
-                            <tr key={i} className="hover:bg-gray-50">
-                              {Object.values(row).map((val: any, j: number) => (
-                                <td key={j} className="px-4 py-2 whitespace-nowrap">
-                                  {typeof val === 'object' ? JSON.stringify(val) : String(val)}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    ) : (
-                      <p className="text-gray-500 italic">No data returned for this query.</p>
-                    )
-                  )}
-                </div>
-              </IOSCard>
-            );
-          })}
-
-          {/* JSON Plan (Debug) */}
-          <div className="mt-8">
-            <details className="text-xs text-gray-400">
-              <summary className="cursor-pointer hover:text-gray-600">View Execution Plan</summary>
-              <pre className="mt-2 bg-gray-50 p-4 rounded overflow-auto">
-                {JSON.stringify(meta, null, 2)}
-              </pre>
-            </details>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
