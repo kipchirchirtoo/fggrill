@@ -53,6 +53,13 @@
         "to": "frontend/.next/static"
       }
     ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "allan-too",
+        "repo": "fggrill"
+      }
+    ],
     "win": {
       "target": [
         "nsis",
@@ -60,14 +67,7 @@
         "zip"
       ],
       "icon": "frontend/public/fglogo.ico",
-      "publisherName": "HIRALL",
-      "publish": [
-        {
-          "provider": "github",
-          "owner": "allan-too",
-          "repo": "fggrill"
-        }
-      ]
+      "publisherName": "HIRALL"
     },
     "nsis": {
       "oneClick": false,
@@ -75,6 +75,20 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "FG Grill Terminal"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office",
+      "icon": "frontend/public/fg_grill_official_icon.png"
     }
+  },
+  "scripts": {
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
+    "release": "electron-builder --win --linux -p always"
   }
 }
