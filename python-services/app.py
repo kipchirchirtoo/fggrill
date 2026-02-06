@@ -97,6 +97,28 @@ report_scheduler = ReportScheduler()
 scheduler_daemon = SchedulerDaemon()
 scheduler_thread = None
 
+# Initialize AI Analyst
+from ai.ai_analyst import AIAnalyst
+ai_analyst = AIAnalyst(database_fetcher)
+
+@app.route('/api/reports/generate/ai-enhanced', methods=['POST'])
+def generate_ai_report():
+    """Generate report using AI Analyst"""
+    try:
+        data = request.get_json()
+        prompt = data.get('prompt')
+        context = data.get('context', {})
+        
+        logger.info(f"AI Analyst Request: {prompt}")
+        
+        result = ai_analyst.generate_report(prompt, context)
+        
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in AI Analyst: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""

@@ -116,7 +116,7 @@ export default function BranchStaffPage() {
     first_name: '',
     last_name: '',
     email: '',
-    phone: '',
+    phone_number: '',
     employee_id: '',
     pos_pin: '',
     role: 'employee'
@@ -235,7 +235,7 @@ export default function BranchStaffPage() {
       first_name: '',
       last_name: '',
       email: '',
-      phone: '',
+      phone_number: '',
       employee_id: '',
       pos_pin: '',
       role: 'employee'
@@ -253,7 +253,7 @@ export default function BranchStaffPage() {
       first_name: member.first_name,
       last_name: member.last_name,
       email: member.email,
-      phone: member.phone || '',
+      phone_number: member.phone || (member as any).phone_number || '',
       employee_id: member.employee_id || '',
       pos_pin: member.pos_pin || '',
       role: member.role
@@ -275,17 +275,17 @@ export default function BranchStaffPage() {
 
     setIsSubmitting(true);
     try {
-      // Map frontend field names to backend expected field names
+      // Map frontend field names to backend expected field names (snake_case)
       const staffData = {
-        firstName: staffForm.first_name,
-        lastName: staffForm.last_name,
+        first_name: staffForm.first_name,
+        last_name: staffForm.last_name,
         email: staffForm.email,
-        phone: staffForm.phone,
+        phone_number: staffForm.phone_number,
         role: staffForm.role,
         department: staffForm.role, // Use role as department for now
-        employeeId: staffForm.employee_id,
+        employee_id: staffForm.employee_id,
         pos_pin: staffForm.pos_pin || null,
-        branchId: currentBranchId,
+        branch_id: currentBranchId,
         status: 'active'
       };
 
@@ -622,15 +622,15 @@ export default function BranchStaffPage() {
                   <label className="text-sm font-medium text-gray-700 mb-1 block">Phone</label>
                   <input
                     type="tel"
-                    value={staffForm.phone}
-                    onChange={(e) => setStaffForm({ ...staffForm, phone: e.target.value })}
+                    value={staffForm.phone_number}
+                    onChange={(e) => setStaffForm({ ...staffForm, phone_number: e.target.value })}
                     className="w-full h-10 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white"
                     placeholder="Phone number"
                   />
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">POS PIN (Waiters: RXXX, Bar: BXXX)</label>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">POS PIN (Waiters: RXXX, Bar: BXXX, Cashier: CXXX)</label>
                   <input
                     type="text"
                     value={staffForm.pos_pin}

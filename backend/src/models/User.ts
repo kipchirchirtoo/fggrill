@@ -105,6 +105,7 @@ export interface IUser {
   status: 'active' | 'inactive' | 'suspended';
   lastLogin?: Date;
   profilePhoto?: string;
+  pos_pin?: string;
   permissions?: string[];
   refreshToken?: string;
   passwordChangedAt?: Date;
@@ -135,6 +136,7 @@ export class User implements IUser {
   status: 'active' | 'inactive' | 'suspended';
   lastLogin?: Date;
   profilePhoto?: string;
+  pos_pin?: string;
   permissions?: string[];
   refreshToken?: string;
   passwordChangedAt?: Date;
@@ -160,6 +162,7 @@ export class User implements IUser {
     this.status = data.status || 'active';
     this.lastLogin = data.lastLogin;
     this.profilePhoto = data.profilePhoto;
+    this.pos_pin = data.pos_pin;
     this.permissions = data.permissions;
     this.refreshToken = data.refreshToken;
     this.passwordChangedAt = data.passwordChangedAt;
@@ -217,6 +220,7 @@ export class User implements IUser {
           status: this.status,
           last_login: this.lastLogin,
           profile_photo: this.profilePhoto,
+          pos_pin: this.pos_pin,
           permissions: this.permissions,
           refresh_token: this.refreshToken,
           password_changed_at: this.passwordChangedAt,

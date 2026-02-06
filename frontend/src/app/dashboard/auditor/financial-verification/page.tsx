@@ -52,6 +52,32 @@ export default function FinancialVerificationPage() {
     const totalVariance = data?.variance || 0;
     const recentTransactions = data?.recent_transactions || [];
 
+    if (isLoading && !data) {
+        return (
+            <DashboardLayout>
+                <div className="space-y-6 pb-12 animate-pulse">
+                    <div className="flex justify-between items-center mb-6">
+                        <div className="h-10 w-48 bg-gray-200 rounded"></div>
+                        <div className="flex gap-2">
+                            <div className="h-10 w-32 bg-gray-200 rounded"></div>
+                            <div className="h-10 w-32 bg-gray-200 rounded"></div>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {[1, 2, 3, 4].map((i) => (
+                            <div key={i} className="h-32 bg-gray-200 rounded-xl"></div>
+                        ))}
+                    </div>
+                    <div className="h-48 bg-gray-200 rounded-xl"></div>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-2 h-96 bg-gray-200 rounded-xl"></div>
+                        <div className="h-96 bg-gray-200 rounded-xl"></div>
+                    </div>
+                </div>
+            </DashboardLayout>
+        );
+    }
+
     return (
         <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN]}>
             <DashboardLayout>
@@ -107,7 +133,7 @@ export default function FinancialVerificationPage() {
                                 </div>
                                 {totalVariance !== 0 && (
                                     <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${totalVariance < 0 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                                        {Math.abs(Math.round((totalVariance / (totalPayments || 1)) * 100))}% VARIANCE
+                                        {totalPayments > 0 ? Math.abs(Math.round((totalVariance / totalPayments) * 100)) : 0}% VARIANCE
                                     </span>
                                 )}
                             </div>
@@ -158,12 +184,7 @@ export default function FinancialVerificationPage() {
                                 <span className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">Sort: By Variance</span>
                             </div>
 
-                            {isLoading ? (
-                                <div className="card-elevated p-12 flex flex-col items-center justify-center bg-white">
-                                    <RefreshCw className="h-8 w-8 animate-spin text-stone-300 mb-2" />
-                                    <p className="text-[13px] font-medium text-stone-400">Synchronizing from gateways...</p>
-                                </div>
-                            ) : branchSummaries.length === 0 ? (
+                            {branchSummaries.length === 0 ? (
                                 <div className="card-elevated p-12 flex flex-col items-center justify-center bg-white opacity-60">
                                     <Building2 className="h-10 w-10 text-stone-200 mb-4" />
                                     <p className="text-[14px] font-bold text-stone-400">No reconciled data for this cycle</p>

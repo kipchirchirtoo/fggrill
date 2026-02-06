@@ -302,7 +302,7 @@ function BarCashierContent() {
                         ...response.data,
                         transaction_ref: response.data.reference,
                         created_at: new Date().toISOString(),
-                        cashier_name: user?.name || 'Bar Cashier',
+                        cashier_name: user ? `${user.firstName} ${user.lastName}` : 'Bar Cashier',
                         total_amount: amount,
                         payment_method: paymentMethod,
                         items: billData.order?.items || []
@@ -431,9 +431,9 @@ function BarCashierContent() {
                     toast.success('Cash payment confirmed');
 
                     setSelectedTransaction({
-                        ...response.data,
+                        custom_ref: response.data.reference, // avoid overwriting actual ID
                         created_at: new Date().toISOString(),
-                        cashier_name: user?.name || 'Bar Cashier',
+                        cashier_name: user ? `${user.firstName} ${user.lastName}` : 'Bar Cashier',
                         payment_method: 'CASH',
                         items: [...cart],
                         total_amount: response.data.total_amount
@@ -515,7 +515,10 @@ function BarCashierContent() {
                     th, td { text-align: left; padding: 2px 0; }
                     .text-right { text-align: right; }
                     .border-top { border-top: 1px dashed black; padding-top: 5px; }
+                    .barcode-container { margin-top: 10px; text-align: center; }
+                    #barcode { width: 100%; max-width: 200px; }
                 </style>
+                <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
             </head>
             <body>
                 <div class="receipt">
@@ -555,8 +558,22 @@ function BarCashierContent() {
                     </div>
                     <div class="center" style="margin-top: 20px;">
                         <p>THANK YOU - CHEERS!</p>
+                        <div class="barcode-container">
+                            <svg id="barcode"></svg>
+                        </div>
                     </div>
                 </div>
+                <script>
+                    try {
+                        const barcodeVal = "${selectedTransaction.id || selectedTransaction.billNo || receiptNumber}";
+                        JsBarcode("#barcode", barcodeVal, {
+                            format: "CODE128",
+                            width: 1.5,
+                            height: 40,
+                            displayValue: false
+                        });
+                    } catch (e) { console.error("Barcode error", e); }
+                </script>
             </body>
             </html>
         `;

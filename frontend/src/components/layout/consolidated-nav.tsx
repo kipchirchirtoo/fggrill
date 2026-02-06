@@ -586,13 +586,7 @@ export function ConsolidatedNav() {
         active={pathname === '/dashboard/auditor'}
       />
 
-      <NavGroup label="Financial Auditing" icon={ShieldCheck} defaultOpen>
-        <NavItem
-          href="/dashboard/auditor/approvals"
-          icon={CheckCircle}
-          label="Approve Stock Requests"
-          active={pathname.includes('/dashboard/auditor/approvals')}
-        />
+      <NavGroup label="Daily Verification" icon={CheckCircle} defaultOpen>
         <NavItem
           href="/dashboard/auditor/financial-verification"
           icon={DollarSign}
@@ -605,32 +599,26 @@ export function ConsolidatedNav() {
           label="Revenue Oversight"
           active={pathname.includes('/dashboard/auditor/revenue-oversight')}
         />
+        <NavItem
+          href="/dashboard/auditor/sold-items"
+          icon={FileText}
+          label="Sold Items Analysis"
+          active={pathname === '/dashboard/auditor/sold-items'}
+        />
       </NavGroup>
 
-      <NavGroup label="Operations Audit" icon={ClipboardList} defaultOpen>
+      <NavGroup label="Stock & Inventory" icon={Package}>
         <NavItem
-          href="/dashboard/auditor/sales"
-          icon={CreditCard}
-          label="Confirm Sales"
-          active={pathname === '/dashboard/auditor/sales'}
+          href="/dashboard/auditor/approvals"
+          icon={CheckCircle}
+          label="Stock Request Approvals"
+          active={pathname.includes('/dashboard/auditor/approvals')}
         />
         <NavItem
           href="/dashboard/auditor/stock"
           icon={Package}
-          label="Confirm Stock Levels"
+          label="Stock Levels"
           active={pathname === '/dashboard/auditor/stock'}
-        />
-        <NavItem
-          href="/dashboard/auditor/orders"
-          icon={ShoppingCart}
-          label="Confirm Branch Orders"
-          active={pathname === '/dashboard/auditor/orders'}
-        />
-        <NavItem
-          href="/dashboard/auditor/sold-items"
-          icon={FileText}
-          label="View Items Sold"
-          active={pathname === '/dashboard/auditor/sold-items'}
         />
         <NavItem
           href="/dashboard/auditor/bar-stock"
@@ -638,10 +626,13 @@ export function ConsolidatedNav() {
           label="Bar Stock Audits"
           active={pathname === '/dashboard/auditor/bar-stock'}
         />
+      </NavGroup>
+
+      <NavGroup label="Reports" icon={BarChart3}>
         <NavItem
           href="/dashboard/auditor/audit-reports"
-          icon={Scale}
-          label="Compare items sold against requisitions"
+          icon={FileSpreadsheet}
+          label="Audit Reports"
           active={pathname.includes('/dashboard/auditor/audit-reports')}
         />
       </NavGroup>

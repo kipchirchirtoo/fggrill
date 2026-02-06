@@ -55,6 +55,33 @@ export default function SoldItemsAnalyticsPage() {
         item.name?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    if (isLoading && !auditData) {
+        return (
+            <DashboardLayout>
+                <div className="space-y-8 pb-12 animate-pulse">
+                    <div className="flex justify-between items-end gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-gray-200"></div>
+                            <div className="space-y-2">
+                                <div className="h-8 w-64 bg-gray-200 rounded"></div>
+                                <div className="h-4 w-96 bg-gray-200 rounded"></div>
+                            </div>
+                        </div>
+                        <div className="h-10 w-32 bg-gray-200 rounded"></div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className="h-24 bg-gray-200 rounded-xl"></div>
+                        ))}
+                    </div>
+
+                    <div className="h-96 bg-gray-200 rounded-xl"></div>
+                </div>
+            </DashboardLayout>
+        );
+    }
+
     return (
         <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN]}>
             <DashboardLayout>
@@ -176,14 +203,7 @@ export default function SoldItemsAnalyticsPage() {
                                         {(!auditData?.summary?.branch_summaries || auditData.summary.branch_summaries.length === 0) && (
                                             <tr>
                                                 <td colSpan={5} className="px-6 py-20 text-center">
-                                                    {isLoading ? (
-                                                        <div className="flex flex-col items-center gap-2 opacity-50">
-                                                            <RefreshCw className="h-6 w-6 animate-spin text-stone-300" />
-                                                            <span className="text-[11px] font-black uppercase tracking-widest text-stone-400">Syncing analytics...</span>
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-[11px] font-black uppercase tracking-widest text-stone-300">No data found</span>
-                                                    )}
+                                                    <span className="text-[11px] font-black uppercase tracking-widest text-stone-300">No data found</span>
                                                 </td>
                                             </tr>
                                         )}
@@ -270,7 +290,7 @@ export default function SoldItemsAnalyticsPage() {
                                             {filteredAnalysis.length === 0 && (
                                                 <tr>
                                                     <td colSpan={6} className="px-6 py-20 text-center text-stone-300 font-bold uppercase tracking-widest text-[11px]">
-                                                        {isLoading ? "Syncing analytics..." : "No matching items found"}
+                                                        No matching items found
                                                     </td>
                                                 </tr>
                                             )}

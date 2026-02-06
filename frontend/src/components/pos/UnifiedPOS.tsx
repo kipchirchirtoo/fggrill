@@ -86,9 +86,92 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
     const [recentOrders, setRecentOrders] = useState<any[]>([]);
     const [isPrinting, setIsPrinting] = useState<string | null>(null);
 
+    // History State
+    const [historyDate, setHistoryDate] = useState<Date>(new Date());
+    const [historyStatus, setHistoryStatus] = useState<'pending' | 'cleared' | 'voided'>('pending');
+    const [isVoiding, setIsVoiding] = useState<string | null>(null);
+    const [voidReason, setVoidReason] = useState('');
+    const [voidConfirmOpen, setVoidConfirmOpen] = useState(false);
+
+    const filteredOrders = useMemo(() => {
+        return recentOrders.filter(order => {
+            // 1. Filter by Date (comparing YYYY-MM-DD)
+            const orderDate = new Date(order.created_at);
+            const isSameDate = orderDate.toDateString() === historyDate.toDateString();
+
+            // 2. Filter by Waiter (Current User)
+            // Assuming 'waiter_id' or checking 'cashier_name' matches user. 
+            // Ideally backend filters, but for now client-side:
+            const isMyOrder = order.waiter_id === user?.id || order.cashier_name?.includes(user?.firstName || '');
+
+            // 3. Filter by Status
+            let matchesStatus = false;
+            if (historyStatus === 'pending') matchesStatus = order.status === 'pending' || order.status === 'kitchen_ready';
+            if (historyStatus === 'cleared') matchesStatus = order.status === 'completed' || order.status === 'paid';
+            if (historyStatus === 'voided') matchesStatus = order.status === 'cancelled' || order.status === 'voided';
+
+            return isSameDate && isMyOrder && matchesStatus;
+        });
+    }, [recentOrders, historyDate, historyStatus, user]);
+
+    const handleVoidOrder = async () => {
+        if (!isVoiding || !voidReason.trim()) return;
+
+        try {
+            const api = isRestaurant ? restaurantAPI : barAPI;
+            // Use updateOrderStatus or specific void endpoint if available. 
+            // Mapping 'cancelled' status as void.
+            const res = await api.updateOrderStatus(isVoiding, 'cancelled');
+
+            if (res.success) {
+                toast.success('Order voided successfully');
+                setIsVoiding(null);
+                setVoidReason('');
+                setVoidConfirmOpen(false);
+                fetchData(); // Refresh list
+            } else {
+                toast.error('Failed to void order');
+            }
+        } catch (error) {
+            console.error('Void error', error);
+            toast.error('Error voiding order');
+        }
+    };
+
+    const handleEditOrder = (order: any) => {
+        // Logic: Add items to cart. 
+        // Optional: Cancel original order? Or just copy items?
+        // User request: "The first order is voided. A new correct order is created".
+        // So we load items, and user acts as if new.
+
+        const newItems = order.items.map((item: any) => ({
+            id: item.menu_item_id || item.id, // Adaptation needed based on API response
+            name: item.name,
+            price: item.unit_price || item.price,
+            quantity: item.quantity,
+            category_id: 'unknown', // Might be missing
+            is_available: true
+        }));
+
+        setCart(prev => [...prev, ...newItems]);
+        setShowHistory(false);
+        toast.info('Items loaded to cart. Please modify and place new order.');
+    };
+
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
+            // Calculate date range for the selected history date
+            const startOfDay = new Date(historyDate);
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(historyDate);
+            endOfDay.setHours(23, 59, 59, 999);
+
+            const dateParams = {
+                from_date: startOfDay.toISOString(),
+                to_date: endOfDay.toISOString()
+            };
+
             if (isRestaurant) {
                 const [itemsRes, categoriesRes] = await Promise.all([
                     restaurantAPI.getMenuItems(undefined, currentBranchId || undefined, true),
@@ -111,10 +194,16 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                 if (tabsRes.success) setOpenTabs(tabsRes.data || []);
             }
 
-            // Fetch recent orders for history
+            // Fetch recent orders for history with date filter
             const ordersRes = isRestaurant
-                ? await restaurantAPI.getOrders({ branchId: Number(currentBranchId) || undefined })
-                : await barAPI.getOrders({ branchId: Number(currentBranchId) || undefined });
+                ? await restaurantAPI.getOrders({
+                    branchId: Number(currentBranchId) || undefined,
+                    ...dateParams
+                })
+                : await barAPI.getOrders({
+                    branchId: Number(currentBranchId) || undefined,
+                    ...dateParams
+                });
 
             if (ordersRes.success) {
                 setRecentOrders(ordersRes.data || []);
@@ -125,7 +214,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
         } finally {
             setIsLoading(false);
         }
-    }, [mode, currentBranchId, isRestaurant]);
+    }, [mode, currentBranchId, isRestaurant, historyDate]);
 
     useEffect(() => {
         fetchData();
@@ -311,7 +400,9 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                         <script>
                             window.onload = function() {
                                 try {
-                                    JsBarcode("#barcode", "${receiptNumber}", {
+                                    // Use full ID for barcode if order number is missing/short to ensure unique lookup
+                                    const barcodeValue = "${orderData.order_number || orderData.id}";
+                                    JsBarcode("#barcode", barcodeValue, {
                                         format: "CODE128",
                                         width: 1.5,
                                         height: 35,
@@ -617,7 +708,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                 <UserIcon className="h-3.5 w-3.5" />
                             </button>
                             <button
-                                onClick={() => logout()}
+                                onClick={() => logout('/terminal')}
                                 className="p-1.5 rounded-lg hover:bg-red-50 hover:shadow-sm border border-transparent hover:border-red-100 transition-all text-stone-400 hover:text-red-500"
                                 title="Log Out"
                             >
@@ -844,6 +935,187 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                     )}
                 </div>
             </div>
-        </div>
+            {/* History Modal */}
+            <AnimatePresence>
+                {showHistory && (
+                    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden"
+                        >
+                            {/* Header */}
+                            <div className="p-4 border-b border-stone-200 flex items-center justify-between bg-stone-50">
+                                <div>
+                                    <h2 className="text-xl font-bold text-stone-900">My Orders</h2>
+                                    <p className="text-xs text-stone-500 font-medium uppercase tracking-wider">
+                                        {user?.firstName} {user?.lastName} | {user?.role}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    {/* Date Selector */}
+                                    <input
+                                        type="date"
+                                        value={historyDate.toISOString().split('T')[0]}
+                                        onChange={(e) => setHistoryDate(new Date(e.target.value))}
+                                        className="bg-white border border-stone-300 text-stone-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2"
+                                    />
+                                    <button
+                                        onClick={() => setShowHistory(false)}
+                                        className="p-2 rounded-full hover:bg-stone-200 text-stone-500 transition-colors"
+                                    >
+                                        <X className="w-6 h-6" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Tabs */}
+                            <div className="flex border-b border-stone-200">
+                                {(['pending', 'cleared', 'voided'] as const).map(status => (
+                                    <button
+                                        key={status}
+                                        onClick={() => setHistoryStatus(status)}
+                                        className={cn(
+                                            "flex-1 py-4 text-sm font-bold uppercase tracking-wider transition-all border-b-2",
+                                            historyStatus === status
+                                                ? "border-blue-600 text-blue-600 bg-blue-50/50"
+                                                : "border-transparent text-stone-500 hover:text-stone-700 hover:bg-stone-50"
+                                        )}
+                                    >
+                                        {status}
+                                        <span className="ml-2 text-xs opacity-60 bg-stone-200 px-1.5 py-0.5 rounded-full">
+                                            {filteredOrders.filter(o => {
+                                                if (status === 'pending') return o.status === 'pending' || o.status === 'kitchen_ready';
+                                                if (status === 'cleared') return o.status === 'completed' || o.status === 'paid';
+                                                if (status === 'voided') return o.status === 'cancelled';
+                                                return false;
+                                            }).length}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Order List */}
+                            <div className="flex-1 overflow-y-auto p-4 bg-stone-50 space-y-3">
+                                {filteredOrders.length === 0 ? (
+                                    <div className="h-64 flex flex-col items-center justify-center text-stone-400">
+                                        <History className="w-12 h-12 mb-3 opacity-20" />
+                                        <p className="font-medium">No {historyStatus} orders found for this date.</p>
+                                    </div>
+                                ) : (
+                                    filteredOrders.map(order => (
+                                        <div key={order.id} className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div>
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="font-bold text-lg text-stone-900">
+                                                            #{order.order_number || order.id.slice(0, 8).toUpperCase()}
+                                                        </span>
+                                                        <span className={cn(
+                                                            "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase",
+                                                            order.status === 'completed' ? "bg-green-100 text-green-700" :
+                                                                order.status === 'cancelled' ? "bg-red-100 text-red-700" :
+                                                                    "bg-amber-100 text-amber-700"
+                                                        )}>
+                                                            {order.status}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-xs text-stone-500">
+                                                        {new Date(order.created_at).toLocaleTimeString()} • {order.table_number ? `Table ${order.table_number}` : 'Walk-in'}
+                                                    </p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="font-black text-lg text-stone-900">KES {order.total_amount?.toLocaleString() || order.total?.toLocaleString()}</p>
+                                                    <p className="text-xs text-stone-400 uppercase font-bold">{order.payment_method}</p>
+                                                </div>
+                                            </div>
+
+                                            {/* Items Summary */}
+                                            <div className="bg-stone-50 rounded-lg p-2 mb-3 text-xs text-stone-600 space-y-1">
+                                                {order.items?.map((item: any, idx: number) => (
+                                                    <div key={idx} className="flex justify-between">
+                                                        <span>{item.quantity}x {item.name || item.menu_item?.name}</span>
+                                                        <span>{((item.unit_price || item.price) * item.quantity).toLocaleString()}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {/* Actions */}
+                                            {historyStatus === 'pending' && (
+                                                <div className="flex gap-2 border-t border-stone-100 pt-3">
+                                                    <button
+                                                        onClick={() => handleEditOrder(order)}
+                                                        className="flex-1 py-2 text-sm font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                                                    >
+                                                        Edit / Copy
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setIsVoiding(order.id);
+                                                            setVoidConfirmOpen(true);
+                                                        }}
+                                                        className="flex-1 py-2 text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                                                    >
+                                                        Void Order
+                                                    </button>
+                                                </div>
+                                            )}
+                                            {historyStatus === 'voided' && order.void_reason && (
+                                                <div className="mt-2 text-xs text-red-500 italic bg-red-50 p-2 rounded">
+                                                    Reason: {order.void_reason}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Void Confirmation Modal */}
+            <AnimatePresence>
+                {voidConfirmOpen && (
+                    <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="bg-white rounded-xl shadow-xl w-full max-w-md p-6"
+                        >
+                            <h3 className="text-lg font-bold text-stone-900 mb-2">Confirm Void Order</h3>
+                            <p className="text-sm text-stone-500 mb-4">
+                                Are you sure you want to void this order? This action cannot be undone and will mark the order as cancelled.
+                            </p>
+
+                            <label className="block text-sm font-medium text-stone-700 mb-1.5">Reason for voiding</label>
+                            <textarea
+                                value={voidReason}
+                                onChange={(e) => setVoidReason(e.target.value)}
+                                placeholder="e.g. Wrong items, Customer changed mind..."
+                                className="w-full h-24 p-3 bg-stone-50 border border-stone-200 rounded-lg text-sm mb-4 focus:ring-2 focus:ring-red-500/20 outline-none resize-none"
+                            ></textarea>
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setVoidConfirmOpen(false)}
+                                    className="flex-1 py-2.5 text-sm font-bold text-stone-600 bg-stone-100 hover:bg-stone-200 rounded-lg"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleVoidOrder}
+                                    disabled={!voidReason.trim()}
+                                    className="flex-1 py-2.5 text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-lg shadow-red-200"
+                                >
+                                    Confirm Void
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+        </div >
     );
 }

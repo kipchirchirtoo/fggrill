@@ -168,6 +168,34 @@ export default function StockAuditPage() {
         else toast.error("Failed to flag variances. Check console.");
     };
 
+    if (isLoading && !auditData) {
+        return (
+            <DashboardLayout>
+                <div className="space-y-8 pb-12 animate-pulse">
+                    <div className="flex justify-between items-center mb-6">
+                        <div className="space-y-2">
+                            <div className="h-8 w-64 bg-gray-200 rounded"></div>
+                            <div className="h-4 w-96 bg-gray-200 rounded"></div>
+                        </div>
+                        <div className="h-10 w-32 bg-gray-200 rounded"></div>
+                    </div>
+
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        {[1, 2, 3, 4].map(i => (
+                            <div key={i} className="h-24 bg-gray-200 rounded-xl"></div>
+                        ))}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {[1, 2, 3, 4, 5, 6].map(i => (
+                            <div key={i} className="h-48 bg-gray-200 rounded-xl"></div>
+                        ))}
+                    </div>
+                </div>
+            </DashboardLayout>
+        );
+    }
+
     return (
         <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN]}>
             <DashboardLayout>
@@ -373,7 +401,7 @@ export default function StockAuditPage() {
                                                         <div className="flex flex-col items-center gap-2 opacity-30">
                                                             <Boxes className="h-10 w-10 mb-2" />
                                                             <p className="text-[11px] font-black uppercase tracking-widest text-stone-300">
-                                                                {isLoading ? "Auditing stock..." : "No inventory data found"}
+                                                                No inventory data found
                                                             </p>
                                                         </div>
                                                     </td>

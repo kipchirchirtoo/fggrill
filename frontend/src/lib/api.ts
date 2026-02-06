@@ -307,7 +307,16 @@ export const storeAPI = {
     }),
 
   // Dispatch
-  createDispatch: (data: { request_id?: string; to_branch_id: number; items: Array<{ item_sku: string; dispatched_quantity: number }>; notes?: string }) =>
+  createDispatch: (data: {
+    request_id?: string;
+    to_branch_id: number;
+    items: Array<{ item_sku: string; dispatched_quantity: number }>;
+    vehicle_number?: string;
+    driver_name?: string;
+    driver_phone?: string;
+    estimated_delivery?: string;
+    notes?: string
+  }) =>
     fetchAPI<any>('/store/dispatch-notes', { method: 'POST', body: JSON.stringify(data) }),
   getDispatchHistory: (status?: string) => {
     const query = status ? `?status=${status}` : '';
@@ -568,63 +577,26 @@ export const procurementAPI = {
 
   // PDF Exports
   exportVATReportPDF: async (filters: { from_date: string; to_date: string }) => {
-    try {
-      const response = await fetch(`${PYTHON_API_URL}/api/reports/generate/branded-pdf`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({
-          reportType: 'vat_report',
-          filters,
-          useRealData: true
-        })
-      });
-
-      if (!response.ok) throw new Error('Failed to generate VAT PDF');
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `VAT_Report_${filters.from_date}_to_${filters.to_date}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      return { success: true };
-    } catch (error) {
-      console.error('Error exporting VAT PDF:', error);
-      return { success: false, message: 'Export failed' };
-    }
+    return reportsAPI.exportReport({
+      reportType: 'vat_report',
+      format: 'pdf',
+      filters
+    });
   },
 
   exportProcurementIntelligencePDF: async (filters: { from_date: string; to_date: string }) => {
-    try {
-      const response = await fetch(`${PYTHON_API_URL}/api/reports/generate/branded-pdf`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({
-          reportType: 'procurement_intelligence',
-          filters,
-          useRealData: true
-        })
-      });
-
-      if (!response.ok) throw new Error('Failed to generate Procurement Intelligence PDF');
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Procurement_Intelligence_${new Date().toISOString().split('T')[0]}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      return { success: true };
-    } catch (error) {
-      console.error('Error exporting Intelligence PDF:', error);
-      return { success: false, message: 'Export failed' };
-    }
+    return reportsAPI.exportReport({
+      reportType: 'procurement_intelligence',
+      format: 'pdf',
+      filters
+    });
+  },
+  exportSupplierStatement: async (filters: { supplier_id: string; from_date: string; to_date: string }) => {
+    return reportsAPI.exportReport({
+      reportType: 'supplier_statement',
+      format: 'pdf',
+      filters
+    });
   },
 
 };
@@ -2558,6 +2530,14 @@ export const reportsAPI = {
     });
   },
 
+  // AI Analyst
+  generateAIReport: async (prompt: string, context?: any) => {
+    return fetchAPI<any>('/reports/generate/ai-enhanced', {
+      method: 'POST',
+      body: JSON.stringify({ request_text: prompt, context })
+    });
+  },
+
   // Python Service Endpoints
   healthCheck: async () => {
     const response = await fetch(`${REPORTS_SERVICE_URL}/health`);
@@ -3295,27 +3275,11 @@ export const accountingAPI = {
   },
 
   exportSupplierStatement: async (params: { supplier_id: string; start_date?: string; end_date?: string }) => {
-    const query = new URLSearchParams();
-    query.append('supplier_id', params.supplier_id);
-    if (params.start_date) query.append('start_date', params.start_date);
-    if (params.end_date) query.append('end_date', params.end_date);
-
-    const response = await fetch(`${PYTHON_SERVICE_URL}/api/accounting/suppliers/statement/export/pdf?${query}`, {
-      headers: getHeaders()
+    return reportsAPI.exportReport({
+      reportType: 'supplier_statement',
+      format: 'pdf',
+      filters: params
     });
-
-    if (!response.ok) throw new Error('Export failed');
-
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Supplier_Statement_${params.end_date || 'Current'}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-    return true;
   },
 
   downloadPurchaseOrder: async (id: string) => {

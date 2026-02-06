@@ -96,9 +96,11 @@ export default function BarStockAuditPage() {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <div className="lg:col-span-1 space-y-4">
                             <h2 className="text-sm font-bold text-stone-400 uppercase tracking-widest px-2">Recent Submissions</h2>
-                            {isLoading ? (
-                                <div className="p-12 text-center">
-                                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-stone-300" />
+                            {isLoading && audits.length === 0 ? (
+                                <div className="space-y-4 animate-pulse">
+                                    {[1, 2, 3].map(i => (
+                                        <div key={i} className="h-24 bg-gray-200 rounded-xl"></div>
+                                    ))}
                                 </div>
                             ) : audits.length === 0 ? (
                                 <IOSCard className="p-8 text-center text-stone-400">

@@ -44,6 +44,10 @@ router.get('/roles', getRoles);
 // Staff lookup by identifier (must come before parameterized routes)
 router.get('/by-identifier/:identifier', getStaffByIdentifier);
 
+// Public attendance routes
+router.post('/attendance/clock-in', clockIn);
+router.post('/attendance/clock-out', clockOut);
+
 // Protected routes
 router.use(protect);
 
@@ -79,16 +83,6 @@ router.post('/payroll',
 router.get('/attendance',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]),
   getAttendance
-);
-
-router.post('/attendance/clock-in',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER]),
-  clockIn
-);
-
-router.post('/attendance/clock-out',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER]),
-  clockOut
 );
 
 router.get('/attendance/summary',

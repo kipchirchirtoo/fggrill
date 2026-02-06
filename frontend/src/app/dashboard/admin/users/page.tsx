@@ -264,23 +264,23 @@ export default function AdminUsersPage() {
 
     setIsSubmitting(true);
     try {
-      // Transform field names to match backend expectations
+      // Transform field names to match backend expectations (snake_case)
       const payload = {
         email: formData.email,
         password: formData.password,
-        firstName: formData.first_name,
-        lastName: formData.last_name,
+        first_name: formData.first_name,
+        last_name: formData.last_name,
         role: formData.role,
-        branchId: formData.branch_id ? parseInt(formData.branch_id) : null,
-        phoneNumber: formData.phone_number || null,
+        branch_id: formData.branch_id ? parseInt(formData.branch_id) : null,
+        phone_number: formData.phone_number || null,
         pos_pin: formData.pos_pin || null,
         status: formData.status,
-        employeeId: formData.employeeId,
+        employee_id: formData.employeeId,
         department: formData.department,
         shift: formData.shift,
-        startDate: formData.startDate,
+        start_date: formData.startDate,
         address: formData.address,
-        emergencyContact: {
+        emergency_contact: {
           name: formData.ec_name,
           relationship: formData.ec_relationship,
           phone: formData.ec_phone
@@ -309,7 +309,7 @@ export default function AdminUsersPage() {
 
     setIsSubmitting(true);
     try {
-      // Transform field names to match backend expectations
+      // Transform field names to match backend expectations (snake_case)
       const payload: any = {
         email: formData.email,
         first_name: formData.first_name,
@@ -319,12 +319,12 @@ export default function AdminUsersPage() {
         phone_number: formData.phone_number || null,
         pos_pin: formData.pos_pin || null,
         status: formData.status,
-        employeeId: formData.employeeId,
+        employee_id: formData.employeeId,
         department: formData.department,
         shift: formData.shift,
-        startDate: formData.startDate,
+        start_date: formData.startDate,
         address: formData.address,
-        emergencyContact: {
+        emergency_contact: {
           name: formData.ec_name,
           relationship: formData.ec_relationship,
           phone: formData.ec_phone
@@ -748,7 +748,7 @@ export default function AdminUsersPage() {
                         placeholder="e.g. R123"
                         maxLength={4}
                       />
-                      <p className="text-xs text-gray-500 mt-1">Waiters: RXXX, Bar: BXXX</p>
+                      <p className="text-xs text-gray-500 mt-1">Waiters: RXXX, Bar: BXXX, Cashier: CXXX</p>
                     </div>
                   </motion.div>
                 )}
@@ -809,14 +809,14 @@ export default function AdminUsersPage() {
           if (!open) resetForm();
           setEditModalOpen(open);
         }}>
-          <DialogContent className="max-w-md p-0 overflow-hidden border-none bg-ios-system-background">
-            <div className="bg-[#F2F2F7] px-4 py-3 border-b flex items-center justify-between">
+          <DialogContent className="max-w-md p-0 overflow-hidden border-none bg-ios-system-background max-h-[90vh] flex flex-col">
+            <div className="bg-[#F2F2F7] px-4 py-3 border-b flex items-center justify-between shrink-0">
               <button onClick={() => setEditModalOpen(false)} className="text-[#007AFF] text-lg">Cancel</button>
               <DialogTitle className="text-lg font-semibold">Edit User</DialogTitle>
               <div className="w-12"></div>
             </div>
 
-            <div className="p-4 bg-white min-h-[500px]">
+            <div className="flex-1 overflow-y-auto p-4 bg-white">
               {/* Wizard Step Indicator */}
               <WizardStepIndicator
                 steps={[
@@ -1030,48 +1030,48 @@ export default function AdminUsersPage() {
                   </motion.div>
                 )}
               </AnimatePresence>
+            </div>
 
-              {/* Navigation Bar */}
-              <div className="flex gap-4 mt-8">
-                {wizardStep > 1 && (
-                  <button
-                    onClick={() => setWizardStep(prev => prev - 1)}
-                    className="flex-1 py-3 px-4 rounded-xl bg-white border border-gray-200 text-gray-700 font-semibold active:bg-gray-50 transition-colors"
-                  >
-                    Back
-                  </button>
-                )}
+            {/* Sticky Navigation Bar */}
+            <div className="flex gap-4 p-4 border-t bg-[#F2F2F7] sticky bottom-0 shrink-0">
+              {wizardStep > 1 && (
+                <button
+                  onClick={() => setWizardStep(prev => prev - 1)}
+                  className="flex-1 py-3 px-4 rounded-xl bg-white border border-gray-200 text-gray-700 font-semibold active:bg-gray-50 transition-colors"
+                >
+                  Back
+                </button>
+              )}
 
-                {wizardStep < (formData.role === UserRole.EMPLOYEE ? 5 : 3) ? (
-                  <button
-                    onClick={() => {
-                      if (wizardStep === 1) {
-                        const errors: any = {};
-                        if (!formData.first_name) errors.first_name = true;
-                        if (!formData.email) errors.email = true;
-                        if (Object.keys(errors).length > 0) {
-                          setFormErrors(errors);
-                          toast.error("Please fill in required fields");
-                          return;
-                        }
+              {wizardStep < (formData.role === UserRole.EMPLOYEE ? 5 : 3) ? (
+                <button
+                  onClick={() => {
+                    if (wizardStep === 1) {
+                      const errors: any = {};
+                      if (!formData.first_name) errors.first_name = true;
+                      if (!formData.email) errors.email = true;
+                      if (Object.keys(errors).length > 0) {
+                        setFormErrors(errors);
+                        toast.error("Please fill in required fields");
+                        return;
                       }
-                      setFormErrors({});
-                      setWizardStep(prev => prev + 1);
-                    }}
-                    className="flex-1 py-3 px-4 rounded-xl bg-[#007AFF] text-white font-semibold active:bg-[#0062CC] shadow-md transition-shadow"
-                  >
-                    Next
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleUpdateUser}
-                    className="flex-1 py-3 px-4 rounded-xl bg-[#007AFF] text-white font-semibold active:bg-[#0062CC] shadow-md transition-shadow"
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? 'Syncing...' : 'Update Details'}
-                  </button>
-                )}
-              </div>
+                    }
+                    setFormErrors({});
+                    setWizardStep(prev => prev + 1);
+                  }}
+                  className="flex-1 py-3 px-4 rounded-xl bg-[#007AFF] text-white font-semibold active:bg-[#0062CC] shadow-md transition-shadow"
+                >
+                  Next
+                </button>
+              ) : (
+                <button
+                  onClick={handleUpdateUser}
+                  className="flex-1 py-3 px-4 rounded-xl bg-[#007AFF] text-white font-semibold active:bg-[#0062CC] shadow-md transition-shadow"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Syncing...' : 'Update Details'}
+                </button>
+              )}
             </div>
           </DialogContent>
         </Dialog>

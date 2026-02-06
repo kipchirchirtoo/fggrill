@@ -16,8 +16,8 @@ class DatabaseFetcher:
     """Fetch real data directly from Supabase database"""
     
     def __init__(self):
-        self.supabase_url = os.getenv('SUPABASE_URL', 'https://utsvlihpudfraxzcmtle.supabase.co')
-        self.supabase_key = os.getenv('SUPABASE_SERVICE_KEY', os.getenv('SUPABASE_ANON_KEY', ''))
+        self.supabase_url = os.getenv('SUPABASE_URL')
+        self.supabase_key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_ANON_KEY')
         self.client: Optional[Client] = None
         self._connect()
     
@@ -83,6 +83,7 @@ class DatabaseFetcher:
                 'kitchen_item_ledger': self._fetch_kitchen_item_ledger,
                 'vat_report': self._fetch_vat_report,
                 'procurement_intelligence': self._fetch_procurement_intelligence,
+                'supplier_statement': self._fetch_supplier_statement,
                 'revenue_reconciliation': self._fetch_revenue_reconciliation,
             }
             
@@ -101,8 +102,8 @@ class DatabaseFetcher:
         """Parse date filters"""
         # Default to today if no dates provided
         today = datetime.now().strftime('%Y-%m-%d')
-        start_date = filters.get('start_date', filters.get('startDate', today))
-        end_date = filters.get('end_date', filters.get('endDate', today))
+        start_date = filters.get('start_date', filters.get('startDate', filters.get('from_date', today)))
+        end_date = filters.get('end_date', filters.get('endDate', filters.get('to_date', today)))
         
         # Log the dates being used for debugging
         logger.info(f"Parsing dates - start: {start_date}, end: {end_date}, branch_id: {filters.get('branch_id')}")
@@ -500,8 +501,8 @@ class DatabaseFetcher:
             
             # Fetch expenses
             expenses_query = self.client.table('expenses').select('*')\
-                .gte('date', start_date)\
-                .lte('date', end_date)
+                .gte('expense_date', start_date)\
+                .lte('expense_date', end_date)
             expenses_query = self._apply_branch_filter(expenses_query, filters)
             expenses = expenses_query.execute()
             
@@ -2242,6 +2243,86 @@ class DatabaseFetcher:
             
         except Exception as e:
             logger.error(f"Error fetching procurement intelligence: {e}")
+            
+        return data
+
+    def _fetch_supplier_statement(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch supplier statement data (Ledger, Balance, Aging)"""
+        start_date, end_date = self._parse_dates(filters)
+        supplier_id = filters.get('supplier_id')
+        
+        data = {
+            'supplier': {},
+            'start_date': start_date,
+            'end_date': end_date,
+            'opening_balance': 0,
+            'transactions': [],
+            'closing_balance': 0,
+            'total_invoiced': 0,
+            'total_paid': 0,
+            'aging': {
+                'current_amount': 0, 'days_30_amount': 0, 'days_60_amount': 0, 'days_90_plus_amount': 0
+            }
+        }
+        
+        if not self.client or not supplier_id:
+            return data
+            
+        try:
+            # 1. Fetch Supplier Details
+            supp_res = self.client.table('store_suppliers').select('*').eq('id', supplier_id).maybe_single().execute()
+            if supp_res.data:
+                supplier = supp_res.data
+                addr_parts = [supplier.get('address_line1'), supplier.get('address_line2'), supplier.get('city')]
+                supplier['address'] = ", ".join([p for p in addr_parts if p])
+                data['supplier'] = supplier
+            
+            # 2. Calculate Opening Balance
+            opening_res = self.client.table('store_supplier_ledger')\
+                .select('debit_amount, credit_amount')\
+                .eq('supplier_id', supplier_id)\
+                .lt('transaction_date', start_date)\
+                .execute()
+            
+            for entry in (opening_res.data or []):
+                data['opening_balance'] += (float(entry.get('credit_amount') or 0) - float(entry.get('debit_amount') or 0))
+            
+            # 3. Fetch Transactions
+            query = self.client.table('store_supplier_ledger').select('*')\
+                .eq('supplier_id', supplier_id)\
+                .gte('transaction_date', start_date)\
+                .lte('transaction_date', end_date)\
+                .order('transaction_date', desc=False)
+            
+            trans_res = query.execute()
+            transactions = trans_res.data or []
+            
+            # Summary & Running Balance
+            running_bal = data['opening_balance']
+            for t in transactions:
+                credit = float(t.get('credit_amount') or 0)
+                debit = float(t.get('debit_amount') or 0)
+                
+                if t.get('transaction_type') == 'invoice':
+                    data['total_invoiced'] += credit
+                elif t.get('transaction_type') == 'payment':
+                    data['total_paid'] += debit
+                
+                running_bal += (credit - debit)
+                t['running_balance'] = running_bal
+            
+            data['transactions'] = transactions
+            data['closing_balance'] = running_bal
+            
+            # 4. Fetch Aging
+            aging_res = self.client.table('store_supplier_balances').select('*')\
+                .eq('supplier_id', supplier_id).maybe_single().execute()
+            if aging_res.data:
+                data['aging'] = aging_res.data
+                
+        except Exception as e:
+            logger.error(f"Error fetching supplier statement: {e}")
+            data['error'] = str(e)
             
         return data
     def fetch_stock_levels_data(self, branch_id: Any = None) -> Dict[str, Any]:

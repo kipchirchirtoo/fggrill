@@ -18,6 +18,7 @@ import { IOSCard } from '@/components/ui/ios-card';
 interface Payment {
     id: string;
     payment_number: string;
+    supplier_id: string;
     supplier_name: string;
     payment_date: string;
     amount: number;
@@ -41,7 +42,7 @@ export default function PaymentsPage() {
     const [payments, setPayments] = useState<Payment[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const [viewLedgerSupplier, setViewLedgerSupplier] = useState<string | null>(null);
+    const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
     const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
     const [isLedgerOpen, setIsLedgerOpen] = useState(false);
 
@@ -58,13 +59,26 @@ export default function PaymentsPage() {
 
     const fetchLedger = async (supplierId: string) => {
         try {
-            // Assuming storeAPI.getSupplierLedger exists or using generic fetch
+            setSelectedSupplierId(supplierId);
             const res = await procurementAPI.getSupplierLedger(supplierId);
             if (res.success) {
                 setLedgerEntries(res.data || []);
                 setIsLedgerOpen(true);
             }
         } catch (e) { toast.error('Failed to load ledger'); }
+    };
+
+    const handleExportStatement = async () => {
+        if (!selectedSupplierId) return;
+
+        toast.promise(procurementAPI.exportVATReportPDF({
+            from_date: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
+            to_date: new Date().toISOString().split('T')[0]
+        }), {
+            loading: 'Generating Supplier Statement...',
+            success: 'Statement downloaded successfully',
+            error: 'Failed to generate statement'
+        });
     };
 
     const filteredPayments = payments.filter(p =>
@@ -167,7 +181,7 @@ export default function PaymentsPage() {
                                                 </IOSBadge>
                                             </td>
                                             <td className="px-4 py-3 text-center">
-                                                <button className="p-1 text-stone-400 hover:text-emerald-600" onClick={() => fetchLedger(p.id)} title="View Supplier Ledger">
+                                                <button className="p-1 text-stone-400 hover:text-emerald-600" onClick={() => fetchLedger(p.supplier_id)} title="View Supplier Ledger">
                                                     <History size={16} />
                                                 </button>
                                             </td>
@@ -216,7 +230,7 @@ export default function PaymentsPage() {
 
                         <div className="mt-4 flex justify-end gap-2">
                             <IOSButton variant="secondary" onClick={() => setIsLedgerOpen(false)} className="h-8 text-[10px] px-4 font-bold uppercase tracking-wider">Close Ledger</IOSButton>
-                            <IOSButton className="h-8 text-[10px] px-4 font-bold uppercase tracking-wider" onClick={() => toast.info('Exporting...')}>Export Statement</IOSButton>
+                            <IOSButton className="h-8 text-[10px] px-4 font-bold uppercase tracking-wider" onClick={handleExportStatement}>Export Statement</IOSButton>
                         </div>
                     </DialogContent>
                 </Dialog>

@@ -52,7 +52,7 @@ export default function HREmployeesPage() {
         role: '',
         branch_id: '',
         department: '',
-        phone: '',
+        phone_number: '',
         national_id: '',
         pos_pin: '',
         shift: 'morning',
@@ -118,7 +118,7 @@ export default function HREmployeesPage() {
             role: '',
             branch_id: '',
             department: '',
-            phone: '',
+            phone_number: '',
             national_id: '',
             pos_pin: '',
             shift: 'morning',
@@ -151,7 +151,15 @@ export default function HREmployeesPage() {
         if (!validateForm()) return;
         setIsSubmitting(true);
         try {
-            await staffAPI.createStaffMember(formData);
+            const payload = {
+                ...formData,
+                emergency_contact: {
+                    name: formData.ec_name,
+                    phone: formData.ec_phone,
+                    relationship: formData.ec_relationship
+                }
+            };
+            await staffAPI.createStaffMember(payload);
             toast.success('Employee onboarded successfully');
             setAddModalOpen(false);
             resetForm();
@@ -172,7 +180,7 @@ export default function HREmployeesPage() {
             role: member.role,
             branch_id: member.branch_id?.toString() || '',
             department: member.department || '',
-            phone: member.phone || '',
+            phone_number: member.phone || (member as any).phone_number || '',
             national_id: member.national_id || '',
             status: member.status,
             pos_pin: (member as any).pos_pin || '',
@@ -250,7 +258,15 @@ export default function HREmployeesPage() {
         if (!validateForm()) return;
         setIsSubmitting(true);
         try {
-            await staffAPI.updateStaffMember(formData.id, formData);
+            const payload = {
+                ...formData,
+                emergency_contact: {
+                    name: formData.ec_name,
+                    phone: formData.ec_phone,
+                    relationship: formData.ec_relationship
+                }
+            };
+            await staffAPI.updateStaffMember(formData.id, payload);
             toast.success('Employee profile updated');
             setEditModalOpen(false);
             resetForm();
@@ -647,8 +663,8 @@ export default function HREmployeesPage() {
                                             <div className="p-4">
                                                 <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Personal Phone</label>
                                                 <Input
-                                                    value={formData.phone}
-                                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                                    value={formData.phone_number}
+                                                    onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
                                                     className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
                                                     placeholder="0706 782 828"
                                                 />
@@ -704,11 +720,12 @@ export default function HREmployeesPage() {
                                                 <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">POS PIN (4-6 Digits)</label>
                                                 <Input
                                                     value={formData.pos_pin}
-                                                    onChange={(e) => setFormData({ ...formData, pos_pin: e.target.value })}
+                                                    onChange={(e) => setFormData({ ...formData, pos_pin: e.target.value.toUpperCase() })}
                                                     className="border-none p-0 h-auto focus-visible:ring-0 text-lg font-mono"
                                                     maxLength={6}
-                                                    placeholder="e.g. 1234"
+                                                    placeholder="RXXX, BXXX or CXXX"
                                                 />
+                                                <p className="text-[10px] text-stone-400 mt-1">Waiters: RXXX, Bar: BXXX, Cashier: CXXX</p>
                                             </div>
                                             <div className="p-4">
                                                 <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Assigned Shift</label>

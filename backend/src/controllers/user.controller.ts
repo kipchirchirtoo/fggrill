@@ -94,12 +94,28 @@ export const createUser = async (
 ): Promise<void> => {
   try {
     const {
-      email, password, firstName, lastName, role, branchId, phoneNumber, pos_pin,
-      employeeId, department, shift, startDate, emergencyContact, address, status
+      email, password, role, status,
+      firstName, first_name,
+      lastName, last_name,
+      branchId, branch_id,
+      phoneNumber, phone_number,
+      pos_pin,
+      employeeId, employee_id,
+      department, shift, startDate, start_date,
+      emergencyContact, emergency_contact,
+      address
     } = req.body;
 
+    const fName = (firstName || first_name || '').trim();
+    const lName = (lastName || last_name || '').trim();
+    const bId = branchId || branch_id;
+    const pNumber = phoneNumber || phone_number;
+    const empId = employeeId || employee_id;
+    const sDate = startDate || start_date;
+    const eContact = emergencyContact || emergency_contact;
+
     // Validate required fields
-    if (!firstName || !lastName || !role) {
+    if (!fName || !lName || !role) {
       res.status(400).json({
         success: false,
         message: 'Please provide firstName, lastName, and role'
@@ -108,7 +124,7 @@ export const createUser = async (
     }
 
     // Validate name lengths to match database constraints
-    if (firstName.trim().length < 2 || firstName.trim().length > 50) {
+    if (fName.length < 2 || fName.length > 50) {
       res.status(400).json({
         success: false,
         message: 'First name must be between 2 and 50 characters'
@@ -116,7 +132,7 @@ export const createUser = async (
       return;
     }
 
-    if (lastName.trim().length < 2 || lastName.trim().length > 50) {
+    if (lName.length < 2 || lName.length > 50) {
       res.status(400).json({
         success: false,
         message: 'Last name must be between 2 and 50 characters'
@@ -180,8 +196,8 @@ export const createUser = async (
             NOW(), NOW()
           )
         `, [userId, userEmail, hashedPassword, JSON.stringify({
-          first_name: firstName.trim(),
-          last_name: lastName.trim()
+          first_name: fName,
+          last_name: lName
         })]);
 
         // 2. Update the public.users entry created by trigger with correct data
@@ -200,22 +216,24 @@ export const createUser = async (
             emergency_contact = $11,
             address = $12,
             status = $13,
+            pos_pin = $14,
             updated_at = NOW()
           WHERE id = $6
         `, [
-          firstName.trim(),
-          lastName.trim(),
+          fName,
+          lName,
           role,
-          branchId || null,
-          phoneNumber || null,
+          bId || null,
+          pNumber || null,
           userId,
-          employeeId || null,
+          empId || null,
           department || null,
           shift || null,
-          startDate || null,
-          emergencyContact ? JSON.stringify(emergencyContact) : null,
+          sDate || null,
+          eContact ? JSON.stringify(eContact) : null,
           address || null,
-          status || 'active'
+          status || 'active',
+          pos_pin || null
         ]);
 
         await client.query('COMMIT');
@@ -269,15 +287,37 @@ export const updateUser = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { password, ...userFields } = req.body;
+    const { password, ...fields } = req.body;
+
+    // Explicitly map fields to snake_case for Supabase
+    const userFields: Record<string, any> = {
+      first_name: fields.first_name || fields.firstName,
+      last_name: fields.last_name || fields.lastName,
+      email: fields.email,
+      role: fields.role,
+      status: fields.status,
+      branch_id: fields.branch_id || fields.branchId,
+      phone_number: fields.phone_number || fields.phoneNumber,
+      employee_id: fields.employee_id || fields.employeeId,
+      department: fields.department,
+      position: fields.position,
+      shift: fields.shift,
+      start_date: fields.start_date || fields.startDate,
+      emergency_contact: fields.emergency_contact || fields.emergencyContact,
+      address: fields.address,
+      pos_pin: fields.pos_pin,
+      updated_at: new Date().toISOString()
+    };
+
+    // Remove undefined fields
+    Object.keys(userFields).forEach(key => {
+      if (userFields[key] === undefined) delete userFields[key];
+    });
 
     // Update user profile in public.users table
     const { data, error } = await supabase
       .from('users')
-      .update({
-        ...userFields,
-        updated_at: new Date().toISOString()
-      })
+      .update(userFields)
       .eq('id', req.params.id)
       .select()
       .single();

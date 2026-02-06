@@ -243,6 +243,10 @@ export default function CentralWarehousePage() {
         request_id: dispatchForm.request_id,
         to_branch_id: dispatchForm.to_branch_id,
         items,
+        vehicle_number: dispatchForm.vehicle_number,
+        driver_name: dispatchForm.driver_name,
+        driver_phone: dispatchForm.driver_phone,
+        estimated_delivery: dispatchForm.estimated_delivery,
         notes: dispatchForm.notes
       });
 
@@ -1009,158 +1013,162 @@ export default function CentralWarehousePage() {
               </div>
             )}
 
-            <div className="p-4 sm:p-6">
-              <div className="mb-6">
-                <h3 className="text-lg font-bold text-stone-900">Dispatch Records</h3>
-                <p className="text-sm text-stone-500">Monitoring outbound stock shipments</p>
-              </div>
-              <div className="overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
-                <table className="w-full border-collapse min-w-[800px]">
-                  <thead>
-                    <tr className="border-b border-stone-100 text-[10px] font-bold text-stone-400 uppercase tracking-wider">
-                      <th className="px-4 py-3 text-left">Dispatch #</th>
-                      <th className="px-4 py-3 text-left">Destination</th>
-                      <th className="px-4 py-3 text-left">Status</th>
-                      <th className="px-4 py-3 text-center">Items</th>
-                      <th className="px-4 py-3 text-left">Date</th>
-                      <th className="px-4 py-3 text-left">Vehicle Details</th>
-                      <th className="px-4 py-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-50 text-[13px]">
-                    {dispatchHistory.map((dispatch) => (
-                      <tr key={dispatch.id} className="group hover:bg-stone-50/50 transition-colors">
-                        <td className="px-4 py-4 font-bold text-stone-900">{dispatch.dispatch_number}</td>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-2 font-medium">
-                            <Building2 className="h-3.5 w-3.5 text-stone-400" />
-                            <span>{dispatch.to_branch?.name || 'Unknown'}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <IOSBadge size="sm" className={`text-[10px] font-bold ${getStatusColor(dispatch.status)}`}>
-                            {dispatch.status}
-                          </IOSBadge>
-                        </td>
-                        <td className="px-4 py-4 text-center">
-                          <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-stone-100 rounded-lg text-stone-600">
-                            <Package className="h-3.5 w-3.5 opacity-50" />
-                            <span className="font-bold">{dispatch.items_count || dispatch.items?.length || 0}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 font-medium text-stone-500">
-                          {formatDate(dispatch.created_at)}
-                        </td>
-                        <td className="px-4 py-4">
-                          <p className="font-bold text-stone-700">{dispatch.vehicle_number || '-'}</p>
-                          <p className="text-[11px] text-stone-400 font-medium">{dispatch.driver_name || 'No driver assigned'}</p>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="flex justify-end">
-                            {dispatch.status === 'PENDING' && (
-                              <button
-                                onClick={() => handleDispatchItem(dispatch.id)}
-                                disabled={dispatchLoading[dispatch.id]}
-                                className="h-8 px-4 bg-stone-900 text-white rounded-lg text-xs font-bold shadow-lg shadow-stone-200 flex items-center gap-2 whitespace-nowrap active:scale-95 transition-all"
-                              >
-                                {dispatchLoading[dispatch.id] ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-                                <span>{dispatchLoading[dispatch.id] ? 'Dispatching...' : 'Dispatch'}</span>
-                              </button>
-                            )}
-                            {dispatch.status === 'IN_TRANSIT' && (
-                              <IOSBadge size="sm" className="bg-blue-50 text-blue-600 border-blue-100 text-[10px] uppercase font-bold">Transit</IOSBadge>
-                            )}
-                            {dispatch.status === 'DELIVERED' && (
-                              <IOSBadge size="sm" className="bg-stone-900 text-white text-[10px] uppercase font-bold flex items-center gap-1">
-                                <CheckCircle className="h-3 w-3" /> Delivered
-                              </IOSBadge>
-                            )}
-                          </div>
-                        </td>
+            {/* Dispatches Tab */}
+            {activeTab === 'dispatches' && (
+              <div className="p-4 sm:p-6">
+                <div className="mb-6">
+                  <h3 className="text-lg font-bold text-stone-900">Dispatch Records</h3>
+                  <p className="text-sm text-stone-500">Monitoring outbound stock shipments</p>
+                </div>
+                <div className="overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
+                  <table className="w-full border-collapse min-w-[800px]">
+                    <thead>
+                      <tr className="border-b border-stone-100 text-[10px] font-bold text-stone-400 uppercase tracking-wider">
+                        <th className="px-4 py-3 text-left">Dispatch #</th>
+                        <th className="px-4 py-3 text-left">Destination</th>
+                        <th className="px-4 py-3 text-left">Status</th>
+                        <th className="px-4 py-3 text-center">Items</th>
+                        <th className="px-4 py-3 text-left">Date</th>
+                        <th className="px-4 py-3 text-left">Vehicle Details</th>
+                        <th className="px-4 py-3 text-right">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {dispatchHistory.length === 0 && (
-                  <div className="text-center py-12 text-gray-500">
-                    <Truck className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                    <p>No dispatch history found</p>
-                    <p className="text-sm mt-2">Go to Stock Requests tab and dispatch approved requests</p>
-                  </div>
-                )}
+                    </thead>
+                    <tbody className="divide-y divide-stone-50 text-[13px]">
+                      {dispatchHistory.map((dispatch) => (
+                        <tr key={dispatch.id} className="group hover:bg-stone-50/50 transition-colors">
+                          <td className="px-4 py-4 font-bold text-stone-900">{dispatch.dispatch_number}</td>
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-2 font-medium">
+                              <Building2 className="h-3.5 w-3.5 text-stone-400" />
+                              <span>{dispatch.to_branch?.name || 'Unknown'}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4">
+                            <IOSBadge size="sm" className={`text-[10px] font-bold ${getStatusColor(dispatch.status)}`}>
+                              {dispatch.status}
+                            </IOSBadge>
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-stone-100 rounded-lg text-stone-600">
+                              <Package className="h-3.5 w-3.5 opacity-50" />
+                              <span className="font-bold">{dispatch.items_count || dispatch.items?.length || 0}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 font-medium text-stone-500">
+                            {formatDate(dispatch.created_at)}
+                          </td>
+                          <td className="px-4 py-4">
+                            <p className="font-bold text-stone-700">{dispatch.vehicle_number || '-'}</p>
+                            <p className="text-[11px] text-stone-400 font-medium">{dispatch.driver_name || 'No driver assigned'}</p>
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="flex justify-end">
+                              {dispatch.status === 'PENDING' && (
+                                <button
+                                  onClick={() => handleDispatchItem(dispatch.id)}
+                                  disabled={dispatchLoading[dispatch.id]}
+                                  className="h-8 px-4 bg-stone-900 text-white rounded-lg text-xs font-bold shadow-lg shadow-stone-200 flex items-center gap-2 whitespace-nowrap active:scale-95 transition-all"
+                                >
+                                  {dispatchLoading[dispatch.id] ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                                  <span>{dispatchLoading[dispatch.id] ? 'Dispatching...' : 'Dispatch'}</span>
+                                </button>
+                              )}
+                              {dispatch.status === 'IN_TRANSIT' && (
+                                <IOSBadge size="sm" className="bg-blue-50 text-blue-600 border-blue-100 text-[10px] uppercase font-bold">Transit</IOSBadge>
+                              )}
+                              {dispatch.status === 'DELIVERED' && (
+                                <IOSBadge size="sm" className="bg-stone-900 text-white text-[10px] uppercase font-bold flex items-center gap-1">
+                                  <CheckCircle className="h-3 w-3" /> Delivered
+                                </IOSBadge>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {dispatchHistory.length === 0 && (
+                    <div className="text-center py-12 text-gray-500">
+                      <Truck className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                      <p>No dispatch history found</p>
+                      <p className="text-sm mt-2">Go to Stock Requests tab and dispatch approved requests</p>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
             )}
 
-            <div className="p-4 sm:p-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                <div>
-                  <h3 className="text-lg font-bold text-stone-900">Branch Transfers</h3>
-                  <p className="text-sm text-stone-500">Inter-branch inventory movement logs</p>
-                </div>
-                <button
-                  onClick={openCreateTransferModal}
-                  className="btn-primary h-11 px-5 flex items-center justify-center gap-2 text-sm"
-                >
-                  <ArrowLeftRight className="h-4 w-4" />
-                  <span>New Transfer</span>
-                </button>
-              </div>
-              <div className="overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
-                <table className="w-full border-collapse min-w-[800px]">
-                  <thead>
-                    <tr className="border-b border-stone-100 text-[10px] font-bold text-stone-400 uppercase tracking-wider">
-                      <th className="px-4 py-3 text-left">Transfer #</th>
-                      <th className="px-4 py-3 text-left">Source / From</th>
-                      <th className="px-4 py-3 text-left">Destination / To</th>
-                      <th className="px-4 py-3 text-left">Status</th>
-                      <th className="px-4 py-3 text-center">Items</th>
-                      <th className="px-4 py-3 text-right">Date Created</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-50 text-[13px]">
-                    {transfers.map((transfer) => (
-                      <tr key={transfer.id} className="group hover:bg-stone-50/50 transition-colors">
-                        <td className="px-4 py-4 font-bold text-stone-900">{transfer.transfer_number || transfer.id}</td>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-2 font-medium text-stone-600">
-                            <MapPin className="h-3.5 w-3.5 opacity-40" />
-                            <span>{transfer.from_branch?.name || 'Central'}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-2 font-bold text-stone-900">
-                            <ArrowRight className="h-3.5 w-3.5 text-stone-300" />
-                            <span>{transfer.to_branch?.name || 'Unknown'}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <IOSBadge size="sm" className={`text-[10px] font-bold ${getStatusColor(transfer.status)}`}>
-                            {transfer.status}
-                          </IOSBadge>
-                        </td>
-                        <td className="px-4 py-4 text-center">
-                          <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-stone-100 rounded-lg font-bold text-stone-600">
-                            <Package className="h-3.5 w-3.5 opacity-50" />
-                            {transfer.items?.length || 0}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 text-right font-medium text-stone-500">
-                          {formatDate(transfer.created_at)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {transfers.length === 0 && (
-                  <div className="text-center py-12 text-gray-500">
-                    <ArrowLeftRight className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                    <p>No transfers found</p>
-                    <p className="text-sm mt-2">Click "New Transfer" to create a branch-to-branch transfer</p>
+            {/* Transfers Tab */}
+            {activeTab === 'transfers' && (
+              <div className="p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                  <div>
+                    <h3 className="text-lg font-bold text-stone-900">Branch Transfers</h3>
+                    <p className="text-sm text-stone-500">Inter-branch inventory movement logs</p>
                   </div>
-                )}
+                  <button
+                    onClick={openCreateTransferModal}
+                    className="btn-primary h-11 px-5 flex items-center justify-center gap-2 text-sm"
+                  >
+                    <ArrowLeftRight className="h-4 w-4" />
+                    <span>New Transfer</span>
+                  </button>
+                </div>
+                <div className="overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
+                  <table className="w-full border-collapse min-w-[800px]">
+                    <thead>
+                      <tr className="border-b border-stone-100 text-[10px] font-bold text-stone-400 uppercase tracking-wider">
+                        <th className="px-4 py-3 text-left">Transfer #</th>
+                        <th className="px-4 py-3 text-left">Source / From</th>
+                        <th className="px-4 py-3 text-left">Destination / To</th>
+                        <th className="px-4 py-3 text-left">Status</th>
+                        <th className="px-4 py-3 text-center">Items</th>
+                        <th className="px-4 py-3 text-right">Date Created</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-50 text-[13px]">
+                      {transfers.map((transfer) => (
+                        <tr key={transfer.id} className="group hover:bg-stone-50/50 transition-colors">
+                          <td className="px-4 py-4 font-bold text-stone-900">{transfer.transfer_number || transfer.id}</td>
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-2 font-medium text-stone-600">
+                              <MapPin className="h-3.5 w-3.5 opacity-40" />
+                              <span>{transfer.from_branch?.name || 'Central'}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-2 font-bold text-stone-900">
+                              <ArrowRight className="h-3.5 w-3.5 text-stone-300" />
+                              <span>{transfer.to_branch?.name || 'Unknown'}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4">
+                            <IOSBadge size="sm" className={`text-[10px] font-bold ${getStatusColor(transfer.status)}`}>
+                              {transfer.status}
+                            </IOSBadge>
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-stone-100 rounded-lg font-bold text-stone-600">
+                              <Package className="h-3.5 w-3.5 opacity-50" />
+                              {transfer.items?.length || 0}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-right font-medium text-stone-500">
+                            {formatDate(transfer.created_at)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {transfers.length === 0 && (
+                    <div className="text-center py-12 text-gray-500">
+                      <ArrowLeftRight className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                      <p>No transfers found</p>
+                      <p className="text-sm mt-2">Click "New Transfer" to create a branch-to-branch transfer</p>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
             )}
           </div>
         </div>

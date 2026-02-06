@@ -123,27 +123,27 @@ export function StaffModal({ isOpen, onClose, mode = 'create', initialData, onSu
     try {
       if (mode === 'create') {
         await staffAPI.createStaffMember({
-          firstName: staffData.firstName,
-          lastName: staffData.lastName,
+          first_name: staffData.firstName,
+          last_name: staffData.lastName,
           email: staffData.email,
-          phone: staffData.phoneNumber,
+          phone_number: staffData.phoneNumber,
           role: staffData.role,
-          branchId: staffData.branchId ? parseInt(staffData.branchId) : null,
+          branch_id: staffData.branchId ? parseInt(staffData.branchId) : null,
           password: staffData.password,
-          nationalId: staffData.nationalId,
+          national_id: staffData.nationalId,
           pos_pin: staffData.pos_pin,
           department: availableRoles.find(r => r.value === staffData.role)?.label || 'Employee'
         });
         toast.success('Staff member created successfully!');
       } else if (initialData?.id) {
         await staffAPI.updateStaffMember(initialData.id, {
-          firstName: staffData.firstName,
-          lastName: staffData.lastName,
+          first_name: staffData.firstName,
+          last_name: staffData.lastName,
           email: staffData.email,
-          phone: staffData.phoneNumber,
+          phone_number: staffData.phoneNumber,
           role: staffData.role,
-          branchId: staffData.branchId ? parseInt(staffData.branchId) : (initialData.branch_id || null),
-          nationalId: staffData.nationalId,
+          branch_id: staffData.branchId ? parseInt(staffData.branchId) : (initialData.branch_id || null),
+          national_id: staffData.nationalId,
           pos_pin: staffData.pos_pin,
           department: availableRoles.find(r => r.value === staffData.role)?.label || 'Employee'
         });
@@ -365,17 +365,17 @@ export function StaffModal({ isOpen, onClose, mode = 'create', initialData, onSu
                       <div className="relative">
                         <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input
-                          type="password"
+                          type="text"
                           name="pos_pin"
                           value={staffData.pos_pin}
-                          onChange={handleChange}
+                          onChange={(e) => setStaffData({ ...staffData, pos_pin: e.target.value.toUpperCase() })}
                           maxLength={6}
-                          placeholder="4-6 digit PIN"
-                          className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          placeholder="RXXX, BXXX, or CXXX"
+                          className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
                           required
                         />
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">Required for check-in terminal</p>
+                      <p className="text-xs text-gray-500 mt-1">Waiters: RXXX, Bar: BXXX, Cashier: CXXX</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">

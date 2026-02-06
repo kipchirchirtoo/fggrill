@@ -20,10 +20,12 @@ export const getBillDetails = async (
             throw new AppError('ID is required', 400);
         }
 
+        const searchId = bookingId.toUpperCase();
+
         // Check if it's a restaurant order (starts with ORD)
-        if (bookingId.startsWith('ORD')) {
+        if (searchId.startsWith('ORD')) {
             // Fetch restaurant order details
-            let query = supabase
+            let restaurantQuery = supabase
                 .from('restaurant_orders')
                 .select(`
                     *,
@@ -32,14 +34,14 @@ export const getBillDetails = async (
                         menu_item:restaurant_menu_items(name)
                     )
                 `)
-                .eq('order_number', bookingId);
+                .or(`order_number.eq.${searchId},order_number.eq.${searchId + ' '}`);
 
             // Branch isolation
             if (req.user?.branch_id) {
-                query = query.eq('branch_id', req.user.branch_id);
+                restaurantQuery = restaurantQuery.eq('branch_id', req.user.branch_id);
             }
 
-            const { data: order, error: orderError } = await query.single();
+            const { data: order, error: orderError } = await restaurantQuery.single();
 
             if (orderError || !order) {
                 throw new AppError('Restaurant order not found', 404);
@@ -77,22 +79,22 @@ export const getBillDetails = async (
         }
 
         // Check if it's a bar order (starts with BAR)
-        if (bookingId.startsWith('BAR')) {
+        if (searchId.startsWith('BAR')) {
             // Fetch bar order details
-            let query = supabase
+            let barQuery = supabase
                 .from('bar_orders')
                 .select(`
                     *,
                     items:bar_order_items(*)
                 `)
-                .eq('order_number', bookingId);
+                .or(`order_number.eq.${searchId},order_number.eq.${searchId + ' '}`);
 
             // Branch isolation
             if (req.user?.branch_id) {
-                query = query.eq('branch_id', req.user.branch_id);
+                barQuery = barQuery.eq('branch_id', req.user.branch_id);
             }
 
-            const { data: order, error: orderError } = await query.single();
+            const { data: order, error: orderError } = await barQuery.single();
 
             if (orderError || !order) {
                 throw new AppError('Bar order not found', 404);
@@ -141,8 +143,10 @@ export const getBillDetails = async (
         }
 
         // Check if it's a POS transaction (starts with CS)
-        if (bookingId.startsWith('CS-')) {
-            const { data: transaction, error: txError } = await supabase
+        if (searchId.startsWith('CS')) {
+            const cleanId = searchId.startsWith('CS-') ? searchId : `CS-${searchId.slice(2)}`;
+
+            let posQuery = supabase
                 .from('pos_transactions')
                 .select(`
                     *,
@@ -151,10 +155,29 @@ export const getBillDetails = async (
                         product:restaurant_menu_items(name)
                     )
                 `)
-                .eq('transaction_ref', bookingId)
-                .single();
+                .eq('transaction_ref', searchId);
 
-            if (txError || !transaction) {
+            if (req.user?.branch_id) {
+                posQuery = posQuery.eq('branch_id', req.user.branch_id);
+            }
+
+            let { data: finalTx, error: txError } = await posQuery.single();
+
+            // If not found by searchId, try cleanId if they differ
+            if ((txError || !finalTx) && cleanId !== searchId) {
+                let cleanIdQuery = supabase
+                    .from('pos_transactions')
+                    .select('*, items:pos_transaction_items(*, product:restaurant_menu_items(name))')
+                    .eq('transaction_ref', cleanId);
+
+                if (req.user?.branch_id) {
+                    cleanIdQuery = cleanIdQuery.eq('branch_id', req.user.branch_id);
+                }
+                const { data: tx2 } = await cleanIdQuery.single();
+                finalTx = tx2;
+            }
+
+            if (!finalTx) {
                 throw new AppError('POS Transaction not found', 404);
             }
 
@@ -163,11 +186,11 @@ export const getBillDetails = async (
                 data: {
                     type: 'pos',
                     order: {
-                        id: transaction.id,
-                        order_number: transaction.transaction_ref,
-                        guest_name: transaction.customer_name || 'Walk-in',
-                        status: transaction.status,
-                        items: transaction.items?.map((item: any) => ({
+                        id: finalTx.id,
+                        order_number: finalTx.transaction_ref,
+                        guest_name: finalTx.customer_name || 'Walk-in',
+                        status: finalTx.status,
+                        items: finalTx.items?.map((item: any) => ({
                             name: item.product?.name || 'Unknown Item',
                             quantity: item.qty,
                             price: item.unit_price,
@@ -175,12 +198,12 @@ export const getBillDetails = async (
                         }))
                     },
                     financials: {
-                        total_amount: transaction.total_amount,
-                        amount_paid: transaction.status === 'PAID' ? transaction.total_amount : 0,
-                        balance: transaction.status === 'PAID' ? 0 : transaction.total_amount,
+                        total_amount: finalTx.total_amount,
+                        amount_paid: finalTx.status === 'PAID' ? finalTx.total_amount : 0,
+                        balance: finalTx.status === 'PAID' ? 0 : finalTx.total_amount,
                         currency: 'KES'
                     },
-                    payment_status: transaction.status.toLowerCase()
+                    payment_status: finalTx.status.toLowerCase()
                 }
             });
             return;
@@ -188,13 +211,13 @@ export const getBillDetails = async (
 
         // Check if it's an unpaid bill from other streams (CON, POL, CWS)
         const otherPrefixes = ['CON', 'POL', 'CWS', 'BILL'];
-        const billPrefix = otherPrefixes.find(p => bookingId.startsWith(p));
+        const billPrefix = otherPrefixes.find(p => searchId.startsWith(p));
 
         if (billPrefix) {
             let query = supabase
                 .from('unpaid_bills')
                 .select('*')
-                .eq('bill_number', bookingId);
+                .eq('bill_number', searchId);
 
             if (req.user?.branch_id) {
                 query = query.eq('branch_id', req.user.branch_id);
@@ -232,87 +255,141 @@ export const getBillDetails = async (
             return;
         }
 
-        // Otherwise assume it's a hotel booking (UUID)
-        // Fetch booking details with guest info
-        let query = supabase
+        // Check if it's a hotel booking by confirmation number (starts with HTL)
+        if (searchId.startsWith('HTL')) {
+            let query = supabase
+                .from('reservations')
+                .select(`
+                    *,
+                    room:rooms!room_id(number, branch_id, type:room_types(name, price))
+                `)
+                .eq('confirmation_number', searchId);
+
+            // Branch isolation via room join
+            if (req.user?.branch_id) {
+                query = query.eq('room.branch_id', req.user.branch_id);
+            }
+
+            const { data: booking, error: bookingError } = await query.single();
+
+            if (!bookingError && booking) {
+                await fetchHotelBillResponse(booking, res);
+                return;
+            }
+        }
+
+        // If not a prefix match, try UUID directly or Room Number fallback
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bookingId);
+
+        if (isUUID) {
+            let query = supabase
+                .from('reservations')
+                .select(`
+                    *,
+                    room:rooms!room_id(number, branch_id, type:room_types(name, price))
+                `)
+                .eq('id', bookingId);
+
+            if (req.user?.branch_id) {
+                query = query.eq('room.branch_id', req.user.branch_id);
+            }
+
+            const { data: booking, error: bookingError } = await query.single();
+            if (!bookingError && booking) {
+                await fetchHotelBillResponse(booking, res);
+                return;
+            }
+        }
+
+        // Fallback: Check if it's a Room Number for an active (checked-in) booking
+        let roomQuery = supabase
             .from('reservations')
             .select(`
-        *,
-        room:rooms(number, type:room_types(name, price))
-      `)
-            .eq('id', bookingId);
+                *,
+                room:rooms!room_id!inner(number, branch_id, type:room_types(name, price))
+            `)
+            .eq('room.number', bookingId)
+            .eq('status', 'checked_in');
 
-        // Branch isolation
         if (req.user?.branch_id) {
-            query = query.eq('branch_id', req.user.branch_id);
+            roomQuery = roomQuery.eq('room.branch_id', req.user.branch_id);
         }
 
-        const { data: booking, error: bookingError } = await query.single();
+        const { data: roomBooking, error: roomError } = await roomQuery.maybeSingle();
 
-        if (bookingError || !booking) {
-            throw new AppError('Booking not found', 404);
+        if (roomBooking) {
+            await fetchHotelBillResponse(roomBooking, res);
+            return;
         }
 
-        // Fetch payments
-        const { data: payments, error: paymentsError } = await supabase
-            .from('payments')
-            .select('*')
-            .eq('booking_id', bookingId);
-
-        if (paymentsError) {
-            throw new AppError('Error fetching payments', 500);
-        }
-
-        // Calculate financials
-        const totalAmount = booking.total_amount;
-        const amountPaid = payments?.reduce((sum, p) => sum + (p.status === 'completed' ? Number(p.amount) : 0), 0) || 0;
-        const balance = totalAmount - amountPaid;
-
-        // Perform strict verification on all completed payments
-        const verifications = [];
-        if (payments) {
-            for (const payment of payments) {
-                if (payment.status === 'completed') {
-                    const result = await paymentVerificationService.verifyTransaction(payment.reference, Number(payment.amount));
-                    verifications.push({
-                        reference: payment.reference,
-                        amount: payment.amount,
-                        verified: result.isValid,
-                        message: result.message
-                    });
-                }
-            }
-        }
-
-        res.json({
-            success: true,
-            data: {
-                type: 'hotel',
-                booking: {
-                    id: booking.id,
-                    guest_name: booking.guest_name,
-                    guest_phone: booking.guest_phone,
-                    room_number: booking.room?.number,
-                    room_type: booking.room?.type?.name,
-                    check_in: booking.check_in,
-                    check_out: booking.check_out,
-                    status: booking.status
-                },
-                financials: {
-                    total_amount: totalAmount,
-                    amount_paid: amountPaid,
-                    balance: balance,
-                    currency: 'KES'
-                },
-                payments: payments,
-                verifications: verifications
-            }
-        });
+        throw new AppError('Bill or Booking not found', 404);
 
     } catch (error) {
         next(error);
     }
 };
+
+/**
+ * Helper to fetch payments and return hotel bill response
+ */
+async function fetchHotelBillResponse(booking: any, res: Response): Promise<void> {
+    // Fetch payments
+    const { data: payments, error: paymentsError } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('booking_id', booking.id);
+
+    if (paymentsError) {
+        throw new AppError('Error fetching payments', 500);
+    }
+
+    // Calculate financials
+    const totalAmount = booking.total_amount;
+    const amountPaid = payments?.reduce((sum, p) => sum + (p.status === 'completed' ? Number(p.amount) : 0), 0) || 0;
+    const balance = totalAmount - amountPaid;
+
+    // Perform strict verification on all completed payments
+    const verifications = [];
+    if (payments) {
+        for (const payment of payments) {
+            if (payment.status === 'completed') {
+                const result = await paymentVerificationService.verifyTransaction(payment.reference, Number(payment.amount));
+                verifications.push({
+                    reference: payment.reference,
+                    amount: payment.amount,
+                    verified: result.isValid,
+                    message: result.message
+                });
+            }
+        }
+    }
+
+    res.json({
+        success: true,
+        data: {
+            type: 'hotel',
+            booking: {
+                id: booking.id,
+                confirmation_number: booking.confirmation_number,
+                guest_name: booking.guest_name,
+                guest_phone: booking.guest_phone,
+                room_number: booking.room?.number,
+                room_type: booking.room?.type?.name,
+                check_in: booking.check_in_date,
+                check_out: booking.check_out_date,
+                status: booking.status
+            },
+            financials: {
+                total_amount: totalAmount,
+                amount_paid: amountPaid,
+                balance: balance,
+                currency: 'KES'
+            },
+            payments: payments,
+            verifications: verifications
+        }
+    });
+}
 
 /**
  * Process Manual/Cash Payment

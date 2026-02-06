@@ -96,19 +96,13 @@ export default function ClockInTerminal() {
                 </div>
 
                 {/* Navigation Buttons */}
-                <div className="flex items-center justify-center gap-4 mb-6">
+                <div className="flex items-center justify-center mb-6">
                     <button
                         onClick={() => window.location.href = '/terminal'}
                         className="px-6 py-3 bg-white/80 backdrop-blur-sm border border-stone-200 rounded-2xl text-stone-600 hover:text-stone-900 hover:border-stone-300 transition-all text-sm font-bold flex items-center gap-2 shadow-sm hover:shadow-md"
                     >
                         <ArrowRight className="h-4 w-4 rotate-180" />
                         Back
-                    </button>
-                    <button
-                        onClick={() => window.location.href = '/dashboard'}
-                        className="px-6 py-3 bg-stone-900 text-white rounded-2xl hover:bg-black transition-all text-sm font-bold flex items-center gap-2 shadow-lg"
-                    >
-                        Dashboard
                     </button>
                 </div>
 

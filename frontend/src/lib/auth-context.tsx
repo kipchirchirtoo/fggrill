@@ -290,7 +290,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const logout = async (redirectTo: string = '/terminal') => {
+  const logout = async (redirectTo: string = '/login') => {
     try {
       await api.auth.logout();
     } catch (error) {

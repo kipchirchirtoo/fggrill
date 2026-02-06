@@ -351,7 +351,7 @@ export const createOrder = async (
     }
 
     // Determine order number with fallback
-    const finalOrderNumber = orderNumber || `ORD${new Date().toISOString().replace(/[-:T]/g, '').slice(2, 12)} `;
+    const finalOrderNumber = orderNumber || `ORD${new Date().toISOString().replace(/[-:T]/g, '').slice(2, 12)}`;
     console.log('Final order number being used:', finalOrderNumber);
 
     // Create order

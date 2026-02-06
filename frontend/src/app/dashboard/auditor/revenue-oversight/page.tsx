@@ -83,6 +83,32 @@ export default function RevenueOversightPage() {
         { name: 'POS Transactions', color: 'bg-indigo-500', icon: CreditCard, field: 'pos' },
     ];
 
+    if (isLoading && !data) {
+        return (
+            <DashboardLayout>
+                <div className="space-y-6 pb-10 animate-pulse">
+                    <div className="flex justify-between items-center mb-6">
+                        <div className="h-10 w-48 bg-gray-200 rounded"></div>
+                        <div className="flex gap-2">
+                            <div className="h-10 w-32 bg-gray-200 rounded"></div>
+                            <div className="h-10 w-32 bg-gray-200 rounded"></div>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        {[1, 2, 3, 4].map((i) => (
+                            <div key={i} className="h-32 bg-gray-200 rounded-xl"></div>
+                        ))}
+                    </div>
+                    <div className="h-64 bg-gray-200 rounded-xl"></div>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-2 h-96 bg-gray-200 rounded-xl"></div>
+                        <div className="h-96 bg-gray-200 rounded-xl"></div>
+                    </div>
+                </div>
+            </DashboardLayout>
+        );
+    }
+
     return (
         <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN]}>
             <DashboardLayout>
@@ -202,7 +228,7 @@ export default function RevenueOversightPage() {
                                 <div className="space-y-6">
                                     {departments.map((dept, i) => {
                                         const amount = data?.revenue_by_dept?.[dept.field] || 0;
-                                        const percentage = Math.round((amount / (data?.total_revenue || 1)) * 100);
+                                        const percentage = data?.total_revenue > 0 ? Math.round((amount / data.total_revenue) * 100) : 0;
                                         return (
                                             <div key={i} className="group">
                                                 <div className="flex justify-between items-end mb-2">
@@ -229,7 +255,7 @@ export default function RevenueOversightPage() {
                                 <div className="flex flex-col justify-center items-center h-full border-l border-stone-50 pl-10">
                                     <div className="text-center mb-6">
                                         <p className="text-[13px] font-semibold text-stone-400 uppercase tracking-widest mb-1">Average Ticket</p>
-                                        <h4 className="text-3xl font-bold text-stone-900">KES {data?.avg_order_value?.toLocaleString()}</h4>
+                                        <h4 className="text-3xl font-bold text-stone-900">KES {data?.avg_order_value?.toLocaleString() || '0'}</h4>
                                     </div>
                                     <div className="text-center">
                                         <p className="text-[13px] font-semibold text-stone-400 uppercase tracking-widest mb-1">Hotel Occupancy</p>
@@ -336,8 +362,8 @@ export default function RevenueOversightPage() {
 
                         <div className="flex items-end justify-between gap-3 h-[250px] mt-4">
                             {(data?.daily_trends || []).map((day: any, i: number) => {
-                                const maxVal = Math.max(...data.daily_trends.map((d: any) => d.amount));
-                                const height = Math.round((day.amount / (maxVal || 1)) * 100);
+                                const maxVal = Math.max(...(data.daily_trends || []).map((d: any) => d.amount));
+                                const height = maxVal > 0 ? Math.round((day.amount / maxVal) * 100) : 0;
                                 return (
                                     <div key={i} className="flex-1 flex flex-col items-center group h-full">
                                         <div className="w-full relative flex flex-col justify-end items-center h-full">

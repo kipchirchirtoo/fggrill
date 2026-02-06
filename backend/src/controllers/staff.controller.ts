@@ -1199,13 +1199,12 @@ export const clockIn = async (
       return;
     }
 
-    // 2. Branch Validation (If terminal device info is provided)
-    // In a real scenario, device_id would be mapped to a branch
+    // 2. Branch Validation (Only if logged in)
     if (device_id && device_id.startsWith('FG-') && req.user?.branch_id) {
       if (staff.branch_id !== req.user.branch_id) {
         res.status(403).json({
           success: false,
-          message: `Cross - branch clock -in not allowed.Staff belongs to branch ${staff.branch_id} `
+          message: `Cross-branch clock-in not allowed. Staff belongs to branch ${staff.branch_id}`
         });
         return;
       }
@@ -1232,6 +1231,7 @@ export const clockIn = async (
 
     const attendance = {
       staff_id,
+      branch_id: staff.branch_id, // Ensure branch_id is recorded
       attendance_date,
       clock_in,
       in_method: in_method || 'pin',
