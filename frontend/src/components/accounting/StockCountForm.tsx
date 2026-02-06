@@ -17,7 +17,7 @@ interface StockItem {
     photo?: File;
 }
 
-export default function StockCountForm({ branchId }: { branchId: string }) {
+export default function StockCountForm({ branchId, isAuditor = false }: { branchId: number | string | null, isAuditor?: boolean }) {
     const [items, setItems] = useState<StockItem[]>([
         { id: '1', itemCode: 'BEV-001', name: 'White Cap Lager', unit: 'Bottle', systemQuantity: 120, physicalQuantity: 120, variance: 0, unitCost: 250 },
         { id: '2', itemCode: 'BEV-002', name: 'Tusker Lager', unit: 'Bottle', systemQuantity: 85, physicalQuantity: 80, variance: -5, unitCost: 250 },
@@ -48,7 +48,7 @@ export default function StockCountForm({ branchId }: { branchId: string }) {
         try {
             // Simulate API call
             await new Promise(resolve => setTimeout(resolve, 1500));
-            toast.success('Stock count submitted for review');
+            toast.success(isAuditor ? 'Audit count submitted successfully' : 'Stock count submitted for review');
         } catch (error) {
             toast.error('Failed to submit stock count');
         } finally {
@@ -62,8 +62,8 @@ export default function StockCountForm({ branchId }: { branchId: string }) {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-[18px] font-bold text-stone-900">New Stock Count</h2>
-                    <p className="text-[12px] text-stone-500">Daily verification for Bar & Kitchen</p>
+                    <h2 className="text-[18px] font-bold text-stone-900">{isAuditor ? 'Audit Stock Count' : 'New Stock Count'}</h2>
+                    <p className="text-[12px] text-stone-500">{isAuditor ? 'Independent verification of stock levels' : 'Daily verification for branch inventory'}</p>
                 </div>
                 <div className="flex items-center gap-2">
                     <button className="btn-secondary py-2">
@@ -75,7 +75,7 @@ export default function StockCountForm({ branchId }: { branchId: string }) {
                         disabled={isSubmitting}
                         className="btn-primary py-2 px-6 bg-stone-900 text-white hover:bg-stone-800 disabled:opacity-50"
                     >
-                        {isSubmitting ? 'Submitting...' : 'Submit for Review'}
+                        {isSubmitting ? 'Submitting...' : (isAuditor ? 'Submit Audit' : 'Submit for Review')}
                     </button>
                 </div>
             </div>

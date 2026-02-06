@@ -61,6 +61,7 @@ export default function HREmployeesPage() {
         ec_phone: '',
         ec_relationship: '',
         supervisor_id: '',
+        basic_salary: 0,
         status: 'active',
         archive_notes: ''
     });
@@ -127,6 +128,7 @@ export default function HREmployeesPage() {
             ec_phone: '',
             ec_relationship: '',
             supervisor_id: '',
+            basic_salary: 0,
             status: 'active',
             archive_notes: ''
         });
@@ -190,6 +192,7 @@ export default function HREmployeesPage() {
             ec_phone: (member as any).emergency_contact?.phone || (member as any).ec_phone || '',
             ec_relationship: (member as any).emergency_contact?.relationship || (member as any).ec_relationship || '',
             supervisor_id: (member as any).supervisor_id || '',
+            basic_salary: (member as any).basic_salary || 0,
             archive_notes: (member as any).archive_notes || ''
         });
         setEditModalOpen(true);
@@ -623,6 +626,17 @@ export default function HREmployeesPage() {
                                                         <option key={s.id} value={s.id}>{s.first_name} {s.last_name} ({s.role})</option>
                                                     ))}
                                                 </select>
+                                            </div>
+
+                                            <div className="p-4">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Basic Salary (Monthly)</label>
+                                                <Input
+                                                    type="number"
+                                                    value={formData.basic_salary}
+                                                    onChange={(e) => setFormData({ ...formData, basic_salary: Number(e.target.value) })}
+                                                    className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
+                                                    placeholder="e.g. 25000"
+                                                />
                                             </div>
                                         </div>
 

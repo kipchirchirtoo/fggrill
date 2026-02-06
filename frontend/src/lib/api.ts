@@ -799,6 +799,77 @@ export const staffAPI = {
     const query = staffId ? `?staff_id=${staffId}` : '';
     return fetchAPI<any>(`/staff/trainings${query}`);
   },
+
+  // Simplified Payroll (New System)
+  simplePayroll: {
+    // Credit Bills
+    createCreditBill: (data: any) => fetchAPI<any>('/credit-bills', { method: 'POST', body: JSON.stringify(data) }),
+    getCreditBills: (params?: { staff_id?: string; status?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.staff_id) query.append('staff_id', params.staff_id);
+      if (params?.status) query.append('status', params.status);
+      return fetchAPI<any>(`/credit-bills?${query}`);
+    },
+    updateCreditBillStatus: (id: string, status: string) =>
+      fetchAPI<any>(`/credit-bills/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+
+    // Advances
+    createAdvance: (data: any) => fetchAPI<any>('/advances', { method: 'POST', body: JSON.stringify(data) }),
+    getAdvances: (params?: { staff_id?: string; status?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.staff_id) query.append('staff_id', params.staff_id);
+      if (params?.status) query.append('status', params.status);
+      return fetchAPI<any>(`/advances?${query}`);
+    },
+    approveAdvance: (id: string) => fetchAPI<any>(`/advances/${id}/approve`, { method: 'PATCH' }),
+
+    // Loans
+    createLoan: (data: any) => fetchAPI<any>('/loans', { method: 'POST', body: JSON.stringify(data) }),
+    getLoans: (params?: { staff_id?: string; status?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.staff_id) query.append('staff_id', params.staff_id);
+      if (params?.status) query.append('status', params.status);
+      return fetchAPI<any>(`/loans?${query}`);
+    },
+
+    // Payroll Generation & History
+    generatePayroll: (data: { month: number; year: number; staff_id?: string }) =>
+      fetchAPI<any>('/payroll/generate', { method: 'POST', body: JSON.stringify(data) }),
+    getPayrollRecords: (params?: { month?: number; year?: number; staff_id?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.month) query.append('month', String(params.month));
+      if (params?.year) query.append('year', String(params.year));
+      if (params?.staff_id) query.append('staff_id', params.staff_id);
+      return fetchAPI<any>(`/payroll/history?${query}`);
+    },
+    emailPayslips: (data: { month: number; year: number }) =>
+      fetchAPI<any>('/payroll/email-all', { method: 'POST', body: JSON.stringify(data) }),
+    downloadPayslipsZip: async (data: { month: number; year: number }) => {
+      try {
+        const response = await fetch(`${API_URL}/api/payroll/download-zip`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify(data)
+        });
+
+        if (!response.ok) throw new Error('Failed to download ZIP');
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Payslips_${data.month}_${data.year}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        return { success: true };
+      } catch (error) {
+        console.error('Error downloading ZIP:', error);
+        return { success: false, message: error instanceof Error ? error.message : 'Download failed' };
+      }
+    }
+  },
   assignTraining: (data: any) => fetchAPI<any>('/staff/trainings', { method: 'POST', body: JSON.stringify(data) }),
   completeTraining: (id: string) => fetchAPI<any>(`/staff/trainings/${id}/complete`, { method: 'PUT' }),
 

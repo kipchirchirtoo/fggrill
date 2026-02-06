@@ -250,22 +250,105 @@ export default function LoginPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-stone-700 mb-1.5 text-center">Enter PIN</label>
-                    <div className="relative max-w-[180px] mx-auto">
-                      <input
-                        type="text"
-                        value={formData.pin}
-                        autoFocus
-                        maxLength={4}
-                        onChange={(e) => setFormData(prev => ({ ...prev, pin: e.target.value.toUpperCase() }))}
-                        className={`w-full text-center text-2xl font-bold tracking-[0.5em] py-4 bg-stone-50 border rounded-2xl transition-all focus:bg-white focus:outline-none focus:ring-4 ${errors.pin
-                          ? 'border-red-300 focus:ring-red-100 text-red-600'
-                          : 'border-stone-200 focus:border-stone-400 focus:ring-stone-100 text-stone-900'
+                    <div className="relative max-w-[240px] mx-auto mb-6">
+                      <div
+                        className={`w-full text-center text-3xl font-bold tracking-[0.2em] py-4 bg-stone-50 border rounded-2xl transition-all ${errors.pin
+                          ? 'border-red-300 text-red-600'
+                          : 'border-stone-200 text-stone-900'
                           }`}
-                        placeholder="0000"
-                      />
+                      >
+                        {formData.pin || <span className="text-stone-300">----</span>}
+                      </div>
                     </div>
-                    {errors.pin && <p className="mt-2 text-xs text-red-500 text-center">{errors.pin}</p>}
-                    <p className="mt-4 text-[10px] text-stone-400 text-center flex items-center justify-center gap-1.5 uppercase tracking-widest font-semibold">
+                    {errors.pin && <p className="mt-2 text-xs text-red-500 text-center mb-4">{errors.pin}</p>}
+
+                    {/* Keypad */}
+                    <div className="grid grid-cols-3 gap-3 max-w-[280px] mx-auto">
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => {
+                            if (formData.pin.length < 4) {
+                              setFormData(prev => ({ ...prev, pin: prev.pin + num }));
+                              setErrors({});
+                            }
+                          }}
+                          className="h-14 rounded-xl bg-white border border-stone-200 text-xl font-semibold text-stone-700 hover:bg-stone-50 hover:border-stone-300 active:scale-95 transition-all shadow-sm"
+                        >
+                          {num}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (formData.pin.length < 4) {
+                            setFormData(prev => ({ ...prev, pin: prev.pin + 'R' }));
+                            setErrors({});
+                          }
+                        }}
+                        className="h-14 rounded-xl bg-orange-50 border border-orange-100 text-xl font-bold text-orange-600 hover:bg-orange-100 active:scale-95 transition-all shadow-sm"
+                      >
+                        R
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (formData.pin.length < 4) {
+                            setFormData(prev => ({ ...prev, pin: prev.pin + '0' }));
+                            setErrors({});
+                          }
+                        }}
+                        className="h-14 rounded-xl bg-white border border-stone-200 text-xl font-semibold text-stone-700 hover:bg-stone-50 hover:border-stone-300 active:scale-95 transition-all shadow-sm"
+                      >
+                        0
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (formData.pin.length < 4) {
+                            setFormData(prev => ({ ...prev, pin: prev.pin + 'B' }));
+                            setErrors({});
+                          }
+                        }}
+                        className="h-14 rounded-xl bg-blue-50 border border-blue-100 text-xl font-bold text-blue-600 hover:bg-blue-100 active:scale-95 transition-all shadow-sm"
+                      >
+                        B
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (formData.pin.length < 4) {
+                            setFormData(prev => ({ ...prev, pin: prev.pin + 'C' }));
+                            setErrors({});
+                          }
+                        }}
+                        className="h-14 rounded-xl bg-emerald-50 border border-emerald-100 text-xl font-bold text-emerald-600 hover:bg-emerald-100 active:scale-95 transition-all shadow-sm"
+                      >
+                        C
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, pin: '' }));
+                          setErrors({});
+                        }}
+                        className="h-14 rounded-xl bg-stone-100 border border-stone-200 text-sm font-semibold text-stone-600 hover:bg-stone-200 active:scale-95 transition-all"
+                      >
+                        CLR
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, pin: prev.pin.slice(0, -1) }));
+                        }}
+                        className="h-14 rounded-xl bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-600 hover:bg-stone-200 active:scale-95 transition-all"
+                      >
+                        <ArrowRight className="w-5 h-5 rotate-180" />
+                      </button>
+                    </div>
+
+                    <p className="mt-6 text-[10px] text-stone-400 text-center flex items-center justify-center gap-1.5 uppercase tracking-widest font-semibold">
                       <Shield className="w-3 h-3" /> Branch-Level Security
                     </p>
                   </div>

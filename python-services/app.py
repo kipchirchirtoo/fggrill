@@ -42,7 +42,7 @@ from room_service.routes import room_bp
 from attendance.routes import attendance_bp
 from id_cards.routes import id_cards_bp
 from reports.auditor_reports import auditor_reports_bp
-
+from payroll.routes import payroll_bp
 
 app = Flask(__name__)
 CORS(app, origins=[
@@ -73,6 +73,7 @@ app.register_blueprint(room_bp, url_prefix='/api/rooms')
 app.register_blueprint(attendance_bp, url_prefix='/api/attendance')
 app.register_blueprint(id_cards_bp)
 app.register_blueprint(auditor_reports_bp)
+app.register_blueprint(payroll_bp)
 
 
 # Configure logging

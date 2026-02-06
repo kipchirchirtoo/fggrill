@@ -54,7 +54,7 @@ import attendanceRoutes from './attendance.routes';
 import pettyCashRoutes from './petty-cash.routes';
 import creditRoutes from './credit.routes';
 import kitchenRoutes from './kitchen.routes';
-import payrollRoutes from './payroll.routes';
+import payrollRoutes from './payroll-simple.routes';
 import procurementRoutes from './procurement.routes';
 import hrReportRoutes from './hr-reports.routes';
 

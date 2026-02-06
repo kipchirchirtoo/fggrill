@@ -1,0 +1,93 @@
+import { Request, Response, NextFunction } from 'express';
+import { supabase } from '../config/supabase';
+import { AppError } from '../middleware/errorHandler';
+
+export const createCreditBill = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { staff_id, amount, description, date } = req.body;
+
+        if (!staff_id || !amount || !description) {
+            throw new AppError('Missing required fields', 400);
+        }
+
+        const { data, error } = await supabase
+            .from('staff_credit_bills')
+            .insert({
+                staff_id,
+                amount,
+                description,
+                date: date || new Date().toISOString().split('T')[0],
+                is_paid: false
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.status(201).json({
+            success: true,
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const getCreditBills = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { staff_id, status } = req.query;
+
+        let query = supabase
+            .from('staff_credit_bills')
+            .select(`
+        *,
+        staff:staff_profiles(id, first_name, last_name, role)
+      `)
+            .order('date', { ascending: false });
+
+        if (staff_id) query = query.eq('staff_id', staff_id);
+
+        // Map 'pending'/'paid' status query to is_paid boolean
+        if (status === 'pending') query = query.eq('is_paid', false);
+        if (status === 'paid' || status === 'deducted') query = query.eq('is_paid', true);
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+
+        res.status(200).json({
+            success: true,
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const updateCreditBillStatus = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body; // Expecting 'paid' or boolean
+
+        let is_paid = false;
+        if (status === 'paid' || status === 'deducted' || status === true) {
+            is_paid = true;
+        }
+
+        const { data, error } = await supabase
+            .from('staff_credit_bills')
+            .update({ is_paid })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.status(200).json({
+            success: true,
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+};

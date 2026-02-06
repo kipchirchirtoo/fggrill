@@ -10,12 +10,12 @@ import { IOSCard } from '@/components/ui/ios-card';
 import { Input } from '@/components/ui/input';
 import { IOSButton } from '@/components/ui/ios-button';
 
-interface LogbookLine {
-    id?: string;
-    section: 'credit_bill' | 'unpaid_bill' | 'paid_bill';
-    customer_name: string;
-    amount: number;
-    reference: string;
+id ?: string;
+section: 'credit_bill' | 'unpaid_bill' | 'paid_bill';
+customer_name: string;
+staff_id ?: string; // Added to link to staff profile
+amount: number;
+reference: string;
 }
 
 interface LogbookData {
@@ -56,7 +56,21 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
         credit_bills: [],
         unpaid_bills: [],
         paid_bills: []
-    });
+    const [staffList, setStaffList] = useState<any[]>([]);
+
+        useEffect(() => {
+        loadStaff();
+    }, []);
+
+    const loadStaff = async () => {
+        try {
+            const res = await fetchAPI('/staff?status=active') as any;
+            if (res.success) setStaffList(res.data);
+        } catch (error) {
+            console.error('Failed to load staff list', error);
+        }
+    };
+
 
     // Configuration based on type
     const isCentral = activeBranch?.is_main_branch || activeBranch?.name?.toLowerCase().includes('central');
@@ -313,13 +327,25 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                         <div className="space-y-2">
                             {logbook.credit_bills.map((line, i) => (
                                 <div key={i} className="flex gap-2">
-                                    <Input
-                                        placeholder="Name"
-                                        className="h-8 text-xs flex-1"
-                                        value={line.customer_name}
+                                    <select
+                                        className="h-8 text-xs flex-1 bg-stone-50 border border-stone-200 rounded px-2"
+                                        value={line.staff_id || ''}
                                         disabled={isReadOnly}
-                                        onChange={e => updateLine('credit_bills', i, 'customer_name', e.target.value)}
-                                    />
+                                        onChange={e => {
+                                            const staffId = e.target.value;
+                                            const staff = staffList.find(s => s.id === staffId);
+                                            // Update both staff_id and name for display
+                                            updateLine('credit_bills', i, 'staff_id', staffId);
+                                            updateLine('credit_bills', i, 'customer_name', staff ? `${staff.first_name} ${staff.last_name}` : '');
+                                        }}
+                                    >
+                                        <option value="">Select Staff Member</option>
+                                        {staffList.map(staff => (
+                                            <option key={staff.id} value={staff.id}>
+                                                {staff.first_name} {staff.last_name} ({staff.role})
+                                            </option>
+                                        ))}
+                                    </select>
                                     <Input
                                         placeholder="Amount"
                                         type="number"

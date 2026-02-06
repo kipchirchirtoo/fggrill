@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { staffAPI } from '@/lib/api';
 import { toast } from 'sonner';
+import { YearlyAttendanceHeatmap } from '@/components/attendance/YearlyAttendanceHeatmap';
 
 export default function ClockInTerminal() {
     const [staffId, setStaffId] = useState('');
@@ -20,6 +21,7 @@ export default function ClockInTerminal() {
     const [staffInfo, setStaffInfo] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
+    const [lastAction, setLastAction] = useState<'in' | 'out'>('in');
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -62,10 +64,16 @@ export default function ClockInTerminal() {
             const response = await apiCall(payload);
 
             if (response.success) {
+                setLastAction(action);
                 setStep('success');
+
+                // Show success screen for longer if showing heatmap (clock out)
+                const timeout = action === 'out' ? 10000 : 3000;
                 setTimeout(() => {
-                    reset();
-                }, 3000);
+                    // Only reset if still on success screen (user might have manually quit)
+                    setStep(current => current === 'success' ? 'id' : current);
+                    if (step === 'success') reset();
+                }, timeout);
             } else {
                 toast.error(response.message || `Failed to clock ${action}`);
             }
@@ -90,7 +98,7 @@ export default function ClockInTerminal() {
                 <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-stone-200/30 blur-[120px] rounded-full" />
             </div>
 
-            <div className="w-full max-w-md relative z-10">
+            <div className={`w-full ${step === 'success' && lastAction === 'out' ? 'max-w-5xl' : 'max-w-md'} relative z-10 transition-all duration-500`}>
                 {/* Header / Clock */}
                 <div className="text-center mb-12 space-y-2">
                     <p className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.3em] leading-none">Management Terminal</p>
@@ -196,12 +204,30 @@ export default function ClockInTerminal() {
                     )}
 
                     {step === 'success' && (
-                        <div className="text-center py-16 animate-ios-fade-in">
-                            <div className="w-20 h-20 rounded-full bg-emerald-50 mx-auto flex items-center justify-center text-emerald-500 mb-6 border border-emerald-100">
-                                <CheckCircle2 className="h-10 w-10" />
+                        <div className="text-center py-8 animate-ios-fade-in space-y-8">
+                            <div>
+                                <div className="w-20 h-20 rounded-full bg-emerald-50 mx-auto flex items-center justify-center text-emerald-500 mb-6 border border-emerald-100">
+                                    <CheckCircle2 className="h-10 w-10" />
+                                </div>
+                                <h2 className="text-2xl font-bold text-stone-900 tracking-tight mb-2">
+                                    {lastAction === 'in' ? 'Welcome!' : 'Goodbye!'}
+                                </h2>
+                                <p className="text-stone-500 font-medium text-sm">
+                                    {lastAction === 'in' ? 'Attendance logged. Have a great shift.' : 'Shift ended. Performance recorded.'}
+                                </p>
                             </div>
-                            <h2 className="text-2xl font-bold text-stone-900 tracking-tight mb-2">SUCCESS</h2>
-                            <p className="text-stone-500 font-medium text-sm">Attendance logged for today.</p>
+
+                            {lastAction === 'out' && staffInfo && (
+                                <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
+                                    <YearlyAttendanceHeatmap staffId={staffInfo.id} />
+                                    <button
+                                        onClick={reset}
+                                        className="mt-6 text-sm text-stone-400 hover:text-stone-900 font-medium"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

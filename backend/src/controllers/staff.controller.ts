@@ -291,7 +291,7 @@ export const createStaffMember = async (
       role,
       department,
       shift,
-      salary,
+      basic_salary,
       startDate,
       idNumber,
       employeeId,
@@ -565,7 +565,7 @@ export const createStaffMember = async (
       department: validDepartment,
       role: role, // Changed from position to role to match schema
       shift: shift || 'morning',
-      salary: salary ? parseFloat(salary) : 0,
+      basic_salary: basic_salary ? parseFloat(basic_salary) : 0,
       start_date: startDate || new Date().toISOString().split('T')[0], // Changed from hire_date to start_date
       id_number: actualIdNumber,
       national_id: nationalId || 'pending',
@@ -666,7 +666,7 @@ export const updateStaffMember = async (
       role,
       department,
       shift,
-      salary,
+      basic_salary,
       start_date,
       national_id,
       status,
@@ -771,7 +771,7 @@ export const updateStaffMember = async (
     };
 
     if (shift !== undefined) staffUpdateData.shift = shift;
-    if (salary !== undefined) staffUpdateData.salary = salary;
+    if (basic_salary !== undefined) staffUpdateData.basic_salary = basic_salary;
     if (status !== undefined) staffUpdateData.status = status;
     if (start_date) staffUpdateData.start_date = start_date;
     if (national_id !== undefined) staffUpdateData.national_id = national_id;

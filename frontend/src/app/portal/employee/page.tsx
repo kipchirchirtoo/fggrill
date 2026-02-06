@@ -34,6 +34,8 @@ import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import { IDCardWidget } from '@/components/employee/portal/IDCardWidget';
+import { YearlyAttendanceHeatmap } from '@/components/attendance/YearlyAttendanceHeatmap';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface DashboardData {
   profile: any;
@@ -53,6 +55,7 @@ export default function EmployeePortal() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [clockingIn, setClockingIn] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [showHeatmap, setShowHeatmap] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -83,6 +86,7 @@ export default function EmployeePortal() {
       if (result.success) {
         toast.success(result.message);
         fetchDashboard();
+        if (action === 'clock_out') setShowHeatmap(true);
       } else {
         toast.error(result.message);
       }
@@ -419,6 +423,14 @@ export default function EmployeePortal() {
         }
         {activeTab === 'profile' && <ProfileTab user={user} profile={data?.profile} />}
       </main>
+      <Dialog open={showHeatmap} onOpenChange={setShowHeatmap}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Your Attendance Overview</DialogTitle>
+          </DialogHeader>
+          {user && <YearlyAttendanceHeatmap staffId={user.id} />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

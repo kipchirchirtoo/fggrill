@@ -304,6 +304,7 @@ class BrandedPDFGenerator:
             'supplier_statement': self._generate_supplier_statement_report,
             'revenue_reconciliation': self._generate_revenue_reconciliation_report,
             'ai_analysis': self._generate_ai_report,
+            'invoice': self._generate_invoice,
         }
         
         # Normalize report type - handle common variations and cases
@@ -3826,6 +3827,151 @@ class BrandedPDFGenerator:
         elements = []
         
         start_date = filters.get('start_date')
+        # ... existing implementation ...
+        # Since I can't effectively append to the *end* of the file easily without reading it all, 
+        # I will insert the new method *before* this method, which I can see clearly.
+        return self._generate_generic_report(data, filters) # Placeholder to avoid breaking if I replace the whole method content by mistake
+
+
+    def _generate_invoice(self, data: Dict, filters: Dict) -> str:
+        """Generate a Branded Invoice PDF"""
+        elements = []
+        
+        # 1. Header with Logo & Invoice Details
+        logo = self._get_logo(width=1.2*inch)
+        
+        invoice_number = data.get('invoice_number', 'INV-0000')
+        invoice_date = data.get('invoice_date', datetime.now().strftime('%d/%m/%Y'))
+        due_date = data.get('due_date', datetime.now().strftime('%d/%m/%Y'))
+        status = data.get('status', 'PENDING').upper()
+        
+        # Company Info (Sender)
+        sender_info = [
+            Paragraph("<b>FAMOUS GATES HOTELS</b>", self.styles['Normal']),
+            Paragraph("Bomet, Kenya", self.styles['SmallText']),
+            Paragraph("Tel: 0706 782 828 | Email: famousgatesbmt@gmail.com", self.styles['SmallText']),
+        ]
+        
+        # Invoice Title Block
+        title_block = [
+            Paragraph("<b>INVOICE</b>", ParagraphStyle('InvoiceTitle', parent=self.styles['Heading1'], fontSize=24, textColor=FG_BLUE, alignment=TA_RIGHT)),
+            Paragraph(f"<b>#{invoice_number}</b>", ParagraphStyle('InvoiceNum', parent=self.styles['Normal'], fontSize=12, alignment=TA_RIGHT)),
+            Spacer(1, 0.1*inch),
+            Paragraph(f"Date: {invoice_date}", ParagraphStyle('InvoiceDate', parent=self.styles['Normal'], alignment=TA_RIGHT)),
+            Paragraph(f"Due Date: {due_date}", ParagraphStyle('InvoiceDate', parent=self.styles['Normal'], alignment=TA_RIGHT)),
+            Spacer(1, 0.1*inch),
+            Paragraph(f"Status: <font color='{FG_GREEN if status=='PAID' else FG_RED}'>{status}</font>", ParagraphStyle('InvoiceStatus', parent=self.styles['Normal'], alignment=TA_RIGHT)),
+        ]
+        
+        header_data = [[logo if logo else '', sender_info, title_block]]
+        header_table = Table(header_data, colWidths=[1.5*inch, 3*inch, 2.5*inch])
+        header_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
+        ]))
+        elements.append(header_table)
+        elements.append(Spacer(1, 0.5*inch))
+        
+        # 2. Bill To & Ship To
+        customer_name = data.get('customer_name', 'Guest / Customer')
+        customer_address = data.get('customer_address', 'N/A')
+        customer_phone = data.get('customer_phone', '')
+        
+        bill_to = [
+            Paragraph("<b>BILL TO:</b>", self.styles['Heading4']),
+            Paragraph(customer_name, self.styles['Normal']),
+            Paragraph(customer_address, self.styles['Normal']),
+            Paragraph(customer_phone, self.styles['Normal']),
+        ]
+        
+        bill_table = Table([[bill_to]], colWidths=[7*inch])
+        bill_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), FG_LIGHT),
+            ('Padding', (0, 0), (-1, -1), 12),
+            ('ROUNDED', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(bill_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # 3. Invoice Items Table
+        headers = ['Item Description', 'Quantity', 'Unit Price', 'Total']
+        items_data = [headers]
+        
+        subtotal = 0
+        items = data.get('items', [])
+        
+        if not items:
+            items_data.append(['No items', '-', '-', '-'])
+        
+        for item in items:
+            desc = item.get('description', 'Item')
+            qty = float(item.get('quantity', 0))
+            price = float(item.get('unit_price', 0))
+            total = float(item.get('total', qty * price))
+            subtotal += total
+            
+            items_data.append([
+                Paragraph(desc, self.styles['Normal']),
+                self._format_number(qty),
+                self._format_currency(price),
+                self._format_currency(total)
+            ])
+        
+        # 4. Totals Calculation
+        tax_rate = float(data.get('tax_rate', 0)) # percentage
+        tax_amount = subtotal * (tax_rate / 100)
+        total_amount = subtotal + tax_amount
+        
+        items_data.append(['', '', 'Subtotal:', self._format_currency(subtotal)])
+        if tax_amount > 0:
+            items_data.append(['', '', f'Tax ({tax_rate}%):', self._format_currency(tax_amount)])
+        items_data.append(['', '', '<b>TOTAL:</b>', f"<b>{self._format_currency(total_amount)}</b>"])
+        
+        item_table = Table(items_data, colWidths=[3.5*inch, 1*inch, 1.2*inch, 1.3*inch])
+        item_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), FG_BLUE),
+            ('TEXTCOLOR', (0, 0), (-1, 0), FG_WHITE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (0, 1), (0, -1), 'LEFT'), # Desc align left
+            ('ALIGN', (1, 1), (-1, -1), 'RIGHT'), # Numbers align right
+            ('BACKGROUND', (0, -1), (-1, -1), HEADER_GRAY), # Total row bg
+            ('GRID', (0, 0), (-1, -4), 0.5, FG_GRAY), # Grid for items only
+            ('LINEBELOW', (0, 0), (-1, 0), 1, FG_DARK),
+            ('LINEABOVE', (2, -1), (-1, -1), 1, FG_DARK), # Line above total
+            ('PADDING', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(item_table)
+        elements.append(Spacer(1, 0.5*inch))
+        
+        # 5. Terms & Notes
+        notes = data.get('notes', 'Thank you for your business!')
+        terms = data.get('terms', 'Payment due within 30 days.')
+        
+        elements.append(Paragraph("<b>Notes & Terms:</b>", self.styles['Heading4']))
+        elements.append(Paragraph(notes, self.styles['Normal']))
+        elements.append(Paragraph(terms, self.styles['SmallText']))
+        
+        # 6. Payment Info
+        elements.append(Spacer(1, 0.2*inch))
+        elements.append(Paragraph("<b>Payment Methods:</b>", self.styles['Heading4']))
+        
+        payment_info = [
+            "M-Pesa: Paybill 123456, Account: Invoice Number",
+            "Bank Transfer: Equity Bank, Acc: 1234567890",
+            "Cheque: Payable to Famous Gates Hotels"
+        ]
+        
+        for method in payment_info:
+             elements.append(Paragraph(f"• {method}", self.styles['Normal']))
+        
+        return self._create_pdf(elements)
+
+    def _generate_revenue_reconciliation_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Revenue Reconciliation Report"""
+        elements = []
+        
+        start_date = filters.get('start_date')
         end_date = filters.get('end_date')
         date_range = f"Period: {start_date} to {end_date}" if start_date and end_date else f"Date: {datetime.now().strftime('%d/%m/%Y')}"
         
@@ -3960,3 +4106,115 @@ class BrandedPDFGenerator:
         
         # Build PDF
         return self._create_pdf(elements)
+
+    def _generate_payslip(self, doc, data, filters):
+        """Generate professional payslip"""
+        # Header
+        self._add_header(doc, "Payslip", data.get('period', datetime.now().strftime('%B %Y')))
+        
+        # Staff Details
+        staff = data.get('staff', {})
+        staff_data = [
+            ['Employee Name:', staff.get('name', 'N/A')],
+            ['Staff ID:', staff.get('staff_id', 'N/A')],
+            ['Department:', staff.get('department', 'N/A')],
+            ['Position:', staff.get('role', 'N/A')],
+            ['PIN No:', staff.get('pin_number', 'N/A')],
+            ['NSSF No:', staff.get('nssf_number', 'N/A')],
+            ['NHIF No:', staff.get('nhif_number', 'N/A')],
+            ['Bank:', f"{staff.get('bank_name', '')} - {staff.get('account_number', '')}"]
+        ]
+        
+        t = Table(staff_data, colWidths=[2*inch, 4*inch])
+        t.setStyle(TableStyle([
+            ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+            ('FONTNAME', (1,0), (1,-1), 'Helvetica'),
+            ('FONTSIZE', (0,0), (-1,-1), 10),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+            ('TEXTCOLOR', (0,0), (0,-1), colors.HexColor('#3C3C43')),
+        ]))
+        doc.append(t)
+        doc.append(Spacer(1, 12))
+        
+        # Earnings Section
+        doc.append(Paragraph("Earnings", self.styles['SectionHeader']))
+        
+        earnings_data = [
+            ['Description', 'Amount (KES)'],
+            ['Basic Salary', f"{data.get('basic_salary', 0):,.2f}"],
+            ['Bonuses', f"{data.get('bonuses', 0):,.2f}"],
+            ['Allowances', f"{data.get('allowances', 0):,.2f}"],
+            ['Total Earnings', f"{data.get('gross_pay', 0):,.2f}"]
+        ]
+        
+        t = Table(earnings_data, colWidths=[4*inch, 2*inch])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F2F2F7')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.HexColor('#3C3C43')),
+            ('ALIGN', (1,0), (1,-1), 'RIGHT'),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+            ('LINEBELOW', (0,0), (-1,0), 1, colors.HexColor('#D1D1D6')),
+            ('LINEABOVE', (0,-1), (-1,-1), 1, colors.HexColor('#3C3C43')),
+            ('PADDING', (0,0), (-1,-1), 8),
+        ]))
+        doc.append(t)
+        doc.append(Spacer(1, 12))
+        
+        # Deductions Section
+        doc.append(Paragraph("Deductions", self.styles['SectionHeader']))
+        
+        deductions_data = [
+            ['Description', 'Amount (KES)'],
+            ['PAYE (Tax)', f"{data.get('paye', 0):,.2f}"],
+            ['NSSF', f"{data.get('nssf', 0):,.2f}"],
+            ['NHIF / SHIF', f"{data.get('nhif', 0):,.2f}"],
+            ['Housing Levy', f"{data.get('housing_levy', 0):,.2f}"],
+            ['Advances', f"{data.get('total_advances', 0):,.2f}"],
+            ['Credit Bills', f"{data.get('total_credit_bills', 0):,.2f}"],
+            ['Loan Repayment', f"{data.get('loan_deduction', 0):,.2f}"],
+            ['Total Deductions', f"{data.get('total_deductions', 0):,.2f}"]
+        ]
+        
+        t = Table(deductions_data, colWidths=[4*inch, 2*inch])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F2F2F7')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.HexColor('#3C3C43')),
+            ('ALIGN', (1,0), (1,-1), 'RIGHT'),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+            ('TEXTCOLOR', (1,-1), (1,-1), colors.HexColor('#FF3B30')), # Red for total deduction
+            ('LINEBELOW', (0,0), (-1,0), 1, colors.HexColor('#D1D1D6')),
+            ('LINEABOVE', (0,-1), (-1,-1), 1, colors.HexColor('#3C3C43')),
+            ('PADDING', (0,0), (-1,-1), 8),
+        ]))
+        doc.append(t)
+        doc.append(Spacer(1, 20))
+        
+        # Net Pay
+        doc.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#D1D1D6')))
+        doc.append(Spacer(1, 6))
+        
+        net_pay_style = ParagraphStyle(
+            'NetPay',
+            parent=self.styles['Normal'],
+            fontSize=14,
+            alignment=TA_RIGHT,
+            fontName='Helvetica-Bold',
+            textColor=colors.HexColor('#34C759')
+        )
+        doc.append(Paragraph(f"NET PAY: KES {data.get('net_pay', 0):,.2f}", net_pay_style))
+        doc.append(Spacer(1, 24))
+        
+        # Footer / Signatures
+        signature_data = [
+            ['___________________', '___________________'],
+            ['Employee Signature', 'Authorized Signature'],
+            ['Date: ....................', 'Date: ....................']
+        ]
+        t = Table(signature_data, colWidths=[3*inch, 3*inch])
+        t.setStyle(TableStyle([
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('TOPPADDING', (0,0), (-1,-1), 20),
+        ]))
+        doc.append(t)
