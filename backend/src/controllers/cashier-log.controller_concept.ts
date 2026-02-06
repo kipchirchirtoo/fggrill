@@ -7,7 +7,7 @@ import { AppError } from '../middleware/errorHandler';
 export const saveCashierLogbook = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { credit_bills, ...logbookData } = req.body;
-        const branchId = req.branch?.id; // Assuming auth middleware sets this
+        const branchId = (req as any).branch?.id; // Assuming auth middleware sets this
 
         // 1. Save Logbook Base Data (Simplified for this snippet)
         // ... (Logbook saving logic) ...

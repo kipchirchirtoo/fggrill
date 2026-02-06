@@ -809,12 +809,12 @@ export const updateStaffMember = async (
 
     // Step 4: Track significant changes in history
     const historyEntries = [];
-    if (salary !== undefined && staff.salary !== parseFloat(salary)) {
+    if (basic_salary !== undefined && staff.basic_salary !== parseFloat(basic_salary)) {
       historyEntries.push({
         staff_id: req.params.id,
         change_type: 'salary_adjustment',
-        old_value: staff.salary.toString(),
-        new_value: salary.toString(),
+        old_value: staff.basic_salary.toString(),
+        new_value: basic_salary.toString(),
         created_by: req.user?.id,
         notes: 'Manual adjustment'
       });
