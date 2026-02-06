@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, List, Any, Optional
-from supabase import ACTION_STATUS
+
 
 logger = logging.getLogger(__name__)
 
