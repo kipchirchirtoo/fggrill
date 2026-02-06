@@ -191,6 +191,11 @@ export default function AdminUsersPage() {
     else if (!/\S+@\S+\.\S+/.test(formData.email)) errors.email = 'Email is invalid';
 
     if (!formData.first_name) errors.first_name = 'First name is required';
+    else if (formData.first_name.length < 2) errors.first_name = 'Must be at least 2 characters';
+
+    if (!formData.last_name) errors.last_name = 'Last name is required';
+    else if (formData.last_name.length < 2) errors.last_name = 'Must be at least 2 characters';
+
     if (!formData.role) errors.role = 'Role is required';
 
     // Validate branch assignment for roles that require it
@@ -629,15 +634,17 @@ export default function AdminUsersPage() {
                           className={formErrors.first_name ? 'border-red-500' : ''}
                           placeholder="Enter first name"
                         />
-                        {formErrors.first_name && <p className="text-red-500 text-xs mt-1">Required</p>}
+                        {formErrors.first_name && <p className="text-red-500 text-xs mt-1">{formErrors.first_name}</p>}
                       </div>
                       <div>
-                        <label className="text-sm font-medium text-gray-700 mb-2 block">Last Name</label>
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">Last Name <span className="text-red-500">*</span></label>
                         <Input
                           value={formData.last_name}
                           onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                          className={formErrors.last_name ? 'border-red-500' : ''}
                           placeholder="Enter last name"
                         />
+                        {formErrors.last_name && <p className="text-red-500 text-xs mt-1">{formErrors.last_name}</p>}
                       </div>
                     </div>
 
@@ -775,7 +782,8 @@ export default function AdminUsersPage() {
                   onClick={() => {
                     if (wizardStep === 1) {
                       const errors: any = {};
-                      if (!formData.first_name) errors.first_name = true;
+                      if (!formData.first_name || formData.first_name.length < 2) errors.first_name = true;
+                      if (!formData.last_name || formData.last_name.length < 2) errors.last_name = true;
                       if (!formData.email) errors.email = true;
                       if (!formData.password) errors.password = true;
                       if (Object.keys(errors).length > 0) {
