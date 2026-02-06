@@ -20,7 +20,7 @@ import {
   Building2, Search, Plus, Check, X, Eye, Send, RefreshCw,
   ChevronRight, Clock, MapPin, ArrowRight, Edit, Trash2, Save,
   BarChart3, Box, Filter, ArrowLeftRight, CheckCircle, XCircle,
-  Camera, Scan, Keyboard
+  Camera, Scan, Keyboard, PackageCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/date-utils';
@@ -134,6 +134,21 @@ export default function CentralWarehousePage() {
     reorder_level: 10,
     supplier: ''
   });
+  const [newItem, setNewItem] = useState<Item>({
+    sku: '',
+    barcode: '',
+    item_name: '',
+    description: '',
+    category: 'Beverages',
+    unit_of_measure: 'piece',
+    quantity: 0,
+    retail_price: 0,
+    cost_price: 0,
+    reorder_level: 10,
+    supplier: ''
+  });
+  const [isSaving, setIsSaving] = useState(false);
+
 
   // Barcode scanner state
   const [isScannerActive, setIsScannerActive] = useState(false);
@@ -231,7 +246,7 @@ export default function CentralWarehousePage() {
         .filter(i => i.status === 'APPROVED' || i.status === 'PARTIALLY_APPROVED')
         .map(i => ({
           item_sku: i.item_sku,
-          quantity: i.approved_quantity || i.requested_quantity
+          dispatched_quantity: i.approved_quantity || i.requested_quantity
         }));
 
       if (items.length === 0) {

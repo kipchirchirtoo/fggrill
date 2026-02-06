@@ -540,7 +540,8 @@ export const processCashierPayment = async (
                     await supabase
                         .from('bar_orders')
                         .update({
-                            payment_status: 'paid'
+                            payment_status: 'paid',
+                            status: 'completed'
                         })
                         .eq('id', order.id);
                 } else if (totalPaid > 0) {
@@ -830,7 +831,10 @@ export const verifyPayment = async (
                 if (order && totalPaid >= order.total) {
                     await supabase
                         .from('bar_orders')
-                        .update({ payment_status: 'paid' })
+                        .update({
+                            payment_status: 'paid',
+                            status: 'completed'
+                        })
                         .eq('id', payment.bar_order_id);
                 } else if (totalPaid > 0) {
                     await supabase

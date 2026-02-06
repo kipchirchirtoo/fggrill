@@ -3054,6 +3054,84 @@ class BrandedPDFGenerator:
         
         return self._create_pdf(elements)
 
+    def _generate_procurement_intelligence_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Procurement Intelligence (VAT, GRNI, Aging) Report PDF"""
+        elements = []
+        
+        date_range = f"Period: {filters.get('start_date', 'N/A')} to {filters.get('end_date', 'N/A')}"
+        elements.extend(self._create_header("PROCUREMENT INTELLIGENCE REPORT", date_range))
+        
+        # 1. VAT Analysis Section
+        vat_data = data.get('vat', {})
+        vat_summary = vat_data.get('summary', {})
+        
+        elements.append(Paragraph("<b>VAT ANALYSIS SUMMARY</b>", self.styles['SectionHeader']))
+        vat_summary_table_data = [
+            [Paragraph("<b>Metric</b>", self.styles['TableHeader']), Paragraph("<b>Amount (KES)</b>", self.styles['TableHeader'])],
+            ['Total Subtotal', self._format_currency(vat_summary.get('total_subtotal', 0))],
+            ['Total VAT Amount', self._format_currency(vat_summary.get('total_vat', 0))],
+            ['Total Withholding VAT', self._format_currency(vat_summary.get('total_withholding', 0))],
+            ['Total Combined Amount', self._format_currency(vat_summary.get('total_combined', 0))]
+        ]
+        
+        vat_summary_table = Table(vat_summary_table_data, colWidths=[3.5*inch, 3*inch])
+        vat_summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(vat_summary_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # 2. GRNI Control Section
+        elements.append(Paragraph("<b>GRNI (GOODS RECEIVED NOT INVOICED) CONTROL</b>", self.styles['SectionHeader']))
+        grni_headers = [Paragraph(f"<b>{h}</b>", self.styles['TableHeader']) for h in ['GRN #', 'Date', 'Supplier', 'Amount']]
+        grni_table_data = [grni_headers]
+        
+        for g in data.get('grni', []):
+            supplier = g.get('supplier', {})
+            grn = g.get('grn', {})
+            grni_table_data.append([
+                grn.get('grn_number', 'N/A'),
+                str(grn.get('grn_date', ''))[:10],
+                supplier.get('name', 'N/A'),
+                self._format_currency(g.get('amount', 0))
+            ])
+            
+        if not data.get('grni'):
+            grni_table_data.append(['No open GRNI entries', '-', '-', '-'])
+            
+        grni_table = Table(grni_table_data, colWidths=[1.5*inch, 1.2*inch, 2.8*inch, 1.5*inch])
+        grni_table.setStyle(self._get_table_style())
+        elements.append(grni_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # 3. Supplier Aging Section
+        elements.append(Paragraph("<b>SUPPLIER BALANCES OVERVIEW</b>", self.styles['SectionHeader']))
+        aging_headers = [Paragraph(f"<b>{h}</b>", self.styles['TableHeader']) for h in ['Supplier', 'Code', 'Total Balance']]
+        aging_table_data = [aging_headers]
+        
+        for a in data.get('aging', []):
+            supplier = a.get('supplier', {})
+            aging_table_data.append([
+                supplier.get('name', 'N/A'),
+                supplier.get('supplier_code', 'N/A'),
+                self._format_currency(a.get('total_balance') or a.get('current_balance', 0))
+            ])
+            
+        if not data.get('aging'):
+            aging_table_data.append(['No supplier balances', '-', '-'])
+            
+        aging_table = Table(aging_table_data, colWidths=[3*inch, 1.5*inch, 2.5*inch])
+        aging_table.setStyle(self._get_table_style())
+        elements.append(aging_table)
+        
+        return self._create_pdf(elements)
+
     def _generate_exception_logs_report(self, data: Dict, filters: Dict) -> str:
         """Generate Exception Logs Report PDF"""
         elements = []

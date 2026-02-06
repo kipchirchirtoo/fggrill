@@ -970,9 +970,12 @@ export default function AdminUsersPage() {
                         <Input
                           value={formData.pos_pin}
                           onChange={(e) => setFormData({ ...formData, pos_pin: e.target.value.toUpperCase() })}
-                          className="border-none p-0 h-auto focus-visible:ring-0 text-lg font-mono"
+                          className={`border-none p-0 h-auto focus-visible:ring-0 text-lg font-mono ${formErrors.pos_pin ? 'text-red-500' : ''}`}
+                          placeholder="e.g. R123"
                           maxLength={4}
                         />
+                        <p className="text-[10px] text-gray-400 mt-1">Waiters: RXXX | Bar: BXXX | Cashiers: CXXX</p>
+                        {formErrors.pos_pin && <p className="text-red-500 text-[10px] mt-1">{formErrors.pos_pin}</p>}
                       </div>
                     </div>
                   </motion.div>

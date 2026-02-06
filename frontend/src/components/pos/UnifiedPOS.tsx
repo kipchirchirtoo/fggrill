@@ -115,7 +115,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
             // 2. Filter by Status
             let matchesStatus = false;
             if (historyStatus === 'pending') matchesStatus = order.status === 'pending' || order.status === 'kitchen_ready';
-            if (historyStatus === 'cleared') matchesStatus = order.status === 'completed' || order.status === 'paid';
+            if (historyStatus === 'cleared') matchesStatus = order.status === 'completed' || order.status === 'paid' || order.status === 'delivered';
             if (historyStatus === 'voided') matchesStatus = order.status === 'cancelled' || order.status === 'voided';
 
             return isSameDate && matchesStatus;
@@ -334,7 +334,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                             <div class="bold header-title">${companyName}</div>
                             <div>${companyAddress}</div>
                             <div>Tel: ${companyPhone}</div>
-                            <div class="bold receipt-type">${(orderData.receipt_type || 'CASH RECEIPT').toUpperCase()}</div>
+                            <div class="bold receipt-type">${(orderData.status === 'pending' || orderData.status === 'kitchen_ready' ? 'PROFORMA BILL' : (orderData.receipt_type || 'CASH RECEIPT')).toUpperCase()}</div>
                         </div>
 
                         <div class="dashed-line"></div>
@@ -385,9 +385,9 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                         </div>
 
                         <div style="margin-top: 10px; font-size: 8px;">
-                            <div class="flex"><span>Payment: ${(orderData.payment_method || paymentMethod).toUpperCase()}</span></div>
-                            <div class="flex"><span>Paid: KES ${totalAmount.toLocaleString()}</span></div>
-                            <div class="flex"><span>Change: KES 0</span></div>
+                            <div class="flex"><span>Payment: ${orderData.status === 'pending' || orderData.status === 'kitchen_ready' ? 'PAYMENT DUE' : (orderData.payment_method || paymentMethod).toUpperCase()}</span></div>
+                            <div class="flex"><span>${orderData.status === 'pending' || orderData.status === 'kitchen_ready' ? 'Amount Due' : 'Paid'}: KES ${totalAmount.toLocaleString()}</span></div>
+                            ${orderData.status === 'pending' || orderData.status === 'kitchen_ready' ? '' : '<div class="flex"><span>Change: KES 0</span></div>'}
                         </div>
 
                         <div class="dashed-line"></div>
@@ -529,7 +529,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                             quantity: item.quantity
                         })),
                         payment_method: paymentMethod,
-                        status: 'completed'
+                        status: 'pending'
                     });
                     if (res.success) {
                         toast.success('Bar order completed!');
@@ -909,24 +909,6 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                 </div>
                             </div>
 
-                            {/* Payment Selection Refined */}
-                            <div className="grid grid-cols-3 gap-2 bg-stone-100 p-1 rounded-lg border border-stone-200/50">
-                                {(['cash', 'mpesa', 'card'] as const).map(method => (
-                                    <button
-                                        key={method}
-                                        onClick={() => setPaymentMethod(method)}
-                                        className={cn(
-                                            "py-1.5 text-[10px] md:text-xs font-bold uppercase rounded-md transition-all",
-                                            paymentMethod === method
-                                                ? "bg-white text-stone-900 shadow-sm border border-stone-100"
-                                                : "text-stone-500 hover:text-stone-700"
-                                        )}
-                                    >
-                                        {method}
-                                    </button>
-                                ))}
-                            </div>
-
                             <button
                                 onClick={handleCreateOrder}
                                 disabled={isSubmitting}
@@ -992,10 +974,14 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                     >
                                         {status}
                                         <span className="ml-2 text-xs opacity-60 bg-stone-200 px-1.5 py-0.5 rounded-full">
-                                            {filteredOrders.filter(o => {
+                                            {recentOrders.filter(o => {
+                                                const orderDate = new Date(o.created_at);
+                                                const isSameDate = orderDate.toDateString() === historyDate.toDateString();
+                                                if (!isSameDate) return false;
+
                                                 if (status === 'pending') return o.status === 'pending' || o.status === 'kitchen_ready';
-                                                if (status === 'cleared') return o.status === 'completed' || o.status === 'paid';
-                                                if (status === 'voided') return o.status === 'cancelled';
+                                                if (status === 'cleared') return o.status === 'completed' || o.status === 'paid' || o.status === 'delivered';
+                                                if (status === 'voided') return o.status === 'cancelled' || o.status === 'voided';
                                                 return false;
                                             }).length}
                                         </span>
@@ -1081,13 +1067,23 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
 
                                                                 {/* Actions */}
                                                                 {historyStatus === 'pending' && (
-                                                                    <div className="flex gap-2">
+                                                                    <div className="grid grid-cols-2 gap-2">
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handlePrintReceipt(order);
+                                                                            }}
+                                                                            className="col-span-2 py-2.5 text-xs font-bold text-white bg-stone-800 hover:bg-stone-950 rounded-lg transition-all flex items-center justify-center gap-2 shadow-sm active:scale-[0.98]"
+                                                                        >
+                                                                            <FileText className="w-4 h-4" />
+                                                                            REPRINT PROFORMA BILL
+                                                                        </button>
                                                                         <button
                                                                             onClick={(e) => {
                                                                                 e.stopPropagation();
                                                                                 handleEditOrder(order);
                                                                             }}
-                                                                            className="flex-1 py-2 text-sm font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                                                                            className="py-2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors uppercase"
                                                                         >
                                                                             Edit / Copy
                                                                         </button>
@@ -1097,7 +1093,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                                                                 setIsVoiding(order.id);
                                                                                 setVoidConfirmOpen(true);
                                                                             }}
-                                                                            className="flex-1 py-2 text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                                                                            className="py-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors uppercase"
                                                                         >
                                                                             Void Order
                                                                         </button>

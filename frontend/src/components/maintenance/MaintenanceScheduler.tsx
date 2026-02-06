@@ -100,13 +100,13 @@ export function MaintenanceScheduler({ branchId, compact = false }: MaintenanceS
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [priorityFilter, setPriorityFilter] = useState<string>('');
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
-  
+
   // Modals
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<MaintenanceTask | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   // Form state
   const [formData, setFormData] = useState({
     title: '',
@@ -144,7 +144,7 @@ export function MaintenanceScheduler({ branchId, compact = false }: MaintenanceS
     try {
       const response = await maintenanceAPI.getRequests(branchId);
       const tasksData = response.data || response.requests || response || [];
-      
+
       const processed: MaintenanceTask[] = tasksData.map((t: any) => ({
         id: t.id,
         title: t.title || t.issue_type || 'Maintenance Task',
@@ -177,16 +177,16 @@ export function MaintenanceScheduler({ branchId, compact = false }: MaintenanceS
       // Calculate stats
       const today = new Date();
       const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      
+
       setStats({
         total: processed.length,
         pending: processed.filter(t => t.status === 'pending').length,
         inProgress: processed.filter(t => t.status === 'in_progress' || t.status === 'assigned').length,
         overdue: processed.filter(t => t.due_date && new Date(t.due_date) < today && t.status !== 'completed').length,
         preventive: processed.filter(t => t.type === 'preventive').length,
-        completedThisMonth: processed.filter(t => 
-          t.status === 'completed' && 
-          t.completed_date && 
+        completedThisMonth: processed.filter(t =>
+          t.status === 'completed' &&
+          t.completed_date &&
           new Date(t.completed_date) >= monthStart
         ).length
       });
@@ -299,14 +299,10 @@ export function MaintenanceScheduler({ branchId, compact = false }: MaintenanceS
         type: formData.type,
         category: formData.category,
         location: formData.location,
-        room_number: formData.room_number || undefined,
+        room_number: formData.room_number || '',
         priority: formData.priority,
-        assigned_to: formData.assigned_to || undefined,
-        scheduled_date: formData.scheduled_date || undefined,
-        due_date: formData.due_date || undefined,
-        estimated_hours: formData.estimated_hours || undefined,
-        recurring: formData.recurring,
-        recurrence_pattern: formData.recurring ? formData.recurrence_pattern : undefined,
+        issue_type: formData.type,
+        reported_by: user?.name || 'Staff',
         branch_id: branchId
       };
 
@@ -507,7 +503,7 @@ export function MaintenanceScheduler({ branchId, compact = false }: MaintenanceS
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold font-sf-pro-display">{task.title}</h3>
                         {task.recurring && (
-                          <Repeat className="h-4 w-4 text-purple-500" title="Recurring" />
+                          <Repeat className="h-4 w-4 text-purple-500" />
                         )}
                         {isOverdue && (
                           <IOSBadge className="bg-red-100 text-red-700">Overdue</IOSBadge>
@@ -744,7 +740,7 @@ export function MaintenanceScheduler({ branchId, compact = false }: MaintenanceS
               <IOSButton variant="outline" className="flex-1" onClick={() => setIsNewModalOpen(false)}>
                 Cancel
               </IOSButton>
-              <IOSButton 
+              <IOSButton
                 className="flex-1 bg-[#3C3C43] hover:bg-[#000000]"
                 onClick={handleSubmitTask}
                 disabled={isSubmitting}

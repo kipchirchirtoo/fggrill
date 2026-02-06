@@ -79,30 +79,30 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  
+
   // Search state
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Booking[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  
+
   // Selected booking
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
-  
+
   // Room assignment
   const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
-  
+
   // ID Verification
   const [idVerified, setIdVerified] = useState(false);
   const [idPhoto, setIdPhoto] = useState<string | null>(null);
-  
+
   // Payment
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'mpesa' | 'prepaid'>('prepaid');
   const [paymentComplete, setPaymentComplete] = useState(false);
-  
+
   // Key card
   const [keyCardIssued, setKeyCardIssued] = useState(false);
-  
+
   // Communication preferences
   const [sendEmail, setSendEmail] = useState(true);
   const [sendSMS, setSendSMS] = useState(true);
@@ -126,16 +126,16 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
     setIsLoading(true);
     try {
       const response = await bookingsAPI.getBooking(id);
-      const booking = response.data || response;
+      const booking = (response.data || response) as Booking;
       setSelectedBooking(booking);
       setCurrentStep(1);
-      
+
       // Check if payment is already complete
       if (booking.amount_paid >= booking.total_amount) {
         setPaymentComplete(true);
         setPaymentMethod('prepaid');
       }
-      
+
       // Fetch available rooms
       await fetchAvailableRooms(booking);
     } catch (error) {
@@ -147,25 +147,25 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
 
   const searchBookings = async () => {
     if (!searchTerm.trim()) return;
-    
+
     setIsSearching(true);
     try {
       const response = await bookingsAPI.getBookings({ status: 'confirmed' });
       const bookings = response.data || response.bookings || response || [];
-      
+
       const filtered = bookings.filter((b: any) => {
         const term = searchTerm.toLowerCase();
         const guestName = `${b.guest?.first_name || ''} ${b.guest?.last_name || ''}`.toLowerCase();
         const bookingNum = (b.booking_number || b.id || '').toLowerCase();
         const roomNum = (b.room?.room_number || '').toLowerCase();
         const phone = (b.guest?.phone || '').toLowerCase();
-        
-        return guestName.includes(term) || 
-               bookingNum.includes(term) || 
-               roomNum.includes(term) ||
-               phone.includes(term);
+
+        return guestName.includes(term) ||
+          bookingNum.includes(term) ||
+          roomNum.includes(term) ||
+          phone.includes(term);
       });
-      
+
       setSearchResults(filtered);
     } catch (error) {
       toast.error('Search failed');
@@ -178,19 +178,19 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
     try {
       const response = await roomsAPI.getRooms();
       const rooms = response.rooms || response.data || response || [];
-      
+
       // Filter available rooms matching the booking's room type
       const available = rooms.filter((r: any) => {
         const isAvailable = r.status === 'available' || r.status === 'clean';
-        const matchesType = !booking.room_type || 
+        const matchesType = !booking.room_type ||
           r.type?.id === booking.room_type?.id ||
           r.type?.name === booking.room_type?.name ||
           r.type === booking.room_type?.name;
         return isAvailable && matchesType;
       });
-      
+
       setAvailableRooms(available);
-      
+
       // If booking already has a room assigned, select it
       if (booking.room) {
         setSelectedRoom(booking.room as Room);
@@ -203,12 +203,12 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
   const handleSelectBooking = async (booking: Booking) => {
     setSelectedBooking(booking);
     setCurrentStep(1);
-    
+
     if (booking.amount_paid >= booking.total_amount) {
       setPaymentComplete(true);
       setPaymentMethod('prepaid');
     }
-    
+
     await fetchAvailableRooms(booking);
   };
 
@@ -271,12 +271,12 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
     try {
       // Update booking status
       await bookingsAPI.checkIn(selectedBooking.id);
-      
+
       // Update room status
       await roomsAPI.updateRoom(selectedRoom.id, { status: 'occupied' });
-      
+
       toast.success('Check-in completed successfully!');
-      
+
       // Send notifications if enabled
       if (sendEmail) {
         // Send welcome email
@@ -286,7 +286,7 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
         // Send SMS with room details
         toast.success('SMS confirmation sent');
       }
-      
+
       onComplete?.();
       setIsOpen(false);
       resetState();
@@ -309,13 +309,13 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
     setKeyCardIssued(false);
   };
 
-  const balanceDue = selectedBooking 
+  const balanceDue = selectedBooking
     ? Math.max(0, selectedBooking.total_amount - selectedBooking.amount_paid)
     : 0;
 
   return (
     <>
-      <IOSButton 
+      <IOSButton
         onClick={() => setIsOpen(true)}
         className="bg-[#3C3C43] hover:bg-[#000000] text-white"
       >
@@ -338,14 +338,12 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
               const Icon = step.icon;
               return (
                 <div key={step.id} className="flex items-center">
-                  <div className={`flex items-center gap-2 ${
-                    step.completed ? 'text-green-600' : 
+                  <div className={`flex items-center gap-2 ${step.completed ? 'text-green-600' :
                     step.current ? 'text-[#3C3C43]' : 'text-gray-400'
-                  }`}>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                      step.completed ? 'bg-green-100' :
-                      step.current ? 'bg-[#3C3C43] text-white' : 'bg-gray-200'
                     }`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step.completed ? 'bg-green-100' :
+                      step.current ? 'bg-[#3C3C43] text-white' : 'bg-gray-200'
+                      }`}>
                       {step.completed ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
                     </div>
                     <span className="text-xs font-medium hidden md:block">{step.title}</span>
@@ -485,7 +483,7 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
                       </IOSButton>
                     </div>
                     <div className="mt-4">
-                      <IOSButton 
+                      <IOSButton
                         className="w-full bg-[#3C3C43] hover:bg-[#000000]"
                         onClick={handleVerifyID}
                       >
@@ -512,11 +510,10 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
                         key={room.id}
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        className={`p-4 border rounded-xl cursor-pointer transition-all ${
-                          selectedRoom?.id === room.id 
-                            ? 'border-[#3C3C43] bg-[#F2F2F7]' 
-                            : 'hover:border-gray-300'
-                        }`}
+                        className={`p-4 border rounded-xl cursor-pointer transition-all ${selectedRoom?.id === room.id
+                          ? 'border-[#3C3C43] bg-[#F2F2F7]'
+                          : 'hover:border-gray-300'
+                          }`}
                         onClick={() => handleSelectRoom(room)}
                       >
                         <div className="flex items-center justify-between mb-2">
@@ -525,7 +522,9 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
                             <Check className="h-5 w-5 text-green-600" />
                           )}
                         </div>
-                        <p className="text-sm text-gray-600">{typeof room.type === 'string' ? room.type : room.type?.name || 'Standard'}</p>
+                        <p className="text-sm text-gray-600">
+                          {typeof (room as any).type === 'string' ? (room as any).type : (room as any).type?.name || 'Standard'}
+                        </p>
                         <p className="text-xs text-gray-400">Floor {room.floor}</p>
                       </motion.div>
                     ))}
@@ -580,11 +579,10 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
                           <button
                             key={method.id}
                             onClick={() => setPaymentMethod(method.id as any)}
-                            className={`p-4 border rounded-xl flex items-center gap-3 transition-all ${
-                              paymentMethod === method.id 
-                                ? 'border-[#3C3C43] bg-[#F2F2F7]' 
-                                : 'hover:border-gray-300'
-                            }`}
+                            className={`p-4 border rounded-xl flex items-center gap-3 transition-all ${paymentMethod === method.id
+                              ? 'border-[#3C3C43] bg-[#F2F2F7]'
+                              : 'hover:border-gray-300'
+                              }`}
                           >
                             <method.icon className="h-5 w-5" />
                             <span className="font-medium">{method.label}</span>
@@ -594,7 +592,7 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
                     </IOSCard>
                   )}
 
-                  <IOSButton 
+                  <IOSButton
                     className="w-full bg-[#3C3C43] hover:bg-[#000000]"
                     onClick={handleProcessPayment}
                     disabled={isProcessing}
@@ -626,7 +624,7 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
                     <p className="text-gray-600 mb-4">
                       Room {selectedRoom?.room_number} • Floor {selectedRoom?.floor}
                     </p>
-                    <IOSButton 
+                    <IOSButton
                       className="bg-[#3C3C43] hover:bg-[#000000]"
                       onClick={handleIssueKeyCard}
                       disabled={isProcessing || keyCardIssued}
@@ -692,7 +690,7 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
                   <p className="text-gray-600 mb-6">
                     {selectedBooking?.guest?.first_name} {selectedBooking?.guest?.last_name} • Room {selectedRoom?.room_number}
                   </p>
-                  
+
                   <div className="flex flex-wrap justify-center gap-3 mb-6">
                     <IOSBadge className="bg-green-100 text-green-700">
                       <Check className="h-3 w-3 mr-1" /> ID Verified
@@ -709,7 +707,7 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
                     <IOSButton variant="outline" onClick={() => { setIsOpen(false); resetState(); }}>
                       Cancel
                     </IOSButton>
-                    <IOSButton 
+                    <IOSButton
                       className="bg-[#3C3C43] hover:bg-[#000000]"
                       onClick={handleCompleteCheckIn}
                       disabled={isProcessing}
@@ -733,7 +731,7 @@ export function ModernCheckIn({ bookingId, onComplete, onCancel }: ModernCheckIn
               <IOSButton variant="outline" onClick={() => setCurrentStep(Math.max(0, currentStep - 1))}>
                 Back
               </IOSButton>
-              <IOSButton 
+              <IOSButton
                 onClick={() => setCurrentStep(Math.min(5, currentStep + 1))}
                 disabled={
                   (currentStep === 1 && !idVerified) ||

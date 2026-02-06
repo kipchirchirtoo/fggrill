@@ -287,6 +287,14 @@ export const storeAPI = {
     return fetchAPI<any>(`/store/stock-requests${qs ? `?${qs}` : ''}`);
   },
   getPendingRequests: () => fetchAPI<any>('/store/stock-requests/pending'),
+  getStockRequests: (params?: { status?: string; branch_id?: number; from_date?: string; to_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.from_date) query.append('from_date', params.from_date);
+    if (params?.to_date) query.append('to_date', params.to_date);
+    return fetchAPI<any>(`/store/stock-requests?${query}`);
+  },
 
   // Kitchen Requisitions (Incoming from Kitchen)
   getKitchenRequisitions: (params?: { branch_id?: number; status?: string }) => {
@@ -625,16 +633,22 @@ export const systemAPI = {
 
 export const staffAPI = {
   // Staff CRUD
-  getStaff: (params?: { branchId?: number; role?: string; search?: string; department?: string; status?: string; page?: number; limit?: number }) => {
-    const query = new URLSearchParams();
-    if (params?.branchId) query.append('branch_id', String(params.branchId));
-    if (params?.role) query.append('role', params.role);
-    if (params?.search) query.append('search', params.search);
-    if (params?.department) query.append('department', params.department);
-    if (params?.status) query.append('status', params.status);
-    if (params?.page) query.append('page', String(params.page));
-    if (params?.limit) query.append('limit', String(params.limit));
-    const queryString = query.toString() ? `?${query.toString()}` : '';
+  getStaff: (params?: number | { branchId?: number; role?: string; search?: string; department?: string; status?: string; page?: number; limit?: number }) => {
+    const queryParams = new URLSearchParams();
+
+    if (typeof params === 'number') {
+      queryParams.append('branch_id', String(params));
+    } else if (params) {
+      if (params.branchId) queryParams.append('branch_id', String(params.branchId));
+      if (params.role) queryParams.append('role', params.role);
+      if (params.search) queryParams.append('search', params.search);
+      if (params.department) queryParams.append('department', params.department);
+      if (params.status) queryParams.append('status', params.status);
+      if (params.page) queryParams.append('page', String(params.page));
+      if (params.limit) queryParams.append('limit', String(params.limit));
+    }
+
+    const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
     return fetchAPI<any>(`/staff${queryString}`);
   },
   getStaffMember: (id: string) => fetchAPI<any>(`/staff/${id}`),
@@ -1252,7 +1266,6 @@ export const bookingsAPI = {
   },
   cancelBooking: (id: string, reason?: string) =>
     fetchAPI<any>(`/bookings/${id}/cancel`, { method: 'PUT', body: JSON.stringify({ reason }) }),
-  checkIn: (id: string) => fetchAPI<any>(`/bookings/${id}/check-in`, { method: 'PUT' }),
   checkOut: (id: string) => fetchAPI<any>(`/bookings/${id}/check-out`, { method: 'PUT' }),
   getBookingByConfirmation: (confirmationNumber: string, email: string) =>
     fetchAPI<any>(`/bookings/confirmation/${confirmationNumber}?email=${encodeURIComponent(email)}`),
@@ -1286,6 +1299,8 @@ export const bookingsAPI = {
       return response;
     });
   },
+  updateRoom: (id: string, data: any) => fetchAPI<any>(`/rooms/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getRoom: (id: string) => fetchAPI<any>(`/rooms/${id}`),
 };
 
 // Helper function to calculate nights between two dates
@@ -2339,6 +2354,7 @@ export const financeAPI = {
     fetchAPI<any>(`/cashier/verify-payment/${paymentId}`, { method: 'POST', body: JSON.stringify({ status, notes }) }),
   recordDeposit: (data: { amount: number; bank_account_id: string; reference: string; notes?: string; date?: string; branch_id?: number }) =>
     fetchPythonAPI<any>('/finance/deposits', { method: 'POST', body: JSON.stringify(data) }),
+  processPayment: (data: any) => fetchAPI<any>('/finance/payments/process', { method: 'POST', body: JSON.stringify(data) }),
 
   // Expense Management
   getExpenses: (params?: any) => {

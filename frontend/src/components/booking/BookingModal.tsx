@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Calendar, Users, MapPin, CreditCard, Check, X, 
-  ChevronLeft, ChevronRight, Star, Wifi, Car, 
+  Calendar, Users, MapPin, CreditCard, Check, X,
+  ChevronLeft, ChevronRight, Star, Wifi, Car,
   Coffee, Utensils, Dumbbell, Waves
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -67,7 +67,7 @@ const ROOM_TYPES: RoomType[] = [
     available: 5
   },
   {
-    id: '2', 
+    id: '2',
     name: 'Deluxe Room',
     description: 'Spacious room with city view',
     basePrice: 12000,
@@ -175,8 +175,8 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
     try {
       // Get available rooms from API
       const totalGuests = adults + children;
-      const response = await roomsAPI.getRooms(activeBranchId, { status: 'available' });
-      
+      const response = await roomsAPI.getRooms({ branch_id: activeBranchId || undefined, status: 'available' });
+
       if (response.success && response.data) {
         // Convert API rooms to RoomType format and filter by occupancy
         const availableRooms = response.data
@@ -223,7 +223,7 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
   const selectRoom = async (room: RoomType) => {
     setSelectedRoom(room);
     setIsLoading(true);
-    
+
     try {
       // Calculate pricing
       const nights = Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24));
@@ -291,10 +291,10 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
       }
 
       const result = await response.json();
-      
+
       toast.success(`Booking confirmed! Confirmation number: ${result.data.confirmationNumber}`);
       setStep(5); // Success step
-      
+
     } catch (error: any) {
       toast.error(error.message || 'Failed to create booking');
     } finally {
@@ -406,8 +406,8 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
         <IOSButton variant="outline" onClick={onClose} className="flex-1">
           Cancel
         </IOSButton>
-        <IOSButton 
-          onClick={checkAvailability} 
+        <IOSButton
+          onClick={checkAvailability}
           disabled={isLoading}
           className="flex-1 bg-[#3C3C43] hover:bg-[#000000] text-white"
         >
@@ -428,8 +428,8 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
         <h3 className="text-lg font-semibold mb-4">Select Your Room</h3>
         <div className="space-y-4 max-h-96 overflow-y-auto">
           {availableRooms.map((room) => (
-            <IOSCard 
-              key={room.id} 
+            <IOSCard
+              key={room.id}
               className="p-4 cursor-pointer hover:shadow-md transition-shadow"
               onClick={() => selectRoom(room)}
             >
@@ -464,11 +464,10 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
           {MEAL_PLANS.map((plan) => (
             <IOSCard
               key={plan.id}
-              className={`p-3 cursor-pointer transition-all ${
-                mealPlan === plan.id 
-                  ? 'bg-[#3C3C43] text-white' 
-                  : 'hover:bg-[#F2F2F7]'
-              }`}
+              className={`p-3 cursor-pointer transition-all ${mealPlan === plan.id
+                ? 'bg-[#3C3C43] text-white'
+                : 'hover:bg-[#F2F2F7]'
+                }`}
               onClick={() => setMealPlan(plan.id)}
             >
               <h4 className="font-medium">{plan.name}</h4>
@@ -503,7 +502,7 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
             <label className="block text-sm font-medium mb-2">First Name *</label>
             <Input
               value={guestInfo.firstName}
-              onChange={(e) => setGuestInfo({...guestInfo, firstName: e.target.value})}
+              onChange={(e) => setGuestInfo({ ...guestInfo, firstName: e.target.value })}
               placeholder="Enter first name"
             />
           </div>
@@ -511,7 +510,7 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
             <label className="block text-sm font-medium mb-2">Last Name *</label>
             <Input
               value={guestInfo.lastName}
-              onChange={(e) => setGuestInfo({...guestInfo, lastName: e.target.value})}
+              onChange={(e) => setGuestInfo({ ...guestInfo, lastName: e.target.value })}
               placeholder="Enter last name"
             />
           </div>
@@ -520,7 +519,7 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
             <Input
               type="email"
               value={guestInfo.email}
-              onChange={(e) => setGuestInfo({...guestInfo, email: e.target.value})}
+              onChange={(e) => setGuestInfo({ ...guestInfo, email: e.target.value })}
               placeholder="Enter email address"
             />
           </div>
@@ -528,7 +527,7 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
             <label className="block text-sm font-medium mb-2">Phone *</label>
             <Input
               value={guestInfo.phone}
-              onChange={(e) => setGuestInfo({...guestInfo, phone: e.target.value})}
+              onChange={(e) => setGuestInfo({ ...guestInfo, phone: e.target.value })}
               placeholder="Enter phone number"
             />
           </div>
@@ -536,7 +535,7 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
             <label className="block text-sm font-medium mb-2">ID Type</label>
             <select
               value={guestInfo.idType}
-              onChange={(e) => setGuestInfo({...guestInfo, idType: e.target.value})}
+              onChange={(e) => setGuestInfo({ ...guestInfo, idType: e.target.value })}
               className="w-full px-3 py-2 border rounded-lg"
             >
               <option value="passport">Passport</option>
@@ -548,7 +547,7 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
             <label className="block text-sm font-medium mb-2">ID Number</label>
             <Input
               value={guestInfo.idNumber}
-              onChange={(e) => setGuestInfo({...guestInfo, idNumber: e.target.value})}
+              onChange={(e) => setGuestInfo({ ...guestInfo, idNumber: e.target.value })}
               placeholder="Enter ID number"
             />
           </div>
@@ -570,8 +569,8 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
         <IOSButton variant="outline" onClick={() => setStep(2)} className="flex-1">
           Back
         </IOSButton>
-        <IOSButton 
-          onClick={() => setStep(4)} 
+        <IOSButton
+          onClick={() => setStep(4)}
           className="flex-1 bg-[#3C3C43] hover:bg-[#000000] text-white"
         >
           Continue to Payment
@@ -635,22 +634,20 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
         <h3 className="text-lg font-semibold mb-4">Payment Method</h3>
         <div className="grid grid-cols-2 gap-3">
           <IOSCard
-            className={`p-3 cursor-pointer transition-all ${
-              paymentMethod === 'card' 
-                ? 'bg-[#3C3C43] text-white' 
-                : 'hover:bg-[#F2F2F7]'
-            }`}
+            className={`p-3 cursor-pointer transition-all ${paymentMethod === 'card'
+              ? 'bg-[#3C3C43] text-white'
+              : 'hover:bg-[#F2F2F7]'
+              }`}
             onClick={() => setPaymentMethod('card')}
           >
             <CreditCard className="h-5 w-5 mb-2" />
             <p className="font-medium">Credit/Debit Card</p>
           </IOSCard>
           <IOSCard
-            className={`p-3 cursor-pointer transition-all ${
-              paymentMethod === 'mpesa' 
-                ? 'bg-[#3C3C43] text-white' 
-                : 'hover:bg-[#F2F2F7]'
-            }`}
+            className={`p-3 cursor-pointer transition-all ${paymentMethod === 'mpesa'
+              ? 'bg-[#3C3C43] text-white'
+              : 'hover:bg-[#F2F2F7]'
+              }`}
             onClick={() => setPaymentMethod('mpesa')}
           >
             <div className="h-5 w-5 mb-2 bg-green-600 rounded" />
@@ -663,7 +660,7 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
         <IOSButton variant="outline" onClick={() => setStep(3)} className="flex-1">
           Back
         </IOSButton>
-        <IOSButton 
+        <IOSButton
           onClick={submitBooking}
           disabled={isSubmitting}
           className="flex-1 bg-[#3C3C43] hover:bg-[#000000] text-white"
@@ -689,7 +686,7 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
           Thank you for your booking. A confirmation email has been sent to your email address.
         </p>
       </div>
-      <IOSButton 
+      <IOSButton
         onClick={onClose}
         className="w-full bg-[#3C3C43] hover:bg-[#000000] text-white"
       >
@@ -715,19 +712,17 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
               {[1, 2, 3, 4].map((stepNum) => (
                 <div key={stepNum} className="flex items-center">
                   <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                      step >= stepNum
-                        ? 'bg-[#3C3C43] text-white'
-                        : 'bg-[#F2F2F7] text-[#3C3C43]'
-                    }`}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step >= stepNum
+                      ? 'bg-[#3C3C43] text-white'
+                      : 'bg-[#F2F2F7] text-[#3C3C43]'
+                      }`}
                   >
                     {stepNum}
                   </div>
                   {stepNum < 4 && (
                     <div
-                      className={`w-12 h-0.5 mx-2 ${
-                        step > stepNum ? 'bg-[#3C3C43]' : 'bg-[#F2F2F7]'
-                      }`}
+                      className={`w-12 h-0.5 mx-2 ${step > stepNum ? 'bg-[#3C3C43]' : 'bg-[#F2F2F7]'
+                        }`}
                     />
                   )}
                 </div>
