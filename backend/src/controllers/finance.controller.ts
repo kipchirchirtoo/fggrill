@@ -1543,3 +1543,144 @@ export const getBranchFinancialProfile = async (
   }
 };
 
+// @desc    Get Daily Logs
+// @route   GET /api/finance/daily-logs
+// @access  Private (Finance Staff, Auditor)
+export const getDailyLogs = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { branch_id, startDate, endDate, status, log_date } = req.query;
+    let query = supabase
+      .from('finance_daily_logs')
+      .select(`
+        *,
+        created_by_user:users!created_by(id, first_name, last_name),
+        verified_by_user:users!verified_by(id, first_name, last_name),
+        lines:finance_daily_log_lines(*)
+      `)
+      .order('log_date', { ascending: false });
+
+    if (branch_id) query = query.eq('branch_id', branch_id);
+    if (status) query = query.eq('status', status);
+    if (log_date) query = query.eq('log_date', log_date);
+    if (startDate) query = query.gte('log_date', startDate);
+    if (endDate) query = query.lte('log_date', endDate);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    res.status(200).json({ success: true, count: data?.length || 0, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Save Daily Log
+// @route   POST /api/finance/daily-logs
+// @access  Private (Branch Accountant)
+export const saveDailyLog = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const {
+      id, branch_id, log_date, opening_balance, closing_balance,
+      total_payments, total_expenses, notes, status, lines
+    } = req.body;
+
+    const userId = req.user?.id;
+    const activeBranchId = req.headers['x-branch-id'];
+
+    // 1. Upsert main log record
+    const logData = {
+      branch_id: branch_id || activeBranchId,
+      log_date,
+      opening_balance,
+      closing_balance,
+      total_payments,
+      total_expenses,
+      notes,
+      status: status || 'draft',
+      created_by: userId
+    };
+
+    let result;
+    if (id) {
+      result = await supabase
+        .from('finance_daily_logs')
+        .update(logData)
+        .eq('id', id)
+        .select()
+        .single();
+    } else {
+      result = await supabase
+        .from('finance_daily_logs')
+        .insert([logData])
+        .select()
+        .single();
+    }
+
+    if (result.error) throw result.error;
+    const log = result.data;
+
+    // 2. Clear and recreate lines
+    if (log.id) {
+      await supabase.from('finance_daily_log_lines').delete().eq('log_id', log.id);
+
+      if (lines && lines.length > 0) {
+        const linesWithLogId = lines.map((l: any) => {
+          const { id: tempId, ...lineData } = l;
+          return {
+            ...lineData,
+            log_id: log.id
+          };
+        });
+
+        const { error: linesError } = await supabase
+          .from('finance_daily_log_lines')
+          .insert(linesWithLogId);
+        if (linesError) throw linesError;
+      }
+    }
+
+    res.status(200).json({ success: true, data: log });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update Daily Log Status
+// @route   PUT /api/finance/daily-logs/:id/status
+// @access  Private (Auditor, Accountant)
+export const updateDailyLogStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { status, rejection_reason } = req.body;
+    const userId = req.user?.id;
+
+    const updateData: any = {
+      status,
+      updated_at: new Date().toISOString()
+    };
+
+    if (status === 'verified') {
+      updateData.verified_by = userId;
+      updateData.verified_at = new Date().toISOString();
+    }
+
+    if (status === 'rejected') {
+      updateData.rejection_reason = rejection_reason;
+    }
+
+    const { data, error } = await supabase
+      .from('finance_daily_logs')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+

@@ -33,7 +33,7 @@ interface SalaryRecord {
     last_name: string;
     role: string;
     department: string;
-    salary: number;
+    basic_salary: number; // Changed from salary
     branch_name?: string;
     bank_name?: string;
     account_number?: string;
@@ -73,14 +73,14 @@ export default function HRSalariesPage() {
     );
 
     const stats = {
-        totalBudget: staff.reduce((sum, s) => sum + Number(s.salary || 0), 0),
-        avgSalary: staff.length > 0 ? staff.reduce((sum, s) => sum + Number(s.salary || 0), 0) / staff.length : 0,
+        totalBudget: staff.reduce((sum, s) => sum + Number(s.basic_salary || 0), 0),
+        avgSalary: staff.length > 0 ? staff.reduce((sum, s) => sum + Number(s.basic_salary || 0), 0) / staff.length : 0,
         count: staff.length
     };
 
     const handleEditSalary = (s: SalaryRecord) => {
         setSelectedStaff(s);
-        setNewSalary(s.salary.toString());
+        setNewSalary((s.basic_salary || 0).toString());
         setEditModalOpen(true);
     };
 
@@ -88,7 +88,7 @@ export default function HRSalariesPage() {
         if (!selectedStaff || !newSalary) return;
         setIsSubmitting(true);
         try {
-            await staffAPI.updateStaffMember(selectedStaff.id, { salary: Number(newSalary) });
+            await staffAPI.updateStaffMember(selectedStaff.id, { basic_salary: Number(newSalary) });
             toast.success(`Salary updated for ${selectedStaff.first_name}`);
             setEditModalOpen(false);
             fetchStaffSalaries();
@@ -239,7 +239,7 @@ export default function HRSalariesPage() {
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
                                                     <span className="text-[14px] font-bold text-stone-900 group-hover:text-emerald-600 transition-colors">
-                                                        {Number(s.salary || 0).toLocaleString()} <span className="text-[10px] text-stone-400 font-medium ml-0.5">KES</span>
+                                                        {Number(s.basic_salary || 0).toLocaleString()} <span className="text-[10px] text-stone-400 font-medium ml-0.5">KES</span>
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4">

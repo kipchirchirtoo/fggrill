@@ -276,7 +276,7 @@ export default function MasterTerminalPage() {
                             </div>
                             <div className="h-8 flex items-center justify-center">
                                 <p className="text-3xl font-black tracking-[0.6em] text-stone-900">
-                                    {pin.padEnd(4, '_')}
+                                    {selectedModule === 'restaurant' ? 'R' : selectedModule === 'bar' ? 'B' : 'C'}{pin.padEnd(4, '_')}
                                 </p>
                             </div>
                         </div>

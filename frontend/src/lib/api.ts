@@ -803,33 +803,33 @@ export const staffAPI = {
   // Simplified Payroll (New System)
   simplePayroll: {
     // Credit Bills
-    createCreditBill: (data: any) => fetchAPI<any>('/credit-bills', { method: 'POST', body: JSON.stringify(data) }),
+    createCreditBill: (data: any) => fetchAPI<any>('/payroll/credit-bills', { method: 'POST', body: JSON.stringify(data) }),
     getCreditBills: (params?: { staff_id?: string; status?: string }) => {
       const query = new URLSearchParams();
       if (params?.staff_id) query.append('staff_id', params.staff_id);
       if (params?.status) query.append('status', params.status);
-      return fetchAPI<any>(`/credit-bills?${query}`);
+      return fetchAPI<any>(`/payroll/credit-bills?${query}`);
     },
     updateCreditBillStatus: (id: string, status: string) =>
-      fetchAPI<any>(`/credit-bills/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+      fetchAPI<any>(`/payroll/credit-bills/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 
     // Advances
-    createAdvance: (data: any) => fetchAPI<any>('/advances', { method: 'POST', body: JSON.stringify(data) }),
+    createAdvance: (data: any) => fetchAPI<any>('/payroll/advances', { method: 'POST', body: JSON.stringify(data) }),
     getAdvances: (params?: { staff_id?: string; status?: string }) => {
       const query = new URLSearchParams();
       if (params?.staff_id) query.append('staff_id', params.staff_id);
       if (params?.status) query.append('status', params.status);
-      return fetchAPI<any>(`/advances?${query}`);
+      return fetchAPI<any>(`/payroll/advances?${query}`);
     },
-    approveAdvance: (id: string) => fetchAPI<any>(`/advances/${id}/approve`, { method: 'PATCH' }),
+    approveAdvance: (id: string) => fetchAPI<any>(`/payroll/advances/${id}/approve`, { method: 'PATCH' }),
 
     // Loans
-    createLoan: (data: any) => fetchAPI<any>('/loans', { method: 'POST', body: JSON.stringify(data) }),
+    createLoan: (data: any) => fetchAPI<any>('/payroll/loans', { method: 'POST', body: JSON.stringify(data) }),
     getLoans: (params?: { staff_id?: string; status?: string }) => {
       const query = new URLSearchParams();
       if (params?.staff_id) query.append('staff_id', params.staff_id);
       if (params?.status) query.append('status', params.status);
-      return fetchAPI<any>(`/loans?${query}`);
+      return fetchAPI<any>(`/payroll/loans?${query}`);
     },
 
     // Payroll Generation & History
@@ -2564,7 +2564,21 @@ export const financeAPI = {
   // Unified Branch Financials
   getBranchFinancials: (branchId: number | string, days: number = 30) => {
     return fetchAPI<any>(`/finance/branch-financials/${branchId}?days=${days}`);
-  }
+  },
+
+  // Daily Logs
+  getDailyLogs: (params?: { branch_id?: number; startDate?: string; endDate?: string; status?: string; log_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    if (params?.status) query.append('status', params.status);
+    if (params?.log_date) query.append('log_date', params.log_date);
+    return fetchAPI<any>(`/finance/daily-logs?${query}`);
+  },
+  saveDailyLog: (data: any) => fetchAPI<any>('/finance/daily-logs', { method: 'POST', body: JSON.stringify(data) }),
+  updateDailyLogStatus: (id: string, data: { status: string; rejection_reason?: string }) =>
+    fetchAPI<any>(`/finance/daily-logs/${id}/status`, { method: 'PUT', body: JSON.stringify(data) }),
 };
 
 // receiptsAPI is defined above with Python microservice integration
@@ -2920,6 +2934,16 @@ export const auditAPI = {
   },
   verifyBarStockTake: (id: string, data: { notes?: string }) =>
     fetchAPI<any>(`/auditor/verify/bar-stock/${id}/verify`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Daily Logs Audit
+  getDailyLogsStatus: (params?: { branch_id?: number; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.status) query.append('status', params.status);
+    return fetchAPI<any>(`/finance/daily-logs?${query}`);
+  },
+  verifyDailyLog: (id: string, status: 'verified' | 'rejected', notes?: string) =>
+    fetchAPI<any>(`/finance/daily-logs/${id}/status`, { method: 'PUT', body: JSON.stringify({ status, rejection_reason: notes }) }),
 };
 
 export const auditorReportsAPI = {
@@ -3023,7 +3047,7 @@ export const auditorReportsAPI = {
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
     return true;
-  }
+  },
 };
 
 export const conferenceAPI = {

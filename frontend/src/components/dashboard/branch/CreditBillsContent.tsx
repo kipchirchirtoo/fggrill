@@ -32,11 +32,15 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
 
     const loadStaff = async () => {
         try {
-            const branchQuery = branchId ? `&branch_id=${branchId}` : '';
-            const res = await api.get(`/staff?status=active${branchQuery}`) as any;
+            const res = await api.staff.getStaff({
+                status: 'active',
+                branchId: branchId || undefined
+            });
 
-            if (res.success || Array.isArray(res)) {
-                setStaffList(res.data || res);
+            if (res.success && Array.isArray(res.data)) {
+                setStaffList(res.data);
+            } else if (Array.isArray(res)) {
+                setStaffList(res);
             }
         } catch (error) {
             console.error('Failed to load staff', error);
@@ -53,14 +57,33 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
         if (!branchId) return;
         setIsLoading(true);
         try {
-            // Mock data for now until API endpoints are fully connected
-            // ideally: api.get(`/finance/staff-credit-bills?branch_id=${branchId}`)
-
-            // Simulating API response structure based on schema
-            setCreditBills([]);
-            setLoans([]);
-            setAdvances([]);
-
+            // Fetch based on active tab
+            if (activeTab === 'staff_credit') {
+                const res = await api.staff.simplePayroll.getCreditBills({ status: 'pending' });
+                if (res.success && Array.isArray(res.data)) {
+                    // Filter by branch locally since API doesn't support branch_id filtering yet for these endpoints
+                    const filtered = res.data.filter((item: any) =>
+                        !item.staff || item.staff.branch_id === branchId || !item.staff.branch_id
+                    );
+                    setCreditBills(filtered);
+                }
+            } else if (activeTab === 'loans') {
+                const res = await api.staff.simplePayroll.getLoans({ status: 'active' });
+                if (res.success && Array.isArray(res.data)) {
+                    const filtered = res.data.filter((item: any) =>
+                        !item.staff || item.staff.branch_id === branchId || !item.staff.branch_id
+                    );
+                    setLoans(filtered);
+                }
+            } else if (activeTab === 'advances') {
+                const res = await api.staff.simplePayroll.getAdvances({ status: 'pending' });
+                if (res.success && Array.isArray(res.data)) {
+                    const filtered = res.data.filter((item: any) =>
+                        !item.staff || item.staff.branch_id === branchId || !item.staff.branch_id
+                    );
+                    setAdvances(filtered);
+                }
+            }
         } catch (error) {
             console.error('Error loading data', error);
             toast.error('Failed to load records');
@@ -162,24 +185,92 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-stone-100">
-                                    {/* Empty State */}
-                                    {(!creditBills.length && activeTab === 'staff_credit') ||
-                                        (!loans.length && activeTab === 'loans') ||
-                                        (!advances.length && activeTab === 'advances') ? (
-                                        <tr>
-                                            <td colSpan={6} className="px-4 py-12 text-center">
-                                                <div className="mx-auto h-12 w-12 rounded-full bg-stone-100 flex items-center justify-center mb-3">
-                                                    <Search className="h-6 w-6 text-stone-400" />
-                                                </div>
-                                                <p className="text-stone-900 font-medium">No records found</p>
-                                                <p className="text-stone-500 text-xs mt-1">
-                                                    No {activeTab.replace('_', ' ')} records found for this branch.
-                                                </p>
+                                    {/* Data Rows */}
+                                    {activeTab === 'staff_credit' && creditBills.map((bill) => (
+                                        <tr key={bill.id} className="hover:bg-stone-50 transition-colors">
+                                            <td className="px-4 py-3 text-stone-600">{bill.date}</td>
+                                            <td className="px-4 py-3 font-medium text-stone-900">
+                                                {bill.staff?.first_name} {bill.staff?.last_name}
+                                            </td>
+                                            <td className="px-4 py-3 text-stone-600">{bill.description}</td>
+                                            <td className="px-4 py-3 text-right font-semibold text-stone-900">
+                                                {bill.amount.toLocaleString()}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${bill.is_paid ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                    {bill.is_paid ? 'Paid/Deducted' : 'Pending'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <button className="text-blue-600 hover:text-blue-700 text-xs font-medium">Details</button>
                                             </td>
                                         </tr>
-                                    ) : (
+                                    ))}
+
+                                    {activeTab === 'loans' && loans.map((loan) => (
+                                        <tr key={loan.id} className="hover:bg-stone-50 transition-colors">
+                                            <td className="px-4 py-3 text-stone-600">{loan.start_date}</td>
+                                            <td className="px-4 py-3 font-medium text-stone-900">
+                                                {loan.staff?.first_name} {loan.staff?.last_name}
+                                            </td>
+                                            <td className="px-4 py-3 text-stone-600">{loan.reason}</td>
+                                            <td className="px-4 py-3 text-right font-semibold text-stone-900">
+                                                {loan.total_amount.toLocaleString()}
+                                                <div className="text-[10px] font-normal text-stone-400">Bal: {loan.remaining_balance.toLocaleString()}</div>
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${loan.status === 'active' ? 'bg-blue-100 text-blue-700' : 'bg-stone-100 text-stone-700'}`}>
+                                                    {loan.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <button className="text-blue-600 hover:text-blue-700 text-xs font-medium">Schedule</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+
+                                    {activeTab === 'advances' && advances.map((advance) => (
+                                        <tr key={advance.id} className="hover:bg-stone-50 transition-colors">
+                                            <td className="px-4 py-3 text-stone-600">{advance.request_date}</td>
+                                            <td className="px-4 py-3 font-medium text-stone-900">
+                                                {advance.staff?.first_name} {advance.staff?.last_name}
+                                            </td>
+                                            <td className="px-4 py-3 text-stone-600">{advance.reason}</td>
+                                            <td className="px-4 py-3 text-right font-semibold text-stone-900">
+                                                {advance.amount.toLocaleString()}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${advance.status === 'approved' ? 'bg-green-100 text-green-700' : advance.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-700'}`}>
+                                                    {advance.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <button className="text-blue-600 hover:text-blue-700 text-xs font-medium">Verify</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+
+                                    {/* Empty State */}
+                                    {((!creditBills.length && activeTab === 'staff_credit' && !isLoading) ||
+                                        (!loans.length && activeTab === 'loans' && !isLoading) ||
+                                        (!advances.length && activeTab === 'advances' && !isLoading)) && (
+                                            <tr>
+                                                <td colSpan={6} className="px-4 py-12 text-center">
+                                                    <div className="mx-auto h-12 w-12 rounded-full bg-stone-100 flex items-center justify-center mb-3">
+                                                        <Search className="h-6 w-6 text-stone-400" />
+                                                    </div>
+                                                    <p className="text-stone-900 font-medium">No records found</p>
+                                                    <p className="text-stone-500 text-xs mt-1">
+                                                        No {activeTab.replace('_', ' ')} records found for this branch.
+                                                    </p>
+                                                </td>
+                                            </tr>
+                                        )}
+
+                                    {isLoading && (
                                         <tr>
-                                            <td colSpan={6} className="px-4 py-4 text-center text-stone-500">
+                                            <td colSpan={6} className="px-4 py-12 text-center text-stone-500">
+                                                <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2"></div>
                                                 Loading records...
                                             </td>
                                         </tr>
@@ -267,7 +358,38 @@ function NewRecordModal({ type, staffList, onClose, onSuccess }: any) {
             }
 
             // Call API
-            const res = await api.post(endpoint, payload);
+            let res;
+            if (type === 'staff_credit') {
+                // Payload for credit_bill: { staff_id, amount, description, date }
+                res = await api.staff.simplePayroll.createCreditBill({
+                    staff_id: formData.staff_id,
+                    amount: parseFloat(formData.amount),
+                    description: formData.description || 'Staff credit bill'
+                });
+            } else if (type === 'loans') {
+                // Payload for loan: { staff_id, total_amount, monthly_installment, reason, start_date }
+                const total = parseFloat(formData.amount);
+                const months = parseInt(formData.repayment_period) || 1;
+                res = await api.staff.simplePayroll.createLoan({
+                    staff_id: formData.staff_id,
+                    total_amount: total,
+                    monthly_installment: total / months,
+                    reason: formData.description || 'Staff loan',
+                    start_date: new Date().toISOString().split('T')[0]
+                });
+            } else if (type === 'advances') {
+                // Payload for advance: { staff_id, amount, reason, request_date }
+                res = await api.staff.simplePayroll.createAdvance({
+                    staff_id: formData.staff_id,
+                    amount: parseFloat(formData.amount),
+                    reason: formData.description || 'Salary advance',
+                    request_date: `${formData.deduction_month}-01` // Use first of the month
+                });
+            } else {
+                toast.error('Invalid request type');
+                setLoading(false);
+                return;
+            }
 
             if (res.success) {
                 toast.success('Record created successfully');

@@ -10,6 +10,7 @@ import {
     Clock, Smartphone, ShieldAlert, Users
 } from 'lucide-react';
 import { CashierLogbookVerification } from '@/components/auditor/CashierLogbookVerification';
+import { DailyLogVerification } from '@/components/auditor/DailyLogVerification';
 import { auditAPI } from '@/lib/api';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { ProtectedRoute } from '@/components/auth/protected-route';
@@ -173,7 +174,11 @@ export default function FinancialVerificationPage() {
                     </div>
 
                     <CashierLogbookVerification
-                        title="Financial Logbook Audits"
+                        title="Cashier Logbook Audits"
+                    />
+
+                    <DailyLogVerification
+                        title="Accountant Daily Log Audits"
                     />
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

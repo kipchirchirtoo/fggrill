@@ -344,7 +344,7 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
 
     // 2. Fetch orders, payments, and POS transactions
     let restQuery = supabase.from('restaurant_orders').select('*, items:restaurant_order_items(*, menu_item:menu_items(name))'); // Fetch items for details
-    let barQuery = supabase.from('bar_orders').select('*, items:bar_order_items(*, stock_item:bar_inventory(item_name))'); // Fetch items for details
+    let barQuery = supabase.from('bar_orders').select('*, items:bar_order_items(*)'); // Fetch items for details (no inventory join)
     let poolQuery = supabase.from('restaurant_pool_token_sales').select('*');
     let paymentsQuery = supabase.from('payments').select('*');
     let posQuery = supabase.from('pos_transactions').select('*');
@@ -1258,7 +1258,7 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
 
     const [restItemsRes, barItemsRes, stockItemsRes] = await Promise.all([
       supabase.from('restaurant_order_items').select('*, menu_item:menu_items(name)').in('order_id', restIds),
-      supabase.from('bar_order_items').select('*, stock_item:bar_inventory(name)').in('order_id', barIds), // Correct column is usually 'name'
+      supabase.from('bar_order_items').select('*').in('order_id', barIds), // No inventory join - bar_order_items only has drink_id and drink_name
       supabase.from('stock_request_items').select('*').in('request_id', stockIds)
     ]);
 
@@ -1478,10 +1478,10 @@ export const getAnomalyDetail = async (req: Request, res: Response, next: NextFu
         break;
 
       case 'bar_order':
-        // Fetch bar order with items
+        // Fetch bar order with items (no inventory join since bar_order_items only has drink_id and drink_name)
         const { data: barOrder, error: barError } = await supabase
           .from('bar_orders')
-          .select('*, items:bar_order_items(*, stock_item:bar_inventory(name)), branch:branches(name), waiter:users(first_name, last_name)')
+          .select('*, items:bar_order_items(*), branch:branches(name), waiter:users(first_name, last_name)')
           .eq('id', id)
           .single();
         data = barOrder;
@@ -1520,6 +1520,169 @@ export const getAnomalyDetail = async (req: Request, res: Response, next: NextFu
 
     res.status(200).json({ success: true, data });
   } catch (error) {
+    next(error);
+  }
+};
+
+// ============ DAILY LOG VERIFICATION ============
+
+// @desc    Get daily logs by status for auditor verification
+// @route   GET /api/auditor/daily-logs?status=pending_audit
+// @access  Private (Auditor)
+export const getDailyLogsStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { status } = req.query;
+
+    // Map frontend status to database status
+    // Frontend uses 'pending_audit', database uses 'submitted'
+    const dbStatus = status === 'pending_audit' ? 'submitted' : status;
+
+    logger.info('Fetching daily logs with status:', { status, dbStatus });
+
+    let query = supabase
+      .from('finance_daily_logs')
+      .select(`
+        *,
+        branch:branches!branch_id(id, name, code),
+        creator:users!created_by(id, first_name, last_name, email),
+        verifier:users!verified_by(id, first_name, last_name, email),
+        lines:finance_daily_log_lines(*)
+      `)
+      .order('log_date', { ascending: false });
+
+    if (dbStatus) {
+      query = query.eq('status', dbStatus);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      logger.error('Error fetching daily logs:', error);
+      throw error;
+    }
+
+    // Transform data to match frontend expectations
+    const transformedData = data?.map(log => ({
+      id: log.id,
+      branch_id: log.branch_id,
+      branch_name: log.branch?.name || 'Unknown Branch',
+      log_date: log.log_date,
+      opening_balance: log.opening_balance,
+      closing_balance: log.closing_balance,
+      total_payments: log.total_payments,
+      total_expenses: log.total_expenses,
+      notes: log.notes,
+      status: log.status,
+      creator_name: log.creator ? `${log.creator.first_name} ${log.creator.last_name}` : 'Unknown',
+      creator_email: log.creator?.email,
+      verified_by: log.verified_by,
+      verified_at: log.verified_at,
+      rejection_reason: log.rejection_reason,
+      created_at: log.created_at,
+      updated_at: log.updated_at,
+      lines: log.lines?.map((line: any) => ({
+        id: line.id,
+        type: line.entry_type,
+        reference_number: line.reference_id,
+        payee: line.description,
+        description: line.description,
+        amount: line.amount,
+        payment_method: line.payment_method,
+        category: line.category,
+        section: line.section
+      })) || []
+    }));
+
+    res.status(200).json({
+      success: true,
+      count: transformedData?.length || 0,
+      data: transformedData
+    });
+
+    logger.info(`Retrieved ${transformedData?.length || 0} daily logs with status: ${dbStatus}`);
+  } catch (error) {
+    logger.error('Exception in getDailyLogsStatus:', error);
+    next(error);
+  }
+};
+
+// @desc    Verify or reject a daily log
+// @route   POST /api/auditor/daily-logs/:id/verify
+// @access  Private (Auditor)
+export const verifyDailyLog = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { action, notes } = req.body;
+
+    if (!action || !['verified', 'rejected'].includes(action)) {
+      res.status(400).json({
+        success: false,
+        message: 'Invalid action. Must be "verified" or "rejected"'
+      });
+      return;
+    }
+
+    if (action === 'rejected' && !notes) {
+      res.status(400).json({
+        success: false,
+        message: 'Rejection reason is required when rejecting a log'
+      });
+      return;
+    }
+
+    logger.info('Verifying daily log:', { id, action, auditor: req.user?.id });
+
+    // Update the daily log
+    const updateData: any = {
+      status: action,
+      verified_by: req.user?.id,
+      verified_at: new Date().toISOString()
+    };
+
+    if (action === 'rejected') {
+      updateData.rejection_reason = notes;
+    }
+
+    const { data, error } = await supabase
+      .from('finance_daily_logs')
+      .update(updateData)
+      .eq('id', id)
+      .select(`
+        *,
+        branch:branches!branch_id(id, name, code),
+        creator:users!created_by(id, first_name, last_name, email),
+        verifier:users!verified_by(id, first_name, last_name, email)
+      `)
+      .single();
+
+    if (error) {
+      logger.error('Error verifying daily log:', error);
+      throw error;
+    }
+
+    if (!data) {
+      res.status(404).json({
+        success: false,
+        message: 'Daily log not found'
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Daily log ${action === 'verified' ? 'verified' : 'rejected'} successfully`,
+      data: {
+        id: data.id,
+        status: data.status,
+        verified_by: data.verified_by,
+        verified_at: data.verified_at,
+        rejection_reason: data.rejection_reason
+      }
+    });
+
+    logger.info(`Daily log ${action}: ${id} by auditor ${req.user?.id}`);
+  } catch (error) {
+    logger.error('Exception in verifyDailyLog:', error);
     next(error);
   }
 };

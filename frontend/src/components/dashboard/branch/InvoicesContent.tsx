@@ -209,17 +209,17 @@ export function InvoicesContent({ branchId, isAuditor = false }: InvoicesContent
                 </IOSCard>
             )}
 
-            {/* Modal */}
             <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Create New Invoice</DialogTitle>
+                <DialogContent className="max-w-2xl p-0 overflow-hidden border-none shadow-2xl bg-white rounded-2xl">
+                    <DialogHeader className="px-6 pt-6 pb-4 border-b border-stone-100 bg-stone-50/50">
+                        <DialogTitle className="text-xl font-bold text-stone-900 tracking-tight">Create New Invoice</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
+
+                    <div className="max-h-[60vh] overflow-y-auto px-6 py-6 space-y-6">
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-stone-700">Customer</label>
+                            <label className="text-[11px] font-bold text-stone-400 uppercase tracking-widest ml-1">Customer / Client</label>
                             <select
-                                className="w-full h-10 px-3 rounded-lg border border-stone-200 bg-white text-sm"
+                                className="w-full h-12 px-4 rounded-xl border border-stone-200 bg-white text-sm font-medium focus:ring-2 focus:ring-stone-900/5 focus:border-stone-400 transition-all"
                                 value={formData.customer_id}
                                 onChange={(e) => setFormData({ ...formData, customer_id: e.target.value })}
                             >
@@ -229,40 +229,58 @@ export function InvoicesContent({ branchId, isAuditor = false }: InvoicesContent
                                 ))}
                             </select>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-stone-700">Date</label>
-                                <input type="date" className="w-full h-10 px-3 rounded-lg border border-stone-200"
+                                <label className="text-[11px] font-bold text-stone-400 uppercase tracking-widest ml-1">Invoice Date</label>
+                                <input type="date" className="w-full h-12 px-4 rounded-xl border border-stone-200 font-medium focus:ring-2 focus:ring-stone-900/5 focus:border-stone-400 transition-all"
                                     value={formData.invoice_date}
                                     onChange={(e) => setFormData({ ...formData, invoice_date: e.target.value })}
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-stone-700">Due Date</label>
-                                <input type="date" className="w-full h-10 px-3 rounded-lg border border-stone-200"
+                                <label className="text-[11px] font-bold text-stone-400 uppercase tracking-widest ml-1">Payment Due Date</label>
+                                <input type="date" className="w-full h-12 px-4 rounded-xl border border-stone-200 font-medium focus:ring-2 focus:ring-stone-900/5 focus:border-stone-400 transition-all"
                                     value={formData.due_date}
                                     onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
                                 />
                             </div>
                         </div>
+
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-stone-700">Amount (KES)</label>
-                            <input type="number" className="w-full h-10 px-3 rounded-lg border border-stone-200" placeholder="0.00"
-                                value={formData.subtotal}
-                                onChange={(e) => setFormData({ ...formData, subtotal: e.target.value })}
-                            />
+                            <label className="text-[11px] font-bold text-stone-400 uppercase tracking-widest ml-1">Invoice Amount (KES)</label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 font-bold text-sm">KES</span>
+                                <input type="number" className="w-full h-12 pl-12 pr-4 rounded-xl border border-stone-200 font-bold text-lg focus:ring-2 focus:ring-stone-900/5 focus:border-stone-400 transition-all" placeholder="0.00"
+                                    value={formData.subtotal}
+                                    onChange={(e) => setFormData({ ...formData, subtotal: e.target.value })}
+                                />
+                            </div>
                         </div>
+
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-stone-700">Notes</label>
-                            <textarea className="w-full h-20 px-3 py-2 rounded-lg border border-stone-200 resize-none"
+                            <label className="text-[11px] font-bold text-stone-400 uppercase tracking-widest ml-1">Additional Notes</label>
+                            <textarea className="w-full h-24 px-4 py-3 rounded-xl border border-stone-200 font-medium resize-none focus:ring-2 focus:ring-stone-900/5 focus:border-stone-400 transition-all"
+                                placeholder="Add invoice terms or special instructions..."
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                             />
                         </div>
                     </div>
-                    <div className="flex justify-end gap-2">
-                        <Button variant="ghost" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-                        <Button className="btn-primary" onClick={handleCreate} disabled={loading}>
+
+                    <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-stone-100 bg-stone-50/50 sticky bottom-0">
+                        <Button
+                            variant="ghost"
+                            onClick={() => setIsModalOpen(false)}
+                            className="h-11 px-6 rounded-xl font-bold text-stone-600 hover:bg-stone-200 transition-all"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            className="h-11 px-8 rounded-xl bg-stone-900 text-white font-bold shadow-lg shadow-stone-200 hover:bg-black transition-all active:scale-95 disabled:opacity-50"
+                            onClick={handleCreate}
+                            disabled={loading}
+                        >
                             {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                             Create Invoice
                         </Button>

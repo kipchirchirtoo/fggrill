@@ -19,7 +19,9 @@ import {
   getSoldItemsAnalysis,
   getBarStockAudits,
   verifyBarStockTake,
-  getAnomalyDetail
+  getAnomalyDetail,
+  getDailyLogsStatus,
+  verifyDailyLog
 } from '../controllers/auditor.controller';
 import {
   getConsumptionConfigs,
@@ -139,5 +141,9 @@ router.get('/verify/sold-items', authorize([UserRole.AUDITOR, UserRole.SUPER_ADM
 router.get('/verify/bar-stock', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getBarStockAudits);
 router.post('/verify/bar-stock/:id/verify', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), verifyBarStockTake);
 router.get('/verify/details', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getAnomalyDetail);
+
+// Daily Log Verification
+router.get('/daily-logs', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT]), getDailyLogsStatus);
+router.post('/daily-logs/:id/verify', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), verifyDailyLog);
 
 export default router;

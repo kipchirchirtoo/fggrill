@@ -8,6 +8,8 @@ import {
     recordBillPayment,
     confirmUnpaidBill,
     getCreditBills,
+    getLoans,
+    getAdvances,
     createCreditBill,
     confirmCreditBill,
     recordCreditPayment,
@@ -109,6 +111,12 @@ router.route('/unpaid-bills/:id/confirm')
 router.route('/credit-bills')
     .get(getCreditBills)
     .post(createCreditBill);
+
+router.route('/credit-bills/loans')
+    .get(getLoans);
+
+router.route('/credit-bills/advances')
+    .get(getAdvances);
 
 router.route('/credit-bills/:id/confirm')
     .patch(

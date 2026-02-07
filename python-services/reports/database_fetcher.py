@@ -265,7 +265,7 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
             data['sales'] += sum(float(o.get('total_amount', 0) or 0) for o in (rest_sales_res.data or []))
 
             # Bar Orders
-            bar_sales_query = self.client.table('bar_orders').select('total_amount, branch_id')\
+            bar_sales_query = self.client.table('bar_orders').select('total, total_amount, branch_id')\
                 .gte('created_at', f'{start_date}T00:00:00')\
                 .lte('created_at', f'{end_date}T23:59:59')\
                 .in_('payment_status', ['paid', 'partial'])
@@ -274,7 +274,7 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
                 else: bar_sales_query = bar_sales_query.in_('branch_id', branch_ids)
             
             bar_sales_res = bar_sales_query.execute()
-            data['sales'] += sum(float(o.get('total_amount', 0) or 0) for o in (bar_sales_res.data or []))
+            data['sales'] += sum(float(o.get('total', o.get('total_amount', 0)) or 0) for o in (bar_sales_res.data or []))
 
             # Reservations
             res_sales_query = self.client.table('reservations').select('total_amount, branch_id')\
@@ -467,7 +467,7 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
             # If bar orders are not in payments table, we fallback to bar_orders table for those not covered
             bar_total = bar_total_from_payments
             if bar_total == 0:
-                bar_total = sum(float(o.get('total_amount', 0) or 0) for o in (bar_orders.data or []))
+                bar_total = sum(float(o.get('total', o.get('total_amount', 0)) or 0) for o in (bar_orders.data or []))
                 
             receipts_total = sum(float(r.get('total_amount', 0) or 0) for r in (receipts.data or []))
             
@@ -2173,24 +2173,25 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
             return data
             
         try:
-            bills_res = self.client.table('employee_credit_bills').select('''
+            # Use staff_credit_bills instead of employee_credit_bills
+            bills_res = self.client.table('staff_credit_bills').select('''
                 *,
-                employee:staff_profiles(id, first_name, last_name, employee_id),
+                employee:staff_profiles(id, first_name, last_name, id_number),
                 branch:branches(name)
             ''')\
-                .neq('status', 'paid')\
-                .order('bill_date', desc=True).execute()
+                .eq('is_paid', False)\
+                .order('date', desc=True).execute()
                 
             today = datetime.now()
             
             for bill in (bills_res.data or []):
-                balance = float(bill.get('balance', 0) or 0)
-                due_date_str = bill.get('due_date') or bill.get('bill_date')
+                # staff_credit_bills uses 'amount' and 'is_paid'
+                balance = float(bill.get('amount', 0) or 0)
+                due_date_str = bill.get('date')
                 
                 days_overdue = 0
                 if due_date_str:
                     try:
-                        # Handle both date and datetime strings
                         if 'T' in due_date_str:
                             due_date = datetime.fromisoformat(due_date_str.replace('Z', '+00:00')).replace(tzinfo=None)
                         else:
@@ -2202,11 +2203,11 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
                 
                 bill_data = {
                     'id': bill.get('id'),
-                    'bill_number': bill.get('bill_number'),
-                    'bill_date': bill.get('bill_date'),
+                    'bill_number': f"CB-{bill.get('id')}",
+                    'bill_date': bill.get('date'),
                     'balance': balance,
                     'daysOverdue': max(0, days_overdue),
-                    'status': bill.get('status'),
+                    'status': 'pending', 
                     'employee': bill.get('employee', {}),
                     'branch': bill.get('branch', {})
                 }
@@ -2320,7 +2321,8 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
             orders = query.execute()
             
             for o in (orders.data or []):
-                data['total_revenue'] += o.get('total_amount', 0) or 0
+                # bar_orders uses 'total' instead of 'total_amount'
+                data['total_revenue'] += o.get('total', o.get('total_amount', 0)) or 0
                 data['total_orders'] += 1
             
             if data['total_orders'] > 0:
@@ -2715,7 +2717,7 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
                     'voided': len([o for o in rest_orders if o.get('status') == 'voided'])
                 },
                 'bar': {
-                    'total_value': sum(o.get('total_amount', 0) or 0 for o in bar_orders if o.get('payment_status') == 'paid'),
+                    'total_value': sum(o.get('total', o.get('total_amount', 0)) or 0 for o in bar_orders if o.get('payment_status') == 'paid'),
                     'count': len(bar_orders),
                     'voided': len([o for o in bar_orders if o.get('status') == 'voided'])
                 },
@@ -2734,9 +2736,10 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
             return {}
             
         try:
-            query = self.client.table('stock_requisitions').select('*, items:stock_requisition_items(*)')
+            # Table is 'stock_requests' not 'stock_requisitions'
+            query = self.client.table('stock_requests').select('*, items:stock_request_items(*)')
             if branch_id and str(branch_id) != '0':
-                query = query.eq('branch_id', branch_id)
+                query = query.eq('requesting_branch_id', branch_id)
             
             query = query.gte('created_at', f'{start_date}T00:00:00')\
                          .lte('created_at', f'{end_date}T23:59:59')

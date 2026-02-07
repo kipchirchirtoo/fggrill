@@ -234,6 +234,40 @@ export const getPayrollRecords = async (req: Request, res: Response, next: NextF
 };
 
 /**
+ * Get payroll summary (aggregated stats)
+ */
+export const getPayrollSummary = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { month, year } = req.query;
+
+        let query = supabase
+            .from('staff_payroll')
+            .select('*');
+
+        if (month) query = query.eq('month', month);
+        if (year) query = query.eq('year', year);
+
+        const { data: records, error } = await query;
+        if (error) throw error;
+
+        const summary = {
+            totalEmployees: new Set(records?.map(r => r.staff_id)).size,
+            totalGrossPay: records?.reduce((sum, r) => sum + (Number(r.basic_salary) || 0), 0), // Simplifying gross as basic for summary
+            totalDeductions: records?.reduce((sum, r) => sum + (Number(r.total_deductions) || 0), 0),
+            totalNetPay: records?.reduce((sum, r) => sum + (Number(r.net_pay) || 0), 0),
+            records_count: records?.length || 0
+        };
+
+        res.status(200).json({
+            success: true,
+            data: summary
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * Trigger Batch Email for Payslips
  */
 export const emailPayslips = async (req: Request, res: Response, next: NextFunction) => {
@@ -320,6 +354,172 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
 
         response.data.pipe(res);
 
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Get all pending payroll items for auditor approval
+ */
+export const getPendingApprovals = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { status } = req.query;
+
+        // Fetch credit bills
+        let creditBillsQuery = supabase
+            .from('credit_bills')
+            .select('*, staff:staff_profiles(first_name, last_name, employee_id)')
+            .order('created_at', { ascending: false });
+
+        if (status === 'pending_accountant') {
+            creditBillsQuery = creditBillsQuery.is('accountant_confirmed_at', null);
+        } else if (status === 'pending_auditor') {
+            creditBillsQuery = creditBillsQuery.not('accountant_confirmed_at', 'is', null).is('auditor_confirmed_at', null);
+        } else if (status === 'approved') {
+            creditBillsQuery = creditBillsQuery.not('auditor_confirmed_at', 'is', null);
+        }
+
+        // Fetch advances
+        let advancesQuery = supabase
+            .from('staff_advances')
+            .select('*, staff:staff_profiles(first_name, last_name, employee_id)')
+            .order('created_at', { ascending: false });
+
+        if (status === 'pending_accountant') {
+            advancesQuery = advancesQuery.is('accountant_confirmed_at', null);
+        } else if (status === 'pending_auditor') {
+            advancesQuery = advancesQuery.not('accountant_confirmed_at', 'is', null).is('auditor_confirmed_at', null);
+        } else if (status === 'approved') {
+            advancesQuery = advancesQuery.not('auditor_confirmed_at', 'is', null);
+        }
+
+        // Fetch loans
+        let loansQuery = supabase
+            .from('staff_loans')
+            .select('*, staff:staff_profiles(first_name, last_name, employee_id)')
+            .order('created_at', { ascending: false });
+
+        if (status === 'pending_accountant') {
+            loansQuery = loansQuery.is('accountant_confirmed_at', null);
+        } else if (status === 'pending_auditor') {
+            loansQuery = loansQuery.not('accountant_confirmed_at', 'is', null).is('auditor_confirmed_at', null);
+        } else if (status === 'approved') {
+            loansQuery = loansQuery.not('auditor_confirmed_at', 'is', null);
+        }
+
+        const [creditBillsRes, advancesRes, loansRes] = await Promise.all([
+            creditBillsQuery,
+            advancesQuery,
+            loansQuery
+        ]);
+
+        if (creditBillsRes.error) throw creditBillsRes.error;
+        if (advancesRes.error) throw advancesRes.error;
+        if (loansRes.error) throw loansRes.error;
+
+        res.status(200).json({
+            success: true,
+            data: {
+                credit_bills: creditBillsRes.data || [],
+                advances: advancesRes.data || [],
+                loans: loansRes.data || []
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Approve a payroll item (credit bill, loan, or advance)
+ */
+export const approvePayrollItem = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { type, id } = req.params;
+        const auditorId = req.user?.id;
+
+        if (!auditorId) {
+            throw new AppError('Unauthorized', 401);
+        }
+
+        let tableName: string;
+        if (type === 'credit_bill') tableName = 'credit_bills';
+        else if (type === 'advance') tableName = 'staff_advances';
+        else if (type === 'loan') tableName = 'staff_loans';
+        else throw new AppError('Invalid type', 400);
+
+        // Update the record with auditor confirmation
+        const { data, error } = await supabase
+            .from(tableName)
+            .update({
+                auditor_confirmed_at: new Date().toISOString(),
+                auditor_id: auditorId,
+                status: type === 'loan' ? 'active' : 'approved'
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        if (!data) throw new AppError('Record not found', 404);
+
+        res.status(200).json({
+            success: true,
+            message: `${type} approved successfully`,
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Reject a payroll item (credit bill, loan, or advance)
+ */
+export const rejectPayrollItem = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { type, id } = req.params;
+        const { reason } = req.body;
+        const auditorId = req.user?.id;
+
+        if (!auditorId) {
+            throw new AppError('Unauthorized', 401);
+        }
+
+        if (!reason) {
+            throw new AppError('Rejection reason is required', 400);
+        }
+
+        let tableName: string;
+        if (type === 'credit_bill') tableName = 'credit_bills';
+        else if (type === 'advance') tableName = 'staff_advances';
+        else if (type === 'loan') tableName = 'staff_loans';
+        else throw new AppError('Invalid type', 400);
+
+        // Update the record with rejection
+        const { data, error } = await supabase
+            .from(tableName)
+            .update({
+                status: 'rejected',
+                auditor_id: auditorId,
+                // Store rejection reason in a notes/reason field if it exists
+                ...(tableName === 'credit_bills' ? { reason: `REJECTED: ${reason}` } : {}),
+                ...(tableName === 'staff_advances' ? { reason: `REJECTED: ${reason}` } : {}),
+                ...(tableName === 'staff_loans' ? { reason: `REJECTED: ${reason}` } : {})
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        if (!data) throw new AppError('Record not found', 404);
+
+        res.status(200).json({
+            success: true,
+            message: `${type} rejected successfully`,
+            data
+        });
     } catch (error) {
         next(error);
     }

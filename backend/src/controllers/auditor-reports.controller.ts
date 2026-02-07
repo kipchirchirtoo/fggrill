@@ -134,16 +134,16 @@ export const getStockUsageReport = async (req: Request, res: Response, next: Nex
 // @access  Private (Auditor)
 export const getEmployeeCreditReport = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        // Fetch all unpaid or partial employee bills
+        // Fetch all unpaid staff credit bills
         const { data: bills, error } = await supabase
-            .from('employee_credit_bills')
+            .from('staff_credit_bills')
             .select(`
-        *,
-        employee:staff_profiles(id, first_name, last_name, employee_id),
-        branch:branches(name)
-      `)
-            .neq('status', 'paid')
-            .order('bill_date', { ascending: false });
+                *,
+                employee:staff_profiles(id, first_name, last_name, id_number),
+                branch:branches(name)
+            `)
+            .eq('is_paid', false)
+            .order('date', { ascending: false });
 
         if (error) throw error;
 
@@ -158,16 +158,23 @@ export const getEmployeeCreditReport = async (req: Request, res: Response, next:
         };
 
         const analyzedBills = bills?.map(bill => {
-            const daysOverdue = Math.floor((today.getTime() - new Date(bill.due_date || bill.bill_date).getTime()) / (1000 * 60 * 60 * 24));
+            const billDate = new Date(bill.date);
+            const daysOverdue = Math.floor((today.getTime() - billDate.getTime()) / (1000 * 60 * 60 * 24));
 
-            buckets.total_outstanding += Number(bill.balance);
+            const amount = Number(bill.amount) || 0;
+            buckets.total_outstanding += amount;
 
-            if (daysOverdue <= 0) buckets.current += Number(bill.balance);
-            else if (daysOverdue <= 30) buckets.overdue_30 += Number(bill.balance);
-            else if (daysOverdue <= 60) buckets.overdue_60 += Number(bill.balance);
-            else buckets.overdue_90 += Number(bill.balance);
+            if (daysOverdue <= 0) buckets.current += amount;
+            else if (daysOverdue <= 30) buckets.overdue_30 += amount;
+            else if (daysOverdue <= 60) buckets.overdue_60 += amount;
+            else buckets.overdue_90 += amount;
 
-            return { ...bill, daysOverdue: Math.max(0, daysOverdue) };
+            return {
+                ...bill,
+                bill_date: bill.date,
+                balance: amount,
+                daysOverdue: Math.max(0, daysOverdue)
+            };
         });
 
         res.status(200).json({

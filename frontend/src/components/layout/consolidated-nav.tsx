@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { cn } from '@/lib/utils';
+import { financeAPI } from '@/lib/api';
 import {
   Building2, Package, Users, Bed, ChevronDown, Warehouse, BarChart3,
   DollarSign, Settings, ClipboardList, Truck, CalendarClock,
@@ -13,7 +14,7 @@ import {
   Home, ArrowDownUp, LifeBuoy, Calendar, Store, TrendingUp, TrendingDown, LineChart, Award,
   UserCheck, Utensils, Wine, Receipt, CreditCard, PieChart, FileText,
   BookOpen, ChefHat, ShoppingCart, Wallet, Scale, AlertCircle, UtensilsCrossed, Trash2, Clock, Shield, Menu, X,
-  Apple, Beer, Pencil, Database, User
+  Apple, Beer, Pencil, Database, User, ArrowDownLeft, ArrowUpRight, RefreshCw, ArrowRight
 } from 'lucide-react';
 
 interface NavItemProps {
@@ -76,8 +77,42 @@ function NavGroup({ label, icon: Icon, children, defaultOpen = false }: NavGroup
 
 export function ConsolidatedNav() {
   const { user } = useAuth();
-  const { activeBranchId } = useBranch();
+  const { activeBranchId, activeBranch } = useBranch();
   const pathname = usePathname();
+
+  const [accountingStats, setAccountingStats] = useState({
+    totalRevenue: 0,
+    totalExpenses: 0,
+    netProfit: 0,
+    margin: 0
+  });
+  const [isStatsLoading, setIsStatsLoading] = useState(false);
+
+  const fetchAccountingStats = useCallback(async () => {
+    if (!activeBranchId) return;
+    setIsStatsLoading(true);
+    try {
+      const res = await financeAPI.getBranchFinancials(activeBranchId);
+      if (res.success) {
+        setAccountingStats({
+          totalRevenue: res.data.summary?.totalRevenue || 0,
+          totalExpenses: res.data.summary?.totalExpenses || 0,
+          netProfit: res.data.summary?.netProfit || 0,
+          margin: res.data.summary?.profitMargin || 0
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching sidebar stats:', error);
+    } finally {
+      setIsStatsLoading(false);
+    }
+  }, [activeBranchId]);
+
+  useEffect(() => {
+    if (user?.role === UserRole.BRANCH_ACCOUNTANT || user?.role === UserRole.ACCOUNTANT) {
+      fetchAccountingStats();
+    }
+  }, [user?.role, fetchAccountingStats]);
 
   if (!user) return null;
 
@@ -641,65 +676,116 @@ export function ConsolidatedNav() {
 
   // Branch Accounting Navigation
   const branchAccountingNav = (
-    <>
-      <NavItem
-        href="/dashboard/branch-accounting"
-        icon={BarChart3}
-        label="Accounting Overview"
-        active={pathname === '/dashboard/branch-accounting' && !pathname.includes('?tab=')}
-      />
+    <div className="space-y-6 px-1">
+      {/* Header and Branch Context */}
+      <div className="px-2 py-1">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-[14px] font-bold text-stone-900 tracking-tight">Accounting Overview</h2>
+          <button
+            onClick={fetchAccountingStats}
+            disabled={isStatsLoading}
+            className="p-1.5 hover:bg-stone-100 rounded-md transition-colors text-stone-400 hover:text-stone-900"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", isStatsLoading && "animate-spin")} />
+          </button>
+        </div>
+        <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">{activeBranch?.name || 'Loading Branch...'}</p>
+      </div>
 
-      <NavGroup label="Operations" icon={Package} defaultOpen>
+      {/* Live Financial Metrics */}
+      <div className="space-y-2">
+        <div className="p-3 bg-stone-50 rounded-xl border border-stone-100">
+          <div className="flex justify-between items-start mb-1">
+            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Total Revenue</p>
+            <span className="text-[9px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full uppercase">Income</span>
+          </div>
+          <p className="text-[14px] font-black text-stone-900">{accountingStats.totalRevenue.toLocaleString()} <span className="text-[10px] font-normal text-stone-400 ml-0.5">KES</span></p>
+        </div>
+
+        <div className="p-3 bg-stone-50 rounded-xl border border-stone-100">
+          <div className="flex justify-between items-start mb-1">
+            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Total Expenses</p>
+            <span className="text-[9px] font-bold bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full uppercase">Outflow</span>
+          </div>
+          <p className="text-[14px] font-black text-stone-900">{accountingStats.totalExpenses.toLocaleString()} <span className="text-[10px] font-normal text-stone-400 ml-0.5">KES</span></p>
+        </div>
+
+        <div className="p-3 bg-stone-900 rounded-xl text-white shadow-sm">
+          <div className="flex justify-between items-start mb-1">
+            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Net Profit</p>
+            <span className="text-[9px] font-bold text-stone-400">Margin: {accountingStats.margin.toFixed(1)}%</span>
+          </div>
+          <p className="text-[14px] font-black">{accountingStats.netProfit.toLocaleString()} <span className="text-[10px] font-normal opacity-50 ml-0.5">KES</span></p>
+        </div>
+      </div>
+
+      {/* Operations Hub (Compressed) */}
+      <div className="space-y-4 pt-2 border-t border-stone-100">
+        <h3 className="px-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">Operations Hub</h3>
+
+        <div className="space-y-1">
+          <Link href="/dashboard/branch-accounting/stock-take" className="block p-2 rounded-lg hover:bg-stone-50 group">
+            <div className="flex justify-between items-center mb-0.5">
+              <span className="text-[12px] font-bold text-stone-800">Stock Taking</span>
+              <span className="text-[10px] font-bold text-stone-400 group-hover:text-stone-900 transition-colors uppercase">Start Count</span>
+            </div>
+            <p className="text-[10px] text-stone-400">Physical inventory verification</p>
+          </Link>
+
+          <Link href="/dashboard/branch-accounting/credit-bills" className="block p-2 rounded-lg hover:bg-stone-50 group">
+            <div className="flex justify-between items-center mb-0.5">
+              <span className="text-[12px] font-bold text-stone-800">Credit & Paid Bills</span>
+              <span className="text-[10px] font-bold text-stone-400 group-hover:text-stone-900 transition-colors uppercase">Manage</span>
+            </div>
+            <p className="text-[10px] text-stone-400">Staff credits, loans & advances</p>
+          </Link>
+
+          <Link href="/dashboard/branch-accounting/business-mpesa" className="block p-2 rounded-lg hover:bg-stone-50 group">
+            <div className="flex justify-between items-center mb-0.5">
+              <span className="text-[12px] font-bold text-stone-800">Business & Mpesa</span>
+              <span className="text-[10px] font-bold text-stone-400 group-hover:text-stone-900 transition-colors uppercase">Reconcile</span>
+            </div>
+            <p className="text-[10px] text-stone-400">Revenue & mobile transactions</p>
+          </Link>
+
+          <Link href="/dashboard/branch-accounting/invoices" className="block p-2 rounded-lg hover:bg-stone-50 group">
+            <div className="flex justify-between items-center mb-0.5">
+              <span className="text-[12px] font-bold text-stone-800">Invoices & Payments</span>
+              <span className="text-[10px] font-bold text-stone-400 group-hover:text-stone-900 transition-colors uppercase">Create</span>
+            </div>
+            <p className="text-[10px] text-stone-400">Billing & payment processing</p>
+          </Link>
+        </div>
+      </div>
+
+      {/* Main Navigation Links */}
+      <div className="space-y-0.5 pt-2 border-t border-stone-100">
         <NavItem
           href="/dashboard/branch-accounting/stock-take"
-          icon={CheckCircle}
-          label="Stock Taking"
+          icon={PieChart}
+          label="Stock Take"
           active={pathname === '/dashboard/branch-accounting/stock-take'}
         />
         <NavItem
-          href="/dashboard/branch-accounting/invoices"
-          icon={FileText}
-          label="Invoices & Bills"
-          active={pathname.includes('/dashboard/branch-accounting/invoices') || pathname.includes('/dashboard/branch-accounting/credit-bills')}
-        />
-        <NavItem
-          href="/dashboard/branch-accounting/payments"
+          href="/dashboard/branch-accounting/credit-bills"
           icon={CreditCard}
-          label="Payments"
-          active={pathname === '/dashboard/branch-accounting/payments'}
-        />
-      </NavGroup>
-
-      <NavGroup label="Financials" icon={DollarSign}>
-        <NavItem
-          href="/dashboard/branch-accounting/revenue"
-          icon={TrendingUp}
-          label="Branch Revenue"
-          active={pathname === '/dashboard/branch-accounting/revenue'}
+          label="Credit Bills"
+          active={pathname === '/dashboard/branch-accounting/credit-bills'}
         />
         <NavItem
-          href="/dashboard/branch-accounting/expenses"
-          icon={Receipt}
-          label="Expenses"
-          active={pathname === '/dashboard/branch-accounting/expenses'}
-        />
-      </NavGroup>
-
-      <NavGroup label="Documents" icon={FileText}>
-        <NavItem
-          href="/dashboard/branch-accounting/invoices"
-          icon={FileText}
-          label="Invoices"
-          active={pathname === '/dashboard/branch-accounting/invoices'}
+          href="/dashboard/branch-accounting/banking/deposits"
+          icon={DollarSign}
+          label="Banking"
+          active={pathname.includes('/dashboard/branch-accounting/banking')}
         />
         <NavItem
-          href="/dashboard/branch-accounting/reports"
-          icon={FileSpreadsheet}
-          label="Daily Reports"
-          active={pathname === '/dashboard/branch-accounting/reports'}
+          href="/dashboard/settings"
+          icon={Settings}
+          label="Settings"
+          active={pathname === '/dashboard/settings'}
         />
-      </NavGroup>
-    </>
+      </div>
+    </div>
   );
 
 
@@ -1350,7 +1436,7 @@ export function ConsolidatedNav() {
 
     // Accounting & Finance
     if (user.role === UserRole.BRANCH_ACCOUNTANT || user.role === UserRole.ACCOUNTANT) {
-      return branchAccountantNav;
+      return branchAccountingNav;
     }
 
     // Branch Operations

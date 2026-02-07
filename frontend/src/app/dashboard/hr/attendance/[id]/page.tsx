@@ -67,6 +67,8 @@ export default function StaffAttendanceDetailPage() {
         const startOfYear = new Date(selectedYear, 0, 1);
         const data: { [key: string]: 'present' | 'absent' | 'overtime' | 'late' | 'excused' } = {};
 
+        console.log('[Heatmap] Processing attendance records:', attendance.length);
+
         attendance.forEach(record => {
             const dateStr = record.attendance_date.split('T')[0];
             const hasOT = (Number(record.hours_ot_weekday || 0) + Number(record.hours_ot_rest || 0)) > 0;
@@ -76,6 +78,8 @@ export default function StaffAttendanceDetailPage() {
             else if (isLate) data[dateStr] = 'late';
             else data[dateStr] = 'present';
         });
+
+        console.log('[Heatmap] Processed attendance data:', Object.keys(data).length, 'days with attendance');
 
         const calendar: any[] = [];
         for (let i = 0; i < 371; i++) {
@@ -89,6 +93,10 @@ export default function StaffAttendanceDetailPage() {
                 status: data[dateStr] || 'absent'
             });
         }
+
+        console.log('[Heatmap] Generated calendar:', calendar.length, 'days');
+        console.log('[Heatmap] Sample days:', calendar.slice(0, 5).map(d => ({ date: d.date.toISOString().split('T')[0], status: d.status })));
+
         return calendar;
     }, [attendance, selectedYear]);
 
@@ -262,7 +270,7 @@ export default function StaffAttendanceDetailPage() {
                                         ))}
                                     </div>
 
-                                    <div className="grid grid-flow-col grid-rows-7 gap-1">
+                                    <div className="grid grid-flow-col grid-rows-7 gap-1 auto-cols-[12px]">
                                         {heatmapData.map((day, idx) => {
                                             let color = 'bg-stone-50 border-stone-100';
                                             if (day.status === 'present') color = 'bg-emerald-300 border-emerald-400/20';

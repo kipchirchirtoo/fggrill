@@ -19,7 +19,10 @@ import {
   getFinancialForecast,
   getAccountsReceivablePayable,
   getFinancialKPIs,
-  getBranchFinancialProfile
+  getBranchFinancialProfile,
+  getDailyLogs,
+  saveDailyLog,
+  updateDailyLogStatus
 } from '../controllers/finance.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -85,6 +88,22 @@ router.route('/expenses')
 router.put('/expenses/:id/approve',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
   approveExpense
+);
+
+// ============== DAILY LOG SYSTEM ==============
+router.get('/daily-logs',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  getDailyLogs
+);
+
+router.post('/daily-logs',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  saveDailyLog
+);
+
+router.put('/daily-logs/:id/status',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
+  updateDailyLogStatus
 );
 
 // ============== ADVANCED FINANCIAL TOOLS ==============

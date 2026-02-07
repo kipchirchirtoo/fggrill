@@ -4,9 +4,9 @@ import { AppError } from '../middleware/errorHandler';
 
 export const createLoan = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { staff_id, total_amount, installment_amount, reason, start_date } = req.body;
+        const { staff_id, total_amount, monthly_installment, reason, start_date } = req.body;
 
-        if (!staff_id || !total_amount || !installment_amount || !reason || !start_date) {
+        if (!staff_id || !total_amount || !monthly_installment || !reason || !start_date) {
             throw new AppError('Missing required fields', 400);
         }
 
@@ -15,7 +15,7 @@ export const createLoan = async (req: Request, res: Response, next: NextFunction
             .insert({
                 staff_id,
                 total_amount,
-                installment_amount,
+                monthly_installment,
                 remaining_balance: total_amount, // Initial balance is total
                 reason,
                 start_date,

@@ -122,63 +122,65 @@ export function BranchAccountingOverview({ branchId, branchName, basePath, isAud
     return (
         <div className="space-y-8">
             {/* Header with clear context */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-stone-900">
+                    <h1 className="text-3xl font-black text-stone-900 tracking-tight">
                         {isAuditor ? 'Branch Audit Overview' : 'Accounting Overview'}
                     </h1>
-                    <p className="text-stone-500">{branchName || 'Branch Financials'}</p>
+                    <p className="text-stone-500 font-medium text-lg">{branchName || 'Branch Financials'}</p>
                 </div>
-                <button
-                    onClick={fetchData}
-                    disabled={isLoading}
-                    className="bg-white border border-stone-200 text-stone-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-stone-50 transition-colors flex items-center gap-2"
-                >
-                    <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                    Refresh
-                </button>
+                {!isAuditor && (
+                    <button
+                        onClick={fetchData}
+                        disabled={isLoading}
+                        className="bg-white border border-stone-200 text-stone-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-stone-50 transition-all flex items-center gap-2 shadow-sm active:scale-95"
+                    >
+                        <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                        Refresh
+                    </button>
+                )}
             </div>
 
             {/* Key Health Metrics - Simplified */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white rounded-2xl p-6 border border-stone-100 shadow-sm relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                <div className="bg-white rounded-2xl p-6 border border-stone-100 shadow-sm relative overflow-hidden group hover:border-emerald-200 transition-colors">
+                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                         <DollarSign className="h-24 w-24 text-emerald-600" />
                     </div>
-                    <p className="text-sm font-medium text-stone-500 mb-1">Total Revenue</p>
-                    <h3 className="text-3xl font-bold text-stone-900">
+                    <p className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-1">Total Revenue</p>
+                    <h3 className="text-3xl font-black text-stone-900">
                         {stats.totalRevenue.toLocaleString()} <span className="text-base font-normal text-stone-400">KES</span>
                     </h3>
-                    <div className="mt-4 flex items-center gap-2 text-emerald-600 text-sm font-medium bg-emerald-50 w-fit px-2 py-1 rounded-full">
-                        <TrendingUp className="h-4 w-4" />
+                    <div className="mt-4 flex items-center gap-2 text-emerald-600 text-xs font-bold bg-emerald-50 w-fit px-2.5 py-1 rounded-full uppercase tracking-tight">
+                        <TrendingUp className="h-3.5 w-3.5" />
                         <span>Income</span>
                     </div>
                 </div>
 
-                <div className="bg-white rounded-2xl p-6 border border-stone-100 shadow-sm relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                <div className="bg-white rounded-2xl p-6 border border-stone-100 shadow-sm relative overflow-hidden group hover:border-rose-200 transition-colors">
+                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                         <ArrowDownRight className="h-24 w-24 text-rose-600" />
                     </div>
-                    <p className="text-sm font-medium text-stone-500 mb-1">Total Expenses</p>
-                    <h3 className="text-3xl font-bold text-stone-900">
+                    <p className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-1">Total Expenses</p>
+                    <h3 className="text-3xl font-black text-stone-900">
                         {stats.totalExpenses.toLocaleString()} <span className="text-base font-normal text-stone-400">KES</span>
                     </h3>
-                    <div className="mt-4 flex items-center gap-2 text-rose-600 text-sm font-medium bg-rose-50 w-fit px-2 py-1 rounded-full">
-                        <ArrowDownRight className="h-4 w-4" />
+                    <div className="mt-4 flex items-center gap-2 text-rose-600 text-xs font-bold bg-rose-50 w-fit px-2.5 py-1 rounded-full uppercase tracking-tight">
+                        <ArrowDownRight className="h-3.5 w-3.5" />
                         <span>Outflow</span>
                     </div>
                 </div>
 
-                <div className="bg-white rounded-2xl p-6 border border-stone-100 shadow-sm relative overflow-hidden">
+                <div className="bg-stone-900 rounded-2xl p-6 shadow-md relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-4 opacity-10">
-                        <Wallet className="h-24 w-24 text-amber-600" />
+                        <Wallet className="h-24 w-24 text-white" />
                     </div>
-                    <p className="text-sm font-medium text-stone-500 mb-1">Net Profit</p>
-                    <h3 className={`text-3xl font-bold ${stats.netProfit >= 0 ? 'text-stone-900' : 'text-rose-600'}`}>
-                        {stats.netProfit.toLocaleString()} <span className="text-base font-normal text-stone-400">KES</span>
+                    <p className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-1">Net Profit</p>
+                    <h3 className="text-3xl font-black text-white">
+                        {stats.netProfit.toLocaleString()} <span className="text-base font-normal opacity-50">KES</span>
                     </h3>
-                    <div className={`mt-4 flex items-center gap-2 text-sm font-medium w-fit px-2 py-1 rounded-full ${stats.netProfit >= 0 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}`}>
-                        <PieChart className="h-4 w-4" />
+                    <div className={`mt-4 flex items-center gap-2 text-xs font-bold w-fit px-2.5 py-1 rounded-full uppercase tracking-tight ${stats.netProfit >= 0 ? 'bg-white/10 text-white' : 'bg-rose-500/20 text-rose-400'}`}>
+                        <PieChart className="h-3.5 w-3.5" />
                         <span>Margin: {financials?.summary?.profitMargin?.toFixed(1) || 0}%</span>
                     </div>
                 </div>

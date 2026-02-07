@@ -27,7 +27,7 @@ export default function AdminHRPayrollPage() {
       ]);
       setStats({
         totalStaff: staffRes.status === 'fulfilled' ? staffRes.value?.data?.length || 0 : 0,
-        totalPayroll: payrollRes.status === 'fulfilled' ? payrollRes.value?.data?.totalAmount || 0 : 0,
+        totalPayroll: payrollRes.status === 'fulfilled' ? payrollRes.value?.data?.totalNetPay || payrollRes.value?.data?.totalAmount || 0 : 0,
         pendingLeave: leaveRes.status === 'fulfilled' ? leaveRes.value?.data?.length || 0 : 0,
       });
     } catch (error) { console.error('Error:', error); }

@@ -18,13 +18,54 @@ interface StockItem {
 }
 
 export default function StockCountForm({ branchId, isAuditor = false }: { branchId: number | string | null, isAuditor?: boolean }) {
-    const [items, setItems] = useState<StockItem[]>([
-        { id: '1', itemCode: 'BEV-001', name: 'White Cap Lager', unit: 'Bottle', systemQuantity: 120, physicalQuantity: 120, variance: 0, unitCost: 250 },
-        { id: '2', itemCode: 'BEV-002', name: 'Tusker Lager', unit: 'Bottle', systemQuantity: 85, physicalQuantity: 80, variance: -5, unitCost: 250 },
-        { id: '3', itemCode: 'KIT-001', name: 'Cooking Oil', unit: 'Liter', systemQuantity: 15, physicalQuantity: 14.5, variance: -0.5, unitCost: 350 },
-    ]);
-    const [isLoading, setIsLoading] = useState(false);
+    const [items, setItems] = useState<StockItem[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [stockTakeId, setStockTakeId] = useState<string | null>(null);
+
+    // Fetch inventory items for the branch
+    useEffect(() => {
+        const fetchInventoryItems = async () => {
+            if (!branchId) return;
+
+            setIsLoading(true);
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch(`/api/simple-items?branch_id=${branchId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) throw new Error('Failed to fetch inventory');
+
+                const res = await response.json();
+
+                if (res.success && res.data) {
+                    // Map inventory items to stock count format
+                    const mappedItems: StockItem[] = res.data.map((inv: any) => ({
+                        id: inv.id,
+                        itemCode: inv.sku || inv.item_sku,
+                        name: inv.item_name || inv.name,
+                        unit: inv.unit || 'Unit',
+                        systemQuantity: inv.quantity || 0,
+                        physicalQuantity: inv.quantity || 0,
+                        variance: 0,
+                        unitCost: inv.cost_price || inv.unit_cost || 0
+                    }));
+                    setItems(mappedItems);
+                }
+            } catch (error) {
+                console.error('Failed to fetch inventory:', error);
+                toast.error('Failed to load inventory items');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchInventoryItems();
+    }, [branchId]);
 
     const handleQuantityChange = (id: string, value: string) => {
         const qty = parseFloat(value) || 0;
@@ -44,12 +85,52 @@ export default function StockCountForm({ branchId, isAuditor = false }: { branch
     };
 
     const handleSubmit = async () => {
+        if (!branchId) {
+            toast.error('Branch ID is required');
+            return;
+        }
+
         setIsSubmitting(true);
         try {
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            toast.success(isAuditor ? 'Audit count submitted successfully' : 'Stock count submitted for review');
+            const token = localStorage.getItem('token');
+
+            // Prepare stock take items
+            const stockTakeItems = items.map(item => ({
+                item_sku: item.itemCode,
+                system_quantity: item.systemQuantity,
+                counted_quantity: item.physicalQuantity,
+                unit_cost: item.unitCost,
+                variance_reason: item.variance !== 0 ? item.reason : null,
+                notes: item.reason
+            }));
+
+            const payload = {
+                branch_id: branchId,
+                take_type: 'FULL',
+                notes: isAuditor ? 'Auditor stock count' : 'Branch stock count',
+                items: stockTakeItems,
+                status: isAuditor ? 'COMPLETED' : 'IN_PROGRESS'
+            };
+
+            const response = await fetch('/api/stock-takes', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) throw new Error('Failed to submit stock count');
+
+            const res = await response.json();
+
+            if (res.success) {
+                setStockTakeId(res.data.id);
+                toast.success(isAuditor ? 'Audit count submitted successfully' : 'Stock count submitted for review');
+            }
         } catch (error) {
+            console.error('Failed to submit stock count:', error);
             toast.error('Failed to submit stock count');
         } finally {
             setIsSubmitting(false);

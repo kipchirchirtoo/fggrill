@@ -1104,7 +1104,7 @@ export const confirmUnpaidBill = async (req: Request, res: Response, next: NextF
  */
 export const getCreditBills = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { branch_id, staff_id, status, approval_status } = req.query;
+        const { branch_id, staff_id, status, approval_status, bill_type } = req.query;
 
         let query = supabase
             .from('credit_bills')
@@ -1127,6 +1127,10 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
             query = query.eq('approval_status', approval_status as string);
         }
 
+        if (bill_type) {
+            query = query.eq('bill_type', bill_type as string);
+        }
+
         const { data, error } = await query;
 
         if (error) throw error;
@@ -1134,6 +1138,84 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
         res.json({
             success: true,
             message: 'Credit bills retrieved successfully',
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Get all loans (bill_type = 'loan')
+ */
+export const getLoans = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { branch_id, staff_id, status } = req.query;
+
+        let query = supabase
+            .from('credit_bills')
+            .select('*')
+            .eq('bill_type', 'loan')
+            .order('credit_date', { ascending: false });
+
+        if (branch_id) {
+            query = query.eq('branch_id', branch_id as string);
+        }
+
+        if (staff_id) {
+            query = query.eq('staff_id', staff_id as string);
+        }
+
+        if (status) {
+            query = query.eq('status', status as string);
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+
+        res.json({
+            success: true,
+            message: 'Loans retrieved successfully',
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Get all salary advances (bill_type = 'advance' or 'salary_advance')
+ */
+export const getAdvances = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { branch_id, staff_id, status } = req.query;
+
+        let query = supabase
+            .from('credit_bills')
+            .select('*')
+            .or('bill_type.eq.advance,bill_type.eq.salary_advance')
+            .order('credit_date', { ascending: false });
+
+        if (branch_id) {
+            query = query.eq('branch_id', branch_id as string);
+        }
+
+        if (staff_id) {
+            query = query.eq('staff_id', staff_id as string);
+        }
+
+        if (status) {
+            query = query.eq('status', status as string);
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+
+        res.json({
+            success: true,
+            message: 'Salary advances retrieved successfully',
             data
         });
     } catch (error) {
