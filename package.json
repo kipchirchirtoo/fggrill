@@ -1,7 +1,10 @@
 {
   "name": "fggrill-central",
   "version": "1.0.12",
-  "author": "HIRALL",
+  "author": {
+    "name": "HIRALL",
+    "email": "info@famousgate.com"
+  },
   "description": "Famous Gate Hotel Management System",
   "main": "electron/main.js",
   "repository": {
