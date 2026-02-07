@@ -42,4 +42,4 @@ jobs:
       - name: Build and Publish Electron
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder build --win --publish always
+        run: npx electron-builder build --win --linux --publish always
