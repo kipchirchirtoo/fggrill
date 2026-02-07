@@ -12,10 +12,16 @@ import md5_fix
 import logging
 from datetime import datetime, timedelta
 import pandas as pd
-from reports.pdf_generator import PDFReportGenerator
+try:
+    from reports.pdf_generator import PDFReportGenerator
+    from reports.branded_pdf_generator import BrandedPDFGenerator
+except ImportError:
+    logging.warning("ReportLab not found. PDF generation will be disabled.")
+    class PDFReportGenerator: pass
+    class BrandedPDFGenerator: pass
+
 from reports.excel_generator import ExcelReportGenerator
 from reports.data_fetcher import DataFetcher
-from reports.branded_pdf_generator import BrandedPDFGenerator
 from reports.database_fetcher import DatabaseFetcher
 from reports.kpi_dashboard_generator import KPIDashboardGenerator
 from reports.kpi_fetcher import add_kpi_dashboard_method

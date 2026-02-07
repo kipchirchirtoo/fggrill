@@ -14,7 +14,7 @@ export default function BranchAccountingDashboard() {
     const currentBranchId = activeBranchId || user?.branch_id;
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.BRANCH_ACCOUNTANT, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
+        <ProtectedRoute allowedRoles={[UserRole.BRANCH_ACCOUNTANT, UserRole.ACCOUNTANT, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
             <DashboardLayout>
                 <div className="max-w-6xl mx-auto space-y-8">
                     <BranchAccountingOverview

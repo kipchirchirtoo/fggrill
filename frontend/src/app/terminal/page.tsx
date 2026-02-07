@@ -276,12 +276,24 @@ export default function MasterTerminalPage() {
                             </div>
                             <div className="h-8 flex items-center justify-center">
                                 <p className="text-3xl font-black tracking-[0.6em] text-stone-900">
-                                    {selectedModule === 'restaurant' ? 'R' : selectedModule === 'bar' ? 'B' : 'C'}{pin.padEnd(4, '_')}
+                                    {pin.padEnd(4, '_')}
                                 </p>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-3 gap-6 w-full max-w-[340px]">
+                            {['R', 'B', 'C'].map((char) => (
+                                <button
+                                    key={char}
+                                    onClick={() => handleNumberClick(char)}
+                                    className={cn(
+                                        "h-20 w-20 rounded-3xl bg-white border border-gray-200 shadow-sm hover:bg-stone-50 hover:border-stone-300 active:scale-95 transition-all flex items-center justify-center text-3xl font-black",
+                                        char === 'R' ? "text-orange-500" : char === 'B' ? "text-indigo-500" : "text-emerald-500"
+                                    )}
+                                >
+                                    {char}
+                                </button>
+                            ))}
                             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
                                 <button
                                     key={num}

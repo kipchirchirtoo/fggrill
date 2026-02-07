@@ -963,3 +963,281 @@ export const getAccountingDashboard = async (req: Request, res: Response, next: 
     next(error);
   }
 };
+
+// ============ BANK DEPOSITS ============
+
+export const getBankDeposits = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { branch_id, start_date, end_date } = req.query;
+
+    let query = supabase
+      .from('accounting_bank_transactions')
+      .select(`
+        *,
+        bank_account:accounting_bank_accounts!inner(*)
+      `)
+      .order('transaction_date', { ascending: false });
+
+    // Filter by type if there's a way to distinguish deposits from other transactions
+    // For now, we'll assume transactions with credit_amount > 0 and no specific type are deposits
+    // or just return all and let frontend filter if needed.
+    // However, the frontend specifically asks for deposits.
+
+    if (branch_id) {
+      query = query.eq('bank_account.branch_id', branch_id);
+    }
+
+    if (start_date) query = query.gte('transaction_date', start_date);
+    if (end_date) query = query.lte('transaction_date', end_date);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    // Filter for deposits (credit > 0)
+    const deposits = data?.filter((txn: any) => txn.credit_amount > 0) || [];
+
+    res.status(200).json({ success: true, count: deposits.length, data: deposits });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getBankAccounts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { branch_id } = req.query;
+
+    let query = supabase
+      .from('accounting_bank_accounts')
+      .select('*')
+      .order('bank_name');
+
+    if (branch_id) {
+      query = query.eq('branch_id', branch_id);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    res.status(200).json({ success: true, count: data?.length || 0, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createBankDeposit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { branch_id, bank_account_id, deposit_date, amount, reference, description, notes } = req.body;
+
+    if (!bank_account_id || !amount) {
+      res.status(400).json({ success: false, message: 'Bank account and amount are required' });
+      return;
+    }
+
+    // Record the bank transaction (a deposit is a CREDIT to the bank account in this schema)
+    const { data, error } = await supabase
+      .from('accounting_bank_transactions')
+      .insert([{
+        bank_account_id,
+        branch_id,
+        transaction_date: deposit_date || new Date().toISOString().split('T')[0],
+        debit_amount: 0,
+        credit_amount: amount,
+        reference,
+        description: notes ? `${description || 'Bank Deposit'} - ${notes}` : (description || 'Bank Deposit'),
+        reconciled: false
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Update bank account balance
+    const { data: account, error: accError } = await supabase
+      .from('accounting_bank_accounts')
+      .select('current_balance')
+      .eq('id', bank_account_id)
+      .single();
+
+    if (!accError && account) {
+      const newBalance = (account.current_balance || 0) + amount;
+      await supabase
+        .from('accounting_bank_accounts')
+        .update({
+          current_balance: newBalance,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', bank_account_id);
+    }
+
+    logger.info(`Bank deposit created: ${reference} for amount ${amount}`);
+
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ============ BANK RECONCILIATION ============
+
+export const getReconciliationData = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { branch_id } = req.query;
+
+    if (!branch_id) {
+      res.status(400).json({ success: false, message: 'Branch ID is required' });
+      return;
+    }
+
+    // 1. Fetch unmatched system sales (Restaurant)
+    const { data: restOrders, error: restError } = await supabase
+      .from('restaurant_orders')
+      .select('id, order_number, total_amount, created_at, payment_method')
+      .eq('branch_id', branch_id)
+      .eq('payment_status', 'paid')
+      .eq('reconciled', false);
+
+    if (restError) throw restError;
+
+    // 2. Fetch unmatched system sales (Bar)
+    const { data: barOrders, error: barError } = await supabase
+      .from('bar_orders')
+      .select('id, order_number, total, created_at, payment_method')
+      .eq('branch_id', branch_id)
+      .eq('payment_status', 'paid')
+      .eq('reconciled', false);
+
+    if (barError) throw barError;
+
+    // 3. Fetch unmatched bank transactions (Deposits/Credits)
+    const { data: bankTxns, error: bankError } = await supabase
+      .from('accounting_bank_transactions')
+      .select(`
+        *,
+        bank_account:accounting_bank_accounts!inner(*)
+      `)
+      .eq('bank_account.branch_id', branch_id)
+      .eq('reconciled', false)
+      .gt('credit_amount', 0);
+
+    if (bankError) throw bankError;
+
+    // 4. Calculate balances
+    // For "book balance", we might need a total balance from chart of accounts, 
+    // but for the demo UI, we'll sum up what we have or use bank account balances.
+
+    const { data: bankAccounts } = await supabase
+      .from('accounting_bank_accounts')
+      .select('current_balance')
+      .eq('branch_id', branch_id);
+
+    const bankBalance = bankAccounts?.reduce((sum: number, acc: any) => sum + (acc.current_balance || 0), 0) || 0;
+
+    // Unmatched sums
+    const unmatchedSalesSum =
+      (restOrders?.reduce((sum: number, o: any) => sum + Number(o.total_amount), 0) || 0) +
+      (barOrders?.reduce((sum: number, o: any) => sum + Number(o.total), 0) || 0);
+
+    const unmatchedDepositsSum = bankTxns?.reduce((sum: number, t: any) => sum + Number(t.credit_amount), 0) || 0;
+
+    // Format transactions for frontend
+    const transactions: any[] = [
+      ...(restOrders?.map((o: any) => ({
+        id: o.id,
+        date: new Date(o.created_at).toISOString().split('T')[0],
+        description: `Restaurant Order #${o.order_number} (${o.payment_method || 'Cash'})`,
+        type: 'sale',
+        amount: Number(o.total_amount),
+        status: 'unmatched'
+      })) || []),
+      ...(barOrders?.map((o: any) => ({
+        id: o.id,
+        date: new Date(o.created_at).toISOString().split('T')[0],
+        description: `Bar Order #${o.order_number} (${o.payment_method || 'Cash'})`,
+        type: 'sale',
+        amount: Number(o.total),
+        status: 'unmatched'
+      })) || []),
+      ...(bankTxns?.map((t: any) => ({
+        id: t.id,
+        date: new Date(t.transaction_date).toISOString().split('T')[0],
+        description: t.description || `Bank Deposit - Ref: ${t.reference}`,
+        type: 'deposit',
+        amount: Number(t.credit_amount),
+        status: 'unmatched'
+      })) || [])
+    ];
+
+    res.status(200).json({
+      success: true,
+      data: {
+        balances: {
+          book: bankBalance + unmatchedSalesSum - unmatchedDepositsSum, // Simplified logic: book should match bank + transit
+          bank: bankBalance,
+          unmatchedSales: unmatchedSalesSum,
+          unmatchedDeposits: unmatchedDepositsSum
+        },
+        transactions
+      }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const matchTransactions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { transactionIds, matchType } = req.body;
+
+    if (!transactionIds || !Array.isArray(transactionIds) || transactionIds.length < 2) {
+      res.status(400).json({ success: false, message: 'At least two transaction IDs (one sale, one deposit) are required' });
+      return;
+    }
+
+    const saleId = transactionIds.find(id => {
+      // We need a way to know which is which. 
+      // In a real app, we might pass metadata or check tables.
+      // For now, let's assume the frontend passes them in a specific order or we check.
+      return true; // placeholder
+    });
+
+    // Strategy: Try to update all provided IDs in all potential tables. 
+    // This is a bit brute force but effective for mixed IDs.
+
+    const now = new Date().toISOString();
+
+    // Identify which ID is a bank transaction and which is an order
+    const { data: bankTxn } = await supabase.from('accounting_bank_transactions').select('id').in('id', transactionIds).single();
+
+    if (!bankTxn) {
+      res.status(404).json({ success: false, message: 'Bank transaction not found in matching set' });
+      return;
+    }
+
+    const otherIds = transactionIds.filter(id => id !== bankTxn.id);
+
+    // Update bank transaction
+    await supabase.from('accounting_bank_transactions').update({
+      reconciled: true,
+      updated_at: now
+    }).eq('id', bankTxn.id);
+
+    // Update orders
+    await supabase.from('restaurant_orders').update({
+      reconciled: true,
+      reconciled_at: now,
+      matched_transaction_id: bankTxn.id
+    }).in('id', otherIds);
+
+    await supabase.from('bar_orders').update({
+      reconciled: true,
+      reconciled_at: now,
+      matched_transaction_id: bankTxn.id
+    }).in('id', otherIds);
+
+    res.status(200).json({ success: true, message: 'Transactions matched and reconciled successfully' });
+
+  } catch (error) {
+    next(error);
+  }
+};

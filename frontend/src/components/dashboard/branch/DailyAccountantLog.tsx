@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
-import { financeAPI, staffAPI } from '@/lib/api';
+import { financeAPI } from '@/lib/api';
 import { toast } from 'sonner';
 import {
     Plus, Trash2, Save, Calculator, AlertCircle,
@@ -70,7 +70,8 @@ export function DailyAccountantLog({ initialMode = 'payments' }: DailyAccountant
                 log_date: date
             });
             if (response.success && response.data && response.data.length > 0) {
-                setLog(response.data[0]);
+                const data = response.data[0];
+                setLog({ ...data, lines: data.lines || [] });
             } else {
                 // Initialize new log with previous day's closing balance if possible
                 // For now just fresh
@@ -131,24 +132,24 @@ export function DailyAccountantLog({ initialMode = 'payments' }: DailyAccountant
         };
         setLog(prev => ({
             ...prev,
-            lines: [...prev.lines, newLine]
+            lines: [...(prev.lines || []), newLine]
         }));
     };
 
     const updateLine = (index: number, field: keyof LogLine, value: any) => {
-        const newLines = [...log.lines];
+        const newLines = [...(log.lines || [])];
         newLines[index] = { ...newLines[index], [field]: value };
         setLog(prev => ({ ...prev, lines: newLines }));
     };
 
     const removeLine = (index: number) => {
-        const newLines = [...log.lines];
+        const newLines = [...(log.lines || [])];
         newLines.splice(index, 1);
         setLog(prev => ({ ...prev, lines: newLines }));
     };
 
-    const payments = log.lines.filter(l => l.section === 'recorded_payments');
-    const expenses = log.lines.filter(l => l.section === 'petty_cash_expenses');
+    const payments = (log.lines || []).filter(l => l.section === 'recorded_payments');
+    const expenses = (log.lines || []).filter(l => l.section === 'petty_cash_expenses');
 
     const paymentsTotal = payments.reduce((sum, l) => sum + (Number(l.amount) || 0), 0);
     const expensesTotal = expenses.reduce((sum, l) => sum + (Number(l.amount) || 0), 0);
@@ -191,8 +192,8 @@ export function DailyAccountantLog({ initialMode = 'payments' }: DailyAccountant
             {/* Status Bar */}
             {log.status !== 'draft' && (
                 <div className={`p-4 rounded-2xl flex items-center justify-between border ${log.status === 'verified' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' :
-                        log.status === 'rejected' ? 'bg-rose-50 border-rose-100 text-rose-800' :
-                            'bg-amber-50 border-amber-100 text-amber-800'
+                    log.status === 'rejected' ? 'bg-rose-50 border-rose-100 text-rose-800' :
+                        'bg-amber-50 border-amber-100 text-amber-800'
                     }`}>
                     <div className="flex items-center gap-3">
                         <Shield size={20} />

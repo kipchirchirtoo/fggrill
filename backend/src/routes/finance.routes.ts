@@ -102,7 +102,7 @@ router.post('/daily-logs',
 );
 
 router.put('/daily-logs/:id/status',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
   updateDailyLogStatus
 );
 
@@ -326,7 +326,7 @@ router.post('/reports/generate',
 
 // Get Branches for Finance
 router.get('/branches',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.BRANCH_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.BRANCH_MANAGER, UserRole.AUDITOR]),
   async (req, res) => {
     try {
       const { data, error } = await supabase.from('branches').select('id, name, code');

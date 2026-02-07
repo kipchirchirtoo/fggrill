@@ -631,7 +631,16 @@ export const systemAPI = {
 // STAFF API
 // =====================================================
 
-export const staffAPI = {
+const staffImpl = {
+  // Staff List
+  getAll: (params?: { branch_id?: number; role?: string; search?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.role) query.append('role', params.role);
+    if (params?.search) query.append('search', params.search);
+    return fetchAPI<any>(`/staff?${query.toString()}`);
+  },
+
   // Staff CRUD
   getStaff: (params?: number | { branchId?: number; role?: string; search?: string; department?: string; status?: string; page?: number; limit?: number }) => {
     const queryParams = new URLSearchParams();
@@ -2819,8 +2828,20 @@ export const auditAPI = {
   getRoleMigrations: () => fetchAPI<any>('/admin/role-migrations'),
   executeRoleMigration: (id: number) => fetchAPI<any>(`/admin/role-migrations/${id}/execute`, { method: 'POST' }),
   revertRoleMigration: (id: number) => fetchAPI<any>(`/admin/role-migrations/${id}/revert`, { method: 'POST' }),
-  createException: (data: any) => fetchAPI<any>('/auditor/exceptions', { method: 'POST', body: JSON.stringify(data) }),
+  getException: (id: string) => fetchAPI<any>(`/auditor/exceptions/${id}`),
+  updateExceptionStatus: (id: string, status: string, notes?: string) =>
+    fetchAPI<any>(`/auditor/exceptions/${id}/status`, { method: 'PUT', body: JSON.stringify({ status, notes }) }),
+  createException: (data: any) =>
+    fetchAPI<any>('/auditor/exceptions', { method: 'POST', body: JSON.stringify(data) }),
 
+  getStaffAudit: (params?: { branch_id?: string; start_date?: string; end_date?: string; staff_id?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id && params.branch_id !== 'all') query.append('branch_id', params.branch_id);
+    if (params?.staff_id && params.staff_id !== 'all') query.append('staff_id', params.staff_id);
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/auditor/staff-audit?${query.toString()}`);
+  },
 
   // Operational Audit (Advanced)
   getConsumptionConfigs: () => fetchAPI<any>('/auditor/consumption/configs'),
@@ -2836,8 +2857,12 @@ export const auditAPI = {
   // Approvals
   getPendingApprovals: (branchId?: number) => {
     const query = branchId ? `?branch_id=${branchId}` : '';
-    return fetchPythonAPI<any>(`/audit/approvals/pending${query}`);
+    return fetchAPI<any>(`/auditor/approvals/pending${query}`);
   },
+  approveRequest: (id: string, type: string, notes?: string) =>
+    fetchAPI<any>('/auditor/approvals/approve', { method: 'POST', body: JSON.stringify({ id, type, notes }) }),
+  rejectRequest: (id: string, type: string, reason: string) =>
+    fetchAPI<any>('/auditor/approvals/reject', { method: 'POST', body: JSON.stringify({ id, type, reason }) }),
   processApproval: (id: string, data: { action: 'APPROVED' | 'REJECTED'; notes?: string }) =>
     fetchPythonAPI<any>(`/audit/approvals/${id}/process`, { method: 'POST', body: JSON.stringify(data) }),
   submitApproval: (data: { entity_type: string; entity_id: string; status: string; comments?: string }) =>
@@ -2906,6 +2931,9 @@ export const auditAPI = {
   getAnomalyDetail: (params: { id: string; type: string }) => {
     return fetchAPI<any>(`/auditor/verify/details?id=${params.id}&type=${params.type}`);
   },
+  clearAnomaly: (data: { id: string; type: string; notes?: string }) => {
+    return fetchAPI<any>('/auditor/verify/clear', { method: 'POST', body: JSON.stringify(data) });
+  },
   verifyStockLevels: (params: { branch_id?: number }) => {
     const query = new URLSearchParams();
     if (params.branch_id !== undefined && params.branch_id !== null) query.append('branch_id', String(params.branch_id));
@@ -2945,6 +2973,7 @@ export const auditAPI = {
   verifyDailyLog: (id: string, status: 'verified' | 'rejected', notes?: string) =>
     fetchAPI<any>(`/finance/daily-logs/${id}/status`, { method: 'PUT', body: JSON.stringify({ status, rejection_reason: notes }) }),
 };
+
 
 export const auditorReportsAPI = {
   getBranchPerformance: (params: { branch_id: number; start_date: string; end_date: string }) => {
@@ -3130,6 +3159,39 @@ export const pettyCashAPI = {
 };
 
 
+
+// =====================================================
+// STAFF API
+// =====================================================
+
+export const staffAPI = {
+  getStaff: () => fetchAPI<any>('/staff'),
+  getLeaveRequests: (params?: { status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    return fetchAPI<any>(`/staff/leave?${query}`);
+  },
+  getAttendance: (params?: { date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.date) query.append('date', params.date);
+    return fetchAPI<any>(`/staff/attendance?${query}`);
+  },
+  simplePayroll: {
+    getPayrollRecords: (params?: { month?: number; year?: number }) => {
+      const query = new URLSearchParams();
+      if (params?.month) query.append('month', String(params.month));
+      if (params?.year) query.append('year', String(params.year));
+      return fetchAPI<any>(`/payroll/history?${query}`);
+    },
+    generatePayroll: (data: { month: number; year: number }) =>
+      fetchAPI<any>('/payroll/generate', { method: 'POST', body: JSON.stringify(data) }),
+    emailPayslips: (data: { month: number; year: number }) =>
+      fetchAPI<any>('/payroll/email-all', { method: 'POST', body: JSON.stringify(data) }),
+    downloadPayslipsZip: (data: { month: number; year: number }) =>
+      fetchAPI<any>('/payroll/download-zip', { method: 'POST', body: JSON.stringify(data) }),
+  }
+};
+
 // =====================================================
 // USER MANAGEMENT API
 // =====================================================
@@ -3214,6 +3276,12 @@ export const payrollAPI = {
     if (params?.branch) query.append('branch', params.branch);
     return fetchAPI<any>(`/payroll/summary?${query}`);
   },
+  getPayrollRecords: (params?: any) => {
+    const query = new URLSearchParams();
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    return fetchAPI<any>(`/payroll/history?${query}`);
+  },
   calculate: (data: any) => fetchAPI<any>('/payroll/calculate', { method: 'POST', body: JSON.stringify(data) }),
   pay: (data: { payrollRecordId: string; paymentMethod: 'mpesa' | 'paystack'; employeePhone?: string; employeeEmail?: string; bankDetails?: any }) =>
     fetchAPI<any>('/payroll/pay', { method: 'POST', body: JSON.stringify(data) }),
@@ -3222,6 +3290,8 @@ export const payrollAPI = {
   getBanks: () => fetchAPI<any>('/payroll/banks'),
   verifyBankAccount: (data: { accountNumber: string; bankCode: string }) =>
     fetchAPI<any>('/payroll/verify-bank', { method: 'POST', body: JSON.stringify(data) }),
+  emailPayslips: (data: any) => fetchAPI<any>('/payroll/email-all', { method: 'POST', body: JSON.stringify(data) }),
+  downloadPayslipsZip: (data: any) => fetchAPI<any>('/payroll/download-zip', { method: 'POST', body: JSON.stringify(data) }),
 
   // Workflow Actions
   review: (id: string) => fetchAPI<any>(`/payroll/${id}/review`, { method: 'PUT' }),
@@ -3264,6 +3334,8 @@ export const notificationsAPI = {
     fetchAPI<any>('/notifications/notify-branch', { method: 'POST', body: JSON.stringify(data) }),
   notifyUser: (data: any) =>
     fetchAPI<any>('/notifications/notify-user', { method: 'POST', body: JSON.stringify(data) }),
+  clearMyNotifications: () => fetchAPI<any>('/notifications/clear-my-notifications', { method: 'DELETE' }),
+  testNotification: () => fetchAPI<any>('/notifications/test-notification', { method: 'POST' }),
   cleanup: () => fetchAPI<any>('/notifications/cleanup', { method: 'POST' }),
 };
 
@@ -3277,6 +3349,12 @@ export const accountingAPI = {
 
   // Dashboard
   getDashboard: () => fetchAPI<any>('/accounting/dashboard'),
+
+  getBankAccounts: (params?: { branch_id?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    return fetchAPI<any>(`/accounting/bank-accounts?${query}`);
+  },
 
   // Chart of Accounts
   getAccounts: (params?: { type?: string }) => {
@@ -3471,7 +3549,7 @@ export const accountingAPI = {
     if (filters?.end_date) params.append('end_date', filters.end_date);
     if (filters?.branch_id) params.append('branch_id', String(filters.branch_id));
 
-    return fetchPythonAPI<any>(`/accounting/reports/p-and-l?${params.toString()}`);
+    return fetchAPI<any>(`/finance/profit-loss?${params.toString()}`);
   },
 
   getAgingAnalysis: async (filters?: any) => {
@@ -3889,7 +3967,7 @@ export const employeePortalAPI = {
 export const api = {
   auth: authAPI,
   user: userAPI,
-  staff: staffAPI,
+  staff: staffImpl,
   system: systemAPI,
   rooms: roomsAPI,
   guests: guestAPI,

@@ -165,11 +165,13 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
         }));
     };
 
-    const updateLine = (section: keyof LogbookData, index: number, field: keyof LogbookLine, value: any) => {
-        if (!Array.isArray(logbook[section])) return;
-        const newLines = [...(logbook[section] as LogbookLine[])];
-        newLines[index] = { ...newLines[index], [field]: value };
-        setLogbook(prev => ({ ...prev, [section]: newLines }));
+    const updateLine = (section: keyof LogbookData, index: number, updates: Partial<LogbookLine>) => {
+        setLogbook(prev => {
+            if (!Array.isArray(prev[section])) return prev;
+            const newLines = [...(prev[section] as LogbookLine[])];
+            newLines[index] = { ...newLines[index], ...updates };
+            return { ...prev, [section]: newLines };
+        });
     };
 
     const removeLine = (section: keyof LogbookData, index: number) => {
@@ -336,25 +338,33 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                         onChange={e => {
                                             const staffId = e.target.value;
                                             const staff = staffList.find(s => s.id === staffId);
-                                            // Update both staff_id and name for display
-                                            updateLine('credit_bills', i, 'staff_id', staffId);
-                                            updateLine('credit_bills', i, 'customer_name', staff ? `${staff.first_name} ${staff.last_name}` : '');
+                                            updateLine('credit_bills', i, {
+                                                staff_id: staffId,
+                                                customer_name: staff ? `${staff.first_name} ${staff.last_name}` : ''
+                                            });
                                         }}
                                     >
-                                        <option value="">Select Staff Member</option>
+                                        <option value="">Select Staff</option>
                                         {staffList.map(staff => (
                                             <option key={staff.id} value={staff.id}>
-                                                {staff.first_name} {staff.last_name} ({staff.role})
+                                                {staff.first_name} {staff.last_name}
                                             </option>
                                         ))}
                                     </select>
+                                    <Input
+                                        placeholder="Name"
+                                        className="h-8 text-xs flex-1"
+                                        value={line.customer_name}
+                                        disabled={isReadOnly}
+                                        onChange={e => updateLine('credit_bills', i, { customer_name: e.target.value })}
+                                    />
                                     <Input
                                         placeholder="Amount"
                                         type="number"
                                         className="h-8 text-xs w-24 text-right"
                                         value={line.amount || ''}
                                         disabled={isReadOnly}
-                                        onChange={e => updateLine('credit_bills', i, 'amount', parseFloat(e.target.value))}
+                                        onChange={e => updateLine('credit_bills', i, { amount: parseFloat(e.target.value) })}
                                     />
                                     {!isReadOnly && (
                                         <button onClick={() => removeLine('credit_bills', i)} className="text-stone-400 hover:text-red-500"><Trash2 size={14} /></button>
@@ -386,7 +396,7 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                         className="h-8 text-xs flex-1"
                                         value={line.customer_name}
                                         disabled={isReadOnly}
-                                        onChange={e => updateLine('unpaid_bills', i, 'customer_name', e.target.value)}
+                                        onChange={e => updateLine('unpaid_bills', i, { customer_name: e.target.value })}
                                     />
                                     <Input
                                         placeholder="Amount"
@@ -394,7 +404,7 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                         className="h-8 text-xs w-24 text-right"
                                         value={line.amount || ''}
                                         disabled={isReadOnly}
-                                        onChange={e => updateLine('unpaid_bills', i, 'amount', parseFloat(e.target.value))}
+                                        onChange={e => updateLine('unpaid_bills', i, { amount: parseFloat(e.target.value) })}
                                     />
                                     {!isReadOnly && (
                                         <button onClick={() => removeLine('unpaid_bills', i)} className="text-stone-400 hover:text-red-500"><Trash2 size={14} /></button>
@@ -426,7 +436,7 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                         className="h-8 text-xs flex-1"
                                         value={line.customer_name}
                                         disabled={isReadOnly}
-                                        onChange={e => updateLine('paid_bills', i, 'customer_name', e.target.value)}
+                                        onChange={e => updateLine('paid_bills', i, { customer_name: e.target.value })}
                                     />
                                     <Input
                                         placeholder="Amount"
@@ -434,7 +444,7 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                                         className="h-8 text-xs w-24 text-right"
                                         value={line.amount || ''}
                                         disabled={isReadOnly}
-                                        onChange={e => updateLine('paid_bills', i, 'amount', parseFloat(e.target.value))}
+                                        onChange={e => updateLine('paid_bills', i, { amount: parseFloat(e.target.value) })}
                                     />
                                     {!isReadOnly && (
                                         <button onClick={() => removeLine('paid_bills', i)} className="text-stone-400 hover:text-red-500"><Trash2 size={14} /></button>

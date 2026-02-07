@@ -13,12 +13,12 @@ import { format } from 'date-fns';
 
 interface DailyLogVerificationProps {
     title?: string;
-    status?: 'pending_audit' | 'verified' | 'rejected';
+    status?: 'submitted' | 'verified' | 'rejected';
 }
 
 export const DailyLogVerification: React.FC<DailyLogVerificationProps> = ({
     title = "Accountant Daily Logs Verification",
-    status = 'pending_audit'
+    status = 'submitted'
 }) => {
     const [logs, setLogs] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);

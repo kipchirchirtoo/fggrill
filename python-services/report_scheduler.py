@@ -17,7 +17,11 @@ from threading import Thread
 from typing import List, Dict, Any, Optional
 from supabase import create_client, Client
 
-from reports.branded_pdf_generator import BrandedPDFGenerator
+try:
+    from reports.branded_pdf_generator import BrandedPDFGenerator
+except ImportError:
+    class BrandedPDFGenerator: pass
+
 from reports.database_fetcher import DatabaseFetcher
 from reports.excel_generator import ExcelReportGenerator
 

@@ -42,9 +42,13 @@ export const getLoans = async (req: Request, res: Response, next: NextFunction) 
         let query = supabase
             .from('staff_loans')
             .select(`
-        *,
-        staff:staff_profiles(id, first_name, last_name, role)
-      `)
+                *,
+                staff:staff_profiles(
+                    id, 
+                    role,
+                    user:users!user_id(id, first_name, last_name)
+                )
+            `)
             .order('created_at', { ascending: false });
 
         if (staff_id) query = query.eq('staff_id', staff_id);
@@ -54,9 +58,20 @@ export const getLoans = async (req: Request, res: Response, next: NextFunction) 
 
         if (error) throw error;
 
+        // Transform to flatten nested user data for frontend compatibility
+        const transformed = data.map(loan => ({
+            ...loan,
+            staff: loan.staff ? {
+                id: loan.staff.id,
+                role: loan.staff.role,
+                first_name: loan.staff.user?.first_name || '',
+                last_name: loan.staff.user?.last_name || ''
+            } : null
+        }));
+
         res.status(200).json({
             success: true,
-            data
+            data: transformed
         });
     } catch (error) {
         next(error);

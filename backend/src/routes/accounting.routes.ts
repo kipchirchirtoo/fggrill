@@ -16,7 +16,12 @@ import {
   createBankTransaction,
   getBankTransactions,
   getBudgets,
-  getAccountingDashboard
+  getAccountingDashboard,
+  getBankDeposits,
+  createBankDeposit,
+  getReconciliationData,
+  matchTransactions,
+  getBankAccounts
 } from '../controllers/accounting.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -101,6 +106,11 @@ router.post('/bills/:id/submit-audit',
 );
 
 // Banking
+router.get('/bank-accounts',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  getBankAccounts
+);
+
 router.get('/bank-transactions',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getBankTransactions
@@ -109,6 +119,27 @@ router.get('/bank-transactions',
 router.post('/bank-transactions',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   createBankTransaction
+);
+
+router.get('/deposits',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  getBankDeposits
+);
+
+router.post('/deposits',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  createBankDeposit
+);
+
+// Reconciliation
+router.get('/reconciliation/data',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  getReconciliationData
+);
+
+router.post('/reconciliation/match',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  matchTransactions
 );
 
 // Budgets

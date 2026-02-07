@@ -9,7 +9,8 @@ import { UserRole } from '@/lib/auth-context';
 import {
     AlertTriangle, ArrowLeft, Calendar, User, Clock,
     FileText, CheckCircle2, XCircle, ShoppingBag,
-    CreditCard, DollarSign, Wallet, Store, ShieldAlert
+    CreditCard, DollarSign, Wallet, Store, ShieldAlert,
+    ChevronRight, ArrowRight
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -33,6 +34,10 @@ export default function AnomalyDetailPage() {
     const [flagReason, setFlagReason] = useState('');
     const [flagSeverity, setFlagSeverity] = useState('MEDIUM');
     const [isSubmittingFlag, setIsSubmittingFlag] = useState(false);
+
+    const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
+    const [verifyNotes, setVerifyNotes] = useState('');
+    const [isSubmittingVerify, setIsSubmittingVerify] = useState(false);
 
     const fetchData = useCallback(async () => {
         if (!id || !type) return;
@@ -69,21 +74,21 @@ export default function AnomalyDetailPage() {
         setIsSubmittingFlag(true);
         try {
             const payload = {
-                entity_type: type?.toUpperCase() || 'UNKNOWN',
-                entity_id: id,
+                exception_type: type?.toUpperCase() || 'UNKNOWN',
+                reference_type: type,
+                reference_id: id,
                 description: flagReason,
                 severity: flagSeverity,
-                detected_at: new Date().toISOString(),
-                status: 'OPEN'
+                status: 'open'
             };
 
-            // Assuming createException exists or mapping to a generic issue creation
             const res = await auditAPI.createException(payload);
 
-            if (res.success || res.ok) { // Adjust based on actual API response structure
-                toast.success('Record flagged for review successfully');
+            if (res.success || res.ok) {
+                toast.success('Record flagged for review. An Audit Exception has been created.');
                 setIsFlagModalOpen(false);
                 setFlagReason('');
+                fetchData(); // Refresh to show linked exception or status change
             } else {
                 toast.error(res.message || 'Failed to flag record');
             }
@@ -92,6 +97,31 @@ export default function AnomalyDetailPage() {
             toast.error('Failed to submit flag request');
         } finally {
             setIsSubmittingFlag(false);
+        }
+    };
+
+    const handleVerifySubmit = async () => {
+        setIsSubmittingVerify(true);
+        try {
+            const res = await auditAPI.clearAnomaly({
+                id,
+                type: type || 'unknown',
+                notes: verifyNotes
+            });
+
+            if (res.success) {
+                toast.success('Transaction verified and cleared');
+                setIsVerifyModalOpen(false);
+                setVerifyNotes('');
+                fetchData(); // Refresh data to show auditor info
+            } else {
+                toast.error(res.message || 'Failed to verify transaction');
+            }
+        } catch (error) {
+            console.error('Error verifying transaction:', error);
+            toast.error('Failed to submit verification');
+        } finally {
+            setIsSubmittingVerify(false);
         }
     };
 
@@ -129,6 +159,27 @@ export default function AnomalyDetailPage() {
     }
 
     const getStatusBadge = (status: string) => {
+        const isVerified = data?.auditor_id || data?.audited_at || status === 'resolved' || status === 'verified' || status === 'approved';
+        const hasOpenExceptions = data?.linked_exceptions?.some((e: any) => e.status !== 'resolved');
+
+        if (isVerified) {
+            return (
+                <div className="bg-emerald-500 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide inline-flex items-center gap-1.5 shadow-sm">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Verified / Audited
+                </div>
+            );
+        }
+
+        if (hasOpenExceptions) {
+            return (
+                <div className="bg-rose-600 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide inline-flex items-center gap-1.5 shadow-sm">
+                    <ShieldAlert className="h-3.5 w-3.5" />
+                    Flagged for Review
+                </div>
+            );
+        }
+
         const styles = ['completed', 'paid', 'delivered'].includes(status) ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
             ['cancelled', 'voided', 'rejected'].includes(status) ? 'bg-rose-50 text-rose-700 border-rose-100' :
                 'bg-amber-50 text-amber-700 border-amber-100';
@@ -179,10 +230,24 @@ export default function AnomalyDetailPage() {
                                             {data.order_number ? `Order #${data.order_number}` :
                                                 data.branch ? `${data.branch.name} Record` : 'Transaction Info'}
                                         </h2>
-                                        <p className="text-sm text-stone-500 flex items-center gap-2">
-                                            <Clock className="h-3.5 w-3.5" />
-                                            {format(new Date(data.created_at || data.detected_at || new Date()), 'PPpp')}
-                                        </p>
+                                        <div className="flex flex-col gap-2">
+                                            <p className="text-sm text-stone-500 flex items-center gap-2">
+                                                <Clock className="h-3.5 w-3.5" />
+                                                {format(new Date(data.created_at || data.detected_at || new Date()), 'PPpp')}
+                                            </p>
+                                            <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                                {data.branch && (
+                                                    <span className="text-[11px] font-bold text-stone-500 uppercase flex items-center gap-1.5">
+                                                        <Store className="h-3 w-3" /> {data.branch.name}
+                                                    </span>
+                                                )}
+                                                {data.waiter && (
+                                                    <span className="text-[11px] font-bold text-stone-500 uppercase flex items-center gap-1.5">
+                                                        <User className="h-3 w-3" /> {data.waiter.first_name} {data.waiter.last_name}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                     {data.status && getStatusBadge(data.status)}
                                 </div>
@@ -226,7 +291,7 @@ export default function AnomalyDetailPage() {
                                                         {data.items?.map((item: any, i: number) => (
                                                             <tr key={i} className="hover:bg-stone-50/50">
                                                                 <td className="px-4 py-3 text-sm font-medium text-stone-900">
-                                                                    {item.menu_item?.name || item.stock_item?.name || item.item_name || 'Unknown Item'}
+                                                                    {item.drink_name || item.menu_item?.name || item.stock_item?.name || item.item_name || 'Unknown Item'}
                                                                 </td>
                                                                 <td className="px-4 py-3 text-center text-sm font-bold text-stone-600">
                                                                     {item.quantity}
@@ -276,11 +341,48 @@ export default function AnomalyDetailPage() {
                                     </div>
                                 )}
                             </div>
+
+                            {/* Linked Exceptions (Flags) */}
+                            {data.linked_exceptions && data.linked_exceptions.length > 0 && (
+                                <div className="space-y-4">
+                                    <h3 className="text-sm font-bold text-stone-900 uppercase tracking-widest flex items-center gap-2 px-1">
+                                        <ShieldAlert className="h-4 w-4 text-rose-500" /> Audit Exceptions ({data.linked_exceptions.length})
+                                    </h3>
+                                    <div className="space-y-3">
+                                        {data.linked_exceptions.map((exc: any, i: number) => (
+                                            <div key={i} className={`p-4 rounded-xl border ${exc.status === 'open' ? 'bg-rose-50 border-rose-100' : 'bg-stone-50 border-stone-200'} transition-all`}>
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${exc.severity === 'HIGH' ? 'bg-rose-500 text-white' : exc.severity === 'MEDIUM' ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white'}`}>
+                                                        {exc.severity} PRIORITY
+                                                    </span>
+                                                    <span className="text-[10px] text-stone-400 font-medium">
+                                                        Created {format(new Date(exc.detected_at || exc.created_at), 'MMM d, HH:mm')}
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm font-bold text-stone-800 mb-1">{exc.description}</p>
+                                                <div className="flex items-center justify-between mt-3 pt-3 border-t border-stone-100">
+                                                    <span className={`text-[10px] font-black uppercase ${exc.status === 'open' ? 'text-rose-600' : 'text-stone-400'}`}>
+                                                        Status: {exc.status}
+                                                    </span>
+                                                    {exc.status === 'open' && (
+                                                        <button
+                                                            onClick={() => router.push(`/dashboard/auditor/revenue-oversight/details/${exc.id}?type=exception`)}
+                                                            className="text-[11px] font-bold text-stone-900 hover:underline flex items-center gap-1"
+                                                        >
+                                                            Update Exception <ChevronRight className="h-3 w-3" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Sidebar Metadata */}
                         <div className="space-y-4">
-                            <div className="card-elevated bg-stone-900 text-white p-6 shadow-lg">
+                            <div className="bg-stone-900 rounded-xl text-white p-6 shadow-lg">
                                 <h3 className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-4">Context Info</h3>
 
                                 <div className="space-y-4">
@@ -325,6 +427,16 @@ export default function AnomalyDetailPage() {
                                     >
                                         <FileText className="h-3.5 w-3.5 mr-2" /> View Audit Trail
                                     </button>
+
+                                    {!data.auditor_id && data.status !== 'resolved' && (
+                                        <button
+                                            onClick={() => setIsVerifyModalOpen(true)}
+                                            className="w-full bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg justify-start text-xs h-9 px-3 inline-flex items-center transition-colors px-4 py-2.5 font-medium"
+                                        >
+                                            <CheckCircle2 className="h-3.5 w-3.5 mr-2" /> Verify & Clear Anomaly
+                                        </button>
+                                    )}
+
                                     <button
                                         onClick={() => setIsFlagModalOpen(true)}
                                         className="w-full btn-secondary justify-start text-xs h-9 text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-100"
@@ -332,6 +444,21 @@ export default function AnomalyDetailPage() {
                                         <ShieldAlert className="h-3.5 w-3.5 mr-2" /> Flag for Review
                                     </button>
                                 </div>
+
+                                {(data.auditor_id || data.resolved_by) && (
+                                    <div className="mt-4 pt-4 border-t border-stone-100">
+                                        <div className="flex items-center gap-2 text-emerald-600 mb-1">
+                                            <CheckCircle2 className="h-3 w-3" />
+                                            <span className="text-[9px] font-bold uppercase">Auditor Verified</span>
+                                        </div>
+                                        <p className="text-[11px] text-stone-600 italic">
+                                            "{data.audit_notes || data.resolution_notes || 'Confirmed and cleared by auditor.'}"
+                                        </p>
+                                        <p className="text-[10px] text-stone-400 mt-1 font-medium">
+                                            {format(new Date(data.audited_at || data.resolved_at), 'PPp')}
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -375,6 +502,49 @@ export default function AnomalyDetailPage() {
                             <Button variant="outline" onClick={() => setIsFlagModalOpen(false)}>Cancel</Button>
                             <Button variant="destructive" onClick={handleFlagSubmit} disabled={isSubmittingFlag}>
                                 {isSubmittingFlag ? 'Submitting...' : 'Flag Record'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Audit Verification Dialog */}
+                <Dialog open={isVerifyModalOpen} onOpenChange={setIsVerifyModalOpen}>
+                    <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                                Auditor Verification
+                            </DialogTitle>
+                            <DialogDescription>
+                                Mark this transaction as audited and verified. This confirms that you have reviewed the details and found no issues.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="verify-notes">Verification Notes (Optional)</Label>
+                                <Textarea
+                                    id="verify-notes"
+                                    placeholder="Add any verification comments or notes here..."
+                                    className="min-h-[100px] border-stone-200 focus:ring-emerald-500 focus:border-emerald-500"
+                                    value={verifyNotes}
+                                    onChange={(e) => setVerifyNotes(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <DialogFooter className="gap-2 sm:gap-0">
+                            <Button
+                                variant="outline"
+                                onClick={() => setIsVerifyModalOpen(false)}
+                                className="border-stone-200 hover:bg-stone-50"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleVerifySubmit}
+                                disabled={isSubmittingVerify}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                            >
+                                {isSubmittingVerify ? 'Verifying...' : 'Confirm Verification'}
                             </Button>
                         </DialogFooter>
                     </DialogContent>

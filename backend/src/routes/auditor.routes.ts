@@ -20,8 +20,10 @@ import {
   getBarStockAudits,
   verifyBarStockTake,
   getAnomalyDetail,
+  verifyAnomaly,
   getDailyLogsStatus,
-  verifyDailyLog
+  verifyDailyLog,
+  getStaffAudit
 } from '../controllers/auditor.controller';
 import {
   getConsumptionConfigs,
@@ -30,7 +32,8 @@ import {
   submitApproval,
   getApprovalHistory,
   handleApprovalRequest,
-  getPayrollVariances
+  getPayrollVariances,
+  getPendingApprovals
 } from '../controllers/auditor-advanced.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -57,23 +60,23 @@ router.get('/night-audit',
 
 // Exceptions
 router.post('/exceptions',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
   createException
 );
 
 router.put('/exceptions/:id/resolve',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
   resolveException
 );
 
 router.get('/exceptions',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
   getExceptions
 );
 
 // Audit Trail
 router.get('/trail',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
   getAuditTrail
 );
 
@@ -120,6 +123,11 @@ router.get('/approvals',
   getApprovalHistory
 );
 
+router.get('/approvals/pending',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.BRANCH_MANAGER, UserRole.AUDITOR]),
+  getPendingApprovals
+);
+
 router.post('/approvals/handle',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
   handleApprovalRequest
@@ -141,9 +149,13 @@ router.get('/verify/sold-items', authorize([UserRole.AUDITOR, UserRole.SUPER_ADM
 router.get('/verify/bar-stock', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getBarStockAudits);
 router.post('/verify/bar-stock/:id/verify', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), verifyBarStockTake);
 router.get('/verify/details', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getAnomalyDetail);
+router.post('/verify/clear', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), verifyAnomaly);
 
 // Daily Log Verification
 router.get('/daily-logs', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT]), getDailyLogsStatus);
 router.post('/daily-logs/:id/verify', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), verifyDailyLog);
+
+// Staff Audit
+router.get('/staff-audit', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getStaffAudit);
 
 export default router;

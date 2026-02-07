@@ -418,6 +418,58 @@ class NotificationService {
   }
 
   /**
+   * Clear all read notifications for a specific user
+   */
+  async clearUserReadNotifications(userId: string): Promise<number> {
+    try {
+      // Validate userId is a valid UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!userId || !uuidRegex.test(userId)) {
+        logger.warn('Invalid userId for clearing notifications:', userId);
+        return 0;
+      }
+
+      // Get user details
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('role, branch_id')
+        .eq('id', userId)
+        .single();
+
+      if (userError || !userData) {
+        logger.error('Error fetching user for clearing notifications:', userError?.message);
+        return 0;
+      }
+
+      // Build query conditions based on user data
+      let orConditions = `user_id.eq.${userId}`;
+      if (userData.role) {
+        orConditions += `,role.eq.${userData.role}`;
+      }
+      if (userData.branch_id) {
+        orConditions += `,branch_id.eq.${userData.branch_id}`;
+      }
+
+      const { data, error } = await supabase
+        .from('notifications')
+        .delete()
+        .eq('is_read', true)
+        .or(orConditions)
+        .select();
+
+      if (error) {
+        logger.error('Error clearing user read notifications:', error);
+        return 0;
+      }
+
+      return data?.length || 0;
+    } catch (error) {
+      logger.error('Exception clearing user read notifications:', error);
+      return 0;
+    }
+  }
+
+  /**
    * Get notifications by category
    */
   async getNotificationsByCategory(category: string, limit: number = 50): Promise<Notification[]> {

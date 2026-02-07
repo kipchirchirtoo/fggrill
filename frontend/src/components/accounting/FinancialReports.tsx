@@ -130,7 +130,7 @@ export default function FinancialReports() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="card-elevated p-6 bg-stone-50">
                             <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-2">Total Revenue</p>
-                            <p className="text-[24px] font-bold text-stone-900">KES {(reportData?.revenue_total || 0).toLocaleString()}</p>
+                            <p className="text-[24px] font-bold text-stone-900">KES {(reportData?.totalRevenue || 0).toLocaleString()}</p>
                             <div className="flex items-center gap-1 mt-2 text-stone-400">
                                 <TrendingUp className="h-3.5 w-3.5" />
                                 <span className="text-[11px] font-bold">Standard Operations</span>
@@ -138,7 +138,7 @@ export default function FinancialReports() {
                         </div>
                         <div className="card-elevated p-6 bg-stone-50">
                             <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-2">Total Expenses</p>
-                            <p className="text-[24px] font-bold text-stone-900">KES {(reportData?.expense_total || 1120500).toLocaleString()}</p>
+                            <p className="text-[24px] font-bold text-stone-900">KES {(reportData?.totalExpenses || 0).toLocaleString()}</p>
                             <div className="flex items-center gap-1 mt-2 text-stone-400">
                                 <TrendingDown className="h-3.5 w-3.5" />
                                 <span className="text-[11px] font-bold">Incurred Costs</span>
@@ -146,10 +146,10 @@ export default function FinancialReports() {
                         </div>
                         <div className="card-elevated p-6 bg-stone-900 text-white shadow-xl">
                             <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-2">Net Profit</p>
-                            <p className="text-[24px] font-bold">KES {(reportData?.net_profit || 0).toLocaleString()}</p>
+                            <p className="text-[24px] font-bold">KES {(reportData?.netProfit || 0).toLocaleString()}</p>
                             <div className="flex items-center gap-1 mt-2 text-emerald-400">
                                 <TrendingUp className="h-3.5 w-3.5" />
-                                <span className="text-[11px] font-bold">Margin: {reportData?.net_profit && reportData?.revenue_total ? ((reportData.net_profit / reportData.revenue_total) * 100).toFixed(1) : 0}%</span>
+                                <span className="text-[11px] font-bold">Margin: {reportData?.profitMargin ? Number(reportData.profitMargin).toFixed(1) : 0}%</span>
                             </div>
                         </div>
                     </div>
@@ -159,7 +159,7 @@ export default function FinancialReports() {
                             <h3 className="text-[14px] font-bold text-stone-900">P&L Detailed Statement</h3>
                             <div className="flex items-center gap-2 text-[12px] text-stone-500 font-medium">
                                 <Filter className="h-3.5 w-3.5" />
-                                Period: Jan 01 - Jan 31, 2024
+                                Period: Current Month
                             </div>
                         </div>
                         <div className="p-8">
@@ -170,38 +170,42 @@ export default function FinancialReports() {
                                     <div className="space-y-3">
                                         <div className="flex justify-between text-[13px] font-medium border-b border-stone-50 pb-2">
                                             <span>Room Revenue</span>
-                                            <span className="font-bold">1,850,000.00</span>
+                                            <span className="font-bold">{(reportData?.breakdown?.room || 0).toLocaleString()}</span>
                                         </div>
                                         <div className="flex justify-between text-[13px] font-medium border-b border-stone-50 pb-2">
-                                            <span>F&B Sales</span>
-                                            <span className="font-bold">450,000.00</span>
+                                            <span>Restaurant Sales</span>
+                                            <span className="font-bold">{(reportData?.breakdown?.restaurant || 0).toLocaleString()}</span>
+                                        </div>
+                                        <div className="flex justify-between text-[13px] font-medium border-b border-stone-50 pb-2">
+                                            <span>Bar Sales</span>
+                                            <span className="font-bold">{(reportData?.breakdown?.bar || 0).toLocaleString()}</span>
+                                        </div>
+                                        <div className="flex justify-between text-[13px] font-medium border-b border-stone-50 pb-2">
+                                            <span>Other Income</span>
+                                            <span className="font-bold">{(reportData?.breakdown?.other_income || 0).toLocaleString()}</span>
                                         </div>
                                         <div className="flex justify-between text-[13px] font-bold pt-2 text-stone-900 uppercase">
                                             <span>Total Revenue</span>
-                                            <span>2,450,000.00</span>
+                                            <span>{(reportData?.totalRevenue || 0).toLocaleString()}</span>
                                         </div>
                                     </div>
                                 </section>
 
-                                {/* COGS/Direct Costs */}
+                                {/* Expenses Section */}
                                 <section>
                                     <h4 className="text-[11px] font-bold text-stone-400 uppercase mb-4 tracking-widest">Operating Expenses</h4>
                                     <div className="space-y-3">
                                         <div className="flex justify-between text-[13px] font-medium border-b border-stone-50 pb-2">
-                                            <span>Salaries & Wages</span>
-                                            <span className="font-bold">650,000.00</span>
+                                            <span>Operational Expenses</span>
+                                            <span className="font-bold">{(reportData?.breakdown?.operational_expenses || 0).toLocaleString()}</span>
                                         </div>
                                         <div className="flex justify-between text-[13px] font-medium border-b border-stone-50 pb-2">
-                                            <span>Utilities (Electricity/Water)</span>
-                                            <span className="font-bold">120,500.00</span>
-                                        </div>
-                                        <div className="flex justify-between text-[13px] font-medium border-b border-stone-50 pb-2">
-                                            <span>Maintenance Costs</span>
-                                            <span className="font-bold">85,000.00</span>
+                                            <span>Other Expenses</span>
+                                            <span className="font-bold">{(reportData?.breakdown?.other_expenses || 0).toLocaleString()}</span>
                                         </div>
                                         <div className="flex justify-between text-[13px] font-bold pt-2 text-stone-900 uppercase">
                                             <span>Total Expenses</span>
-                                            <span>1,120,500.00</span>
+                                            <span>{(reportData?.totalExpenses || 0).toLocaleString()}</span>
                                         </div>
                                     </div>
                                 </section>
@@ -209,7 +213,7 @@ export default function FinancialReports() {
                                 <div className="p-6 bg-stone-900 rounded-xl text-white mt-10">
                                     <div className="flex justify-between text-[16px] font-bold">
                                         <span>Net Profit / (Loss)</span>
-                                        <span>1,329,500.00</span>
+                                        <span>{(reportData?.netProfit || 0).toLocaleString()}</span>
                                     </div>
                                 </div>
                             </div>

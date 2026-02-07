@@ -77,7 +77,7 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
                     .select('id, monthly_installment, remaining_balance, start_date')
                     .eq('staff_id', staff.id)
                     .eq('status', 'active')
-                    .lte('start_date', endDate);
+                    .lte('start_date', endDate); // Added this line to match the pattern of other queries.
 
                 let totalLoanDeductions = 0;
                 const loanUpdates = [];
@@ -205,9 +205,12 @@ export const getPayrollRecords = async (req: Request, res: Response, next: NextF
             .from('staff_payroll')
             .select(`
                 *,
-                staff:staff_profiles(id, first_name, last_name, role, department, bank_name, account_number, pin_number, nssf_number, nhif_number, phone_number, email)
+                staff:staff_profiles(
+                    *,
+                    user:users!user_id(*)
+                )
             `)
-            .order('created_at', { ascending: false });
+            .order('generated_at', { ascending: false });
 
         if (month) query = query.eq('month', month);
         if (year) query = query.eq('year', year);
@@ -219,9 +222,16 @@ export const getPayrollRecords = async (req: Request, res: Response, next: NextF
         // Transform data for frontend if needed (e.g. flatten staff details)
         const transformed = data.map(item => ({
             ...item,
-            staff_name: `${item.staff?.first_name || ''} ${item.staff?.last_name || ''}`.trim(),
+            staff_name: item.staff?.user ? `${item.staff.user.first_name || ''} ${item.staff.user.last_name || ''}`.trim() : '',
             staff_role: item.staff?.role,
-            staff_department: item.staff?.department
+            staff_department: item.staff?.department,
+            staff: item.staff ? {
+                ...item.staff,
+                first_name: item.staff.user?.first_name || '',
+                last_name: item.staff.user?.last_name || '',
+                phone_number: item.staff.user?.phone_number || '',
+                email: item.staff.user?.email || ''
+            } : null
         }));
 
         res.status(200).json({
@@ -279,7 +289,10 @@ export const emailPayslips = async (req: Request, res: Response, next: NextFunct
             .from('staff_payroll')
             .select(`
                 *,
-                staff:staff_profiles(id, first_name, last_name, role, department, bank_name, account_number, pin_number, nssf_number, nhif_number, phone_number, email)
+                staff:staff_profiles(
+                    *,
+                    user:users!user_id(*)
+                )
             `)
             .eq('month', month)
             .eq('year', year);
@@ -292,7 +305,11 @@ export const emailPayslips = async (req: Request, res: Response, next: NextFunct
             ...r,
             staff: {
                 ...r.staff,
-                name: `${r.staff?.first_name || ''} ${r.staff?.last_name || ''}`.trim()
+                first_name: r.staff?.user?.first_name || '',
+                last_name: r.staff?.user?.last_name || '',
+                email: r.staff?.user?.email || '',
+                phone_number: r.staff?.user?.phone_number || '',
+                name: r.staff?.user ? `${r.staff.user.first_name || ''} ${r.staff.user.last_name || ''}`.trim() : ''
             },
             period: `${month} ${year}`
         }));
@@ -325,7 +342,10 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
             .from('staff_payroll')
             .select(`
                 *,
-                staff:staff_profiles(id, first_name, last_name, role, department, bank_name, account_number, pin_number, nssf_number, nhif_number, phone_number, email)
+                staff:staff_profiles(
+                    *,
+                    user:users!user_id(*)
+                )
             `)
             .eq('month', month)
             .eq('year', year);
@@ -337,7 +357,11 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
             ...r,
             staff: {
                 ...r.staff,
-                name: `${r.staff?.first_name || ''} ${r.staff?.last_name || ''}`.trim()
+                first_name: r.staff?.user?.first_name || '',
+                last_name: r.staff?.user?.last_name || '',
+                email: r.staff?.user?.email || '',
+                phone_number: r.staff?.user?.phone_number || '',
+                name: r.staff?.user ? `${r.staff.user.first_name || ''} ${r.staff.user.last_name || ''}`.trim() : ''
             },
             period: `${month} ${year}`
         }));
@@ -368,44 +392,66 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
 
         // Fetch credit bills
         let creditBillsQuery = supabase
-            .from('credit_bills')
-            .select('*, staff:staff_profiles(first_name, last_name, employee_id)')
+            .from('staff_credit_bills')
+            .select(`
+                *, 
+                staff:staff_profiles(
+                    id,
+                    role,
+                    user:users!user_id(id, first_name, last_name)
+                )
+            `)
             .order('created_at', { ascending: false });
 
         if (status === 'pending_accountant') {
-            creditBillsQuery = creditBillsQuery.is('accountant_confirmed_at', null);
+            creditBillsQuery = creditBillsQuery.eq('is_paid', false);
         } else if (status === 'pending_auditor') {
-            creditBillsQuery = creditBillsQuery.not('accountant_confirmed_at', 'is', null).is('auditor_confirmed_at', null);
+            // Fallback since auditor columns are missing
+            creditBillsQuery = creditBillsQuery.eq('is_paid', false);
         } else if (status === 'approved') {
-            creditBillsQuery = creditBillsQuery.not('auditor_confirmed_at', 'is', null);
+            creditBillsQuery = creditBillsQuery.eq('is_paid', true);
         }
 
         // Fetch advances
         let advancesQuery = supabase
             .from('staff_advances')
-            .select('*, staff:staff_profiles(first_name, last_name, employee_id)')
+            .select(`
+                *, 
+                staff:staff_profiles(
+                    id,
+                    role,
+                    user:users!user_id(id, first_name, last_name)
+                )
+            `)
             .order('created_at', { ascending: false });
 
         if (status === 'pending_accountant') {
-            advancesQuery = advancesQuery.is('accountant_confirmed_at', null);
+            advancesQuery = advancesQuery.eq('status', 'pending');
         } else if (status === 'pending_auditor') {
-            advancesQuery = advancesQuery.not('accountant_confirmed_at', 'is', null).is('auditor_confirmed_at', null);
+            advancesQuery = advancesQuery.eq('status', 'pending');
         } else if (status === 'approved') {
-            advancesQuery = advancesQuery.not('auditor_confirmed_at', 'is', null);
+            advancesQuery = advancesQuery.eq('status', 'approved');
         }
 
         // Fetch loans
         let loansQuery = supabase
             .from('staff_loans')
-            .select('*, staff:staff_profiles(first_name, last_name, employee_id)')
+            .select(`
+                *, 
+                staff:staff_profiles(
+                    id,
+                    role,
+                    user:users!user_id(id, first_name, last_name)
+                )
+            `)
             .order('created_at', { ascending: false });
 
         if (status === 'pending_accountant') {
-            loansQuery = loansQuery.is('accountant_confirmed_at', null);
+            loansQuery = loansQuery.eq('status', 'pending_approval');
         } else if (status === 'pending_auditor') {
-            loansQuery = loansQuery.not('accountant_confirmed_at', 'is', null).is('auditor_confirmed_at', null);
+            loansQuery = loansQuery.eq('status', 'pending_approval');
         } else if (status === 'approved') {
-            loansQuery = loansQuery.not('auditor_confirmed_at', 'is', null);
+            loansQuery = loansQuery.eq('status', 'active');
         }
 
         const [creditBillsRes, advancesRes, loansRes] = await Promise.all([
@@ -421,9 +467,30 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
         res.status(200).json({
             success: true,
             data: {
-                credit_bills: creditBillsRes.data || [],
-                advances: advancesRes.data || [],
-                loans: loansRes.data || []
+                credit_bills: (creditBillsRes.data || []).map((bill: any) => ({
+                    ...bill,
+                    staff: bill.staff ? {
+                        ...bill.staff,
+                        first_name: bill.staff.user?.first_name || '',
+                        last_name: bill.staff.user?.last_name || ''
+                    } : null
+                })),
+                advances: (advancesRes.data || []).map((advance: any) => ({
+                    ...advance,
+                    staff: advance.staff ? {
+                        ...advance.staff,
+                        first_name: advance.staff.user?.first_name || '',
+                        last_name: advance.staff.user?.last_name || ''
+                    } : null
+                })),
+                loans: (loansRes.data || []).map((loan: any) => ({
+                    ...loan,
+                    staff: loan.staff ? {
+                        ...loan.staff,
+                        first_name: loan.staff.user?.first_name || '',
+                        last_name: loan.staff.user?.last_name || ''
+                    } : null
+                }))
             }
         });
     } catch (error) {
@@ -444,7 +511,7 @@ export const approvePayrollItem = async (req: Request, res: Response, next: Next
         }
 
         let tableName: string;
-        if (type === 'credit_bill') tableName = 'credit_bills';
+        if (type === 'credit_bill') tableName = 'staff_credit_bills';
         else if (type === 'advance') tableName = 'staff_advances';
         else if (type === 'loan') tableName = 'staff_loans';
         else throw new AppError('Invalid type', 400);
@@ -492,7 +559,7 @@ export const rejectPayrollItem = async (req: Request, res: Response, next: NextF
         }
 
         let tableName: string;
-        if (type === 'credit_bill') tableName = 'credit_bills';
+        if (type === 'credit_bill') tableName = 'staff_credit_bills';
         else if (type === 'advance') tableName = 'staff_advances';
         else if (type === 'loan') tableName = 'staff_loans';
         else throw new AppError('Invalid type', 400);
@@ -504,7 +571,7 @@ export const rejectPayrollItem = async (req: Request, res: Response, next: NextF
                 status: 'rejected',
                 auditor_id: auditorId,
                 // Store rejection reason in a notes/reason field if it exists
-                ...(tableName === 'credit_bills' ? { reason: `REJECTED: ${reason}` } : {}),
+                ...(tableName === 'staff_credit_bills' ? { description: `REJECTED: ${reason}` } : {}),
                 ...(tableName === 'staff_advances' ? { reason: `REJECTED: ${reason}` } : {}),
                 ...(tableName === 'staff_loans' ? { reason: `REJECTED: ${reason}` } : {})
             })

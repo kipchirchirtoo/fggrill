@@ -40,9 +40,13 @@ export const getAdvances = async (req: Request, res: Response, next: NextFunctio
         let query = supabase
             .from('staff_advances')
             .select(`
-        *,
-        staff:staff_profiles(id, first_name, last_name, role)
-      `)
+                *,
+                staff:staff_profiles(
+                    id, 
+                    role,
+                    user:users!user_id(id, first_name, last_name)
+                )
+            `)
             .order('created_at', { ascending: false });
 
         if (staff_id) query = query.eq('staff_id', staff_id);
@@ -52,9 +56,20 @@ export const getAdvances = async (req: Request, res: Response, next: NextFunctio
 
         if (error) throw error;
 
+        // Transform to flatten nested user data for frontend compatibility
+        const transformed = data.map(advance => ({
+            ...advance,
+            staff: advance.staff ? {
+                id: advance.staff.id,
+                role: advance.staff.role,
+                first_name: advance.staff.user?.first_name || '',
+                last_name: advance.staff.user?.last_name || ''
+            } : null
+        }));
+
         res.status(200).json({
             success: true,
-            data
+            data: transformed
         });
     } catch (error) {
         next(error);

@@ -96,9 +96,11 @@ export class AggregationService {
                         }
                     }
 
-                    // Filter by branch if requested
-                    if (branchId && paymentBranchId && paymentBranchId !== branchId) {
-                        continue;
+                    // Filter by branch if requested - STRICT FILTERING
+                    if (branchId) {
+                        if (!paymentBranchId || paymentBranchId !== branchId) {
+                            continue;
+                        }
                     }
 
                     // Categorize revenue
@@ -272,7 +274,9 @@ export class AggregationService {
                     }
                 }
 
-                if (branchId && paymentBranchId && paymentBranchId !== branchId) return;
+                if (branchId) {
+                    if (!paymentBranchId || paymentBranchId !== branchId) return;
+                }
 
                 const date = new Date(payment.created_at).toISOString().split('T')[0];
                 if (!dailyData[date]) dailyData[date] = { inflow: 0, outflow: 0 };

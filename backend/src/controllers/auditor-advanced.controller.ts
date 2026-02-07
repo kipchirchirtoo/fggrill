@@ -397,3 +397,85 @@ export const getApprovalHistory = async (req: Request, res: Response, next: Next
         next(error);
     }
 };
+
+/**
+ * Get all pending approvals for a branch (aggregated)
+ */
+export const getPendingApprovals = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { branch_id } = req.query;
+
+        if (!branch_id) {
+            res.status(400).json({ success: false, message: 'branch_id is required' });
+            return;
+        }
+
+        // 1. Fetch pending from approval_requests
+        const { data: requests, error: requestsError } = await supabase
+            .from('approval_requests')
+            .select('*')
+            .eq('status', 'pending');
+
+        // 2. Fetch pending credit bills
+        const { data: bills, error: billsError } = await supabase
+            .from('staff_credit_bills')
+            .select('*, staff:staff_profiles(branch_id)')
+            .eq('is_paid', false);
+
+        // 3. Fetch pending staff advances
+        const { data: advances, error: advancesError } = await supabase
+            .from('staff_advances')
+            .select('*, staff:staff_profiles(branch_id)')
+            .eq('status', 'pending');
+
+        // 4. Fetch pending staff loans
+        const { data: loans, error: loansError } = await supabase
+            .from('staff_loans')
+            .select('*, staff:staff_profiles(branch_id)')
+            .eq('status', 'pending_approval');
+
+        // 5. Fetch pending stock counts
+        const { data: stockCounts, error: stockCountsError } = await supabase
+            .from('stock_counts')
+            .select('*')
+            .eq('branch_id', branch_id)
+            .eq('status', 'pending');
+
+        if (requestsError) throw requestsError;
+        if (billsError) throw billsError;
+        if (advancesError) throw advancesError;
+        if (loansError) throw loansError;
+        if (stockCountsError) throw stockCountsError;
+
+        // Filter by branch_id where applicable
+        const filteredBills = bills?.filter((b: any) => b.staff?.branch_id === Number(branch_id)) || [];
+        const filteredAdvances = advances?.filter((a: any) => a.staff?.branch_id === Number(branch_id)) || [];
+        const filteredLoans = loans?.filter((l: any) => l.staff?.branch_id === Number(branch_id)) || [];
+
+        // Combine into a flat list of pending items
+        const pendingItems = [
+            ...(requests || []).map(r => ({ ...r, category: 'General Request' })),
+            ...filteredBills.map(b => ({ ...b, category: 'Credit Bill' })),
+            ...filteredAdvances.map(a => ({ ...a, category: 'Advance' })),
+            ...filteredLoans.map(l => ({ ...l, category: 'Loan' })),
+            ...(stockCounts || []).map(s => ({ ...s, category: 'Stock Take' }))
+        ];
+
+        res.status(200).json({
+            success: true,
+            count: pendingItems.length,
+            data: pendingItems,
+            summary: {
+                requests: requests?.length || 0,
+                bills: filteredBills.length,
+                advances: filteredAdvances.length,
+                loans: filteredLoans.length,
+                stock_counts: stockCounts?.length || 0
+            }
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+

@@ -204,6 +204,34 @@ router.patch('/mark-all-read', authenticate, async (req: Request, res: Response)
 });
 
 /**
+ * @route   DELETE /api/notifications/clear-my-notifications
+ * @desc    Clear all read notifications for the current user
+ * @access  Private
+ */
+router.delete('/clear-my-notifications', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+
+    const deletedCount = await notificationService.clearUserReadNotifications(userId);
+
+    res.json({
+      success: true,
+      data: { deletedCount },
+      message: `Cleared ${deletedCount} read notification${deletedCount !== 1 ? 's' : ''}`
+    });
+  } catch (error) {
+    logger.error('Error clearing user notifications:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error clearing notifications'
+    });
+  }
+});
+
+/**
  * @route   DELETE /api/notifications/:id
  * @desc    Delete a notification (admin only)
  * @access  Private (Admin)
@@ -234,6 +262,41 @@ router.delete('/:id', authenticate, async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: 'Error deleting notification'
+    });
+  }
+});
+
+/**
+ * @route   POST /api/notifications/test-notification
+ * @desc    Send a test notification to the current user
+ * @access  Private
+ */
+router.post('/test-notification', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+
+    const notification = await notificationService.createNotification({
+      user_id: userId,
+      title: 'Test Notification',
+      message: 'This is a test push notification from Famous Gates. If you can see this, push notifications are working!',
+      type: 'info',
+      category: 'system',
+      priority: 'medium'
+    });
+
+    res.json({
+      success: true,
+      data: notification,
+      message: 'Test notification sent successfully'
+    });
+  } catch (error) {
+    logger.error('Error sending test notification:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error sending test notification'
     });
   }
 });

@@ -157,8 +157,18 @@ export default function BarStockAuditPage() {
                                         <div className="p-6">
                                             {selectedAudit.notes && (
                                                 <div className="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-100 text-blue-800 text-sm">
-                                                    <p className="font-bold mb-1">Bartender Notes:</p>
+                                                    <p className="font-bold mb-1 border-b border-blue-200 pb-1 mb-2">Bartender Notes:</p>
                                                     <p>{selectedAudit.notes}</p>
+                                                </div>
+                                            )}
+
+                                            {selectedAudit.audit_notes && (
+                                                <div className="mb-6 p-4 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800 text-sm">
+                                                    <p className="font-bold mb-1 border-b border-emerald-200 pb-1 mb-2">Auditor Remarks:</p>
+                                                    <p>{selectedAudit.audit_notes}</p>
+                                                    {selectedAudit.verified_at && (
+                                                        <p className="text-[10px] mt-2 opacity-60 italic">Verified at {new Date(selectedAudit.verified_at).toLocaleString()}</p>
+                                                    )}
                                                 </div>
                                             )}
 
@@ -189,7 +199,7 @@ export default function BarStockAuditPage() {
                                                         return (
                                                             <tr key={item.id} className="hover:bg-stone-50/50">
                                                                 <td className="py-4 px-2">
-                                                                    <p className="font-bold text-stone-900 text-sm">{item.name || 'Unknown'}</p>
+                                                                    <p className="font-bold text-stone-900 text-sm">{item.drink?.name || item.name || 'Unknown'}</p>
                                                                 </td>
                                                                 <td className="py-4 text-center text-stone-500 font-mono text-sm">
                                                                     {item.system_quantity}

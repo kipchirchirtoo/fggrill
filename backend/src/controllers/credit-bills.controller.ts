@@ -40,9 +40,13 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
         let query = supabase
             .from('staff_credit_bills')
             .select(`
-        *,
-        staff:staff_profiles(id, first_name, last_name, role)
-      `)
+                *,
+                staff:staff_profiles(
+                    id, 
+                    role,
+                    user:users!user_id(id, first_name, last_name)
+                )
+            `)
             .order('date', { ascending: false });
 
         if (staff_id) query = query.eq('staff_id', staff_id);
@@ -55,9 +59,20 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
 
         if (error) throw error;
 
+        // Transform to flatten nested user data for frontend compatibility
+        const transformed = data.map(bill => ({
+            ...bill,
+            staff: bill.staff ? {
+                id: bill.staff.id,
+                role: bill.staff.role,
+                first_name: bill.staff.user?.first_name || '',
+                last_name: bill.staff.user?.last_name || ''
+            } : null
+        }));
+
         res.status(200).json({
             success: true,
-            data
+            data: transformed
         });
     } catch (error) {
         next(error);

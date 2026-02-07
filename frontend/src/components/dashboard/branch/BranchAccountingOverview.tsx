@@ -269,11 +269,11 @@ export function BranchAccountingOverview({ branchId, branchName, basePath, isAud
                         <CreditCard className="h-6 w-6 mx-auto mb-2 text-stone-400 group-hover:text-stone-600" />
                         <span className="text-sm font-medium text-stone-600 group-hover:text-stone-900">Credit Bills</span>
                     </Link>
-                    <Link href={`${basePath}/banking`} className="p-4 rounded-xl bg-stone-50 hover:bg-stone-100 text-center transition-colors group">
+                    <Link href={`${basePath}/banking/deposits`} className="p-4 rounded-xl bg-stone-50 hover:bg-stone-100 text-center transition-colors group">
                         <DollarSign className="h-6 w-6 mx-auto mb-2 text-stone-400 group-hover:text-stone-600" />
                         <span className="text-sm font-medium text-stone-600 group-hover:text-stone-900">Banking</span>
                     </Link>
-                    <Link href={`${basePath}/settings`} className="p-4 rounded-xl bg-stone-50 hover:bg-stone-100 text-center transition-colors group">
+                    <Link href="/dashboard/settings" className="p-4 rounded-xl bg-stone-50 hover:bg-stone-100 text-center transition-colors group">
                         <RefreshCw className="h-6 w-6 mx-auto mb-2 text-stone-400 group-hover:text-stone-600" />
                         <span className="text-sm font-medium text-stone-600 group-hover:text-stone-900">Settings</span>
                     </Link>

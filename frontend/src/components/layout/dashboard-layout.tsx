@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter, usePathname } from 'next/navigation';
 import { notificationsAPI } from '@/lib/api';
 import { ConsolidatedNav } from '@/components/layout/consolidated-nav';
+import { NotificationListener } from '@/components/notifications/NotificationListener';
 import { cn } from '@/lib/utils';
 import {
   Bell,
@@ -289,6 +290,8 @@ export function DashboardLayout(props: DashboardLayoutProps) {
         isOpen={notificationModalOpen}
         onClose={handleNotificationModalClose}
       />
+
+      <NotificationListener />
     </div>
   );
 }

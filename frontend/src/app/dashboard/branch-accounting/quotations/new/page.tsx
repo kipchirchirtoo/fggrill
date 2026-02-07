@@ -10,7 +10,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 
 export default function NewQuotationPage() {
     return (
-        <ProtectedRoute allowedRoles={[UserRole.BRANCH_ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
+        <ProtectedRoute allowedRoles={[UserRole.BRANCH_ACCOUNTANT, UserRole.ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
             <DashboardLayout>
                 <div className="p-6 max-w-7xl mx-auto space-y-6">
                     <div className="flex items-center gap-2 mb-2">

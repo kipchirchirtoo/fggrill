@@ -7,8 +7,9 @@ import {
   Clock, Users, Bed, FileText, Search, Check
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { bookingsAPI, guestAPI, roomsAPI } from '@/lib/api';
-import { useBranch } from '@/lib/branch-context';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { IOSButton } from '@/components/ui/ios-button';
+import { Input } from '@/components/ui/input';
 
 interface ReservationModalProps {
   isOpen: boolean;
@@ -186,309 +187,273 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JS
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ scale: 0.95 }}
-        animate={{ scale: 1 }}
-        exit={{ scale: 0.95 }}
-        className="bg-white rounded-xl p-5 max-w-lg w-full max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">New Reservation</h2>
-            <p className="text-sm text-gray-500">Step {step} of 3</p>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Progress Bar */}
-        <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
-          <div
-            className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
-            style={{ width: `${(step / 3) * 100}%` }}
-          />
-        </div>
-
-        {/* Step 1: Guest Search & Information */}
-        {step === 1 && (
-          <div className="space-y-6">
-            <div>
-              <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-4 flex items-center gap-2">
-                <Search className="h-5 w-5" />
-                Search Existing Guest
-              </h3>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={guestSearchTerm}
-                  onChange={(e) => setGuestSearchTerm(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleGuestSearch()}
-                  placeholder="Search by name, email, or phone..."
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-ios-lg"
-                />
-                <button
-                  onClick={handleGuestSearch}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700 flex items-center gap-2"
-                >
-                  <Search className="h-4 w-4" />
-                  Search
-                </button>
-              </div>
-
-              {/* Search Results */}
-              {guestSearchResults.length > 0 && (
-                <div className="mt-3 border border-gray-200 rounded-ios-lg max-h-48 overflow-y-auto">
-                  {guestSearchResults.map((guest: any) => (
-                    <div
-                      key={guest.id}
-                      onClick={() => handleSelectGuest(guest)}
-                      className="p-3 hover:bg-gray-50 cursor-pointer border-b last:border-b-0 flex items-center justify-between"
-                    >
-                      <div>
-                        <p className="font-medium">{guest.first_name} {guest.last_name}</p>
-                        <p className="text-sm text-gray-500">{guest.email} • {guest.phone}</p>
-                      </div>
-                      <Check className="h-5 w-5 text-green-600" />
-                    </div>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg p-0 overflow-hidden flex flex-col border-none shadow-2xl rounded-2xl bg-white max-h-[90vh]">
+        <DialogHeader className="p-4 border-b border-stone-100 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <DialogTitle className="text-[17px] font-black text-stone-900 leading-tight">New Reservation</DialogTitle>
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1">
+                  {[1, 2, 3].map((s) => (
+                    <div key={s} className={`h-1 w-6 rounded-full transition-all ${s <= step ? 'bg-stone-900' : 'bg-stone-100'}`} />
                   ))}
                 </div>
-              )}
+                <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest leading-none">Step {step} of 3</span>
+              </div>
             </div>
+          </div>
+        </DialogHeader>
 
-            {selectedGuest && (
-              <div className="p-3 bg-green-50 border border-green-200 rounded-ios-lg">
-                <p className="text-sm font-medium text-green-800">Selected Guest:</p>
-                <p className="text-sm text-green-700">{selectedGuest.first_name} {selectedGuest.last_name}</p>
+        <div className="flex-1 overflow-y-auto scrollbar-thin p-5">
+          <motion.div
+            key={step}
+            initial={{ opacity: 0, x: step > 1 ? 10 : -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-6"
+          >
+            {/* Step 1: Guest Search & Information */}
+            {step === 1 && (
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <h3 className="text-[13px] font-black text-stone-900 uppercase tracking-widest flex items-center gap-2">
+                    <Search className="h-4 w-4 text-stone-400" />
+                    Guest Search
+                  </h3>
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      value={guestSearchTerm}
+                      onChange={(e) => setGuestSearchTerm(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleGuestSearch()}
+                      placeholder="Name, email, or phone..."
+                      className="rounded-xl border-stone-200 h-11"
+                    />
+                    <button
+                      onClick={handleGuestSearch}
+                      className="px-4 py-2 bg-stone-900 text-white rounded-xl font-bold text-xs uppercase tracking-widest active:scale-95 transition-all"
+                    >
+                      Search
+                    </button>
+                  </div>
+
+                  {/* Search Results */}
+                  {guestSearchResults.length > 0 && (
+                    <div className="mt-2 border border-stone-100 rounded-2xl overflow-hidden bg-stone-50 shadow-inner">
+                      {guestSearchResults.map((guest: any) => (
+                        <button
+                          key={guest.id}
+                          onClick={() => handleSelectGuest(guest)}
+                          className="w-full p-4 text-left hover:bg-white border-b border-stone-100 last:border-b-0 transition-colors flex items-center justify-between group"
+                        >
+                          <div>
+                            <p className="text-[13px] font-black text-stone-900 leading-tight">{guest.first_name} {guest.last_name}</p>
+                            <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest mt-1">{guest.email} • {guest.phone}</p>
+                          </div>
+                          <Check className="h-4 w-4 text-green-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4 pt-4 border-t border-stone-100">
+                  <h3 className="text-[13px] font-black text-stone-900 uppercase tracking-widest flex items-center gap-2">
+                    <User className="h-4 w-4 text-stone-400" />
+                    Guest Profile
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">Full Name*</label>
+                      <Input
+                        type="text"
+                        name="guestName"
+                        value={reservationData.guestName}
+                        onChange={handleChange}
+                        className="rounded-xl border-stone-200 h-11"
+                        placeholder="e.g. John Doe"
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">Email*</label>
+                        <Input
+                          type="email"
+                          name="email"
+                          value={reservationData.email}
+                          onChange={handleChange}
+                          className="rounded-xl border-stone-200 h-11"
+                          placeholder="john@example.com"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">Phone</label>
+                        <Input
+                          type="tel"
+                          name="phone"
+                          value={reservationData.phone}
+                          onChange={handleChange}
+                          className="rounded-xl border-stone-200 h-11"
+                          placeholder="+254..."
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
-            <div className="border-t pt-4">
-              <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-4 flex items-center gap-2">
-                <User className="h-5 w-5" />
-                Guest Information
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">
-                    Full Name*
-                  </label>
-                  <input
-                    type="text"
-                    name="guestName"
-                    value={reservationData.guestName}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">
-                    Email*
-                  </label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={reservationData.email}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
-                    required
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm text-gray-700 mb-1">
-                    Phone
-                  </label>
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={reservationData.phone}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Stay Details */}
-        {step === 2 && (
-          <div className="space-y-6">
-            <div>
-              <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-4 flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Stay Details
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">
-                    Check-in Date*
-                  </label>
-                  <input
-                    type="date"
-                    name="checkIn"
-                    value={reservationData.checkIn}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">
-                    Check-out Date*
-                  </label>
-                  <input
-                    type="date"
-                    name="checkOut"
-                    value={reservationData.checkOut}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">
-                    Room Type*
-                  </label>
-                  <select
-                    name="roomTypeId"
-                    value={reservationData.roomTypeId}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
-                  >
-                    <option value="">Select Room Type</option>
-                    {roomTypes.map((t: any) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-1">
-                      Adults
-                    </label>
-                    <input
-                      type="number"
-                      name="adults"
-                      value={reservationData.adults}
-                      onChange={handleChange}
-                      min="1"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
-                    />
+            {/* Step 2: Stay Details */}
+            {step === 2 && (
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <h3 className="text-[13px] font-black text-stone-900 uppercase tracking-widest flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-stone-400" />
+                    Stay Details
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">Check-in</label>
+                      <Input
+                        type="date"
+                        name="checkIn"
+                        value={reservationData.checkIn}
+                        onChange={handleChange}
+                        className="rounded-xl border-stone-200 h-11"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">Check-out</label>
+                      <Input
+                        type="date"
+                        name="checkOut"
+                        value={reservationData.checkOut}
+                        onChange={handleChange}
+                        className="rounded-xl border-stone-200 h-11"
+                        required
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-1">
-                      Children
-                    </label>
-                    <input
-                      type="number"
-                      name="children"
-                      value={reservationData.children}
+
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">Room Type*</label>
+                    <select
+                      name="roomTypeId"
+                      value={reservationData.roomTypeId}
                       onChange={handleChange}
-                      min="0"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-4 flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Additional Information
-              </h3>
-              <div>
-                <label className="block text-sm text-gray-700 mb-1">
-                  Special Requests
-                </label>
-                <textarea
-                  name="specialRequests"
-                  value={reservationData.specialRequests}
-                  onChange={handleChange}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg resize-none"
-                  placeholder="Any special requirements or requests..."
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Step 3: Room Selection */}
-        {step === 3 && (
-          <div className="space-y-6">
-            <div>
-              <h3 className="font-semibold font-sf-pro-display text-gray-900 mb-4 flex items-center gap-2">
-                <Bed className="h-5 w-5" />
-                Select Room
-              </h3>
-
-              {availableRooms.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 rounded-ios-lg">
-                  <Bed className="h-12 w-12 mx-auto text-gray-400 mb-3" />
-                  <p className="text-gray-600">Loading available rooms...</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
-                  {availableRooms.map((room: any) => (
-                    <div
-                      key={room.id}
-                      onClick={() => setSelectedRoom(room)}
-                      className={`p-4 border-2 rounded-ios-lg cursor-pointer transition-all ${selectedRoom?.id === room.id
-                        ? 'border-indigo-600 bg-indigo-50'
-                        : 'border-gray-200 hover:border-indigo-300'
-                        }`}
+                      className="w-full h-11 px-4 border border-stone-200 rounded-xl bg-white text-stone-900 focus:outline-none focus:ring-2 focus:ring-stone-900/10 transition-all font-bold text-sm"
                     >
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-bold text-lg">Room {room.room_number}</p>
-                            {selectedRoom?.id === room.id && (
-                              <Check className="h-5 w-5 text-indigo-600" />
+                      <option value="">Select Room Type</option>
+                      {roomTypes.map((t: any) => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">Adults</label>
+                      <Input
+                        type="number"
+                        name="adults"
+                        value={reservationData.adults}
+                        onChange={handleChange}
+                        min="1"
+                        className="rounded-xl border-stone-200 h-11 font-black text-center"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">Children</label>
+                      <Input
+                        type="number"
+                        name="children"
+                        value={reservationData.children}
+                        onChange={handleChange}
+                        min="0"
+                        className="rounded-xl border-stone-200 h-11 font-black text-center"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t border-stone-100">
+                  <h3 className="text-[13px] font-black text-stone-900 uppercase tracking-widest flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-stone-400" />
+                    Additional Info
+                  </h3>
+                  <textarea
+                    name="specialRequests"
+                    value={reservationData.specialRequests}
+                    onChange={handleChange}
+                    rows={3}
+                    className="w-full px-4 py-3 border border-stone-200 rounded-xl resize-none bg-stone-50 text-stone-900 focus:outline-none focus:ring-2 focus:ring-stone-900/10 transition-all text-sm font-medium"
+                    placeholder="Any special requirements..."
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Room Selection */}
+            {step === 3 && (
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <h3 className="text-[13px] font-black text-stone-900 uppercase tracking-widest flex items-center gap-2">
+                    <Bed className="h-4 w-4 text-stone-400" />
+                    Select Room
+                  </h3>
+
+                  {availableRooms.length === 0 ? (
+                    <div className="text-center py-12 bg-stone-50 rounded-2xl border border-dashed border-stone-200">
+                      <Bed className="h-10 w-10 mx-auto text-stone-200 mb-3" />
+                      <p className="text-[11px] font-black text-stone-400 uppercase tracking-widest">Searching available rooms...</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3 max-h-80 overflow-y-auto pr-2 scrollbar-thin">
+                      {availableRooms.map((room: any) => (
+                        <button
+                          key={room.id}
+                          onClick={() => setSelectedRoom(room)}
+                          className={`p-4 rounded-2xl border-2 text-left transition-all ${selectedRoom?.id === room.id
+                            ? 'border-stone-900 bg-stone-900 text-white shadow-lg'
+                            : 'border-stone-100 bg-stone-50 text-stone-900 hover:border-stone-200'
+                            }`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="space-y-1">
+                              <p className="text-[15px] font-black leading-none">Room {room.room_number}</p>
+                              <p className={`text-[11px] font-bold uppercase tracking-widest ${selectedRoom?.id === room.id ? 'text-stone-400' : 'text-stone-400'}`}>
+                                {room.type?.name || 'Standard'} • Floor {room.floor || 1}
+                              </p>
+                              {room.type?.base_price && (
+                                <p className={`text-[13px] font-black mt-1 ${selectedRoom?.id === room.id ? 'text-white' : 'text-stone-900'}`}>
+                                  KES {room.type.base_price.toLocaleString()}
+                                  <span className="text-[10px] font-bold opacity-60 ml-1">/ NIGHT</span>
+                                </p>
+                              )}
+                            </div>
+                            {selectedRoom?.id === room.id ? (
+                              <Check className="h-5 w-5" />
+                            ) : (
+                              <Bed className="h-5 w-5 text-stone-200" />
                             )}
                           </div>
-                          <p className="text-sm text-gray-600">{room.type?.name || 'Standard'}</p>
-                          <p className="text-sm text-gray-500 mt-1">Floor {room.floor || 1}</p>
-                          {room.type?.base_price && (
-                            <p className="text-sm font-medium text-indigo-600 mt-2">
-                              KES {room.type.base_price.toLocaleString()}/night
-                            </p>
-                          )}
-                        </div>
-                        <Bed className="h-6 w-6 text-gray-400" />
-                      </div>
+                        </button>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
-
-              {selectedRoom && (
-                <div className="mt-4 p-3 bg-indigo-50 border border-indigo-200 rounded-ios-lg">
-                  <p className="text-sm font-medium text-indigo-800">Selected Room:</p>
-                  <p className="text-sm text-indigo-700">
-                    Room {selectedRoom.room_number} - {selectedRoom.type?.name || 'Standard'}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+              </div>
+            )}
+          </motion.div>
+        </div>
 
         {/* Navigation Buttons */}
-        <div className="flex justify-between gap-3 mt-6 pt-6 border-t">
+        <div className="p-4 border-t border-stone-100 bg-white flex justify-between gap-3 flex-shrink-0">
           <button
             onClick={() => {
               if (step === 1) {
@@ -498,7 +463,7 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JS
               }
             }}
             disabled={isLoading}
-            className="px-4 py-2 text-gray-600 hover:text-gray-900 disabled:opacity-50"
+            className="px-6 py-2.5 text-[11px] font-black text-stone-400 uppercase tracking-widest hover:text-stone-900 transition-colors disabled:opacity-30"
           >
             {step === 1 ? 'Cancel' : 'Previous'}
           </button>
@@ -520,28 +485,17 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JS
                   loadAvailableRooms();
                 }
               }}
-              className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700 flex items-center gap-2"
+              className="px-8 py-2.5 bg-stone-900 text-white rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-stone-800 transition-all shadow-lg active:scale-95"
             >
               Next
-              <Calendar className="h-4 w-4" />
             </button>
           ) : (
             <button
               onClick={handleSubmit}
               disabled={isLoading || !selectedRoom}
-              className="px-6 py-2 bg-green-600 text-white rounded-ios-lg hover:bg-green-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-8 py-2.5 bg-green-600 text-white rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-green-700 transition-all shadow-lg shadow-green-600/20 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
             >
-              {isLoading ? (
-                <>
-                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4" />
-                  Create Reservation
-                </>
-              )}
+              {isLoading ? 'Processing...' : 'Create Reservation'}
             </button>
           )}
         </div>

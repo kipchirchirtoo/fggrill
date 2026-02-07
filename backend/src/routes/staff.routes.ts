@@ -53,7 +53,7 @@ router.use(protect);
 
 // Admin, Manager, Restaurant staff, POS Kitchen, and Cashier routes (POS/Cashier needs to access staff for order assignment and credit bills)
 router.get('/',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RESTAURANT, UserRole.POS_KITCHEN, UserRole.KITCHEN, UserRole.HR_MANAGER, UserRole.CASHIER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RESTAURANT, UserRole.POS_KITCHEN, UserRole.KITCHEN, UserRole.HR_MANAGER, UserRole.CASHIER, UserRole.AUDITOR, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getStaff
 );
 
@@ -75,18 +75,18 @@ router.post('/performance',
 
 // Admin, Manager, and Accountant routes
 router.post('/payroll',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.HR_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.HR_MANAGER]),
   processPayroll
 );
 
 // Attendance routes
 router.get('/attendance',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getAttendance
 );
 
 router.get('/attendance/summary',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getAttendanceSummary
 );
 
@@ -107,7 +107,7 @@ router.put('/attendance/:id/approve',
 
 // Leave management routes
 router.route('/leave')
-  .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER]), getLeaveRequests)
+  .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), getLeaveRequests)
   .post(protect, createLeaveRequest);
 
 router.post('/leave/lock',
@@ -116,7 +116,7 @@ router.post('/leave/lock',
 );
 
 router.get('/attendance/reports',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getAttendanceReports
 );
 
@@ -129,7 +129,7 @@ router.post('/:id/photo',
 
 // Parameterized routes
 router.get('/:id',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getStaffMember
 );
 
@@ -144,7 +144,7 @@ router.post('/:id/archive',
 );
 
 router.get('/:id/history',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getStaffHistory
 );
 
@@ -155,7 +155,7 @@ router.post('/:id/documents',
 );
 
 router.get('/:id/documents',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getStaffDocuments
 );
 

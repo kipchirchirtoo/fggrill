@@ -29,18 +29,18 @@ export default function AuditorDashboard() {
         voidedOrders: 0
     });
 
-    const [recentLogs, setRecentLogs] = useState<any[]>([]);
+    const [watchList, setWatchList] = useState<any[]>([]);
     const router = useRouter();
     const { activeBranchId } = useBranch();
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const branchId = activeBranchId === 0 ? undefined : activeBranchId;
-            const [logsRes, requestsRes, ordersRes] = await Promise.all([
+            const [logsRes, requestsRes, ordersRes, revenueRes] = await Promise.all([
                 auditAPI.getAuditLogs({ branchId: activeBranchId || undefined }),
                 storeAPI.getBranchRequests('PENDING_AUDIT', activeBranchId || undefined),
-                restaurantAPI.getOrders({ status: 'cancelled', branchId: activeBranchId || undefined })
+                restaurantAPI.getOrders({ status: 'cancelled', branchId: activeBranchId || undefined }),
+                auditAPI.verifyRevenue({ branch_id: activeBranchId || undefined })
             ]);
 
             if (logsRes.success) {
@@ -61,8 +61,10 @@ export default function AuditorDashboard() {
                     highRiskFindings: highRisks,
                     voidedOrders: voidedCount
                 });
+            }
 
-                setRecentLogs(logs.slice(0, 5));
+            if (revenueRes.success && revenueRes.data?.anomalies) {
+                setWatchList(revenueRes.data.anomalies.slice(0, 10));
             }
         } catch (e) {
             console.error("Auditor fetch failed:", e);
@@ -227,17 +229,18 @@ export default function AuditorDashboard() {
                                 </div>
                             </div>
                             <div className="space-y-4">
-                                {recentLogs.length > 0 ? (
-                                    recentLogs.map((log: any, i: number) => (
-                                        <div key={i} className="flex gap-4 items-start group pb-4 border-b border-stone-50 last:border-0 last:pb-0">
-                                            <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0 bg-stone-200 group-hover:scale-125 transition-transform"
-                                                style={{ backgroundColor: log.severity === 'high' ? '#ef4444' : log.severity === 'medium' ? '#f59e0b' : '#d6d3d1' }} />
+                                {watchList.length > 0 ? (
+                                    watchList.map((item: any, i: number) => (
+                                        <div key={i} className="flex gap-4 items-start group pb-4 border-b border-stone-50 last:border-0 last:pb-0 cursor-pointer"
+                                            onClick={() => router.push(`/dashboard/auditor/revenue-oversight/details/${item.id}?type=${item.entity_type}`)}>
+                                            <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0 transition-transform group-hover:scale-125"
+                                                style={{ backgroundColor: item.severity === 'HIGH' ? '#ef4444' : item.severity === 'MEDIUM' ? '#f59e0b' : '#d6d3d1' }} />
                                             <div className="flex-1">
-                                                <p className="text-[13px] font-medium text-stone-900">
-                                                    {log.action}
+                                                <p className="text-[13px] font-medium text-stone-900 line-clamp-1">
+                                                    {item.detail}
                                                 </p>
-                                                <p className="text-[11px] text-stone-400 mt-1">
-                                                    {log.module} • {new Date(log.performed_at).toLocaleDateString()}
+                                                <p className="text-[11px] text-stone-400 mt-1 capitalize">
+                                                    {item.type.toLowerCase()} • {new Date(item.time).toLocaleDateString()}
                                                 </p>
                                             </div>
                                             <ChevronRight className="h-4 w-4 text-stone-200 group-hover:text-stone-400 transition-colors" />
@@ -254,8 +257,8 @@ export default function AuditorDashboard() {
                                 )}
                             </div>
                             <div className="pt-2">
-                                <Link href="/dashboard/auditor/audit-reports" className="btn-ghost w-full justify-between">
-                                    <span>View All Reports</span>
+                                <Link href="/dashboard/auditor/revenue-oversight" className="btn-ghost w-full justify-between">
+                                    <span>View Audit Watchlist</span>
                                     <ArrowRight className="h-4 w-4" />
                                 </Link>
                             </div>

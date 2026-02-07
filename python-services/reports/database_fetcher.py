@@ -6,8 +6,13 @@ Direct database connection for accurate report data
 import os
 import logging
 from datetime import datetime, timedelta
-from supabase import create_client, Client
 from typing import Dict, Any, List, Optional
+
+try:
+    from supabase import create_client, Client
+except ImportError:
+    create_client = None
+    Client = object
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +28,10 @@ class DatabaseFetcher:
     
     def _connect(self):
         """Establish database connection"""
+        if create_client is None:
+            logger.warning("Supabase client not found. Database features disabled.")
+            return
+
         try:
             if self.supabase_url and self.supabase_key:
                 self.client = create_client(self.supabase_url, self.supabase_key)
@@ -1973,12 +1982,6 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
     def _fetch_sold_items_agg(self, filters: Dict) -> Dict[str, Any]:
         """Aggregate sold items across branches for global analysis"""
         start_date, end_date = self._parse_dates(filters)
-        branch_id = filters.get('branch_id')
-        if branch_id:
-            try:
-                branch_id = int(branch_id)
-            except (ValueError, TypeError):
-                branch_id = None
         
         data = {
             'items': [],
@@ -1989,43 +1992,71 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
         if not self.client: return data
         
         try:
-            # Aggregate Restaurant Order Items
-            query = self.client.table('restaurant_order_items').select('*, order:restaurant_orders(branch_id, branch_name), menu_item:restaurant_menu_items(name, category_id)')\
+            agg = {}
+            branch_ids = self._parse_branch_ids(filters)
+            
+            # 1. Aggregate Restaurant Order Items
+            rest_query = self.client.table('restaurant_order_items').select('*, order:restaurant_orders(branch_id, branch:branches(name)), menu_item:restaurant_menu_items(name)')\
                 .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
             
-            # Note: We use filter with dot notation for joins in PostgREST/Supabase
-            branch_ids = self._parse_branch_ids(filters)
             if branch_ids:
                 if len(branch_ids) == 1:
-                    query = query.filter('order.branch_id', 'eq', branch_ids[0])
+                    rest_query = rest_query.filter('order.branch_id', 'eq', branch_ids[0])
                 else:
-                    # Supabase python client doesn't support .in_ on joined columns easily with the higher level API
-                    # but we can try to use a filter string if needed, or stick to simple filter for now.
-                    # Actually, .filter('column', 'in', '(val1,val2)') works in PostgREST
                     branch_ids_str = f"({','.join(map(str, branch_ids))})"
-                    query = query.filter('order.branch_id', 'in', branch_ids_str)
+                    rest_query = rest_query.filter('order.branch_id', 'in', branch_ids_str)
                 
-            result = query.execute()
+            rest_result = rest_query.execute()
             
-            agg = {}
-            for item in (result.data or []):
-                menu_item = item.get('menu_item') or {}
-                name = menu_item.get('name', 'Unknown')
-                if name == 'Unknown' and not item.get('menu_item'): continue
+            for item in (rest_result.data or []):
+                name = item.get('menu_item', {}).get('name') or item.get('item_name', 'Unknown Item')
                 qty = item.get('quantity', 0) or 0
                 price = item.get('unit_price', 0) or 0
                 
                 if name not in agg:
-                    agg[name] = {'name': name, 'quantity': 0, 'revenue': 0, 'branches': {}}
+                    agg[name] = {'name': name, 'quantity': 0, 'revenue': 0, 'branches': {}, 'type': 'Food'}
                 
                 agg[name]['quantity'] += qty
                 agg[name]['revenue'] += qty * price
                 
-                br_name = item.get('order', {}).get('branch_name', 'Main')
+                br_name = item.get('order', {}).get('branch', {}).get('name', 'Main')
                 agg[name]['branches'][br_name] = agg[name]['branches'].get(br_name, 0) + qty
                 
                 data['total_revenue'] += qty * price
                 data['total_quantity'] += qty
+
+            # 2. Aggregate Bar Order Items
+            try:
+                bar_query = self.client.table('bar_order_items').select('*, order:bar_orders(branch_id, branch:branches(name))')\
+                    .gte('created_at', f'{start_date}T00:00:00').lte('created_at', f'{end_date}T23:59:59')
+                
+                if branch_ids:
+                    if len(branch_ids) == 1:
+                        bar_query = bar_query.filter('order.branch_id', 'eq', branch_ids[0])
+                    else:
+                        branch_ids_str = f"({','.join(map(str, branch_ids))})"
+                        bar_query = bar_query.filter('order.branch_id', 'in', branch_ids_str)
+                
+                bar_result = bar_query.execute()
+                
+                for item in (bar_result.data or []):
+                    name = item.get('drink_name', 'Unknown Drink')
+                    qty = item.get('quantity', 0) or 0
+                    price = item.get('unit_price', 0) or 0
+                    
+                    if name not in agg:
+                        agg[name] = {'name': name, 'quantity': 0, 'revenue': 0, 'branches': {}, 'type': 'Drink'}
+                    
+                    agg[name]['quantity'] += qty
+                    agg[name]['revenue'] += qty * price
+                    
+                    br_name = item.get('order', {}).get('branch', {}).get('name', 'Main')
+                    agg[name]['branches'][br_name] = agg[name]['branches'].get(br_name, 0) + qty
+                    
+                    data['total_revenue'] += qty * price
+                    data['total_quantity'] += qty
+            except Exception as be:
+                logger.error(f"Error fetching bar items agg: {be}")
                 
             data['items'] = sorted(agg.values(), key=lambda x: x['revenue'], reverse=True)
             
@@ -2033,6 +2064,7 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
             logger.error(f"Error fetching sold items agg: {e}")
             
         return data
+
 
     def _fetch_branch_performance(self, filters: Dict) -> Dict[str, Any]:
         """Fetch Branch Performance Report data"""

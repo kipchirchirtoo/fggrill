@@ -296,7 +296,7 @@ export default function RevenueOversightPage() {
                                                         'bg-blue-50 text-blue-600'
                                                     }`}>
                                                     {anomaly.type === 'VOID' ? <TrendingDown className="h-4 w-4" /> :
-                                                        anomaly.type === 'EXCEPTION' ? <ShieldAlert className="h-4 w-4" /> :
+                                                        (anomaly.type === 'EXCEPTION' || anomaly.type === 'FLAGGED') ? <ShieldAlert className="h-4 w-4" /> :
                                                             <Clock className="h-4 w-4" />}
                                                 </div>
                                                 <div className="flex-1 min-w-0">

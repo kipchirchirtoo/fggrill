@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Bell, Clock, CheckCircle, AlertCircle, Info, Package, Home, Wrench, DollarSign } from 'lucide-react';
+import { X, Bell, Clock, CheckCircle, AlertCircle, Info, Package, Home, Wrench, DollarSign, Trash2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { notificationsAPI } from '@/lib/api';
 import { toast } from 'sonner';
@@ -46,11 +46,11 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
         branchId: user?.branch_id,
         branchName: user?.branch_name
       });
-      
+
       const response = await notificationsAPI.getNotifications();
-      
+
       console.log('🔔 [Notifications] API Response:', response);
-      
+
       if (response.success && response.data) {
         console.log(`🔔 [Notifications] Loaded ${response.data.length} notifications`);
         setNotifications(response.data);
@@ -66,6 +66,21 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
       setIsLoading(false);
     }
   };
+
+  // Real-time polling for notifications
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Initial load
+    loadNotifications();
+
+    // Poll every 30 seconds while modal is open
+    const interval = setInterval(() => {
+      loadNotifications();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [isOpen]);
 
   const markAsRead = async (id: number) => {
     try {
@@ -93,9 +108,23 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
     }
   };
 
+  const clearAllNotifications = async () => {
+    try {
+      const response = await notificationsAPI.clearMyNotifications();
+      if (response.success) {
+        // Remove all read notifications from the list
+        setNotifications(prev => prev.filter(n => !n.is_read));
+        toast.success(response.message || 'All read notifications cleared');
+      }
+    } catch (error) {
+      console.error('Error clearing notifications:', error);
+      toast.error('Failed to clear notifications');
+    }
+  };
+
   const getNotificationIcon = (type: string, category: string) => {
     const iconClasses = 'h-5 w-5 text-[#3C3C43]'; // iOS neutral gray - NO COLORS
-    
+
     // Return icon based on category
     switch (category) {
       case 'inventory':
@@ -123,37 +152,37 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
 
   // Static time display to avoid hydration issues
   const [mounted, setMounted] = useState(false);
-  
+
   // Use useEffect to update the mounted state
   useEffect(() => {
     setMounted(true);
   }, []);
-  
+
   // Safe date formatter that avoids hydration mismatches
   const formatDate = (dateString: string) => {
     try {
       if (!dateString) return '';
-      
+
       // Always return a fixed format date during server rendering
       if (!mounted) {
         return '';
       }
-      
+
       // Simple date formatting for client-side only
       const date = new Date(dateString);
       const now = new Date();
       const diffMs = now.getTime() - date.getTime();
       const diffMins = Math.floor(diffMs / 60000);
-      
+
       if (diffMins < 1) return 'Just now';
       if (diffMins < 60) return `${diffMins}m ago`;
-      
+
       const diffHours = Math.floor(diffMins / 60);
       if (diffHours < 24) return `${diffHours}h ago`;
-      
+
       const diffDays = Math.floor(diffHours / 24);
       if (diffDays < 7) return `${diffDays}d ago`;
-      
+
       // Simple date format to avoid locale issues
       return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     } catch (e) {
@@ -202,9 +231,18 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
             {notifications.some(n => !n.is_read) && (
               <button
                 onClick={markAllAsRead}
-                className="text-sm text-[#3C3C43] hover:text-[#000000] font-medium"
+                className="text-sm text-[#3C3C43] hover:text-[#000000] font-medium px-2 py-1 hover:bg-[#F2F2F7] rounded-lg transition-colors"
               >
                 Mark all read
+              </button>
+            )}
+            {notifications.some(n => n.is_read) && (
+              <button
+                onClick={clearAllNotifications}
+                className="p-2 hover:bg-[#F2F2F7] rounded-lg transition-colors group"
+                title="Clear all read notifications"
+              >
+                <Trash2 className="h-4 w-4 text-[#8E8E93] group-hover:text-red-500 transition-colors" />
               </button>
             )}
             <button onClick={onClose} className="p-2 hover:bg-[#F2F2F7] rounded-xl transition-colors">
@@ -230,9 +268,8 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
               {notifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className={`flex items-start gap-4 p-4 hover:bg-[#F2F2F7] transition-colors cursor-pointer ${
-                    !notification.is_read ? 'bg-[#F2F2F7]/50' : ''
-                  }`}
+                  className={`flex items-start gap-4 p-4 hover:bg-[#F2F2F7] transition-colors cursor-pointer ${!notification.is_read ? 'bg-[#F2F2F7]/50' : ''
+                    }`}
                   onClick={() => handleNotificationClick(notification)}
                 >
                   <div className="flex-shrink-0 mt-1">
@@ -267,7 +304,7 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
                     <div className="flex items-center gap-2 mt-2">
                       <Clock className="h-3.5 w-3.5 text-[#8E8E93]" />
                       <span className="text-xs text-[#8E8E93]" suppressHydrationWarning>
-                        {mounted ? formatDate(notification.created_at) : 
+                        {mounted ? formatDate(notification.created_at) :
                           <span className="invisible">timestamp</span>
                         }
                       </span>
