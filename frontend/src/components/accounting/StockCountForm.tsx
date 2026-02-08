@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { PieChart, Save, Trash2, Plus, AlertCircle, Camera, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { storekeepingAPI } from '@/lib/api';
 
 interface StockItem {
     id: string;
@@ -30,27 +31,17 @@ export default function StockCountForm({ branchId, isAuditor = false }: { branch
 
             setIsLoading(true);
             try {
-                const token = localStorage.getItem('token');
-                const response = await fetch(`/api/simple-items?branch_id=${branchId}`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-
-                if (!response.ok) throw new Error('Failed to fetch inventory');
-
-                const res = await response.json();
+                const res = await storekeepingAPI.getBranchStock(Number(branchId));
 
                 if (res.success && res.data) {
                     // Map inventory items to stock count format
                     const mappedItems: StockItem[] = res.data.map((inv: any) => ({
                         id: inv.id,
-                        itemCode: inv.sku || inv.item_sku,
+                        itemCode: inv.sku || inv.item_sku || inv.item_code,
                         name: inv.item_name || inv.name,
                         unit: inv.unit || 'Unit',
-                        systemQuantity: inv.quantity || 0,
-                        physicalQuantity: inv.quantity || 0,
+                        systemQuantity: inv.quantity || inv.current_quantity || 0,
+                        physicalQuantity: inv.quantity || inv.current_quantity || 0,
                         variance: 0,
                         unitCost: inv.cost_price || inv.unit_cost || 0
                     }));

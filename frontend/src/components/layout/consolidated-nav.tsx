@@ -14,7 +14,8 @@ import {
   Home, ArrowDownUp, LifeBuoy, Calendar, Store, TrendingUp, TrendingDown, LineChart, Award,
   UserCheck, Utensils, Wine, Receipt, CreditCard, PieChart, FileText,
   BookOpen, ChefHat, ShoppingCart, Wallet, Scale, AlertCircle, UtensilsCrossed, Trash2, Clock, Shield, Menu, X,
-  Apple, Beer, Pencil, Database, User, ArrowDownLeft, ArrowUpRight, RefreshCw, ArrowRight, Calculator
+  Apple, Beer, Pencil, Database, User, ArrowDownLeft, ArrowUpRight, RefreshCw, ArrowRight, Calculator, Search,
+  LayoutDashboard
 } from 'lucide-react';
 
 interface NavItemProps {
@@ -80,39 +81,7 @@ export function ConsolidatedNav() {
   const { activeBranchId, activeBranch } = useBranch();
   const pathname = usePathname();
 
-  const [accountingStats, setAccountingStats] = useState({
-    totalRevenue: 0,
-    totalExpenses: 0,
-    netProfit: 0,
-    margin: 0
-  });
-  const [isStatsLoading, setIsStatsLoading] = useState(false);
 
-  const fetchAccountingStats = useCallback(async () => {
-    if (!activeBranchId) return;
-    setIsStatsLoading(true);
-    try {
-      const res = await financeAPI.getBranchFinancials(activeBranchId);
-      if (res.success) {
-        setAccountingStats({
-          totalRevenue: res.data.summary?.totalRevenue || 0,
-          totalExpenses: res.data.summary?.totalExpenses || 0,
-          netProfit: res.data.summary?.netProfit || 0,
-          margin: res.data.summary?.profitMargin || 0
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching sidebar stats:', error);
-    } finally {
-      setIsStatsLoading(false);
-    }
-  }, [activeBranchId]);
-
-  useEffect(() => {
-    if (user?.role === UserRole.BRANCH_ACCOUNTANT || user?.role === UserRole.ACCOUNTANT) {
-      fetchAccountingStats();
-    }
-  }, [user?.role, fetchAccountingStats]);
 
   if (!user) return null;
 
@@ -621,6 +590,13 @@ export function ConsolidatedNav() {
         active={pathname === '/dashboard/auditor'}
       />
 
+      <NavItem
+        href="/dashboard/auditor/search"
+        icon={Search}
+        label="SEARCH"
+        active={pathname === '/dashboard/auditor/search'}
+      />
+
       <NavGroup label="Daily Verification" icon={CheckCircle} defaultOpen>
         <NavItem
           href="/dashboard/auditor/financial-verification"
@@ -683,108 +659,48 @@ export function ConsolidatedNav() {
     </>
   );
 
+
+
+
   // Branch Accounting Navigation
   const branchAccountingNav = (
     <>
       <NavItem
         href="/dashboard/branch-accounting"
-        icon={Home}
+        icon={LayoutDashboard}
         label="Overview"
         active={pathname === '/dashboard/branch-accounting'}
       />
 
-      <NavGroup label="Financial Operations" icon={DollarSign} defaultOpen>
-        <NavItem
-          href="/dashboard/branch-accounting/stock-take"
-          icon={PieChart}
-          label="Stock Taking"
-          active={pathname.includes('/dashboard/branch-accounting/stock-take')}
-        />
-        <NavItem
-          href="/dashboard/branch-accounting/credit-bills"
-          icon={CreditCard}
-          label="Credit & Paid Bills"
-          active={pathname.includes('/dashboard/branch-accounting/credit-bills')}
-        />
-        <NavItem
-          href="/dashboard/branch-accounting/business-mpesa"
-          icon={Wallet}
-          label="Business & Mpesa"
-          active={pathname.includes('/dashboard/branch-accounting/business-mpesa')}
-        />
-        <NavItem
-          href="/dashboard/branch-accounting/sold-items"
-          icon={Receipt}
-          label="Sold Items"
-          active={pathname.includes('/dashboard/branch-accounting/sold-items')}
-        />
-      </NavGroup>
+      <NavItem
+        href="/dashboard/branch-accounting/stock-take"
+        icon={Package}
+        label="Stock Takes"
+        active={pathname.includes('/dashboard/branch-accounting/stock-take')}
+      />
 
-      <NavGroup label="Banking & Payments" icon={Building}>
-        <NavItem
-          href="/dashboard/branch-accounting/banking/deposits"
-          icon={ArrowDownLeft}
-          label="Deposits"
-          active={pathname.includes('/dashboard/branch-accounting/banking/deposits')}
-        />
-        <NavItem
-          href="/dashboard/branch-accounting/banking/reconciliation"
-          icon={CheckCircle}
-          label="Reconciliation"
-          active={pathname.includes('/dashboard/branch-accounting/banking/reconciliation')}
-        />
-        <NavItem
-          href="/dashboard/branch-accounting/invoices"
-          icon={FileText}
-          label="Invoices"
-          active={pathname.includes('/dashboard/branch-accounting/invoices')}
-        />
-        <NavItem
-          href="/dashboard/branch-accounting/payments"
-          icon={CreditCard}
-          label="Payments"
-          active={pathname.includes('/dashboard/branch-accounting/payments')}
-        />
-      </NavGroup>
+      <NavItem
+        href="/dashboard/branch-accounting/credit-bills"
+        icon={CreditCard}
+        label="Credit & Paid Bills"
+        active={pathname.includes('/dashboard/branch-accounting/credit-bills')}
+      />
 
-      <NavGroup label="Expenses & Reports" icon={BarChart3}>
-        <NavItem
-          href="/dashboard/branch-accounting/expenses"
-          icon={TrendingDown}
-          label="Expenses"
-          active={pathname.includes('/dashboard/branch-accounting/expenses')}
-        />
-        <NavItem
-          href="/dashboard/branch-accounting/reports"
-          icon={FileSpreadsheet}
-          label="Reports"
-          active={pathname.includes('/dashboard/branch-accounting/reports')}
-        />
-        <NavItem
-          href="/dashboard/branch-accounting/audit-trail"
-          icon={ShieldCheck}
-          label="Audit Trail"
-          active={pathname.includes('/dashboard/branch-accounting/audit-trail')}
-        />
-      </NavGroup>
+      <NavItem
+        href="/dashboard/branch-accounting/payments"
+        icon={CreditCard}
+        label="Payments"
+        active={pathname.includes('/dashboard/branch-accounting/payments')}
+      />
 
-      <NavGroup label="Accounting Tools" icon={Calculator}>
-        <NavItem
-          href="/dashboard/branch-accounting/accounting-tools/chart-of-accounts"
-          icon={BookOpen}
-          label="Chart of Accounts"
-          active={pathname.includes('/dashboard/branch-accounting/accounting-tools/chart-of-accounts')}
-        />
-        <NavItem
-          href="/dashboard/branch-accounting/accounting-tools/period-management"
-          icon={Calendar}
-          label="Period Management"
-          active={pathname.includes('/dashboard/branch-accounting/accounting-tools/period-management')}
-        />
-      </NavGroup>
+      <NavItem
+        href="/dashboard/branch-accounting/invoices"
+        icon={FileText}
+        label="Invoices"
+        active={pathname.includes('/dashboard/branch-accounting/invoices')}
+      />
     </>
   );
-
 
   // Central Storekeeper Navigation (Legacy)
   const centralStoreNav = (
@@ -1435,6 +1351,8 @@ export function ConsolidatedNav() {
     if (user.role === UserRole.BRANCH_ACCOUNTANT || user.role === UserRole.ACCOUNTANT) {
       return branchAccountingNav;
     }
+
+
 
     // Branch Operations
     if (user.role === UserRole.BRANCH_OPERATIONS_MANAGER) {

@@ -6,22 +6,14 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { CreditBillsContent } from '@/components/dashboard/branch/CreditBillsContent';
 
-export default function CreditBillsPage() {
+export default function BranchCreditBillsPage() {
     const { user } = useAuth();
     const { activeBranchId } = useBranch();
 
-    // Use active branch from context, fallback to user's branch
-    const currentBranchId = activeBranchId || user?.branch_id;
-
     return (
-        <ProtectedRoute allowedRoles={[UserRole.BRANCH_ACCOUNTANT, UserRole.ACCOUNTANT, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
+        <ProtectedRoute allowedRoles={[UserRole.BRANCH_ACCOUNTANT, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
             <DashboardLayout>
-                <div className="max-w-6xl mx-auto space-y-6">
-                    <CreditBillsContent
-                        branchId={currentBranchId || null}
-                        isAuditor={false}
-                    />
-                </div>
+                <CreditBillsContent branchId={activeBranchId} />
             </DashboardLayout>
         </ProtectedRoute>
     );

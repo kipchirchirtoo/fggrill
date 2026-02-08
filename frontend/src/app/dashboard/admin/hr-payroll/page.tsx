@@ -40,7 +40,7 @@ export default function AdminHRPayrollPage() {
     { href: '/dashboard/admin/staff', icon: Users, label: 'Staff', desc: 'Manage employees', color: 'bg-blue-50 text-[#007AFF]' },
     { href: '/dashboard/admin/staff/attendance', icon: Calendar, label: 'Attendance', desc: 'Daily records', color: 'bg-green-50 text-[#34C759]' },
     { href: '/dashboard/gm/leave-requests', icon: FileText, label: 'Leave', desc: 'Leave requests', color: 'bg-yellow-50 text-yellow-600' },
-    { href: '/dashboard/branch-accounting', icon: CreditCard, label: 'Payroll', desc: 'Process payments', color: 'bg-purple-50 text-purple-600' },
+
   ];
 
   return (

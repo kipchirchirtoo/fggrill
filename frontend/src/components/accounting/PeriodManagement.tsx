@@ -18,6 +18,8 @@ export default function PeriodManagement() {
     const [periodStatus, setPeriodStatus] = useState<'open' | 'closed' | 'locked'>('open');
     const [currentPeriod, setCurrentPeriod] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
+    // Note: Pre-closing tasks are hardcoded for now
+    // TODO: Future enhancement - fetch tasks from database
     const [tasks, setTasks] = useState<PeriodTask[]>([
         { id: '1', task: 'Finalize all room billings', completed: true, assignedTo: 'Reception Lead' },
         { id: '2', task: 'Complete month-end physical stock count', completed: true, assignedTo: 'Branch Accountant' },
@@ -37,6 +39,7 @@ export default function PeriodManagement() {
             }
         } catch (error) {
             console.error(error);
+            toast.error('Failed to load fiscal periods');
         } finally {
             setIsLoading(false);
         }
@@ -192,8 +195,8 @@ export default function PeriodManagement() {
                             onClick={handleClosePeriod}
                             disabled={!allCompleted || isLoading || periodStatus !== 'open'}
                             className={`w-full py-3 rounded-xl font-bold text-[13px] transition-all flex items-center justify-center gap-2 ${allCompleted && periodStatus === 'open'
-                                    ? 'bg-stone-900 text-white hover:bg-stone-800 shadow-lg'
-                                    : 'bg-stone-100 text-stone-400 cursor-not-allowed'
+                                ? 'bg-stone-900 text-white hover:bg-stone-800 shadow-lg'
+                                : 'bg-stone-100 text-stone-400 cursor-not-allowed'
                                 }`}
                         >
                             {isLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}

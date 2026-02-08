@@ -3577,7 +3577,29 @@ export const accountingAPI = {
     fetchAPI<any>('/accounting/reconciliation/match', { method: 'POST', body: JSON.stringify(data) }),
 
   saveReconciliationSession: (data: any) =>
-    fetchAPI<any>('/accounting/reconciliation/save', { method: 'POST', body: JSON.stringify(data) })
+    fetchAPI<any>('/accounting/reconciliation/save', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Fiscal Period Management
+  getFiscalPeriods: (branchId?: number) => {
+    const query = branchId ? `?branch_id=${branchId}` : '';
+    return fetchPythonAPI<any>(`/accounting/fiscal-periods${query}`);
+  },
+
+  createFiscalPeriod: (data: any) =>
+    fetchPythonAPI<any>('/accounting/fiscal-periods', { method: 'POST', body: JSON.stringify(data) }),
+
+  closePeriod: (periodId: string, data: { closing_date?: string; closed_by?: string }) =>
+    fetchPythonAPI<any>(`/accounting/fiscal-periods/${periodId}/close`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  lockPeriod: (periodId: string, data?: { locked_by?: string }) =>
+    fetchPythonAPI<any>(`/accounting/fiscal-periods/${periodId}/lock`, { method: 'PATCH', body: JSON.stringify(data || {}) })
+};
+
+// ==================== UNIVERSAL SEARCH API ====================
+
+export const searchAPI = {
+  universalSearch: (query: string) =>
+    fetchPythonAPI<any>(`/search/universal?q=${encodeURIComponent(query)}`)
 };
 
 // ==================== ROOM SERVICE API (Python Microservice) ====================

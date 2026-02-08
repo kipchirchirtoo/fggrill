@@ -72,13 +72,7 @@ const navigationItems: NavItem[] = [
     color: 'bg-indigo-50 text-indigo-600',
     roles: [UserRole.BRANCH_OPERATIONS_MANAGER, UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]
   },
-  {
-    href: '/dashboard/branch-accounting',
-    label: 'Accounting',
-    icon: DollarSign,
-    color: 'bg-emerald-50 text-emerald-600',
-    roles: [UserRole.BRANCH_ACCOUNTANT, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]
-  },
+
   {
     href: '/dashboard/reports',
     label: 'Reports',
