@@ -3989,6 +3989,7 @@ export const api = {
   employeePortal: employeePortalAPI,
   idCards: idCardsAPI,
   procurement: procurementAPI,
+  search: searchAPI,
 };
 
 export default api;
