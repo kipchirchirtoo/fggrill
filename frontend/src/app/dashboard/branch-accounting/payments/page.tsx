@@ -9,7 +9,7 @@ import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';
 import { CreditCard, Plus, Filter, Search, CheckCircle, XCircle, Clock, FileText, Download } from 'lucide-react';
 import { toast } from 'sonner';
-import { financeAPI } from '@/lib/api';
+import { financeAPI, searchAPI } from '@/lib/api';
 
 export default function BranchPaymentsPage() {
     const { user } = useAuth();
@@ -26,15 +26,37 @@ export default function BranchPaymentsPage() {
     const handleSearch = async () => {
         if (!searchQuery.trim()) return;
         setLoading(true);
-        // Simulate API call for now, replacing with real financeAPI.search call
-        // In a real scenario, this would hit endpoints gathering Branch Orders, Bills, Hotel Bookings, etc.
-        setTimeout(() => {
-            setSearchResults([
-                { id: '1', type: 'Order', reference: 'ORD-2024-001', amount: 1500, customer: 'Walk-in', date: '2024-02-08', status: 'Pending Confirmation' },
-                { id: '2', type: 'Booking', reference: 'BK-1025', amount: 45000, customer: 'John Doe', date: '2024-02-07', status: 'Pending Confirmation' },
-            ].filter(item => item.reference.toLowerCase().includes(searchQuery.toLowerCase()) || item.customer.toLowerCase().includes(searchQuery.toLowerCase())));
+        if (!searchQuery.trim()) return;
+        setLoading(true);
+        try {
+            const response = await searchAPI.universalSearch(searchQuery);
+            if (response.success && response.data) {
+                // Filter specifically for payment-related items (orders, bookings, bills)
+                const paymentItems = response.data.filter((item: any) =>
+                    ['order', 'booking', 'bill', 'receipt'].includes(item.type)
+                ).map((item: any) => ({
+                    id: item.id,
+                    type: item.type.charAt(0).toUpperCase() + item.type.slice(1),
+                    reference: item.title, // Assuming title allows identification
+                    amount: item.metadata?.total_amount || item.metadata?.amount || 0,
+                    customer: item.metadata?.guest_name || item.metadata?.customer_name || 'Walk-in',
+                    date: item.metadata?.date || new Date().toISOString().split('T')[0],
+                    status: item.metadata?.payment_status || item.metadata?.status || 'Pending'
+                }));
+                setSearchResults(paymentItems);
+                if (paymentItems.length === 0) {
+                    toast.info('No payment records found matching your query');
+                }
+            } else {
+                setSearchResults([]);
+                toast.info('No results found');
+            }
+        } catch (error) {
+            console.error('Search error:', error);
+            toast.error('Failed to search payments');
+        } finally {
             setLoading(false);
-        }, 800);
+        }
     };
 
     const handleConfirmPayment = async (id: string) => {
@@ -75,8 +97,8 @@ export default function BranchPaymentsPage() {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id as any)}
                                 className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === tab.id
-                                        ? 'border-blue-600 text-blue-600'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                                    ? 'border-blue-600 text-blue-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700'
                                     }`}
                             >
                                 <tab.icon className="h-4 w-4" />

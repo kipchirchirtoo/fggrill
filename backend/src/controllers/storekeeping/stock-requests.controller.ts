@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
+import notificationService from '../../services/notification.service';
 import * as BranchInventoryService from '../../services/branch-inventory.service';
 
 // @desc    Get all stock requests
@@ -250,6 +251,20 @@ export const createStockRequest = async (
             .eq('id', newRequest.id)
             .single();
 
+        // Notify Auditor/Central Storekeeper
+        notificationService.notifyRole(
+            'auditor',
+            'New Stock Request',
+            `Branch ${branch.code} has submitted a new stock request (${request_number}).`,
+            {
+                type: 'info',
+                category: 'stock_request',
+                priority: priority === 'URGENT' ? 'high' : 'medium',
+                actionUrl: `/dashboard/central-store/requests/${newRequest.id}`,
+                metadata: { request_id: newRequest.id, branch_id: requesting_branch_id }
+            }
+        ).catch(e => logger.error('Failed to notify auditor of stock request', e));
+
         res.status(201).json({
             success: true,
             data: completeRequest
@@ -302,11 +317,35 @@ export const reviewStockRequest = async (
                 finalApprovals,
                 review_notes
             );
+
+            // Fetch request details for notification
+            const { data: request } = await supabase
+                .from('stock_requests')
+                .select('requested_by, request_number')
+                .eq('id', id)
+                .single();
+
             res.status(200).json({
                 success: true,
                 message: 'Stock request approved successfully',
                 data: result
             });
+
+            // Notify Requester
+            if (request && request.requested_by) {
+                notificationService.notifyUser(
+                    request.requested_by,
+                    'Stock Request Approved',
+                    `Your stock request ${request.request_number} has been approved.`,
+                    {
+                        type: 'success',
+                        category: 'stock_request',
+                        priority: 'medium',
+                        actionUrl: `/dashboard/store/requests/${id}`,
+                        metadata: { request_id: id, status: 'APPROVED' }
+                    }
+                ).catch(e => logger.error('Failed to notify requester of stock request approval', e));
+            }
             return;
         }
 
@@ -329,11 +368,35 @@ export const reviewStockRequest = async (
                 rejectedItems,
                 review_notes
             );
+
+            // Fetch request details for notification
+            const { data: request } = await supabase
+                .from('stock_requests')
+                .select('requested_by, request_number')
+                .eq('id', id)
+                .single();
+
             res.status(200).json({
                 success: true,
                 message: 'Stock request rejected',
                 data: result
             });
+
+            // Notify Requester
+            if (request && request.requested_by) {
+                notificationService.notifyUser(
+                    request.requested_by,
+                    'Stock Request Rejected',
+                    `Your stock request ${request.request_number} was rejected. Reason: ${review_notes || 'No reason provided.'}`,
+                    {
+                        type: 'error',
+                        category: 'stock_request',
+                        priority: 'high',
+                        actionUrl: `/dashboard/store/requests/${id}`,
+                        metadata: { request_id: id, status: 'REJECTED' }
+                    }
+                ).catch(e => logger.error('Failed to notify requester of stock request rejection', e));
+            }
             return;
         }
 
@@ -383,11 +446,34 @@ export const approveStockRequest = async (
             approved_quantity_notes
         );
 
+        // Fetch request details for notification
+        const { data: request } = await supabase
+            .from('stock_requests')
+            .select('requested_by, request_number')
+            .eq('id', id)
+            .single();
+
         res.status(200).json({
             success: true,
             message: 'Stock request approved successfully',
             data: result
         });
+
+        // Notify Requester
+        if (request && request.requested_by) {
+            notificationService.notifyUser(
+                request.requested_by,
+                'Stock Request Approved',
+                `Your stock request ${request.request_number} has been approved.`,
+                {
+                    type: 'success',
+                    category: 'stock_request',
+                    priority: 'medium',
+                    actionUrl: `/dashboard/store/requests/${id}`,
+                    metadata: { request_id: id, status: 'APPROVED' }
+                }
+            ).catch(e => logger.error('Failed to notify requester of stock request approval', e));
+        }
     } catch (error) {
         logger.error('Error approving stock request:', error);
         next(error);
@@ -426,11 +512,34 @@ export const rejectStockRequest = async (
             review_notes
         );
 
+        // Fetch request details for notification
+        const { data: request } = await supabase
+            .from('stock_requests')
+            .select('requested_by, request_number')
+            .eq('id', id)
+            .single();
+
         res.status(200).json({
             success: true,
             message: 'Stock request rejected successfully',
             data: result
         });
+
+        // Notify Requester
+        if (request && request.requested_by) {
+            notificationService.notifyUser(
+                request.requested_by,
+                'Stock Request Rejected',
+                `Your stock request ${request.request_number} was rejected. Reason: ${review_notes || 'No reason provided.'}`,
+                {
+                    type: 'error',
+                    category: 'stock_request',
+                    priority: 'high',
+                    actionUrl: `/dashboard/store/requests/${id}`,
+                    metadata: { request_id: id, status: 'REJECTED' }
+                }
+            ).catch(e => logger.error('Failed to notify requester of stock request rejection', e));
+        }
     } catch (error) {
         logger.error('Error rejecting stock request:', error);
         next(error);

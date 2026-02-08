@@ -61,8 +61,8 @@ router.use((req: any, res, next) => {
 router.get('/logbook/today', getCashierLogbookToday);
 router.post('/logbook', saveCashierLogbook);
 router.post('/logbook/:id/submit', submitLogbookForAudit);
-router.get('/logbook/pending', authorize(['auditor', UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT] as any), getLogbooksForAudit);
-router.post('/logbook/:id/audit', authorize(['auditor', UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT] as any), auditLogbook);
+router.get('/logbook/pending', authorize(['auditor', UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT] as any), getLogbooksForAudit);
+router.post('/logbook/:id/audit', authorize(['auditor', UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT] as any), auditLogbook);
 
 // ============================================
 // EXISTING ROUTES

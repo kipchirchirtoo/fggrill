@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
+import notificationService from '../services/notification.service';
 
 // ============================================================
 // CONSUMPTION CONFIGURATION (MAPPING)
@@ -338,6 +339,26 @@ export const handleApprovalRequest = async (req: Request, res: Response, next: N
             new_values: { status, notes },
             performed_at: new Date().toISOString()
         });
+
+        // 5. Notify original requester
+        if (request.requested_by) {
+            const resultTitle = status === 'approved' ? 'Request Approved' : 'Request Rejected';
+            const resultMsg = status === 'approved'
+                ? `Your ${request.request_type} request has been approved by the auditor.`
+                : `Your ${request.request_type} request was rejected by the auditor. Reason: ${notes || 'No reason provided.'}`;
+
+            notificationService.notifyUser(
+                request.requested_by,
+                resultTitle,
+                resultMsg,
+                {
+                    type: status === 'approved' ? 'success' : 'error',
+                    category: 'audit_result',
+                    priority: status === 'approved' ? 'medium' : 'high',
+                    metadata: { request_id: requestId, status, request_type: request.request_type }
+                }
+            ).catch(e => logger.error(`Failed to notify requester ${request.requested_by} of audit result`, e));
+        }
 
         res.status(200).json({ success: true, message: `Request ${status} successfully` });
         logger.info(`Audit request ${requestId} (${request.request_type}) ${status} by ${auditorId}`);

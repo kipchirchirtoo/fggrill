@@ -49,15 +49,15 @@ from attendance.routes import attendance_bp
 from id_cards.routes import id_cards_bp
 from reports.auditor_reports import auditor_reports_bp
 from payroll.routes import payroll_bp
+from search.routes import search_bp
 
 app = Flask(__name__)
-CORS(app, origins=[
-    'http://localhost:3000', 
-    'http://localhost:3001', 
-    'https://famousgate.hirall.com',
-    'https://api.hirall.com',
-    '*'
-])
+CORS(app, resources={r"/*": {
+    "origins": ["http://localhost:3000", "https://famousgate.hirall.com", "https://www.famousgate.hirall.com", "https://api.hirall.com", "*"],
+    "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "x-branch-id"],
+    "supports_credentials": True
+}})
 
 # Register existing blueprints
 app.register_blueprint(receipts_bp)
@@ -80,6 +80,7 @@ app.register_blueprint(attendance_bp, url_prefix='/api/attendance')
 app.register_blueprint(id_cards_bp)
 app.register_blueprint(auditor_reports_bp)
 app.register_blueprint(payroll_bp)
+app.register_blueprint(search_bp)
 
 
 # Configure logging

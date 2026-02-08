@@ -10,8 +10,6 @@ export const getStockTakes = async (req: Request, res: Response) => {
             .from('stock_takes')
             .select(`
                 *,
-                started_by_user:users!stock_takes_started_by_fkey(first_name, last_name),
-                completed_by_user:users!stock_takes_completed_by_fkey(first_name, last_name),
                 branch:branches(name)
             `)
             .order('created_at', { ascending: false });
@@ -44,8 +42,6 @@ export const getStockTake = async (req: Request, res: Response) => {
             .from('stock_takes')
             .select(`
                 *,
-                started_by_user:users!stock_takes_started_by_fkey(first_name, last_name),
-                completed_by_user:users!stock_takes_completed_by_fkey(first_name, last_name),
                 branch:branches(name)
             `)
             .eq('id', id)

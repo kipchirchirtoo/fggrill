@@ -156,13 +156,46 @@ export const getJournalEntries = async (req: Request, res: Response, next: NextF
 
 export const createInvoice = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { customer_id, invoice_date, due_date, subtotal, tax_amount, reference, notes } = req.body;
+    const { customer_id, customer_name, customer_email, invoice_date, due_date, subtotal, tax_amount, reference, notes, items } = req.body;
 
     const total_amount = subtotal + (tax_amount || 0);
     const invoice_number = `INV-${Date.now()}`;
 
     // Customer mapping logic to handle string IDs
     let resolvedCustomerId = customer_id;
+
+    // Handle ad-hoc customer (if name provided but no ID)
+    if (!resolvedCustomerId && customer_name) {
+      const { data: existingByName } = await supabase
+        .from('accounting_customers')
+        .select('id')
+        .ilike('customer_name', customer_name)
+        .maybeSingle();
+
+      if (existingByName) {
+        resolvedCustomerId = existingByName.id;
+      } else {
+        // Create new ad-hoc customer
+        const { data: newCustomer, error: createError } = await supabase
+          .from('accounting_customers')
+          .insert([{
+            customer_code: `CUST-${Date.now()}`,
+            customer_name,
+            email: customer_email,
+            is_active: true
+          }])
+          .select()
+          .single();
+
+        if (createError) {
+          logger.error('Error creating ad-hoc customer:', createError);
+        } else {
+          resolvedCustomerId = newCustomer.id;
+          logger.info(`Created ad-hoc customer for invoice: ${customer_name}`);
+        }
+      }
+    }
+
     if (customer_id) {
       // 1. Check if already exists in accounting_customers by internal ID (if UUID)
       if (isUUID(customer_id)) {
@@ -251,6 +284,7 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
         status: 'unpaid',
         reference,
         notes,
+        items, // Save items as JSONB
         created_by: req.user?.id
       }])
       .select()
@@ -308,7 +342,7 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
       .from('accounting_ar_invoices')
       .select(`
         *,
-        customer:accounting_customers(*)
+        customer:accounting_customers!customer_id(id, customer_name, email, phone)
       `)
       .order('invoice_date', { ascending: false });
 

@@ -570,13 +570,16 @@ def get_audit_trail():
         branch_id = request.args.get('branch_id')
         entity_type = request.args.get('entity_type')
         if supabase:
-            query = supabase.table('financial_audit_logs').select('*, staff:staff_profiles(id, first_name, last_name)')
+            # Note: Removed join with staff_profiles as there's no FK relationship
+            # and staff_profiles lacks first_name/last_name columns
+            query = supabase.table('financial_audit_logs').select('*')
             if branch_id: query = query.eq('branch_id', branch_id)
             if entity_type: query = query.eq('entity_type', entity_type)
             res = query.order('created_at', desc=True).limit(100).execute()
             return jsonify({'success': True, 'data': res.data})
         return jsonify({'success': False}), 503
     except Exception as e:
+        logger.error(f"Error fetching audit trail: {e}")
         return jsonify({'error': str(e)}), 500
 
 # Journal Entry Routes (Enhanced)
@@ -614,12 +617,81 @@ def get_chart_of_accounts():
     try:
         branch_id = request.args.get('branch_id')
         if supabase:
-            query = supabase.table('accounting_chart_of_accounts').select('*, category:accounting_account_categories(*)')
+            # Note: Removed join with accounting_account_categories as there's no FK relationship
+            # Frontend can fetch categories separately if needed
+            query = supabase.table('accounting_chart_of_accounts').select('*')
             if branch_id: query = query.eq('branch_id', branch_id)
             res = query.order('account_code').execute()
             return jsonify({'success': True, 'data': res.data})
         return jsonify({'success': False}), 503
     except Exception as e:
+        logger.error(f"Error fetching chart of accounts: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# Fiscal Period Management Routes
+@accounting_bp.route('/fiscal-periods', methods=['GET'])
+def get_fiscal_periods():
+    """Get all fiscal periods for a branch"""
+    try:
+        branch_id = request.args.get('branch_id', type=int)
+        if supabase:
+            query = supabase.table('fiscal_periods').select('*')
+            if branch_id:
+                query = query.eq('branch_id', branch_id)
+            res = query.order('start_date', desc=True).execute()
+            return jsonify({'success': True, 'data': res.data})
+        return jsonify({'success': False}), 503
+    except Exception as e:
+        logger.error(f"Error fetching fiscal periods: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@accounting_bp.route('/fiscal-periods', methods=['POST'])
+def create_fiscal_period():
+    """Create a new fiscal period"""
+    try:
+        data = request.get_json()
+        if supabase:
+            res = supabase.table('fiscal_periods').insert(data).execute()
+            return jsonify({'success': True, 'data': res.data})
+        return jsonify({'success': False}), 503
+    except Exception as e:
+        logger.error(f"Error creating fiscal period: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@accounting_bp.route('/fiscal-periods/<period_id>/close', methods=['PATCH'])
+def close_fiscal_period(period_id):
+    """Close a fiscal period"""
+    try:
+        data = request.get_json()
+        if supabase:
+            update_data = {
+                'status': 'closed',
+                'closed_at': data.get('closing_date', datetime.now().isoformat()),
+                'closed_by': data.get('closed_by')
+            }
+            res = supabase.table('fiscal_periods').update(update_data).eq('id', period_id).execute()
+            return jsonify({'success': True, 'data': res.data})
+        return jsonify({'success': False}), 503
+    except Exception as e:
+        logger.error(f"Error closing fiscal period: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@accounting_bp.route('/fiscal-periods/<period_id>/lock', methods=['PATCH'])
+def lock_fiscal_period(period_id):
+    """Lock a fiscal period (auditor only)"""
+    try:
+        data = request.get_json()
+        if supabase:
+            update_data = {
+                'status': 'locked',
+                'locked_at': datetime.now().isoformat(),
+                'locked_by': data.get('locked_by')
+            }
+            res = supabase.table('fiscal_periods').update(update_data).eq('id', period_id).execute()
+            return jsonify({'success': True, 'data': res.data})
+        return jsonify({'success': False}), 503
+    except Exception as e:
+        logger.error(f"Error locking fiscal period: {e}")
         return jsonify({'error': str(e)}), 500
 
 # Financial Reporting Routes

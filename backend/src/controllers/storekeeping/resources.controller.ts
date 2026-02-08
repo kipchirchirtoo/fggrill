@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
 import * as BranchInventoryService from '../../services/branch-inventory.service';
 import { logger } from '../../utils/logger';
+import notificationService from '../../services/notification.service';
 
 // =====================================================
 // VEHICLES
@@ -326,7 +327,7 @@ export const getStockTakes = async (req: Request, res: Response) => {
       .select(`
         *,
         branch:branches(id, name, code),
-        counted_by_profile:staff_profiles!counted_by(first_name, last_name)
+        counted_by_profile:users!counted_by(id, first_name, last_name)
       `)
       .order('count_date', { ascending: false });
 
@@ -408,16 +409,37 @@ export const getStockTakeItems = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const { data, error } = await supabase
+    // 1. Fetch stock count items
+    const { data: items, error: itemsError } = await supabase
       .from('stock_count_items')
-      .select(`
-        *,
-        item:inventory_items(name, code, category, unit)
-      `)
+      .select('*')
       .eq('stock_count_id', id);
 
-    if (error) throw error;
-    res.json({ success: true, data });
+    if (itemsError) throw itemsError;
+    if (!items || items.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    // 2. Fetch inventory items details
+    const itemIds = items.map(i => i.item_id).filter(id => id);
+    if (itemIds.length === 0) {
+      return res.json({ success: true, data: items });
+    }
+
+    const { data: inventoryItems, error: invError } = await supabase
+      .from('inventory_items')
+      .select('id, name, item_code, category, unit')
+      .in('id', itemIds);
+
+    if (invError) throw invError;
+
+    // 3. Manually merge
+    const mergedData = items.map(item => ({
+      ...item,
+      item: inventoryItems?.find(inv => inv.id === item.item_id) || null
+    }));
+
+    res.json({ success: true, data: mergedData });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -492,6 +514,20 @@ export const completeStockTake = async (req: Request, res: Response) => {
     });
 
     logger.info(`Stock count ${id} submitted for audit by ${userId}`);
+
+    // Notify Auditor
+    notificationService.notifyRole(
+      'auditor',
+      'Stock Take Submission',
+      `A new stock take (${count.count_number || id}) has been submitted for audit.`,
+      {
+        type: 'warning',
+        category: 'audit',
+        priority: 'medium',
+        actionUrl: `/dashboard/auditor/stock-takes/${id}`,
+        metadata: { stock_count_id: id, type: 'stock_take' }
+      }
+    ).catch(e => logger.error('Failed to notify auditor of stock take submission', e));
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

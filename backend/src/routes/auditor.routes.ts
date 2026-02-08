@@ -23,7 +23,10 @@ import {
   verifyAnomaly,
   getDailyLogsStatus,
   verifyDailyLog,
-  getStaffAudit
+  getStaffAudit,
+  flagItem,
+  getWatchlist,
+  resolveWatchlistItem
 } from '../controllers/auditor.controller';
 import {
   getConsumptionConfigs,
@@ -157,5 +160,10 @@ router.post('/daily-logs/:id/verify', authorize([UserRole.AUDITOR, UserRole.SUPE
 
 // Staff Audit
 router.get('/staff-audit', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getStaffAudit);
+
+// Auditor Watchlist
+router.post('/watchlist', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), flagItem);
+router.get('/watchlist', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getWatchlist);
+router.put('/watchlist/:id', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), resolveWatchlistItem);
 
 export default router;

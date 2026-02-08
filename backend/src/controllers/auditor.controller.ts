@@ -212,6 +212,22 @@ export const verifyAnomaly = async (req: Request, res: Response, next: NextFunct
         error = billError;
         break;
 
+      case 'invoice':
+        const { data: invData, error: invError } = await supabase
+          .from('accounting_ar_invoices')
+          .update({
+            auditor_id: auditorId,
+            audited_at: timestamp,
+            audit_notes: notes,
+            status: 'verified'
+          })
+          .eq('id', id)
+          .select()
+          .single();
+        result = invData;
+        error = invError;
+        break;
+
       case 'exception':
         const { data: excData, error: excError } = await supabase
           .from('audit_exceptions')
@@ -434,6 +450,98 @@ export const getFindings = async (req: Request, res: Response, next: NextFunctio
     })) || [];
 
     res.status(200).json({ success: true, count: data?.length || 0, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ============ AUDITOR WATCHLIST ============
+
+export const flagItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { entity_type, entity_id, reason, metadata } = req.body;
+    const flagged_by = req.user?.id;
+
+    if (!entity_type || !entity_id) {
+      res.status(400).json({ success: false, message: 'entity_type and entity_id are required' });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('auditor_watchlist')
+      .insert([{
+        entity_type,
+        entity_id,
+        reason,
+        flagged_by,
+        metadata,
+        status: 'pending'
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Optional: Update the entity itself to show it's flagged
+    if (entity_type === 'invoice') {
+      await supabase.from('accounting_ar_invoices').update({ is_flagged: true }).eq('id', entity_id);
+    }
+
+    res.status(201).json({ success: true, data });
+    logger.info(`Item flagged for audit: ${entity_type} ${entity_id}`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getWatchlist = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { status, entity_type } = req.query;
+
+    let query = supabase
+      .from('auditor_watchlist')
+      .select(`
+        *,
+        flagged_by_user:users!flagged_by(id, first_name, last_name)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (status) query = query.eq('status', status);
+    if (entity_type) query = query.eq('entity_type', entity_type);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    res.status(200).json({ success: true, count: data?.length || 0, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resolveWatchlistItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { status, resolution_notes } = req.body;
+
+    const { data, error } = await supabase
+      .from('auditor_watchlist')
+      .update({
+        status: status || 'resolved',
+        updated_at: new Date().toISOString(),
+        metadata: { resolution_notes }
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // If resolved, we might want to unflag the entity
+    if ((status === 'resolved' || status === 'dismissed') && data.entity_type === 'invoice') {
+      await supabase.from('accounting_ar_invoices').update({ is_flagged: false }).eq('id', data.entity_id);
+    }
+
+    res.status(200).json({ success: true, data });
   } catch (error) {
     next(error);
   }

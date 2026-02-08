@@ -4,6 +4,7 @@ import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { paymentVerificationService } from '../services/payment.verification.service';
 import { mpesaService } from '../services/mpesa.service';
+import notificationService from '../services/notification.service';
 
 /**
  * Get Bill Details by Booking ID (or Barcode)
@@ -1928,6 +1929,23 @@ export const submitLogbookForAudit = async (req: Request, res: Response, next: N
 
         if (updateError) throw updateError;
 
+        // Notify Auditor and Accountant
+        const notificationData = {
+            type: 'warning' as const,
+            category: 'audit',
+            priority: 'medium' as const,
+            actionUrl: `/dashboard/auditor/cashier-logs/${id}`,
+            metadata: { logbook_id: id, type: 'cashier_logbook', cashier_id }
+        };
+
+        // 1. Notify Auditor
+        notificationService.notifyRole('auditor', 'Cashier Logbook Submission', `Cashier logbook for ${logbook.type} has been submitted for audit.`, notificationData)
+            .catch(e => logger.error('Failed to notify auditor of logbook submission', e));
+
+        // 2. Notify Accountant
+        notificationService.notifyRole('branch_accountant', 'Cashier Logbook Submission', `Cashier logbook for ${logbook.type} has been submitted for review.`, notificationData)
+            .catch(e => logger.error('Failed to notify accountant of logbook submission', e));
+
         res.json({
             success: true,
             message: 'Logbook submitted for audit successfully',
@@ -2032,6 +2050,26 @@ export const auditLogbook = async (req: Request, res: Response, next: NextFuncti
             .single();
 
         if (updateError) throw updateError;
+
+        // Notify Cashier
+        if (updated && updated.cashier_id) {
+            const resultTitle = action === 'approve' ? 'Logbook Approved' : 'Logbook Rejected';
+            const resultMsg = action === 'approve'
+                ? `Your cashier logbook for ${updated.type} has been approved.`
+                : `Your cashier logbook for ${updated.type} was rejected. Reason: ${notes || 'No reason provided.'}`;
+
+            notificationService.notifyUser(
+                updated.cashier_id,
+                resultTitle,
+                resultMsg,
+                {
+                    type: action === 'approve' ? 'success' : 'error',
+                    category: 'audit_result',
+                    priority: action === 'approve' ? 'medium' : 'high',
+                    metadata: { logbook_id: id, status: updated.status }
+                }
+            ).catch(e => logger.error(`Failed to notify cashier ${updated.cashier_id} of logbook audit result`, e));
+        }
 
         res.json({
             success: true,

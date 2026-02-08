@@ -187,25 +187,7 @@ async function fetchPythonAPI<T>(endpoint: string, options?: FetchOptions): Prom
 }
 
 
-async function fetchPythonAPI<T>(endpoint: string, options?: FetchOptions): Promise<T> {
-  // Use PYTHON_API_URL
-  const url = `${PYTHON_API_URL}/api${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
 
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      ...getHeaders(),
-      ...options?.headers
-    }
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(errorData.message || errorData.detail || `Request failed with status ${response.status}`);
-  }
-
-  return response.json();
-}
 
 // =====================================================
 // STOREKEEPING API
@@ -509,6 +491,8 @@ export const storeAPI = {
     }
   },
 };
+
+export const storekeepingAPI = storeAPI;
 
 // =====================================================
 // PROCUREMENT API
@@ -2895,6 +2879,23 @@ export const auditAPI = {
     return fetchAPI<any>(`/auditor/approvals?${query}`);
   },
 
+  // Watchlist & Verification
+  flagItem: (data: { entity_type: string; entity_id: string; reason?: string; metadata?: any }) =>
+    fetchAPI<any>('/auditor/watchlist', { method: 'POST', body: JSON.stringify(data) }),
+
+  getWatchlist: (params?: { status?: string; entity_type?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.entity_type) query.append('entity_type', params.entity_type);
+    return fetchAPI<any>(`/auditor/watchlist?${query}`);
+  },
+
+  resolveWatchlistItem: (id: string, data: { status: string; resolution_notes?: string }) =>
+    fetchAPI<any>(`/auditor/watchlist/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  verifyAnomaly: (data: { id: string; type: string; notes?: string }) =>
+    fetchAPI<any>('/auditor/verify/clear', { method: 'POST', body: JSON.stringify(data) }),
+
   // Payroll Audit
   getPayrollVariances: (params: { branch_id?: number; period_month: string }) => {
     const query = new URLSearchParams();
@@ -3601,16 +3602,8 @@ export const accountingAPI = {
     fetchAPI<any>('/accounting/reconciliation/save', { method: 'POST', body: JSON.stringify(data) }),
 
   // Fiscal Period Management
-  getFiscalPeriods: (branchId?: number) => {
-    const query = branchId ? `?branch_id=${branchId}` : '';
-    return fetchPythonAPI<any>(`/accounting/fiscal-periods${query}`);
-  },
-
   createFiscalPeriod: (data: any) =>
     fetchPythonAPI<any>('/accounting/fiscal-periods', { method: 'POST', body: JSON.stringify(data) }),
-
-  closePeriod: (periodId: string, data: { closing_date?: string; closed_by?: string }) =>
-    fetchPythonAPI<any>(`/accounting/fiscal-periods/${periodId}/close`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   lockPeriod: (periodId: string, data?: { locked_by?: string }) =>
     fetchPythonAPI<any>(`/accounting/fiscal-periods/${periodId}/lock`, { method: 'PATCH', body: JSON.stringify(data || {}) })
