@@ -219,7 +219,7 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
           <div>
             <h2 className="text-lg font-semibold font-sf-pro-display text-[#000000]">Notifications</h2>
             <p className="text-sm text-[#8E8E93]">
-              {notifications.filter(n => !n.is_read).length} unread
+              {notifications.filter(n => !n.is_read).length} unread{' '}
               {user?.branch_name && (
                 <span className="ml-2 text-xs px-2 py-0.5 bg-[#F2F2F7] rounded-full">
                   {user.branch_name}

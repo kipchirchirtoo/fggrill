@@ -129,9 +129,15 @@ export default function BranchFinancialVerificationPage() {
                         </div>
 
                         <IOSCard>
-                            <div className="p-4 border-b border-stone-100">
-                                <h2 className="font-bold text-gray-900">Detailed Payment Log</h2>
-                                <p className="text-sm text-gray-500">Chronological ledger of all verified session transactions</p>
+                            <div className="p-4 border-b border-stone-100 flex items-center justify-between">
+                                <div>
+                                    <h2 className="font-bold text-gray-900">Detailed Payment Log</h2>
+                                    <p className="text-sm text-gray-500">Chronological ledger of all verified session transactions</p>
+                                </div>
+                                <div className="flex gap-2 text-xs">
+                                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Verified</span>
+                                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-500"></div> Pending Audit</span>
+                                </div>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full">
@@ -140,30 +146,74 @@ export default function BranchFinancialVerificationPage() {
                                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reference</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mode</th>
                                             <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Audit</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
+                                            <th className="px-4 py-3"></th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-stone-50">
-                                        {selectedCashier.payments.map((p: any, i: number) => (
-                                            <tr key={i} className="hover:bg-stone-50">
-                                                <td className="px-4 py-3">
-                                                    <span className="font-mono text-sm font-bold text-gray-900">{p.reference || 'Manual Entry'}</span>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <IOSBadge variant="light" className="text-xs">{p.payment_method}</IOSBadge>
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-bold text-gray-900">KES {p.amount.toLocaleString()}</td>
-                                                <td className="px-4 py-3">
-                                                    <IOSBadge variant="light" color={p.status === 'completed' ? 'success' : 'warning'}>
-                                                        {p.status}
-                                                    </IOSBadge>
-                                                </td>
-                                                <td className="px-4 py-3 text-sm text-gray-500">
-                                                    {new Date(p.created_at).toLocaleTimeString()}
-                                                </td>
-                                            </tr>
-                                        ))}
+                                        {selectedCashier.payments.map((p: any, i: number) => {
+                                            const isVerified = p.auditor_id || (p.metadata?.auditor_id);
+                                            return (
+                                                <tr key={i} className={`hover:bg-stone-50 ${isVerified ? 'bg-stone-50/30' : ''}`}>
+                                                    <td className="px-4 py-3">
+                                                        <span className="font-mono text-sm font-bold text-gray-900">{p.reference || (p.id ? p.id.slice(0, 8) : 'Manual')}</span>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <IOSBadge variant="light" className="text-xs">{p.payment_method}</IOSBadge>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-bold text-gray-900">KES {p.amount.toLocaleString()}</td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        {isVerified ? (
+                                                            <div className="flex flex-col items-center">
+                                                                <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                                                                <span className="text-[10px] text-gray-400">Verified</span>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex flex-col items-center">
+                                                                <AlertCircle className="h-4 w-4 text-amber-500" />
+                                                                <span className="text-[10px] text-gray-400">Pending</span>
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm text-gray-500">
+                                                        {new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        {!isVerified && (
+                                                            <IOSButton
+                                                                variant="secondary"
+                                                                className="h-7 text-[10px] px-2"
+                                                                onClick={async () => {
+                                                                    try {
+                                                                        const id = p.restaurant_order_id || p.bar_order_id || p.pos_transaction_id || p.id;
+                                                                        const type = p.restaurant_order_id ? 'restaurant_order' :
+                                                                            (p.bar_order_id ? 'bar_order' :
+                                                                                (p.pos_transaction_id ? 'pos_transaction' : 'payment'));
+
+                                                                        const res = await auditAPI.verifyAnomaly({ id, type, notes: 'Verified via financial session review' });
+                                                                        if (res.success) {
+                                                                            toast.success("Transaction verified successfully");
+                                                                            // Update local state or re-fetch
+                                                                            fetchData();
+                                                                        } else {
+                                                                            toast.error(res.message || "Failed to verify transaction");
+                                                                        }
+                                                                    } catch (err) {
+                                                                        toast.error("An error occurred");
+                                                                    }
+                                                                }}
+                                                            >
+                                                                Verify
+                                                            </IOSButton>
+                                                        )}
+                                                        {isVerified && (
+                                                            <span className="text-[10px] text-emerald-600 font-medium">Cleared</span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>

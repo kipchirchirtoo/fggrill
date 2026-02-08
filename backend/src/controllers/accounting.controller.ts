@@ -5,6 +5,16 @@ import notificationService from '../services/notification.service';
 
 const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
+const getBranchName = async (branchId: number | null): Promise<string> => {
+  if (!branchId) return 'Central';
+  try {
+    const { data } = await supabase.from('branches').select('name').eq('id', branchId).single();
+    return data?.name || 'Unknown Branch';
+  } catch (e) {
+    return 'Unknown Branch';
+  }
+};
+
 // ============ CHART OF ACCOUNTS ============
 
 export const getChartOfAccounts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -295,18 +305,24 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
     logger.info(`Invoice created: ${invoice_number}`);
 
     // Notify Auditor
-    notificationService.notifyRole(
-      'auditor',
-      'New Invoice Created',
-      `Invoice ${invoice_number} for ${total_amount} has been created.`,
-      {
-        type: 'info',
-        category: 'finance',
-        priority: 'medium',
-        actionUrl: '/dashboard/auditor/invoices',
-        metadata: { invoice_id: data.id }
-      }
-    ).catch(e => logger.error('Failed to notify auditor of new invoice', e));
+    getBranchName(req.user?.branch_id).then(branchName => {
+      notificationService.notifyRole(
+        'auditor',
+        'New Invoice Created',
+        `New invoice ${invoice_number} created for ${branchName} branch (Total: ${total_amount}).`,
+        {
+          type: 'info',
+          category: 'finance',
+          priority: 'medium',
+          actionUrl: '/dashboard/auditor/invoices',
+          metadata: {
+            invoice_id: data.id,
+            branch_id: req.user?.branch_id,
+            branch_name: branchName
+          }
+        }
+      ).catch(e => logger.error('Failed to notify auditor of new invoice', e));
+    });
 
     res.status(201).json({ success: true, data });
   } catch (error) {
@@ -579,18 +595,24 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
     logger.info(`Bill created: ${bill_number}`);
 
     // Notify Auditor
-    notificationService.notifyRole(
-      'auditor',
-      'New Bill Created',
-      `Bill ${bill_number} for ${total_amount} has been recorded.`,
-      {
-        type: 'info',
-        category: 'finance',
-        priority: 'medium',
-        actionUrl: '/dashboard/auditor/expenses',
-        metadata: { bill_id: data.id }
-      }
-    ).catch(e => logger.error('Failed to notify auditor of new bill', e));
+    getBranchName(req.user?.branch_id).then(branchName => {
+      notificationService.notifyRole(
+        'auditor',
+        'New Bill Created',
+        `New bill ${bill_number} recorded for ${branchName} branch (Total: ${total_amount}).`,
+        {
+          type: 'info',
+          category: 'finance',
+          priority: 'medium',
+          actionUrl: '/dashboard/auditor/branch-audit/credit-bills',
+          metadata: {
+            bill_id: data.id,
+            branch_id: req.user?.branch_id,
+            branch_name: branchName
+          }
+        }
+      ).catch(e => logger.error('Failed to notify auditor of new bill', e));
+    });
 
     res.status(201).json({ success: true, data });
   } catch (error) {
@@ -770,18 +792,25 @@ export const submitInvoiceForAudit = async (req: Request, res: Response, next: N
     logger.info(`Invoice ${invoice.invoice_number} submitted for audit by ${userId}`);
 
     // Notify Auditor
-    notificationService.notifyRole(
-      'auditor',
-      'Audit Request: Invoice',
-      `Invoice ${invoice.invoice_number} submitted for audit.`,
-      {
-        type: 'warning',
-        category: 'audit',
-        priority: 'high',
-        actionUrl: '/dashboard/auditor/audit-requests',
-        metadata: { invoice_id: id, type: 'invoice' }
-      }
-    ).catch(e => logger.error('Failed to notify auditor of invoice audit request', e));
+    getBranchName(req.user?.branch_id).then(branchName => {
+      notificationService.notifyRole(
+        'auditor',
+        'Audit Request: Invoice',
+        `Invoice ${invoice.invoice_number} from ${branchName} submitted for audit.`,
+        {
+          type: 'warning',
+          category: 'audit',
+          priority: 'high',
+          actionUrl: '/dashboard/auditor/invoices',
+          metadata: {
+            invoice_id: id,
+            type: 'invoice',
+            branch_id: req.user?.branch_id,
+            branch_name: branchName
+          }
+        }
+      ).catch(e => logger.error('Failed to notify auditor of invoice audit request', e));
+    });
 
     res.status(200).json({ success: true, message: 'Invoice submitted for audit' });
   } catch (error) {
@@ -831,18 +860,25 @@ export const submitBillForAudit = async (req: Request, res: Response, next: Next
     logger.info(`Bill ${bill.bill_number} submitted for audit by ${userId}`);
 
     // Notify Auditor
-    notificationService.notifyRole(
-      'auditor',
-      'Audit Request: Bill',
-      `Bill ${bill.bill_number} submitted for audit.`,
-      {
-        type: 'warning',
-        category: 'audit',
-        priority: 'high',
-        actionUrl: '/dashboard/auditor/audit-requests',
-        metadata: { bill_id: id, type: 'bill' }
-      }
-    ).catch(e => logger.error('Failed to notify auditor of bill audit request', e));
+    getBranchName(req.user?.branch_id).then(branchName => {
+      notificationService.notifyRole(
+        'auditor',
+        'Audit Request: Bill',
+        `Bill ${bill.bill_number} from ${branchName} submitted for audit.`,
+        {
+          type: 'warning',
+          category: 'audit',
+          priority: 'high',
+          actionUrl: '/dashboard/auditor/branch-audit/credit-bills',
+          metadata: {
+            bill_id: id,
+            type: 'bill',
+            branch_id: req.user?.branch_id,
+            branch_name: branchName
+          }
+        }
+      ).catch(e => logger.error('Failed to notify auditor of bill audit request', e));
+    });
 
     res.status(200).json({ success: true, message: 'Bill submitted for audit' });
   } catch (error) {

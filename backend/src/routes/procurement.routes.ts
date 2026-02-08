@@ -58,7 +58,8 @@ const procurementRoles = [
     UserRole.PROCUREMENT,
     UserRole.PURCHASING_MANAGER,
     UserRole.CENTRAL_STOREKEEPER,
-    UserRole.BRANCH_STOREKEEPER
+    UserRole.BRANCH_STOREKEEPER,
+    UserRole.BRANCH_ACCOUNTANT
 ];
 const storeRoles = [
     UserRole.SUPER_ADMIN,

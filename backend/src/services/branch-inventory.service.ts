@@ -235,16 +235,29 @@ export async function createStockRequest(
 
   // Notify Auditor
   try {
+    // Fetch branch name for notification
+    const { data: branchData } = await supabase
+      .from('branches')
+      .select('name')
+      .eq('id', branchId)
+      .single();
+
+    const branchName = branchData?.name || branchCode;
+
     await notificationService.notifyRole(
       'auditor',
       'New Stock Request for Review',
-      `Branch ${branchCode} has submitted a new stock request (${requestNumber}). Approval required.`,
+      `${branchName} branch has submitted a new stock request (${requestNumber}). Approval required.`,
       {
         type: 'info',
         category: 'stock',
         priority: priority === 'URGENT' ? 'urgent' : 'medium',
         actionUrl: '/dashboard/auditor/approvals',
-        metadata: { request_id: request.id, branch_code: branchCode }
+        metadata: {
+          request_id: request.id,
+          branch_code: branchCode,
+          branch_name: branchName
+        }
       }
     );
   } catch (error) {

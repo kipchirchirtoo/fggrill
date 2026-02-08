@@ -142,12 +142,13 @@ export default function BranchRequestsPage() {
                 </div>
 
                 <Dialog open={isNewRequestModalOpen} onOpenChange={setIsNewRequestModalOpen}>
-                    <DialogContent className="max-w-2xl">
-                        <DialogHeader>
+                    <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 overflow-hidden shadow-2xl border-stone-200">
+                        <DialogHeader className="p-6 pb-2 border-b border-stone-50 bg-white">
                             <DialogTitle>New Stock Requisition</DialogTitle>
                             <p className="text-xs text-stone-500">Requesting items from Central Store for your branch</p>
                         </DialogHeader>
-                        <div className="space-y-6 mt-4">
+
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
                             {/* Search & Suggestions */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
@@ -164,7 +165,6 @@ export default function BranchRequestsPage() {
                                                     (i.item?.item_name || i.item_name || '').toLowerCase().includes(term) ||
                                                     (i.item_sku || i.sku || '').toLowerCase().includes(term)
                                                 );
-                                                // We can use this to filter the dropdown or show a results list
                                             }}
                                         />
                                     </div>
@@ -200,7 +200,7 @@ export default function BranchRequestsPage() {
                             {/* Added Items List */}
                             <div className="space-y-3">
                                 <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Requested Items ({requestItems.length})</label>
-                                <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2">
+                                <div className="space-y-2">
                                     {requestItems.length === 0 ? (
                                         <div className="py-8 text-center bg-stone-50 rounded-xl border border-dashed border-stone-200">
                                             <p className="text-xs text-stone-400">No items added yet</p>
@@ -257,25 +257,25 @@ export default function BranchRequestsPage() {
                                     className="bg-stone-50 border-stone-200"
                                 />
                             </div>
+                        </div>
 
-                            <div className="flex gap-3 pt-2">
-                                <IOSButton variant="secondary" onClick={() => setIsNewRequestModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                                <IOSButton onClick={handleCreateRequest} className="flex-1 px-8">Submit Requisition</IOSButton>
-                            </div>
+                        <div className="p-4 bg-stone-50 border-t border-stone-100 flex gap-3">
+                            <IOSButton variant="secondary" onClick={() => setIsNewRequestModalOpen(false)} className="flex-1">Cancel</IOSButton>
+                            <IOSButton onClick={handleCreateRequest} className="flex-1 px-8">Submit Requisition</IOSButton>
                         </div>
                     </DialogContent>
                 </Dialog>
 
                 {/* Detail Modal */}
                 <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
-                    <DialogContent className="max-w-3xl">
-                        <DialogHeader>
+                    <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 overflow-hidden shadow-2xl border-stone-200">
+                        <DialogHeader className="p-6 pb-2 border-b border-stone-50 bg-white">
                             <DialogTitle>Request Details</DialogTitle>
                             <p className="text-xs text-stone-500">{selectedRequest?.request_number}</p>
                         </DialogHeader>
 
                         {selectedRequest && (
-                            <div className="space-y-6 mt-4">
+                            <div className="flex-1 overflow-y-auto p-6 space-y-6">
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-stone-50 p-4 rounded-xl border border-stone-100">
                                     <div>
                                         <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Status</label>
@@ -350,7 +350,8 @@ export default function BranchRequestsPage() {
                                 )}
                             </div>
                         )}
-                        <div className="flex justify-end pt-4">
+
+                        <div className="p-4 bg-stone-50 border-t border-stone-100 flex justify-end">
                             <IOSButton variant="secondary" onClick={() => setIsDetailModalOpen(false)}>Close</IOSButton>
                         </div>
                     </DialogContent>

@@ -49,7 +49,7 @@ from attendance.routes import attendance_bp
 from id_cards.routes import id_cards_bp
 from reports.auditor_reports import auditor_reports_bp
 from payroll.routes import payroll_bp
-from search.routes import search_bp
+from search.routes import search_bp, init_search_routes
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {
@@ -108,6 +108,7 @@ scheduler_thread = None
 # Initialize AI Analyst
 from ai.ai_analyst import AIAnalyst
 ai_analyst = AIAnalyst(database_fetcher)
+init_search_routes(database_fetcher.client)
 
 @app.route('/api/reports/generate/ai-enhanced', methods=['POST'])
 def generate_ai_report():

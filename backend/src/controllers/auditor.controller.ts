@@ -244,6 +244,40 @@ export const verifyAnomaly = async (req: Request, res: Response, next: NextFunct
         error = excError;
         break;
 
+      case 'pos_transaction':
+        const { data: posData, error: posError } = await supabase
+          .from('pos_transactions')
+          .update({
+            auditor_id: auditorId,
+            audited_at: timestamp,
+            audit_notes: notes
+          })
+          .eq('id', id)
+          .select()
+          .single();
+        result = posData;
+        error = posError;
+        break;
+
+      case 'payment':
+        const { data: payData, error: payError } = await supabase
+          .from('payments')
+          .update({
+            metadata: {
+              ...(req.body.metadata || {}),
+              auditor_id: auditorId,
+              audited_at: timestamp,
+              audit_notes: notes,
+              verified: true
+            }
+          })
+          .eq('id', id)
+          .select()
+          .single();
+        result = payData;
+        error = payError;
+        break;
+
       default:
         res.status(400).json({ success: false, message: 'Invalid entity type for verification' });
         return;
@@ -775,11 +809,11 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
       { data: barOrders },
       { data: posTxns }
     ] = await Promise.all([
-      bookingIds.length ? supabase.from('reservations').select('id, branch_id, created_by').in('id', bookingIds) : { data: [] },
-      invoiceIds.length ? supabase.from('accounting_ar_invoices').select('id, created_by').in('id', invoiceIds) : { data: [] },
-      restOrderIds.length ? supabase.from('restaurant_orders').select('id, branch_id, staff_id').in('id', restOrderIds) : { data: [] },
-      barOrderIds.length ? supabase.from('bar_orders').select('id, branch_id, staff_id').in('id', barOrderIds) : { data: [] },
-      posIds.length ? supabase.from('pos_transactions').select('id, branch_id, cashier_id').in('id', posIds) : { data: [] }
+      bookingIds.length ? supabase.from('reservations').select('id, branch_id, created_by, auditor_id, audited_at, audit_notes').in('id', bookingIds) : { data: [] },
+      invoiceIds.length ? supabase.from('accounting_ar_invoices').select('id, created_by, auditor_id, audited_at, audit_notes').in('id', invoiceIds) : { data: [] },
+      restOrderIds.length ? supabase.from('restaurant_orders').select('id, branch_id, staff_id, auditor_id, audited_at, audit_notes').in('id', restOrderIds) : { data: [] },
+      barOrderIds.length ? supabase.from('bar_orders').select('id, branch_id, staff_id, auditor_id, audited_at, audit_notes').in('id', barOrderIds) : { data: [] },
+      posIds.length ? supabase.from('pos_transactions').select('id, branch_id, cashier_id, auditor_id, audited_at, audit_notes').in('id', posIds) : { data: [] }
     ]);
 
     // 4. Create lookup maps
@@ -811,10 +845,18 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
         inferredUserId = invoiceMap[p.invoice_id].created_by;
       }
 
+      const related = p.booking_id ? bookingMap[p.booking_id] :
+        (p.restaurant_order_id ? restOrderMap[p.restaurant_order_id] :
+          (p.bar_order_id ? barOrderMap[p.bar_order_id] :
+            (p.pos_transaction_id ? posMap[p.pos_transaction_id] : (p.invoice_id ? invoiceMap[p.invoice_id] : null))));
+
       return {
         ...p,
         branch_id: inferredBranchId,
-        created_by: inferredUserId
+        user_id: inferredUserId,
+        auditor_id: related?.auditor_id || p.metadata?.auditor_id,
+        audited_at: related?.audited_at || p.metadata?.audited_at,
+        audit_notes: related?.audit_notes || p.metadata?.audit_notes
       };
     }) || [];
 

@@ -646,6 +646,12 @@ export function ConsolidatedNav() {
           label="Bar Stock Audits"
           active={pathname === '/dashboard/auditor/bar-stock'}
         />
+        <NavItem
+          href="/dashboard/auditor/purchases"
+          icon={ShoppingCart}
+          label="Purchase Audits"
+          active={pathname.includes('/dashboard/auditor/purchases')}
+        />
       </NavGroup>
 
       <NavGroup label="Reports" icon={BarChart3}>
@@ -691,6 +697,13 @@ export function ConsolidatedNav() {
         icon={CreditCard}
         label="Payments"
         active={pathname.includes('/dashboard/branch-accounting/payments')}
+      />
+
+      <NavItem
+        href="/dashboard/branch-accounting/purchases"
+        icon={ShoppingCart}
+        label="Purchases"
+        active={pathname.includes('/dashboard/branch-accounting/purchases')}
       />
 
       <NavItem

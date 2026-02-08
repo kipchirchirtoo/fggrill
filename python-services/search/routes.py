@@ -43,35 +43,59 @@ def universal_search():
             except Exception as e:
                 logger.error(f"Error searching staff: {e}")
 
-            # Search Orders (Restaurant/Bar/POS)
+            # Search Restaurant Orders
             try:
-                orders_res = supabase.table('orders').select('id, order_number, total_amount, status, branch_id, created_at, order_type').or_(
-                    f'order_number.ilike.%{query}%,id.eq.{query if query.isdigit() else "0"}'
-                ).limit(10).execute()
+                rest_orders_res = supabase.table('restaurant_orders').select('id, order_number, total_amount, status, branch_id, created_at').or_(
+                    f'order_number.ilike.%{query}%,id.eq.{query if "-" in query and len(query) > 30 else "00000000-0000-0000-0000-000000000000"}'
+                ).limit(5).execute()
                 
-                for order in orders_res.data:
+                for order in rest_orders_res.data:
                     results.append({
                         'type': 'order',
                         'id': str(order['id']),
-                        'title': f"Order #{order.get('order_number', order['id'])}",
-                        'subtitle': f"{order.get('order_type', 'Order')} • KES {order.get('total_amount', 0):,.2f}",
+                        'title': f"Restaurant Odr #{order.get('order_number', 'N/A')}",
+                        'subtitle': f"Restaurant • KES {order.get('total_amount', 0):,.2f}",
                         'metadata': {
                             'order_number': order.get('order_number', 'N/A'),
-                            'total_amount': f"KES {order.get('total_amount', 0):,.2f}",
+                            'amount': order.get('total_amount', 0),
                             'status': order.get('status', 'N/A'),
                             'branch_id': order.get('branch_id', 'N/A'),
                             'created_at': order.get('created_at', 'N/A'),
-                            'order_type': order.get('order_type', 'N/A')
+                            'order_type': 'Restaurant'
                         }
                     })
             except Exception as e:
-                logger.error(f"Error searching orders: {e}")
+                logger.error(f"Error searching restaurant orders: {e}")
+
+            # Search Bar Orders
+            try:
+                bar_orders_res = supabase.table('bar_orders').select('id, order_number, total, status, branch_id, created_at').or_(
+                    f'order_number.ilike.%{query}%,id.eq.{query if "-" in query and len(query) > 30 else "00000000-0000-0000-0000-000000000000"}'
+                ).limit(5).execute()
+                
+                for order in bar_orders_res.data:
+                    results.append({
+                        'type': 'order',
+                        'id': str(order['id']),
+                        'title': f"Bar Order #{order.get('order_number', 'N/A')}",
+                        'subtitle': f"Bar • KES {order.get('total', 0):,.2f}",
+                        'metadata': {
+                            'order_number': order.get('order_number', 'N/A'),
+                            'amount': order.get('total', 0),
+                            'status': order.get('status', 'N/A'),
+                            'branch_id': order.get('branch_id', 'N/A'),
+                            'created_at': order.get('created_at', 'N/A'),
+                            'order_type': 'Bar'
+                        }
+                    })
+            except Exception as e:
+                logger.error(f"Error searching bar orders: {e}")
 
             # Search Guests
             try:
                 guests_res = supabase.table('guests').select('id, first_name, last_name, email, phone, id_number').or_(
                     f'first_name.ilike.%{query}%,last_name.ilike.%{query}%,email.ilike.%{query}%,phone.ilike.%{query}%,id_number.ilike.%{query}%'
-                ).limit(10).execute()
+                ).limit(5).execute()
                 
                 for guest in guests_res.data:
                     results.append({
@@ -90,21 +114,21 @@ def universal_search():
 
             # Search Bookings
             try:
-                bookings_res = supabase.table('reservations').select('id, booking_reference, guest_name, check_in, check_out, status, branch_id').or_(
-                    f'booking_reference.ilike.%{query}%,guest_name.ilike.%{query}%,id.eq.{query if query.isdigit() else "0"}'
-                ).limit(10).execute()
+                bookings_res = supabase.table('reservations').select('id, confirmation_number, guest_name, check_in_date, check_out_date, status, branch_id').or_(
+                    f'confirmation_number.ilike.%{query}%,guest_name.ilike.%{query}%,id.eq.{query if "-" in query and len(query) > 30 else "00000000-0000-0000-0000-000000000000"}'
+                ).limit(5).execute()
                 
                 for booking in bookings_res.data:
                     results.append({
                         'type': 'booking',
                         'id': str(booking['id']),
-                        'title': f"Booking {booking.get('booking_reference', booking['id'])}",
+                        'title': f"Booking {booking.get('confirmation_number', booking['id'])}",
                         'subtitle': f"{booking.get('guest_name', 'Guest')} • {booking.get('status', 'N/A')}",
                         'metadata': {
-                            'booking_reference': booking.get('booking_reference', 'N/A'),
+                            'confirmation_number': booking.get('confirmation_number', 'N/A'),
                             'guest_name': booking.get('guest_name', 'N/A'),
-                            'check_in': booking.get('check_in', 'N/A'),
-                            'check_out': booking.get('check_out', 'N/A'),
+                            'check_in': booking.get('check_in_date', 'N/A'),
+                            'check_out': booking.get('check_out_date', 'N/A'),
                             'status': booking.get('status', 'N/A'),
                             'branch_id': booking.get('branch_id', 'N/A')
                         }
@@ -112,68 +136,45 @@ def universal_search():
             except Exception as e:
                 logger.error(f"Error searching bookings: {e}")
 
-            # Search Transactions (M-Pesa, Bank)
+            # Search Transactions (Payments)
             try:
-                transactions_res = supabase.table('mpesa_transactions').select('id, transaction_code, amount, phone_number, transaction_type, created_at').or_(
-                    f'transaction_code.ilike.%{query}%,phone_number.ilike.%{query}%'
-                ).limit(10).execute()
+                payments_res = supabase.table('payments').select('id, reference, amount, payment_method, status, created_at').or_(
+                    f'reference.ilike.%{query}%'
+                ).limit(5).execute()
                 
-                for txn in transactions_res.data:
+                for txn in payments_res.data:
                     results.append({
                         'type': 'transaction',
                         'id': str(txn['id']),
-                        'title': f"M-Pesa {txn.get('transaction_code', txn['id'])}",
-                        'subtitle': f"KES {txn.get('amount', 0):,.2f} • {txn.get('phone_number', 'N/A')}",
+                        'title': f"Payment {txn.get('reference', txn['id'])}",
+                        'subtitle': f"KES {txn.get('amount', 0):,.2f} • {txn.get('payment_method', 'N/A')}",
                         'metadata': {
-                            'transaction_code': txn.get('transaction_code', 'N/A'),
-                            'amount': f"KES {txn.get('amount', 0):,.2f}",
-                            'phone_number': txn.get('phone_number', 'N/A'),
-                            'transaction_type': txn.get('transaction_type', 'N/A'),
+                            'reference': txn.get('reference', 'N/A'),
+                            'amount': txn.get('amount', 0),
+                            'payment_method': txn.get('payment_method', 'N/A'),
+                            'status': txn.get('status', 'N/A'),
                             'created_at': txn.get('created_at', 'N/A')
                         }
                     })
             except Exception as e:
-                logger.error(f"Error searching transactions: {e}")
+                logger.error(f"Error searching payments: {e}")
 
-            # Search Receipts
+            # Search Bills
             try:
-                receipts_res = supabase.table('receipts').select('id, receipt_number, amount, payment_method, branch_id, created_at').or_(
-                    f'receipt_number.ilike.%{query}%,id.eq.{query if query.isdigit() else "0"}'
-                ).limit(10).execute()
-                
-                for receipt in receipts_res.data:
-                    results.append({
-                        'type': 'receipt',
-                        'id': str(receipt['id']),
-                        'title': f"Receipt #{receipt.get('receipt_number', receipt['id'])}",
-                        'subtitle': f"KES {receipt.get('amount', 0):,.2f} • {receipt.get('payment_method', 'N/A')}",
-                        'metadata': {
-                            'receipt_number': receipt.get('receipt_number', 'N/A'),
-                            'amount': f"KES {receipt.get('amount', 0):,.2f}",
-                            'payment_method': receipt.get('payment_method', 'N/A'),
-                            'branch_id': receipt.get('branch_id', 'N/A'),
-                            'created_at': receipt.get('created_at', 'N/A')
-                        }
-                    })
-            except Exception as e:
-                logger.error(f"Error searching receipts: {e}")
-
-            # Search Bills/Invoices
-            try:
-                bills_res = supabase.table('credit_bills').select('id, bill_number, customer_name, amount, status, branch_id, created_at').or_(
+                bills_res = supabase.table('unpaid_bills').select('id, bill_number, customer_name, total_amount, status, branch_id, created_at').or_(
                     f'bill_number.ilike.%{query}%,customer_name.ilike.%{query}%'
-                ).limit(10).execute()
+                ).limit(5).execute()
                 
                 for bill in bills_res.data:
                     results.append({
                         'type': 'bill',
                         'id': str(bill['id']),
                         'title': f"Bill #{bill.get('bill_number', bill['id'])}",
-                        'subtitle': f"{bill.get('customer_name', 'Customer')} • KES {bill.get('amount', 0):,.2f}",
+                        'subtitle': f"{bill.get('customer_name', 'Customer')} • KES {bill.get('total_amount', 0):,.2f}",
                         'metadata': {
                             'bill_number': bill.get('bill_number', 'N/A'),
                             'customer_name': bill.get('customer_name', 'N/A'),
-                            'amount': f"KES {bill.get('amount', 0):,.2f}",
+                            'amount': bill.get('total_amount', 0),
                             'status': bill.get('status', 'N/A'),
                             'branch_id': bill.get('branch_id', 'N/A'),
                             'created_at': bill.get('created_at', 'N/A')

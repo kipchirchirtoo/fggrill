@@ -266,7 +266,10 @@ export default function RevenueOversightPage() {
                                             <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" /> Compliance Status
                                         </div>
                                         <p className="text-[12px] text-stone-600 leading-relaxed font-medium">
-                                            Yield optimization is within target parameters. <span className="text-emerald-600 text-bold">+4.2%</span> performance increase detected.
+                                            {data?.total_revenue > 0
+                                                ? "Yield optimization monitoring active. Departmental performance reflects current operational flow."
+                                                : "System ready for operations. Operational records have been successfully reset for client handover."
+                                            }
                                         </p>
                                     </div>
                                 </div>

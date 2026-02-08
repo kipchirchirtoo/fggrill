@@ -26,23 +26,29 @@ export default function BranchPaymentsPage() {
     const handleSearch = async () => {
         if (!searchQuery.trim()) return;
         setLoading(true);
-        if (!searchQuery.trim()) return;
-        setLoading(true);
         try {
             const response = await searchAPI.universalSearch(searchQuery);
             if (response.success && response.data) {
-                // Filter specifically for payment-related items (orders, bookings, bills)
+                // Filter specifically for payment-related items (orders, bookings, bills, transactions)
                 const paymentItems = response.data.filter((item: any) =>
-                    ['order', 'booking', 'bill', 'receipt'].includes(item.type)
-                ).map((item: any) => ({
-                    id: item.id,
-                    type: item.type.charAt(0).toUpperCase() + item.type.slice(1),
-                    reference: item.title, // Assuming title allows identification
-                    amount: item.metadata?.total_amount || item.metadata?.amount || 0,
-                    customer: item.metadata?.guest_name || item.metadata?.customer_name || 'Walk-in',
-                    date: item.metadata?.date || new Date().toISOString().split('T')[0],
-                    status: item.metadata?.payment_status || item.metadata?.status || 'Pending'
-                }));
+                    ['order', 'booking', 'bill', 'receipt', 'transaction'].includes(item.type)
+                ).map((item: any) => {
+                    // Extract amount, ensuring we handle both string and numeric types from backend
+                    let amountValue = item.metadata?.amount || 0;
+                    if (typeof amountValue === 'string') {
+                        amountValue = parseFloat(amountValue.replace(/[^0-9.]/g, '')) || 0;
+                    }
+
+                    return {
+                        id: item.id,
+                        type: item.type === 'transaction' ? 'Payment' : item.type.charAt(0).toUpperCase() + item.type.slice(1),
+                        reference: item.metadata?.order_number || item.metadata?.bill_number || item.metadata?.reference || item.title,
+                        amount: amountValue,
+                        customer: item.metadata?.guest_name || item.metadata?.customer_name || 'Walk-in',
+                        date: item.metadata?.created_at || item.metadata?.date || new Date().toISOString().split('T')[0],
+                        status: item.metadata?.payment_status || item.metadata?.status || 'Pending'
+                    };
+                });
                 setSearchResults(paymentItems);
                 if (paymentItems.length === 0) {
                     toast.info('No payment records found matching your query');

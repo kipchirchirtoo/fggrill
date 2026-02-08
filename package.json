@@ -1,6 +1,6 @@
 {
   "name": "fggrill-central",
-  "version": "1.0.22",
+  "version": "1.0.23",
   "author": {
     "name": "HIRALL",
     "email": "info@famousgate.com"
@@ -12,7 +12,8 @@
     "url": "https://github.com/allan-too/fggrill.git"
   },
   "dependencies": {
-    "dotenv": "^17.2.3",
+    "@supabase/supabase-js": "^2.95.3",
+    "dotenv": "^17.2.4",
     "electron-is-dev": "^2.0.0",
     "electron-updater": "^6.7.3",
     "pg": "^8.16.3"

@@ -201,25 +201,25 @@ export default function AuditorApprovalPanel() {
             )}
 
             <Dialog open={reviewModalOpen} onOpenChange={setReviewModalOpen}>
-                <DialogContent className="max-w-3xl bg-white rounded-3xl border-none shadow-2xl p-0 overflow-hidden">
-                    <div className="bg-stone-900 p-8 text-white relative">
+                <DialogContent className="max-w-3xl bg-white rounded-3xl border-none shadow-2xl p-0 overflow-hidden flex flex-col max-h-[90vh]">
+                    <div className="bg-stone-50 p-8 border-b border-stone-200/60 relative shrink-0">
                         <DialogHeader>
                             <div className="flex items-center gap-4 mb-2">
-                                <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-white shrink-0 border border-white/5">
+                                <div className="w-12 h-12 rounded-xl bg-stone-900 flex items-center justify-center text-white shrink-0 shadow-sm">
                                     <Shield className="h-6 w-6" />
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">Security Review</span>
-                                    <DialogTitle className="text-2xl font-black tracking-tight">{selectedRequest?.request_number || 'Review Request'}</DialogTitle>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">Security Review</span>
+                                    <DialogTitle className="text-2xl font-black tracking-tight text-stone-900">{selectedRequest?.request_number || 'Review Request'}</DialogTitle>
                                 </div>
                             </div>
-                            <DialogDescription className="text-stone-400 font-semibold mt-1">
-                                Evaluating inventory movement for {selectedRequest?.branch_name}
+                            <DialogDescription className="text-stone-500 font-semibold mt-1">
+                                Evaluating inventory movement for <span className="text-stone-900">{selectedRequest?.branch_name}</span>
                             </DialogDescription>
                         </DialogHeader>
                     </div>
 
-                    <div className="p-8 space-y-8">
+                    <div className="p-8 space-y-8 overflow-y-auto min-h-0 flex-1">
                         {selectedRequest && (
                             <>
                                 {/* Branch Performance Summary */}
@@ -327,8 +327,8 @@ export default function AuditorApprovalPanel() {
                         )}
                     </div>
 
-                    <div className="p-8 pt-0 mt-2">
-                        <div className="flex flex-col sm:flex-row gap-3 pt-8 border-t border-stone-100">
+                    <div className="p-8 bg-white border-t border-stone-100 shrink-0">
+                        <div className="flex flex-col sm:flex-row gap-3">
                             <button
                                 onClick={() => handleDecision('REJECT')}
                                 disabled={isActionLoading}
