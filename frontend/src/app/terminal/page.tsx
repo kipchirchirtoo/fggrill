@@ -114,6 +114,18 @@ export default function MasterTerminalPage() {
         }
     }, [pin]);
 
+    const checkUpdates = () => {
+        if (typeof window !== 'undefined' && (window as any).require) {
+            try {
+                const { ipcRenderer } = (window as any).require('electron');
+                ipcRenderer.send('check-for-updates');
+                toast.info('Checking for updates...');
+            } catch (e) {
+                console.error('Failed to check for updates:', e);
+            }
+        }
+    };
+
     if (!mounted) return null;
 
     return (
@@ -345,9 +357,17 @@ export default function MasterTerminalPage() {
                 </div>
             )}
 
-            <p className="fixed bottom-8 left-1/2 -translate-x-1/2 text-[11px] text-stone-400 font-medium tracking-wide">
-                Made by <span className="font-bold text-stone-600">Hirall</span>
-            </p>
+            <div className="fixed bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1">
+                <p className="text-[11px] text-stone-400 font-medium tracking-wide">
+                    Made by <span className="font-bold text-stone-600">Hirall</span>
+                </p>
+                <button
+                    onClick={checkUpdates}
+                    className="text-[9px] text-stone-300 hover:text-stone-500 transition-colors font-mono"
+                >
+                    v1.0.15 • Check for updates
+                </button>
+            </div>
         </div>
     );
 }
