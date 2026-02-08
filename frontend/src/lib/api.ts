@@ -186,6 +186,27 @@ async function fetchPythonAPI<T>(endpoint: string, options?: FetchOptions): Prom
   } as unknown as T;
 }
 
+
+async function fetchPythonAPI<T>(endpoint: string, options?: FetchOptions): Promise<T> {
+  // Use PYTHON_API_URL
+  const url = `${PYTHON_API_URL}/api${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...getHeaders(),
+      ...options?.headers
+    }
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Request failed' }));
+    throw new Error(errorData.message || errorData.detail || `Request failed with status ${response.status}`);
+  }
+
+  return response.json();
+}
+
 // =====================================================
 // STOREKEEPING API
 // =====================================================
