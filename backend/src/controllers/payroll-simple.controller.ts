@@ -206,7 +206,8 @@ export const getPayrollRecords = async (req: Request, res: Response, next: NextF
                 *,
                 staff:staff_profiles(
                     *,
-                    user:users!user_id(*)
+                    user:users!user_id(*),
+                    branch:branches(id, name)
                 )
             `)
             .order('generated_at', { ascending: false });
@@ -224,6 +225,7 @@ export const getPayrollRecords = async (req: Request, res: Response, next: NextF
             staff_name: item.staff?.user ? `${item.staff.user.first_name || ''} ${item.staff.user.last_name || ''}`.trim() : '',
             staff_role: item.staff?.role,
             staff_department: item.staff?.department,
+            branch_name: item.staff?.branch?.name || 'Main Branch',
             staff: item.staff ? {
                 ...item.staff,
                 first_name: item.staff.user?.first_name || '',
@@ -312,7 +314,8 @@ export const emailPayslips = async (req: Request, res: Response, next: NextFunct
                 *,
                 staff:staff_profiles(
                     *,
-                    user:users!user_id(*)
+                    user:users!user_id(*),
+                    branch:branches(id, name)
                 )
             `)
             .eq('month', String(month))
@@ -330,7 +333,8 @@ export const emailPayslips = async (req: Request, res: Response, next: NextFunct
                 last_name: r.staff?.user?.last_name || '',
                 email: r.staff?.user?.email || '',
                 phone_number: r.staff?.user?.phone_number || '',
-                name: r.staff?.user ? `${r.staff.user.first_name || ''} ${r.staff.user.last_name || ''}`.trim() : ''
+                name: r.staff?.user ? `${r.staff.user.first_name || ''} ${r.staff.user.last_name || ''}`.trim() : '',
+                branch_name: r.staff?.branch?.name || 'Main Branch'
             },
             period: `${month} ${year}`
         }));
@@ -368,7 +372,8 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
                 *,
                 staff:staff_profiles(
                     *,
-                    user:users!user_id(*)
+                    user:users!user_id(*),
+                    branch:branches(id, name)
                 )
             `)
             .eq('month', String(month))
@@ -385,7 +390,8 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
                 last_name: r.staff?.user?.last_name || '',
                 email: r.staff?.user?.email || '',
                 phone_number: r.staff?.user?.phone_number || '',
-                name: r.staff?.user ? `${r.staff.user.first_name || ''} ${r.staff.user.last_name || ''}`.trim() : ''
+                name: r.staff?.user ? `${r.staff.user.first_name || ''} ${r.staff.user.last_name || ''}`.trim() : '',
+                branch_name: r.staff?.branch?.name || 'Main Branch'
             },
             period: `${month} ${year}`
         }));

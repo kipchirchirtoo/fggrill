@@ -128,7 +128,7 @@ def email_batch_payslips():
                 pdf_attachment.add_header('Content-Disposition', 'attachment', filename=f"Payslip_{period}.pdf")
                 msg.attach(pdf_attachment)
                 
-                with smtplib.SMTP(email_service.SMTP_HOST, email_service.SMTP_PORT) as server:
+                with smtplib.SMTP(email_service.SMTP_HOST, email_service.SMTP_PORT, timeout=30) as server:
                     server.starttls()
                     server.login(email_service.SMTP_USER, email_service.SMTP_PASS)
                     server.send_message(msg)

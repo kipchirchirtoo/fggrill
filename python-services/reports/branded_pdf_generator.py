@@ -513,144 +513,156 @@ class BrandedPDFGenerator:
         return self._create_pdf(elements)
 
     def _generate_payslip(self, data: Dict, filters: Dict) -> str:
-        """Generate a branded Employee Payslip based on the provided template image"""
+        """Generate a branded Employee Payslip based on accurate data and clean layout"""
         elements = []
         
-        # Header - customized for payslip style
-        # In the image, the logo is on the left and PAYSLIP is on the right
+        # 1. Cleaner Header Layout to prevent overlay
         logo = self._get_logo(width=0.8*inch)
-        
-        company_name = data.get('company', 'Famous Gates Hotels')
+        company_name = data.get('company', 'FAMOUS GATES HOTELS')
         company_email = data.get('company_email', 'famousgatesbmt@gmail.com')
         company_address = data.get('company_address', 'Bomet, Kenya')
         
-        header_data = [
-            [logo, [
-                Paragraph(f"<font size='10' color='{FG_GRAY}'>Famous Gates</font>", self.styles['Normal']),
-                Paragraph("<font size='18' face='Helvetica-Bold'>PAYSLIP</font>", self.styles['Normal']),
-                Paragraph(f"<font size='8' color='{FG_GRAY}'>{company_email} | {company_address}</font>", self.styles['Normal'])
-            ]]
+        header_content = [
+            Paragraph(f"<b>{company_name}</b>", self.styles['Normal']),
+            Paragraph(f"<font size='7' color='{FG_GRAY}'>{company_email} | {company_address}</font>", self.styles['Normal']),
+            Spacer(1, 0.1*inch),
+            Paragraph("<font size='16' face='Helvetica-Bold' color='#3C3C43'>PAYSLIP</font>", self.styles['Normal']),
         ]
         
-        header_table = Table(header_data, colWidths=[1.2*inch, 6*inch])
+        header_table = Table([[logo, header_content]], colWidths=[1.2*inch, 6*inch])
         header_table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('ALIGN', (0, 0), (0, 0), 'LEFT'),
-            ('ALIGN', (1, 0), (1, 0), 'LEFT'),
-            ('LEFTPADDING', (1, 0), (1, 0), 20),
+            ('LEFTPADDING', (1, 0), (1, 0), 15),
         ]))
         elements.append(header_table)
-        elements.append(Spacer(1, 0.4*inch))
+        elements.append(Spacer(1, 0.2*inch))
+        elements.append(HRFlowable(width="100%", thickness=1, color=FG_LIGHT))
+        elements.append(Spacer(1, 0.2*inch))
         
-        # Body Title and Pay Period
-        month = data.get('month', datetime.now().strftime('%B'))
+        # 2. Pay Period and Branch info
+        raw_month = data.get('month')
+        month_name = raw_month
+        if str(raw_month).isdigit():
+            import calendar
+            try:
+                # calendar.month_name starts at 1
+                month_name = calendar.month_name[int(raw_month)]
+            except:
+                month_name = raw_month
+        
         year = data.get('year', datetime.now().year)
+        period_str = f"{month_name} {year}"
         
-        elements.append(Paragraph("<b>Payslip</b>", self.styles['ReportTitle']))
-        elements.append(Paragraph(f"<b>Pay Period:</b> {month} {year}", 
-            ParagraphStyle('PayPeriod', parent=self.styles['Normal'], alignment=TA_CENTER, fontSize=11)))
-        elements.append(Spacer(1, 0.3*inch))
+        # Fetch staff/branch info
+        staff = data.get('staff', {})
+        # Branch info might be in staff object or data root
+        branch_name = staff.get('branch_name') or data.get('branch_name') or filters.get('branch_name', 'Main Branch')
         
-        # Employee Info
-        employee = data.get('employee', {})
-        user = employee.get('user', {})
-        name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or "Employee Name"
-        national_id = employee.get('kra_pin') or employee.get('national_id') or "N/A"
-        position = employee.get('employee_type') or "Staff"
-        
-        emp_info = [
-            Paragraph(f"<b>Employee Name:</b> {name}", self.styles['Normal']),
-            Paragraph(f"<b>Employee PIN/ID:</b> {national_id}", self.styles['Normal']),
-            Paragraph(f"<b>Position:</b> {position}", self.styles['Normal']),
+        period_data = [
+            [Paragraph(f"<b>Pay Period:</b> {period_str}", self.styles['Normal']),
+             Paragraph(f"<b>Branch:</b> {branch_name}", self.styles['Normal'])]
         ]
-        for p in emp_info:
-            elements.append(p)
-            elements.append(Spacer(1, 0.05*inch))
+        period_table = Table(period_data, colWidths=[3.75*inch, 3.75*inch])
+        period_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+        ]))
+        elements.append(period_table)
+        elements.append(Spacer(1, 0.2*inch))
         
-        elements.append(Spacer(1, 0.3*inch))
+        # 3. Employee Info - using proper staff data
+        name = staff.get('name') or f"{staff.get('first_name', '')} {staff.get('last_name', '')}".strip() or "Employee Name"
+        pin_id = staff.get('kra_pin') or staff.get('national_id') or staff.get('id', 'N/A')
+        role = staff.get('role') or staff.get('position') or "Staff"
         
-        # Financial Table (Earnings / Deductions)
-        # Headers: Earnings | Amount | Deductions | Amount
-        table_headers = [
-            Paragraph("<b>Earnings</b>", self.styles['TableHeader']),
-            Paragraph("<b>Amount</b>", self.styles['TableHeader']),
-            Paragraph("<b>Deductions</b>", self.styles['TableHeader']),
-            Paragraph("<b>Amount</b>", self.styles['TableHeader'])
+        info_data = [
+            ['Employee Name:', name],
+            ['Employee PIN/ID:', pin_id],
+            ['Position:', role]
         ]
         
-        # Earnings
+        info_table = Table(info_data, colWidths=[1.5*inch, 6*inch])
+        info_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(info_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # 4. Financial Structure
+        # Earnings Grid
+        elements.append(Paragraph("<b>EARNINGS & DEDUCTIONS</b>", self.styles['SectionHeader']))
+        
         base_salary = float(data.get('basic_salary') or 0)
-        overtime_pay = float(data.get('overtime_pay') or 0)
-        bonuses = float(data.get('allowances') or 0)
-        gross_salary = float(data.get('gross_pay') or base_salary + overtime_pay + bonuses)
+        allowances = float(data.get('allowances') or 0)
+        overtime = float(data.get('overtime_pay') or 0)
+        gross_pay = float(data.get('gross_pay') or (base_salary + allowances + overtime))
         
         # Deductions
-        paye = float(data.get('paye_tax') or data.get('tax_deductions') or 0)
-        nssf = float(data.get('nssf_deduction') or 0)
-        shif = float(data.get('shif_deduction') or 0)
-        housing_levy = float(data.get('housing_levy_deduction') or 0)
-        total_deductions = float(data.get('total_deductions') or (paye + nssf + shif + housing_levy))
+        loans = float(data.get('loan_deduction') or 0)
+        credit_bills = float(data.get('total_credit_bills') or 0)
+        advances = float(data.get('total_advances') or 0)
         
-        net_pay = float(data.get('net_salary') or (gross_salary - total_deductions))
+        total_deductions = float(data.get('total_deductions') or (loans + credit_bills + advances))
+        net_pay = float(data.get('net_pay') or (gross_pay - total_deductions))
         
-        table_rows = [
-            table_headers,
-            ["Base Salary", self._format_currency(base_salary), "PAYE Tax", self._format_currency(paye)],
-            ["Overtime Pay", self._format_currency(overtime_pay), "NSSF", self._format_currency(nssf)],
-            ["Allowances/Bonuses", self._format_currency(bonuses), "SHIF", self._format_currency(shif)],
-            ["", "", "Housing Levy", self._format_currency(housing_levy)],
-            [Paragraph("<b>Gross Salary</b>", self.styles['TableCell']), self._format_currency(gross_salary), 
-             "Other Deductions", self._format_currency(0)],
-            [Paragraph("<b>Total</b>", self.styles['TableCell']), self._format_currency(gross_salary), 
-             Paragraph("<b>Total</b>", self.styles['TableCell']), self._format_currency(total_deductions)],
+        fin_data = [
+            [Paragraph("<b>Earnings</b>", self.styles['TableHeader']), Paragraph("<b>Amount (KES)</b>", self.styles['TableHeader']),
+             Paragraph("<b>Deductions</b>", self.styles['TableHeader']), Paragraph("<b>Amount (KES)</b>", self.styles['TableHeader'])],
+            
+            ["Basic Salary", f"{base_salary:,.2f}", "Staff Loans", f"{loans:,.2f}"],
+            ["Allowances/Bonus", f"{allowances:,.2f}", "Credit Bills", f"{credit_bills:,.2f}"],
+            ["Overtime Pay", f"{overtime:,.2f}", "Salary Advances", f"{advances:,.2f}"],
+            
+            [Paragraph("<b>Gross Salary</b>", self.styles['Normal']), Paragraph(f"<b>{gross_pay:,.2f}</b>", self.styles['Normal']),
+             Paragraph("<b>Total Deductions</b>", self.styles['Normal']), Paragraph(f"<b>{total_deductions:,.2f}</b>", self.styles['Normal'])]
         ]
         
-        financial_table = Table(table_rows, colWidths=[2*inch, 1.5*inch, 2*inch, 1.5*inch])
-        financial_table.setStyle(TableStyle([
+        fin_table = Table(fin_data, colWidths=[2*inch, 1.75*inch, 2*inch, 1.75*inch])
+        fin_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), HEADER_GRAY),
-            ('INNERGRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
-            ('BOX', (0, 0), (-1, -1), 0.5, FG_GRAY),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
             ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
             ('ALIGN', (3, 0), (3, -1), 'RIGHT'),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
         ]))
-        elements.append(financial_table)
+        elements.append(fin_table)
         elements.append(Spacer(1, 0.4*inch))
         
-        # Net Pay Section
-        net_headers = [
-            Paragraph("<b>Net Pay</b>", self.styles['TableHeader']),
-            Paragraph("<b>Amount</b>", self.styles['TableHeader'])
+        # 5. Net Pay Summary
+        net_pay_data = [
+            [Paragraph("<font size='12'><b>TOTAL NET PAY</b></font>", self.styles['Normal']), 
+             Paragraph(f"<font size='14'><b>{self._format_currency(net_pay)}</b></font>", 
+                       ParagraphStyle('NetPay', parent=self.styles['Normal'], alignment=TA_RIGHT, textColor=colors.HexColor('#008000')))]
         ]
-        net_rows = [
-            net_headers,
-            ["Net Pay", Paragraph(f"<b>{self._format_currency(net_pay)}</b>", self.styles['TableCell'])]
-        ]
-        net_table = Table(net_rows, colWidths=[4.1*inch, 3.4*inch])
+        net_table = Table(net_pay_data, colWidths=[4*inch, 3.5*inch])
         net_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GRAY),
-            ('INNERGRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
-            ('BOX', (0, 0), (-1, -1), 0.5, FG_GRAY),
-            ('ALIGN', (1, 1), (1, 1), 'RIGHT'),
-            ('TOPPADDING', (0, 0), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('BACKGROUND', (0, 0), (-1, -1), HEADER_GREEN),
+            ('BOX', (0, 0), (-1, -1), 1, FG_DARK),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
         ]))
         elements.append(net_table)
-        elements.append(Spacer(1, 0.6*inch))
         
-        # Footer
-        footer_style = ParagraphStyle('Footer', parent=self.styles['Normal'], fontSize=9, alignment=TA_LEFT)
-        elements.append(Paragraph(f"If you need further assistance, please feel free to contact HR at {company_email}.", footer_style))
+        # 6. Footer message
+        elements.append(Spacer(1, 0.6*inch))
+        elements.append(Paragraph("If you need further assistance, please feel free to contact HR at famousgatesbmt@gmail.com.", self.styles['SmallText']))
         
         return self._create_pdf(elements)
 
     def _create_pdf(self, elements: List, filename: str = None, landscape_mode: bool = False) -> str:
         """Create PDF from elements"""
         if not filename:
-            filename = f"/tmp/FG_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            import random
+            import string
+            suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+            filename = f"/tmp/FG_Report_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{suffix}.pdf"
         
         pagesize = landscape(A4) if landscape_mode else A4
         
