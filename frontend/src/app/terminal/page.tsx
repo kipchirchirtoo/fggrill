@@ -365,7 +365,7 @@ export default function MasterTerminalPage() {
                     onClick={checkUpdates}
                     className="text-[9px] text-stone-300 hover:text-stone-500 transition-colors font-mono"
                 >
-                    v1.0.18 • Check for updates
+                    v1.0.19 • Check for updates
                 </button>
             </div>
         </div>

@@ -1,6 +1,6 @@
 {
   "name": "famous-gate-hotel-backend",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "description": "Backend API for Famous Gate Hotel Management System",
   "main": "dist/server.js",
   "scripts": {
