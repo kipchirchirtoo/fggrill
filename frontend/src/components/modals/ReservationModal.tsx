@@ -7,9 +7,11 @@ import {
   Clock, Users, Bed, FileText, Search, Check
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog as UIDialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { IOSButton } from '@/components/ui/ios-button';
 import { Input } from '@/components/ui/input';
+import { useBranch } from '@/lib/branch-context';
+import { roomsAPI, guestAPI, bookingsAPI } from '@/lib/api';
 
 interface ReservationModalProps {
   isOpen: boolean;
@@ -187,8 +189,10 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JS
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <UIDialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-lg p-0 overflow-hidden flex flex-col border-none shadow-2xl rounded-2xl bg-white max-h-[90vh]">
         <DialogHeader className="p-4 border-b border-stone-100 flex-shrink-0">
           <div className="flex items-center justify-between">
@@ -499,7 +503,7 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JS
             </button>
           )}
         </div>
-      </motion.div>
-    </motion.div>
+      </DialogContent>
+    </UIDialog>
   );
 }
