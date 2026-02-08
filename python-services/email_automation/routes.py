@@ -45,6 +45,12 @@ class EmailAutomationService:
         self.db_path = os.path.join(os.path.dirname(__file__), 'email_schedule.db')
         self.init_database()
         self.email_templates = self.load_email_templates()
+        # Expose SMTP config for other services
+        self.SMTP_HOST = SMTP_HOST
+        self.SMTP_PORT = SMTP_PORT
+        self.SMTP_USER = SMTP_USER
+        self.SMTP_PASS = SMTP_PASS
+        self.SMTP_FROM_EMAIL = SMTP_FROM_EMAIL
         
     def init_database(self):
         """Initialize SQLite database for email scheduling"""

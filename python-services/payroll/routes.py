@@ -38,10 +38,13 @@ def generate_batch_zip():
                 filepath = os.path.join(temp_dir, filename)
                 
                 # Use BrandedPDFGenerator to create PDF
-                pdf_buffer = pdf_generator.generate_report('payslip', record, {})
+                pdf_path = pdf_generator.generate_report('payslip', record, {})
                 
-                with open(filepath, 'wb') as f:
-                    f.write(pdf_buffer.getvalue())
+                # Move the generated PDF to our temp directory
+                shutil.copy(pdf_path, filepath)
+                # Cleanup the original temp file
+                if os.path.exists(pdf_path):
+                    os.remove(pdf_path)
                     
                 pdf_files.append(filepath)
             except Exception as e:
@@ -88,8 +91,15 @@ def email_batch_payslips():
                 continue
                 
             try:
-                # Generate PDF
-                pdf_buffer = pdf_generator.generate_report('payslip', record, {})
+                # Generate PDF (returns path)
+                pdf_path = pdf_generator.generate_report('payslip', record, {})
+                
+                with open(pdf_path, 'rb') as f:
+                    pdf_content = f.read()
+                
+                # Cleanup the original temp file
+                if os.path.exists(pdf_path):
+                    os.remove(pdf_path)
                 
                 # Convert PDF to HTML/Text or Attachment (Email service needs update to handle attachments)
                 # For now, we will send a notification that payslip is ready, 
@@ -114,7 +124,7 @@ def email_batch_payslips():
                 msg.attach(MIMEText(body, 'plain'))
                 
                 # Attachment
-                pdf_attachment = MIMEApplication(pdf_buffer.getvalue(), _subtype="pdf")
+                pdf_attachment = MIMEApplication(pdf_content, _subtype="pdf")
                 pdf_attachment.add_header('Content-Disposition', 'attachment', filename=f"Payslip_{period}.pdf")
                 msg.attach(pdf_attachment)
                 
