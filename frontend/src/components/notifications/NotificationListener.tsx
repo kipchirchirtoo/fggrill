@@ -89,8 +89,8 @@ export function NotificationListener() {
         // Initial check after 2 seconds
         const initialTimeout = setTimeout(checkForNewNotifications, 2000);
 
-        // Then check every 5 seconds (more frequent)
-        const interval = setInterval(checkForNewNotifications, 5000);
+        // Then check every 30 seconds (reduced frequency)
+        const interval = setInterval(checkForNewNotifications, 30000);
 
         return () => {
             clearTimeout(initialTimeout);

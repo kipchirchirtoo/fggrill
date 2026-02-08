@@ -277,6 +277,28 @@ export const getPayrollSummary = async (req: Request, res: Response, next: NextF
 };
 
 /**
+ * Utility to call Python service with retries
+ */
+const callPythonWithRetry = async (url: string, data: any, config: any = {}, maxRetries = 3) => {
+    let lastError: any;
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            return await axios.post(url, data, config);
+        } catch (error: any) {
+            lastError = error;
+            if (error.response?.status === 429) {
+                const delay = Math.pow(2, i) * 2000; // 2s, 4s, 8s
+                logger.warn(`Python service rate limited (429). Retrying in ${delay}ms... (Attempt ${i + 1}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+            }
+            throw error;
+        }
+    }
+    throw lastError;
+};
+
+/**
  * Trigger Batch Email for Payslips
  */
 export const emailPayslips = async (req: Request, res: Response, next: NextFunction) => {
@@ -317,7 +339,7 @@ export const emailPayslips = async (req: Request, res: Response, next: NextFunct
         const pythonUrl = `${PYTHON_SERVICE_URL}/api/payroll/email-batch`;
         logger.debug(`Calling Python service (Email): ${pythonUrl}`);
 
-        const pythonRes = await axios.post(pythonUrl, {
+        const pythonRes = await callPythonWithRetry(pythonUrl, {
             payroll_records: formattedRecords,
             period: `${month} ${year}`
         });
@@ -373,15 +395,15 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
         logger.debug(`Calling Python service (ZIP): ${pythonUrl}`);
 
         // Since we want to stream the ZIP back to client, we respond with the stream
-        const response = await axios.post(pythonUrl, {
+        const pythonRes = await callPythonWithRetry(pythonUrl, {
             payroll_records: formattedRecords,
-            period: `${month}_${year}`
+            period: `${month} ${year}`
         }, { responseType: 'stream' });
 
         res.setHeader('Content-Type', 'application/zip');
         res.setHeader('Content-Disposition', `attachment; filename=Payslips_${month}_${year}.zip`);
 
-        response.data.pipe(res);
+        pythonRes.data.pipe(res);
 
     } catch (error) {
         next(error);

@@ -28,4 +28,5 @@ EXPOSE 5001
 # Run with gunicorn
 # Run with gunicorn
 # Render provides PORT environment variable
-CMD gunicorn --bind 0.0.0.0:$PORT --workers 4 --timeout 120 app:app
+# Render provides PORT environment variable
+CMD gunicorn --bind 0.0.0.0:$PORT --workers 8 --timeout 300 app:app
