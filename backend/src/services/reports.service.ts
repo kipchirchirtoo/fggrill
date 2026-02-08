@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { logger } from '../utils/logger';
+import { PYTHON_SERVICE_URL } from '../config/pythonService';
 import { emailService } from './email.service';
 import { pool } from '../config/pg';
 import fs from 'fs';
@@ -29,7 +30,7 @@ class ReportsService {
 
   constructor() {
     this.db = pool;
-    this.pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
+    this.pythonServiceUrl = PYTHON_SERVICE_URL;
 
     // Define scheduled reports
     this.scheduledReports = [

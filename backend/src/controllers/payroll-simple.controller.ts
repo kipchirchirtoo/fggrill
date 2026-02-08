@@ -2,9 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { AppError } from '../middleware/errorHandler';
 import axios from 'axios';
-
-// Python Service URL
-const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:5000';
+import { PYTHON_SERVICE_URL } from '../config/pythonService';
+import { logger } from '../utils/logger';
 
 /**
  * Generate Payroll for a specific month/year
@@ -182,8 +181,8 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
             }
         }
 
-        res.status(200).json({
-            success: true,
+        res.status(errors.length > 0 && results.length === 0 ? 500 : 200).json({
+            success: errors.length < staffList.length,
             data: {
                 processed_count: results.length,
                 error_count: errors.length,
@@ -212,8 +211,8 @@ export const getPayrollRecords = async (req: Request, res: Response, next: NextF
             `)
             .order('generated_at', { ascending: false });
 
-        if (month) query = query.eq('month', month);
-        if (year) query = query.eq('year', year);
+        if (month) query = query.eq('month', String(month));
+        if (year) query = query.eq('year', Number(year));
         if (staff_id) query = query.eq('staff_id', staff_id);
 
         const { data, error } = await query;
@@ -254,8 +253,8 @@ export const getPayrollSummary = async (req: Request, res: Response, next: NextF
             .from('staff_payroll')
             .select('*');
 
-        if (month) query = query.eq('month', month);
-        if (year) query = query.eq('year', year);
+        if (month) query = query.eq('month', String(month));
+        if (year) query = query.eq('year', Number(year));
 
         const { data: records, error } = await query;
         if (error) throw error;
@@ -294,8 +293,8 @@ export const emailPayslips = async (req: Request, res: Response, next: NextFunct
                     user:users!user_id(*)
                 )
             `)
-            .eq('month', month)
-            .eq('year', year);
+            .eq('month', String(month))
+            .eq('year', Number(year));
 
         if (error) throw error;
         if (!records || records.length === 0) throw new AppError('No payroll records found to email', 404);
@@ -315,7 +314,10 @@ export const emailPayslips = async (req: Request, res: Response, next: NextFunct
         }));
 
         // Call Python Service
-        const pythonRes = await axios.post(`${PYTHON_SERVICE_URL}/api/payroll/email-batch`, {
+        const pythonUrl = `${PYTHON_SERVICE_URL}/api/payroll/email-batch`;
+        logger.debug(`Calling Python service (Email): ${pythonUrl}`);
+
+        const pythonRes = await axios.post(pythonUrl, {
             payroll_records: formattedRecords,
             period: `${month} ${year}`
         });
@@ -347,8 +349,8 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
                     user:users!user_id(*)
                 )
             `)
-            .eq('month', month)
-            .eq('year', year);
+            .eq('month', String(month))
+            .eq('year', Number(year));
 
         if (error) throw error;
         if (!records || records.length === 0) throw new AppError('No payroll records found', 404);
@@ -367,8 +369,11 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
         }));
 
         // Call Python Service explicitly for ZIP
+        const pythonUrl = `${PYTHON_SERVICE_URL}/api/payroll/generate-batch-zip`;
+        logger.debug(`Calling Python service (ZIP): ${pythonUrl}`);
+
         // Since we want to stream the ZIP back to client, we respond with the stream
-        const response = await axios.post(`${PYTHON_SERVICE_URL}/api/payroll/generate-batch-zip`, {
+        const response = await axios.post(pythonUrl, {
             payroll_records: formattedRecords,
             period: `${month}_${year}`
         }, { responseType: 'stream' });

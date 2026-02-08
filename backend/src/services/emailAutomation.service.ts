@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import { PYTHON_SERVICE_URL } from '../config/pythonService';
 import { emailService } from './email.service';
 import { bookingEmailSequence } from '../utils/bookingEmailTemplates';
 
@@ -20,7 +21,7 @@ class EmailAutomationService {
   private pythonServiceUrl: string;
 
   constructor() {
-    this.pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
+    this.pythonServiceUrl = PYTHON_SERVICE_URL;
   }
 
   /**
