@@ -4,7 +4,7 @@ import { useAuth, UserRole } from '@/lib/auth-context';
 import { useBranch, BranchSelector } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { BranchAccountingOverview } from '@/components/dashboard/branch/BranchAccountingOverview';
+import { IOSCard } from '@/components/ui/ios-card';
 
 export default function AuditorBranchAuditPage() {
     const { user } = useAuth();
@@ -22,12 +22,20 @@ export default function AuditorBranchAuditPage() {
                         <BranchSelector />
                     </div>
 
-                    <BranchAccountingOverview
-                        branchId={activeBranchId}
-                        branchName={activeBranch?.name}
-                        basePath="/dashboard/auditor/branch-audit"
-                        isAuditor={true}
-                    />
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <IOSCard className="p-6 cursor-pointer hover:shadow-lg transition-all" onClick={() => window.location.href = '/dashboard/auditor/stock'}>
+                            <h3 className="text-lg font-bold mb-2">Stock Audit</h3>
+                            <p className="text-sm text-stone-500">Verify branch stock takes and variances.</p>
+                        </IOSCard>
+                        <IOSCard className="p-6 cursor-pointer hover:shadow-lg transition-all" onClick={() => window.location.href = '/dashboard/auditor/financial-verification'}>
+                            <h3 className="text-lg font-bold mb-2">Financial Verification</h3>
+                            <p className="text-sm text-stone-500">Audit payments and transactions.</p>
+                        </IOSCard>
+                        <IOSCard className="p-6 cursor-pointer hover:shadow-lg transition-all" onClick={() => window.location.href = '/dashboard/auditor/staff-audit'}>
+                            <h3 className="text-lg font-bold mb-2">Staff & Credit Audit</h3>
+                            <p className="text-sm text-stone-500">Audit staff credits, loans, and advances.</p>
+                        </IOSCard>
+                    </div>
                 </div>
             </DashboardLayout>
         </ProtectedRoute>
