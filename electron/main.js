@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, dialog } = require('electron');
+const { app, BrowserWindow, globalShortcut, dialog, ipcMain } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -125,6 +125,20 @@ app.on('ready', () => {
     // Check for updates every time the app opens
     if (!isDev) {
         autoUpdater.checkForUpdatesAndNotify();
+
+        // Check for updates every 8 hours if the app stays open
+        setInterval(() => {
+            autoUpdater.checkForUpdates();
+        }, 8 * 60 * 60 * 1000);
+    }
+});
+
+// IPC listener for manual check from frontend
+ipcMain.on('check-for-updates', () => {
+    if (!isDev) {
+        autoUpdater.checkForUpdatesAndNotify();
+    } else {
+        console.log('Update check skipped in development mode');
     }
 });
 
