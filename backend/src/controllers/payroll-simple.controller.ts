@@ -4,6 +4,7 @@ import { AppError } from '../middleware/errorHandler';
 import axios from 'axios';
 import { PYTHON_SERVICE_URL } from '../config/pythonService';
 import { logger } from '../utils/logger';
+import { emailService } from '../services/email.service';
 
 /**
  * Generate Payroll for a specific month/year
@@ -339,18 +340,42 @@ export const emailPayslips = async (req: Request, res: Response, next: NextFunct
             period: `${month} ${year}`
         }));
 
-        // Call Python Service
-        const pythonUrl = `${PYTHON_SERVICE_URL}/api/payroll/email-batch`;
-        logger.debug(`Calling Python service (Email): ${pythonUrl}`);
+        // Send individual emails
+        const results = { sent: 0, failed: 0, details: [] as any[] };
+        const pythonUrl = `${PYTHON_SERVICE_URL}/api/payroll/generate-single-pdf`;
 
-        const pythonRes = await callPythonWithRetry(pythonUrl, {
-            payroll_records: formattedRecords,
-            period: `${month} ${year}`
-        });
+        for (const record of formattedRecords) {
+            try {
+                // 1. Get PDF from Python
+                const pythonRes = await callPythonWithRetry(pythonUrl, record, {
+                    responseType: 'arraybuffer'
+                });
+
+                if (pythonRes.status !== 200) {
+                    throw new Error(`Python service failed: ${pythonRes.statusText}`);
+                }
+
+                // 2. Send Email via Node side
+                const pdfBuffer = Buffer.from(pythonRes.data);
+                await emailService.sendPayslipEmail(
+                    record.staff,
+                    month,
+                    parseInt(year),
+                    pdfBuffer
+                );
+
+                results.sent++;
+                results.details.push({ name: record.staff.name, status: 'sent' });
+            } catch (err: any) {
+                logger.error(`Failed to email payslip for ${record.staff?.name}: ${err.message}`);
+                results.failed++;
+                results.details.push({ name: record.staff?.name, error: err.message });
+            }
+        }
 
         res.status(200).json({
             success: true,
-            data: pythonRes.data
+            data: results
         });
 
     } catch (error) {
