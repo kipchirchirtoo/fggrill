@@ -20,10 +20,11 @@ export default function ClockInTerminal() {
     const [method, setMethod] = useState<'biometric' | 'rfid' | 'pin'>('biometric');
     const [staffInfo, setStaffInfo] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(false);
-    const [currentTime, setCurrentTime] = useState(new Date());
+    const [currentTime, setCurrentTime] = useState<Date | null>(null);
     const [lastAction, setLastAction] = useState<'in' | 'out'>('in');
 
     useEffect(() => {
+        setCurrentTime(new Date());
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
@@ -102,11 +103,11 @@ export default function ClockInTerminal() {
                 {/* Header / Clock */}
                 <div className="text-center mb-12 space-y-2">
                     <p className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.3em] leading-none">Management Terminal</p>
-                    <h1 className="text-6xl font-bold text-stone-900 tracking-tighter">
-                        {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    <h1 className="text-6xl font-bold text-stone-900 tracking-tighter" suppressHydrationWarning>
+                        {currentTime ? currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
                     </h1>
-                    <p className="text-stone-500 font-medium text-sm">
-                        {currentTime.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
+                    <p className="text-stone-500 font-medium text-sm" suppressHydrationWarning>
+                        {currentTime ? currentTime.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }) : 'Loading...'}
                     </p>
                 </div>
 

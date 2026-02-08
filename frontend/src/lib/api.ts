@@ -631,7 +631,7 @@ export const systemAPI = {
 // STAFF API
 // =====================================================
 
-const staffImpl = {
+export const staffAPI = {
   // Staff List
   getAll: (params?: { branch_id?: number; role?: string; search?: string }) => {
     const query = new URLSearchParams();
@@ -3164,33 +3164,7 @@ export const pettyCashAPI = {
 // STAFF API
 // =====================================================
 
-export const staffAPI = {
-  getStaff: () => fetchAPI<any>('/staff'),
-  getLeaveRequests: (params?: { status?: string }) => {
-    const query = new URLSearchParams();
-    if (params?.status) query.append('status', params.status);
-    return fetchAPI<any>(`/staff/leave?${query}`);
-  },
-  getAttendance: (params?: { date?: string }) => {
-    const query = new URLSearchParams();
-    if (params?.date) query.append('date', params.date);
-    return fetchAPI<any>(`/staff/attendance?${query}`);
-  },
-  simplePayroll: {
-    getPayrollRecords: (params?: { month?: number; year?: number }) => {
-      const query = new URLSearchParams();
-      if (params?.month) query.append('month', String(params.month));
-      if (params?.year) query.append('year', String(params.year));
-      return fetchAPI<any>(`/payroll/history?${query}`);
-    },
-    generatePayroll: (data: { month: number; year: number }) =>
-      fetchAPI<any>('/payroll/generate', { method: 'POST', body: JSON.stringify(data) }),
-    emailPayslips: (data: { month: number; year: number }) =>
-      fetchAPI<any>('/payroll/email-all', { method: 'POST', body: JSON.stringify(data) }),
-    downloadPayslipsZip: (data: { month: number; year: number }) =>
-      fetchAPI<any>('/payroll/download-zip', { method: 'POST', body: JSON.stringify(data) }),
-  }
-};
+
 
 // =====================================================
 // USER MANAGEMENT API
@@ -3967,7 +3941,7 @@ export const employeePortalAPI = {
 export const api = {
   auth: authAPI,
   user: userAPI,
-  staff: staffImpl,
+  staff: staffAPI,
   system: systemAPI,
   rooms: roomsAPI,
   guests: guestAPI,
