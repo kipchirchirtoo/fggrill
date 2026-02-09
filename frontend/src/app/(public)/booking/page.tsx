@@ -96,7 +96,9 @@ function BookingContent() {
 
   const calculateTotal = () => {
     if (!roomDetails) return 0;
-    const subtotal = roomDetails.pricePerNight * calculateNights();
+    // Use basePrice for calculation to match the breakdown
+    // Total = Base + Tax (16%) + Service (10%)
+    const subtotal = roomDetails.basePrice * calculateNights();
     const tax = subtotal * 0.16;
     const serviceCharge = subtotal * 0.10;
     return subtotal + tax + serviceCharge;
