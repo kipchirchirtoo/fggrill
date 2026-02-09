@@ -63,7 +63,7 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, rooms = [], staff = []
 
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof TaskFormData, string>> = {};
-    
+
     if (!formData.room_number.trim()) {
       newErrors.room_number = 'Room number is required';
     }
@@ -74,7 +74,7 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, rooms = [], staff = []
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validate()) return;
 
     setIsSubmitting(true);
@@ -120,10 +120,10 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, rooms = [], staff = []
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-hidden"
+            className="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100 flex-shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
                   <Sparkles className="h-5 w-5 text-emerald-600" />
@@ -143,7 +143,7 @@ export function NewTaskModal({ isOpen, onClose, onSubmit, rooms = [], staff = []
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto max-h-[calc(90vh-180px)]">
+            <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1">
               {/* Room Number */}
               {rooms.length > 0 ? (
                 <div className="space-y-2">

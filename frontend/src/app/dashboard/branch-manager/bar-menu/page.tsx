@@ -525,15 +525,15 @@ export default function BarMenuManagementPage() {
 
         {/* Drink Modal */}
         <Dialog open={drinkModalOpen} onOpenChange={setDrinkModalOpen}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
+          <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col overflow-hidden p-0">
+            <DialogHeader className="px-6 py-4 border-b border-stone-100 bg-white">
               <DialogTitle className="flex items-center gap-2 text-xl font-sf-pro-display">
                 <Wine className="h-5 w-5 text-stone-600" />
                 {selectedDrink ? 'Refine Drink Selection' : 'Create New Collection Entry'}
               </DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-8 py-4 px-1">
+            <div className="flex-1 overflow-y-auto p-6 space-y-8">
               {/* Image Section */}
               <div className="space-y-4">
                 <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Product Visual</h4>
@@ -655,30 +655,30 @@ export default function BarMenuManagementPage() {
                   />
                 </div>
               </div>
+            </div>
 
-              <div className="flex gap-4 pt-6 border-t border-stone-100">
-                <IOSButton variant="secondary" onClick={() => setDrinkModalOpen(false)} className="flex-1 h-12 text-base font-semibold">
-                  Cancel
-                </IOSButton>
-                <IOSButton onClick={handleSaveDrink} disabled={isSubmitting || isUploadingImage} className="flex-1 h-12 text-base font-semibold">
-                  {isUploadingImage ? 'Uploading Image...' : isSubmitting ? 'Processing...' : selectedDrink ? 'Save Variations' : 'Add to Collection'}
-                </IOSButton>
-              </div>
+            <div className="p-4 bg-stone-50 border-t border-stone-100 flex gap-4">
+              <IOSButton variant="secondary" onClick={() => setDrinkModalOpen(false)} className="flex-1 h-12 text-base font-semibold">
+                Cancel
+              </IOSButton>
+              <IOSButton onClick={handleSaveDrink} disabled={isSubmitting || isUploadingImage} className="flex-1 h-12 text-base font-semibold">
+                {isUploadingImage ? 'Uploading Image...' : isSubmitting ? 'Processing...' : selectedDrink ? 'Save Variations' : 'Add to Collection'}
+              </IOSButton>
             </div>
           </DialogContent>
         </Dialog>
 
         {/* Category Modal */}
         <Dialog open={categoryModalOpen} onOpenChange={setCategoryModalOpen}>
-          <DialogContent className="max-w-xl">
-            <DialogHeader>
+          <DialogContent className="max-w-xl flex flex-col overflow-hidden p-0 max-h-[85vh]">
+            <DialogHeader className="px-6 py-4 border-b border-stone-100 bg-white">
               <DialogTitle className="flex items-center gap-2 text-xl font-sf-pro-display">
                 <Tag className="h-5 w-5 text-stone-600" />
                 {selectedCategory ? 'Edit Bar Category' : 'Create Bar Collection'}
               </DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-6 py-4 px-1">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
               <div className="space-y-2">
                 <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Collection Title *</label>
                 <Input
@@ -708,14 +708,15 @@ export default function BarMenuManagementPage() {
                   placeholder="Strategic description for the bar team..."
                 />
               </div>
-              <div className="flex gap-4 pt-4 border-t border-stone-100">
-                <IOSButton variant="secondary" onClick={() => setCategoryModalOpen(false)} className="flex-1 h-12 text-base font-semibold">
-                  Discard
-                </IOSButton>
-                <IOSButton onClick={handleSaveCategory} disabled={isSubmitting} className="flex-1 h-12 text-base font-semibold">
-                  {isSubmitting ? 'Saving...' : selectedCategory ? 'Apply Changes' : 'Initialize Collection'}
-                </IOSButton>
-              </div>
+            </div>
+
+            <div className="p-4 bg-stone-50 border-t border-stone-100 flex gap-4">
+              <IOSButton variant="secondary" onClick={() => setCategoryModalOpen(false)} className="flex-1 h-12 text-base font-semibold">
+                Discard
+              </IOSButton>
+              <IOSButton onClick={handleSaveCategory} disabled={isSubmitting} className="flex-1 h-12 text-base font-semibold">
+                {isSubmitting ? 'Saving...' : selectedCategory ? 'Apply Changes' : 'Initialize Collection'}
+              </IOSButton>
             </div>
           </DialogContent>
         </Dialog>

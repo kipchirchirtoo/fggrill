@@ -403,19 +403,6 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
           </div>
         </div>
       </div>
-
-      <div className="flex gap-3 pt-6 sticky bottom-0 bg-white">
-        <IOSButton variant="outline" onClick={onClose} className="flex-1 rounded-xl">
-          Cancel
-        </IOSButton>
-        <IOSButton
-          onClick={checkAvailability}
-          disabled={isLoading}
-          className="flex-1 bg-stone-900 hover:bg-stone-800 text-white rounded-xl shadow-lg"
-        >
-          {isLoading ? 'Checking...' : 'Check Availability'}
-        </IOSButton>
-      </div>
     </motion.div>
   );
 
@@ -479,15 +466,6 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
             </div>
           ))}
         </div>
-      </div>
-
-      <div className="flex gap-3 pt-6 sticky bottom-0 bg-white">
-        <button
-          onClick={() => setStep(1)}
-          className="flex-1 py-3 px-4 rounded-xl font-bold text-sm border border-stone-200 text-stone-600 hover:bg-stone-50 transition-all"
-        >
-          Back
-        </button>
       </div>
     </motion.div>
   );
@@ -573,21 +551,6 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
           rows={3}
         />
       </div>
-
-      <div className="flex gap-3 pt-6 sticky bottom-0 bg-white">
-        <button
-          onClick={() => setStep(2)}
-          className="flex-1 py-3 px-4 rounded-xl font-bold text-sm border border-stone-200 text-stone-600 hover:bg-stone-50 transition-all"
-        >
-          Back
-        </button>
-        <IOSButton
-          onClick={() => setStep(4)}
-          className="flex-1 bg-stone-900 hover:bg-stone-800 text-white rounded-xl shadow-lg"
-        >
-          Continue to Payment
-        </IOSButton>
-      </div>
     </motion.div>
   );
 
@@ -671,22 +634,6 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
           </div>
         </div>
       </div>
-
-      <div className="flex gap-3 pt-6 sticky bottom-0 bg-white">
-        <button
-          onClick={() => setStep(3)}
-          className="flex-1 py-3 px-4 rounded-xl font-bold text-sm border border-stone-200 text-stone-600 hover:bg-stone-50 transition-all"
-        >
-          Back
-        </button>
-        <IOSButton
-          onClick={submitBooking}
-          disabled={isSubmitting}
-          className="flex-1 bg-stone-900 hover:bg-stone-800 text-white rounded-xl shadow-lg"
-        >
-          {isSubmitting ? 'Processing...' : 'Confirm Booking'}
-        </IOSButton>
-      </div>
     </motion.div>
   );
 
@@ -707,14 +654,6 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
         <p className="text-stone-500 text-sm max-w-[240px] mx-auto leading-relaxed">
           Your stay at Famous Gate is booked. We've sent the confirmation details to your email.
         </p>
-      </div>
-      <div className="pt-4 px-4">
-        <button
-          onClick={onClose}
-          className="w-full bg-stone-900 hover:bg-stone-800 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-stone-900/10 active:scale-[0.98] transition-all"
-        >
-          Finish
-        </button>
       </div>
     </motion.div>
   );
@@ -766,6 +705,78 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
               {step === 5 && renderStep5()}
             </AnimatePresence>
           </div>
+
+          {step < 5 && (
+            <div className="p-4 border-t border-stone-100 bg-white">
+              {step === 1 && (
+                <div className="flex gap-3">
+                  <IOSButton variant="outline" onClick={onClose} className="flex-1 rounded-xl">
+                    Cancel
+                  </IOSButton>
+                  <IOSButton
+                    onClick={checkAvailability}
+                    disabled={isLoading}
+                    className="flex-1 bg-stone-900 hover:bg-stone-800 text-white rounded-xl shadow-lg"
+                  >
+                    {isLoading ? 'Checking...' : 'Check Availability'}
+                  </IOSButton>
+                </div>
+              )}
+              {step === 2 && (
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setStep(1)}
+                    className="flex-1 py-3 px-4 rounded-xl font-bold text-sm border border-stone-200 text-stone-600 hover:bg-stone-50 transition-all"
+                  >
+                    Back
+                  </button>
+                </div>
+              )}
+              {step === 3 && (
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setStep(2)}
+                    className="flex-1 py-3 px-4 rounded-xl font-bold text-sm border border-stone-200 text-stone-600 hover:bg-stone-50 transition-all"
+                  >
+                    Back
+                  </button>
+                  <IOSButton
+                    onClick={() => setStep(4)}
+                    className="flex-1 bg-stone-900 hover:bg-stone-800 text-white rounded-xl shadow-lg"
+                  >
+                    Continue to Payment
+                  </IOSButton>
+                </div>
+              )}
+              {step === 4 && (
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setStep(3)}
+                    className="flex-1 py-3 px-4 rounded-xl font-bold text-sm border border-stone-200 text-stone-600 hover:bg-stone-50 transition-all"
+                  >
+                    Back
+                  </button>
+                  <IOSButton
+                    onClick={submitBooking}
+                    disabled={isSubmitting}
+                    className="flex-1 bg-stone-900 hover:bg-stone-800 text-white rounded-xl shadow-lg"
+                  >
+                    {isSubmitting ? 'Processing...' : 'Confirm Booking'}
+                  </IOSButton>
+                </div>
+              )}
+            </div>
+          )}
+          {step === 5 && (
+            <div className="p-4 border-t border-stone-100 bg-white space-y-4">
+              <button
+                onClick={onClose}
+                className="w-full bg-stone-900 hover:bg-stone-800 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-stone-900/10 active:scale-[0.98] transition-all"
+              >
+                Finish
+              </button>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

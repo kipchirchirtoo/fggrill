@@ -112,16 +112,16 @@ export function AddRoomModal({ isOpen, onClose, onRoomAdded, branchId }: AddRoom
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto p-0">
-        <div className="p-4">
-          <DialogHeader className="pb-3">
-            <DialogTitle className="flex items-center gap-2 text-lg">
-              <Plus className="h-4 w-4" />
-              Add New Room
-            </DialogTitle>
-          </DialogHeader>
+      <DialogContent className="max-w-xl max-h-[85vh] flex flex-col overflow-hidden p-0">
+        <div className="p-4 border-b">
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <Plus className="h-4 w-4" />
+            Add New Room
+          </DialogTitle>
+        </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="flex-1 overflow-y-auto p-4">
+          <form id="add-room-form" onSubmit={handleSubmit} className="space-y-4">
             {/* Basic Information */}
             <IOSCard className="p-2">
               <h3 className="font-medium text-[#3C3C43] mb-2 flex items-center gap-1 text-sm">
@@ -230,8 +230,8 @@ export function AddRoomModal({ isOpen, onClose, onRoomAdded, branchId }: AddRoom
                     type="button"
                     onClick={() => toggleAmenity(amenity)}
                     className={`p-1 rounded text-xs transition-all ${formData.amenities.includes(amenity)
-                        ? 'bg-[#3C3C43] text-white'
-                        : 'bg-[#F2F2F7] text-[#3C3C43] hover:bg-[#E5E5EA]'
+                      ? 'bg-[#3C3C43] text-white'
+                      : 'bg-[#F2F2F7] text-[#3C3C43] hover:bg-[#E5E5EA]'
                       }`}
                   >
                     {amenity.length > 8 ? amenity.substring(0, 6) + '..' : amenity}
@@ -247,27 +247,28 @@ export function AddRoomModal({ isOpen, onClose, onRoomAdded, branchId }: AddRoom
                 rows={1}
               />
             </IOSCard>
-
-            {/* Actions */}
-            <div className="flex gap-2 pt-2">
-              <IOSButton
-                type="button"
-                variant="outline"
-                onClick={onClose}
-                className="flex-1 h-8 text-sm"
-                disabled={isSubmitting}
-              >
-                Cancel
-              </IOSButton>
-              <IOSButton
-                type="submit"
-                className="flex-1 h-8 text-sm bg-[#3C3C43] hover:bg-[#000000] text-white"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? 'Adding...' : 'Add Room'}
-              </IOSButton>
-            </div>
           </form>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2 p-4 border-t bg-white">
+          <IOSButton
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            className="flex-1 h-8 text-sm"
+            disabled={isSubmitting}
+          >
+            Cancel
+          </IOSButton>
+          <IOSButton
+            type="submit"
+            form="add-room-form"
+            className="flex-1 h-8 text-sm bg-[#3C3C43] hover:bg-[#000000] text-white"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Adding...' : 'Add Room'}
+          </IOSButton>
         </div>
       </DialogContent>
     </Dialog>

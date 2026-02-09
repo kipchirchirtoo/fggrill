@@ -574,15 +574,15 @@ export default function BranchStaffPage() {
 
           {/* Add/Edit Staff Modal */}
           <Dialog open={showStaffModal} onOpenChange={setShowStaffModal}>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
+            <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col overflow-hidden p-0">
+              <DialogHeader className="px-6 py-4 border-b border-stone-100 bg-white">
                 <DialogTitle className="flex items-center gap-2 text-xl font-sf-pro-display">
                   <UserPlus className="h-5 w-5 text-blue-600" />
                   {editingStaff ? 'Refine Staff Profile' : 'Onboard New Staff Member'}
                 </DialogTitle>
               </DialogHeader>
 
-              <div className="space-y-8 py-4 px-1">
+              <div className="flex-1 overflow-y-auto p-6 space-y-8">
                 {/* Personal Information Section */}
                 <div className="space-y-4">
                   <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Personal Details</h4>
@@ -683,23 +683,23 @@ export default function BranchStaffPage() {
                     </div>
                   </div>
                 </div>
+              </div>
 
-                <div className="flex gap-4 pt-4">
-                  <IOSButton
-                    variant="secondary"
-                    onClick={() => { setShowStaffModal(false); resetStaffForm(); }}
-                    className="flex-1 h-12 text-base font-semibold"
-                  >
-                    Discard Changes
-                  </IOSButton>
-                  <IOSButton
-                    onClick={handleSubmitStaff}
-                    disabled={isSubmitting}
-                    className="flex-1 h-12 text-base font-semibold"
-                  >
-                    {isSubmitting ? 'Processing...' : editingStaff ? 'Save Changes' : 'Confirm Onboarding'}
-                  </IOSButton>
-                </div>
+              <div className="p-4 bg-stone-50 border-t border-stone-100 flex gap-4">
+                <IOSButton
+                  variant="secondary"
+                  onClick={() => { setShowStaffModal(false); resetStaffForm(); }}
+                  className="flex-1 h-12 text-base font-semibold"
+                >
+                  Discard Changes
+                </IOSButton>
+                <IOSButton
+                  onClick={handleSubmitStaff}
+                  disabled={isSubmitting}
+                  className="flex-1 h-12 text-base font-semibold"
+                >
+                  {isSubmitting ? 'Processing...' : editingStaff ? 'Save Changes' : 'Confirm Onboarding'}
+                </IOSButton>
               </div>
             </DialogContent>
           </Dialog>

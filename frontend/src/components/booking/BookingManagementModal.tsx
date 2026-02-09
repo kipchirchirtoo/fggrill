@@ -323,57 +323,6 @@ export function BookingManagementModal({
           )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="pt-6 flex flex-wrap gap-2 sticky bottom-0 bg-white">
-          {booking.status === 'confirmed' && (
-            <button
-              onClick={checkInGuest}
-              disabled={isSubmitting}
-              className="px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-black uppercase tracking-widest shadow-lg shadow-green-600/20 active:scale-[0.98] transition-all flex items-center gap-2"
-            >
-              <Check className="h-3.5 w-3.5" />
-              Check In
-            </button>
-          )}
-
-          {booking.status === 'checked_in' && (
-            <button
-              onClick={checkOutGuest}
-              disabled={isSubmitting}
-              className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-widest shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all flex items-center gap-2"
-            >
-              <Check className="h-3.5 w-3.5" />
-              Check Out
-            </button>
-          )}
-
-          {['confirmed', 'pending'].includes(booking.status) && (
-            <>
-              <button
-                onClick={() => setActiveTab('modify')}
-                className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 text-xs font-black uppercase tracking-widest active:scale-[0.98] transition-all flex items-center gap-2"
-              >
-                <Edit className="h-3.5 w-3.5" />
-                Modify
-              </button>
-
-              <button
-                onClick={cancelBooking}
-                disabled={isSubmitting}
-                className="px-4 py-2.5 rounded-xl border border-red-100 text-red-600 hover:bg-red-50 text-xs font-black uppercase tracking-widest active:scale-[0.98] transition-all flex items-center gap-2"
-              >
-                <X className="h-3.5 w-3.5" />
-                Cancel
-              </button>
-            </>
-          )}
-
-          <button
-            className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 text-xs font-black uppercase tracking-widest ml-auto active:scale-[0.98] transition-all"
-          >
-            Invoice
-          </button>
-        </div>
       </div>
     );
   };
@@ -489,21 +438,6 @@ export function BookingManagementModal({
           </div>
         </div>
 
-        <div className="flex gap-3 pt-6 sticky bottom-0 bg-white">
-          <button
-            onClick={() => setActiveTab('details')}
-            className="flex-1 py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-widest border border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-700 transition-all"
-          >
-            Discard
-          </button>
-          <button
-            onClick={modifyBooking}
-            disabled={isSubmitting}
-            className="flex-1 py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-widest bg-stone-900 text-white hover:bg-stone-800 transition-all shadow-lg shadow-stone-900/10 active:scale-[0.98]"
-          >
-            {isSubmitting ? 'Saving...' : 'Save Changes'}
-          </button>
-        </div>
       </div>
     );
   };
@@ -563,7 +497,6 @@ export function BookingManagementModal({
       </div>
     );
   };
-  bitumen
   if (!booking) return null;
 
   return (
@@ -612,6 +545,82 @@ export function BookingManagementModal({
               {activeTab === 'history' && renderHistoryTab()}
             </motion.div>
           </div>
+
+          {/* Sticky Footers based on active tab */}
+          {activeTab === 'details' && booking && (
+            <div className="p-4 border-t border-stone-100 bg-white">
+              <div className="flex flex-wrap gap-2">
+                {booking.status === 'confirmed' && (
+                  <button
+                    onClick={checkInGuest}
+                    disabled={isSubmitting}
+                    className="px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white text-xs font-black uppercase tracking-widest shadow-lg shadow-green-600/20 active:scale-[0.98] transition-all flex items-center gap-2"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    Check In
+                  </button>
+                )}
+
+                {booking.status === 'checked_in' && (
+                  <button
+                    onClick={checkOutGuest}
+                    disabled={isSubmitting}
+                    className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-widest shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all flex items-center gap-2"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    Check Out
+                  </button>
+                )}
+
+                {['confirmed', 'pending'].includes(booking.status) && (
+                  <>
+                    <button
+                      onClick={() => setActiveTab('modify')}
+                      className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 text-xs font-black uppercase tracking-widest active:scale-[0.98] transition-all flex items-center gap-2"
+                    >
+                      <Edit className="h-3.5 w-3.5" />
+                      Modify
+                    </button>
+
+                    <button
+                      onClick={cancelBooking}
+                      disabled={isSubmitting}
+                      className="px-4 py-2.5 rounded-xl border border-red-100 text-red-600 hover:bg-red-50 text-xs font-black uppercase tracking-widest active:scale-[0.98] transition-all flex items-center gap-2"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Cancel
+                    </button>
+                  </>
+                )}
+
+                <button
+                  className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 text-xs font-black uppercase tracking-widest ml-auto active:scale-[0.98] transition-all"
+                >
+                  Invoice
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'modify' && booking && (
+            <div className="p-4 border-t border-stone-100 bg-white">
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setActiveTab('details')}
+                  className="flex-1 py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-widest border border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-700 transition-all"
+                >
+                  Discard
+                </button>
+                <button
+                  onClick={modifyBooking}
+                  disabled={isSubmitting}
+                  className="flex-1 py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-widest bg-stone-900 text-white hover:bg-stone-800 transition-all shadow-lg shadow-stone-900/10 active:scale-[0.98]"
+                >
+                  {isSubmitting ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

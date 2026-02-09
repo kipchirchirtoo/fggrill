@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { 
-  Scan, X, Search, PackagePlus, CheckCircle, Loader2, 
+import {
+  Scan, X, Search, PackagePlus, CheckCircle, Loader2,
   AlertCircle, Package, Keyboard, Camera, Tag, Hash
 } from 'lucide-react';
 import {
@@ -50,8 +50,8 @@ function generateProductCode(name: string): string {
 
 // Get category code from category name
 function getCategoryCode(category: string): string {
-  const found = CATEGORY_OPTIONS.find(c => 
-    c.name.toLowerCase() === category.toLowerCase() || 
+  const found = CATEGORY_OPTIONS.find(c =>
+    c.name.toLowerCase() === category.toLowerCase() ||
     c.label.toLowerCase() === category.toLowerCase() ||
     c.code.toLowerCase() === category.toLowerCase()
   );
@@ -65,16 +65,16 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
   const [isScanning, setIsScanning] = useState(false);
   const [scannerActive, setScannerActive] = useState(false);
   const [lastOrderNumber, setLastOrderNumber] = useState<string | null>(null);
-  
+
   // Refs for focus management
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const quantityInputRef = useRef<HTMLInputElement>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
-  
+
   // Buffer for hardware scanner input (captures rapid keystrokes)
   const scanBuffer = useRef<string>('');
   const scanTimeout = useRef<NodeJS.Timeout | null>(null);
-  
+
   // Form data
   const [formData, setFormData] = useState({
     sku: '',
@@ -100,7 +100,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
       // User manually entered SKU
       return formData.sku;
     }
-    
+
     const catCode = getCategoryCode(formData.category || 'General');
     const prodCode = generateProductCode(formData.item_name);
     return `FGH-${catCode}-${prodCode}-XXXX`;
@@ -169,11 +169,11 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
 
     const cleanCode = code.trim();
     setEntryState('SEARCHING');
-    
+
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_URL}/api/store/items/${encodeURIComponent(cleanCode)}`, {
-        headers: { 
+        headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
@@ -181,7 +181,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
 
       if (response.ok) {
         const { data } = await response.json();
-        
+
         // FOUND: Item exists - auto-fill and go to quantity entry
         setExistingItem(data);
         setFormData(prev => ({
@@ -201,7 +201,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
         }));
         setEntryState('FOUND');
         toast.success(`✓ Item found: ${data.item_name || data.description}`);
-        
+
       } else {
         // NOT FOUND: Go to create mode with barcode pre-filled
         setFormData(prev => ({
@@ -228,12 +228,12 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
   const handleBarcodeInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setFormData(prev => ({ ...prev, barcode: value, sku: value }));
-    
+
     // Clear existing timeout
     if (scanTimeout.current) {
       clearTimeout(scanTimeout.current);
     }
-    
+
     // Set new timeout - if no more input in 100ms, consider scan complete
     // Hardware scanners type much faster than humans
     if (value.length >= 3) {
@@ -263,10 +263,10 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
   const startCameraScanner = async () => {
     setIsScanning(true);
     setScannerActive(true);
-    
+
     // Wait for the reader div to be rendered
     await new Promise(resolve => setTimeout(resolve, 200));
-    
+
     try {
       const html5QrCode = new Html5Qrcode("barcode-reader", {
         formatsToSupport: [
@@ -282,7 +282,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
         ],
         verbose: false
       });
-      
+
       scannerRef.current = html5QrCode;
 
       await html5QrCode.start(
@@ -299,7 +299,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
           setFormData(prev => ({ ...prev, barcode: decodedText, sku: decodedText }));
           lookupBarcode(decodedText);
         },
-        () => {} // Ignore errors during scanning
+        () => { } // Ignore errors during scanning
       );
     } catch (err) {
       console.error('Camera error:', err);
@@ -330,7 +330,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
   // ==========================================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (formData.quantity <= 0) {
       toast.error('Please enter a quantity greater than 0');
       quantityInputRef.current?.focus();
@@ -368,7 +368,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
 
         const result = await response.json();
         const orderNum = result.orderNumber || result.data?.orderNumber;
-        
+
         toast.success(
           <div className="space-y-1">
             <p className="font-semibold font-sf-pro-display">✓ Stock Added Successfully</p>
@@ -377,13 +377,13 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
           </div>,
           { duration: 5000 }
         );
-        
+
         setLastOrderNumber(orderNum);
       } else {
         // CREATE MODE: Use create item endpoint (SKU will be auto-generated)
         // Don't send SKU - let backend generate it
         const { sku: _sku, ...dataWithoutSku } = formData;
-        
+
         const response = await fetch(`${API_URL}/api/store/items`, {
           method: 'POST',
           headers: {
@@ -404,7 +404,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
         const result = await response.json();
         const newSku = result.data?.sku;
         const orderNum = result.data?.orderNumber;
-        
+
         toast.success(
           <div className="space-y-1">
             <p className="font-semibold font-sf-pro-display">✓ Item Created Successfully</p>
@@ -414,7 +414,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
           </div>,
           { duration: 5000 }
         );
-        
+
         setLastOrderNumber(orderNum);
       }
 
@@ -436,30 +436,30 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto p-0">
-        
+      <DialogContent className="max-w-lg max-h-[80vh] flex flex-col overflow-hidden p-0">
+
         {/* CAMERA SCANNER OVERLAY */}
         {scannerActive && (
           <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl p-6 w-full max-w-lg relative">
-              <Button 
-                type="button" 
-                variant="ghost" 
-                size="icon" 
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
                 className="absolute right-3 top-3 z-10 bg-white/80 hover:bg-white"
                 onClick={stopCameraScanner}
               >
                 <X className="h-6 w-6" />
               </Button>
-              
+
               <div className="text-center mb-4">
                 <Camera className="h-8 w-8 mx-auto mb-2 text-indigo-600" />
                 <h3 className="text-lg font-semibold font-sf-pro-display">Scan Barcode</h3>
                 <p className="text-sm text-gray-500">Point camera at product barcode</p>
               </div>
-              
+
               <div id="barcode-reader" className="w-full overflow-hidden rounded-xl border-2 border-indigo-200"></div>
-              
+
               <p className="text-center text-xs text-gray-400 mt-4">
                 Supports: UPC, EAN, Code 128, Code 39
               </p>
@@ -497,8 +497,8 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+
           {/* ==========================================
               STEP 1: SCAN/SEARCH MODE
           ========================================== */}
@@ -512,7 +512,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
                     Scan Barcode or Enter SKU
                   </Label>
                 </div>
-                
+
                 <div className="flex gap-2">
                   <div className="flex-1 relative">
                     <Input
@@ -530,9 +530,9 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
                       <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 h-6 w-6 text-indigo-600 animate-spin" />
                     )}
                   </div>
-                  
-                  <Button 
-                    type="button" 
+
+                  <Button
+                    type="button"
                     size="icon"
                     className="h-14 w-14 bg-indigo-600 hover:bg-indigo-700"
                     onClick={() => lookupBarcode(formData.barcode)}
@@ -540,8 +540,8 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
                   >
                     <Search className="h-6 w-6" />
                   </Button>
-                  
-                  <Button 
+
+                  <Button
                     type="button"
                     size="icon"
                     variant="outline"
@@ -552,7 +552,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
                     <Camera className="h-6 w-6" />
                   </Button>
                 </div>
-                
+
                 <div className="mt-4 flex items-center gap-4 text-sm text-gray-500">
                   <span className="flex items-center gap-1">
                     <Keyboard className="h-4 w-4" />
@@ -571,7 +571,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
           ========================================== */}
           {entryState === 'FOUND' && existingItem && (
             <div className="space-y-4 animate-in fade-in duration-200">
-              
+
               {/* Item Info Card - Compact */}
               <div className="bg-green-50 border border-green-200 rounded-ios-lg p-3">
                 <div className="flex items-center gap-3">
@@ -598,14 +598,14 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
                     type="number"
                     min="1"
                     value={formData.quantity || ''}
-                    onChange={e => setFormData({...formData, quantity: parseInt(e.target.value) || 0})}
+                    onChange={e => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })}
                     className="w-28 h-12 text-2xl font-bold text-center bg-white border-2 border-indigo-300"
                     placeholder="0"
                     required
                   />
                   <Input
                     value={formData.notes}
-                    onChange={e => setFormData({...formData, notes: e.target.value})}
+                    onChange={e => setFormData({ ...formData, notes: e.target.value })}
                     className="flex-1 h-12 bg-white"
                     placeholder="Invoice # (optional)"
                   />
@@ -620,8 +620,8 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
                 <Button type="button" variant="ghost" size="sm" onClick={resetToScanMode}>
                   ← Back
                 </Button>
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   size="sm"
                   disabled={isLoading || formData.quantity <= 0}
                   className="bg-green-600 hover:bg-green-700"
@@ -637,7 +637,7 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
           ========================================== */}
           {entryState === 'CREATE' && (
             <div className="space-y-3 animate-in fade-in duration-200">
-              
+
               {/* SKU Preview - Compact */}
               <div className="bg-blue-50 border border-blue-200 rounded-ios-lg p-3">
                 <div className="flex items-center justify-between">
@@ -655,9 +655,9 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
               <div className="space-y-3">
                 <div>
                   <Label className="text-sm">Item Name *</Label>
-                  <Input 
-                    value={formData.item_name} 
-                    onChange={e => setFormData({...formData, item_name: e.target.value, description: e.target.value})}
+                  <Input
+                    value={formData.item_name}
+                    onChange={e => setFormData({ ...formData, item_name: e.target.value, description: e.target.value })}
                     placeholder="e.g., Tusker Lager 500ml"
                     required
                   />
@@ -666,9 +666,9 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-sm">Category *</Label>
-                    <Select 
-                      value={formData.category} 
-                      onValueChange={v => setFormData({...formData, category: v})}
+                    <Select
+                      value={formData.category}
+                      onValueChange={v => setFormData({ ...formData, category: v })}
                     >
                       <SelectTrigger><SelectValue placeholder="Select category..." /></SelectTrigger>
                       <SelectContent>
@@ -683,12 +683,12 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
                   <div>
                     <Label className="text-sm">Unit</Label>
-                    <Select 
-                      value={formData.unit_of_measure} 
-                      onValueChange={v => setFormData({...formData, unit_of_measure: v})}
+                    <Select
+                      value={formData.unit_of_measure}
+                      onValueChange={v => setFormData({ ...formData, unit_of_measure: v })}
                     >
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -707,22 +707,22 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-sm">Cost Price</Label>
-                    <Input 
-                      type="number" 
+                    <Input
+                      type="number"
                       min="0"
-                      value={formData.cost_price || ''} 
-                      onChange={e => setFormData({...formData, cost_price: parseFloat(e.target.value) || 0})}
+                      value={formData.cost_price || ''}
+                      onChange={e => setFormData({ ...formData, cost_price: parseFloat(e.target.value) || 0 })}
                       placeholder="0"
                     />
                   </div>
                   <div>
                     <Label className="text-sm">Selling Price *</Label>
-                    <Input 
-                      type="number" 
+                    <Input
+                      type="number"
                       min="0"
                       step="0.01"
-                      value={formData.retail_price || ''} 
-                      onChange={e => setFormData({...formData, retail_price: parseFloat(e.target.value) || 0})}
+                      value={formData.retail_price || ''}
+                      onChange={e => setFormData({ ...formData, retail_price: parseFloat(e.target.value) || 0 })}
                       placeholder="0.00"
                       required
                     />
@@ -740,14 +740,14 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
                     type="number"
                     min="1"
                     value={formData.quantity || ''}
-                    onChange={e => setFormData({...formData, quantity: parseInt(e.target.value) || 0})}
+                    onChange={e => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })}
                     className="w-24 h-10 text-xl font-bold text-center bg-white border-2 border-indigo-300"
                     placeholder="0"
                     required
                   />
                   <Input
                     value={formData.notes}
-                    onChange={e => setFormData({...formData, notes: e.target.value})}
+                    onChange={e => setFormData({ ...formData, notes: e.target.value })}
                     className="flex-1 h-10 bg-white"
                     placeholder="Invoice # (optional)"
                   />
@@ -759,8 +759,8 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
                 <Button type="button" variant="ghost" size="sm" onClick={resetToScanMode}>
                   ← Back
                 </Button>
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   size="sm"
                   disabled={isLoading || formData.quantity <= 0 || !formData.item_name.trim()}
                   className="bg-orange-600 hover:bg-orange-700"

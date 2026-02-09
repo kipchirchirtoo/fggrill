@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { 
-  Package, X, Tag, DollarSign, Boxes, Calendar, 
+import {
+  Package, X, Tag, DollarSign, Boxes, Calendar,
   User, Truck, AlertTriangle, History, Edit, Trash2
 } from 'lucide-react';
 import {
@@ -45,7 +45,7 @@ export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManag
       const response = await fetch(`${API_URL}/api/store/items/${encodeURIComponent(item.sku)}/history`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         setStockHistory(data.data || []);
@@ -63,53 +63,53 @@ export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManag
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
-        <DialogHeader className="pb-4 border-b">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-100 rounded-ios-lg">
-                <Package className="h-6 w-6 text-indigo-600" />
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col p-0">
+        <div className="p-0 border-b">
+          <DialogHeader className="p-4 pb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 rounded-ios-lg">
+                  <Package className="h-6 w-6 text-indigo-600" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl">{item.item_name || item.description}</DialogTitle>
+                  <p className="text-sm text-gray-500 font-mono">{item.sku}</p>
+                </div>
               </div>
-              <div>
-                <DialogTitle className="text-xl">{item.item_name || item.description}</DialogTitle>
-                <p className="text-sm text-gray-500 font-mono">{item.sku}</p>
-              </div>
+              {isLowStock && (
+                <div className="flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-sm">
+                  <AlertTriangle className="h-4 w-4" />
+                  Low Stock
+                </div>
+              )}
             </div>
-            {isLowStock && (
-              <div className="flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-sm">
-                <AlertTriangle className="h-4 w-4" />
-                Low Stock
-              </div>
-            )}
-          </div>
-        </DialogHeader>
+          </DialogHeader>
 
-        {/* Tabs */}
-        <div className="flex gap-4 border-b pt-2">
-          <button
-            onClick={() => setActiveTab('details')}
-            className={`pb-3 px-1 text-sm font-medium ${
-              activeTab === 'details'
-                ? 'border-b-2 border-indigo-600 text-indigo-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Item Details
-          </button>
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`pb-3 px-1 text-sm font-medium ${
-              activeTab === 'history'
-                ? 'border-b-2 border-indigo-600 text-indigo-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Stock History
-          </button>
+          {/* Tabs */}
+          <div className="flex gap-4 px-4 pt-2">
+            <button
+              onClick={() => setActiveTab('details')}
+              className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${activeTab === 'details'
+                  ? 'border-indigo-600 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+            >
+              Item Details
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${activeTab === 'history'
+                  ? 'border-indigo-600 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+            >
+              Stock History
+            </button>
+          </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto py-4">
+        <div className="flex-1 overflow-y-auto p-4">
           {activeTab === 'details' && (
             <div className="space-y-6">
               {/* Stock Status Card */}
@@ -199,23 +199,21 @@ export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManag
                 <div className="space-y-3">
                   {stockHistory.slice(0, 20).map((record, idx) => (
                     <div key={idx} className="flex items-center gap-4 p-3 bg-gray-50 rounded-ios-lg">
-                      <div className={`p-2 rounded-full ${
-                        record.change_type === 'IN' ? 'bg-green-100 text-green-600' : 
-                        record.change_type === 'OUT' ? 'bg-red-100 text-red-600' : 
-                        'bg-blue-100 text-blue-600'
-                      }`}>
+                      <div className={`p-2 rounded-full ${record.change_type === 'IN' ? 'bg-green-100 text-green-600' :
+                          record.change_type === 'OUT' ? 'bg-red-100 text-red-600' :
+                            'bg-blue-100 text-blue-600'
+                        }`}>
                         {record.change_type === 'IN' ? '+' : record.change_type === 'OUT' ? '-' : '~'}
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center justify-between">
                           <p className="font-medium">
-                            {record.change_type === 'IN' ? 'Stock In' : 
-                             record.change_type === 'OUT' ? 'Stock Out' : 'Adjustment'}
+                            {record.change_type === 'IN' ? 'Stock In' :
+                              record.change_type === 'OUT' ? 'Stock Out' : 'Adjustment'}
                           </p>
-                          <p className={`font-bold ${
-                            record.change_type === 'IN' ? 'text-green-600' : 
-                            record.change_type === 'OUT' ? 'text-red-600' : 'text-blue-600'
-                          }`}>
+                          <p className={`font-bold ${record.change_type === 'IN' ? 'text-green-600' :
+                              record.change_type === 'OUT' ? 'text-red-600' : 'text-blue-600'
+                            }`}>
                             {record.change_type === 'IN' ? '+' : ''}{record.quantity_change}
                           </p>
                         </div>
@@ -236,21 +234,21 @@ export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManag
         </div>
 
         {/* Footer Actions */}
-        <div className="flex justify-between pt-4 border-t">
+        <div className="flex justify-between p-4 border-t bg-white">
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
           {isManager && (
             <div className="flex gap-2">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="text-red-600 border-red-200 hover:bg-red-50"
                 onClick={() => onDelete?.(item.sku)}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete
               </Button>
-              <Button 
+              <Button
                 className="bg-indigo-600 hover:bg-indigo-700"
                 onClick={() => onEdit?.(item)}
               >

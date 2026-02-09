@@ -6,6 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogBody,
+  DialogFooter,
   Button,
   Input,
   Label,
@@ -79,9 +80,11 @@ export function AddNewItemModal({ isOpen, onClose }: ModalProps) {
               <Label htmlFor="quantity">Quantity</Label>
               <Input id="quantity" type="number" placeholder="Enter quantity" className="bg-white/50 backdrop-blur-sm border-gray-200/50" />
             </div>
-            <Button onClick={() => { }}>Add Item</Button>
           </div>
         </DialogBody>
+        <DialogFooter>
+          <Button onClick={() => { }} className="w-full">Add Item</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -125,9 +128,11 @@ export function CreateRequisitionModal({ isOpen, onClose }: ModalProps) {
               <Label htmlFor="notes">Notes</Label>
               <Textarea id="notes" placeholder="Enter any additional notes" className="bg-white/50 backdrop-blur-sm border-gray-200/50" />
             </div>
-            <Button onClick={() => { }}>Create Requisition</Button>
           </div>
         </DialogBody>
+        <DialogFooter>
+          <Button onClick={() => { }} className="w-full">Create Requisition</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -170,9 +175,11 @@ export function CreatePOModal({ isOpen, onClose }: ModalProps) {
               <Label htmlFor="deliveryDate">Delivery Date</Label>
               <Input id="deliveryDate" type="date" className="bg-white/50 backdrop-blur-sm border-gray-200/50" />
             </div>
-            <Button onClick={() => { }}>Create PO</Button>
           </div>
         </DialogBody>
+        <DialogFooter>
+          <Button onClick={() => { }} className="w-full">Create PO</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -207,9 +214,11 @@ export function AddSupplierModal({ isOpen, onClose }: ModalProps) {
               <Label htmlFor="address">Address</Label>
               <Textarea id="address" placeholder="Enter address" className="bg-white/50 backdrop-blur-sm border-gray-200/50" />
             </div>
-            <Button onClick={() => { }}>Add Supplier</Button>
           </div>
         </DialogBody>
+        <DialogFooter>
+          <Button onClick={() => { }} className="w-full">Add Supplier</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

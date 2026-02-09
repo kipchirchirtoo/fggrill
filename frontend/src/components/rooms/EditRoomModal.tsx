@@ -110,99 +110,101 @@ export function EditRoomModal({ isOpen, onClose, onRoomUpdated, room }: EditRoom
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md">
-        <DialogTitle className="text-xl font-bold text-gray-900 mb-6">
+      <DialogContent className="max-w-md max-h-[85vh] flex flex-col overflow-hidden">
+        <DialogTitle className="text-xl font-bold text-gray-900 mb-6 flex-shrink-0">
           Edit Room {room?.room_number}
         </DialogTitle>
 
-        <div className="space-y-4">
-          {/* Room Number */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Hash className="inline h-4 w-4 mr-1" />
-              Room Number
-            </label>
-            <Input
-              value={formData.room_number}
-              onChange={(e) => setFormData({ ...formData, room_number: e.target.value })}
-              placeholder="e.g., 101"
-              className="h-11"
-            />
-          </div>
+        <div className="flex-1 overflow-y-auto pr-2">
+          <div className="space-y-4">
+            {/* Room Number */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <Hash className="inline h-4 w-4 mr-1" />
+                Room Number
+              </label>
+              <Input
+                value={formData.room_number}
+                onChange={(e) => setFormData({ ...formData, room_number: e.target.value })}
+                placeholder="e.g., 101"
+                className="h-11"
+              />
+            </div>
 
-          {/* Room Type */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Building2 className="inline h-4 w-4 mr-1" />
-              Room Type
-            </label>
-            <select
-              value={formData.room_type}
-              onChange={(e) => setFormData({ ...formData, room_type: e.target.value })}
-              className="w-full h-11 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              {ROOM_TYPES.map((type) => (
-                <option key={type.id} value={type.name}>
-                  {type.name}
-                </option>
-              ))}
-            </select>
-          </div>
+            {/* Room Type */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <Building2 className="inline h-4 w-4 mr-1" />
+                Room Type
+              </label>
+              <select
+                value={formData.room_type}
+                onChange={(e) => setFormData({ ...formData, room_type: e.target.value })}
+                className="w-full h-11 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {ROOM_TYPES.map((type) => (
+                  <option key={type.id} value={type.name}>
+                    {type.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {/* Floor */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Building2 className="inline h-4 w-4 mr-1" />
-              Floor
-            </label>
-            <Input
-              type="number"
-              value={formData.floor}
-              onChange={(e) => setFormData({ ...formData, floor: parseInt(e.target.value) || 1 })}
-              min="1"
-              max="50"
-              className="h-11"
-            />
-          </div>
+            {/* Floor */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <Building2 className="inline h-4 w-4 mr-1" />
+                Floor
+              </label>
+              <Input
+                type="number"
+                value={formData.floor}
+                onChange={(e) => setFormData({ ...formData, floor: parseInt(e.target.value) || 1 })}
+                min="1"
+                max="50"
+                className="h-11"
+              />
+            </div>
 
-          {/* Status */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Status
-            </label>
-            <select
-              value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-              className="w-full h-11 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              {ROOM_STATUSES.map((status) => (
-                <option key={status.id} value={status.id}>
-                  {status.name}
-                </option>
-              ))}
-            </select>
-          </div>
+            {/* Status */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Status
+              </label>
+              <select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                className="w-full h-11 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {ROOM_STATUSES.map((status) => (
+                  <option key={status.id} value={status.id}>
+                    {status.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {/* Price */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <DollarSign className="inline h-4 w-4 mr-1" />
-              Rate per Night (KES)
-            </label>
-            <Input
-              type="number"
-              value={formData.price}
-              onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-              min="0"
-              step="100"
-              placeholder="5000"
-              className="h-11"
-            />
+            {/* Price */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <DollarSign className="inline h-4 w-4 mr-1" />
+                Rate per Night (KES)
+              </label>
+              <Input
+                type="number"
+                value={formData.price}
+                onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                min="0"
+                step="100"
+                placeholder="5000"
+                className="h-11"
+              />
+            </div>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-3 mt-8">
+        <div className="flex gap-3 mt-4 pt-4 border-t flex-shrink-0">
           <IOSButton
             variant="secondary"
             onClick={handleClose}

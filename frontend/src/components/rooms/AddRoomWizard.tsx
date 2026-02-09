@@ -515,7 +515,7 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto p-0 border-none bg-stone-50/50 backdrop-blur-xl">
+      <DialogContent className="max-w-4xl max-h-[95vh] overflow-hidden p-0 border-none bg-stone-50/50 backdrop-blur-xl">
         <div className="flex flex-col h-full bg-white/90 shadow-2xl overflow-hidden rounded-2xl">
           <DialogHeader className="p-8 pb-4 bg-stone-50 border-b border-stone-100">
             <DialogTitle className="text-3xl font-sf-pro-display font-bold tracking-tight text-stone-900">
@@ -540,10 +540,10 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
                     <button
                       onClick={() => setCurrentStep(step.id)}
                       className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-sf-pro-display font-bold transition-all duration-300 ${currentStep > step.id
-                          ? 'bg-stone-900 text-white shadow-lg'
-                          : currentStep === step.id
-                            ? 'bg-stone-900 text-white ring-4 ring-stone-100 shadow-lg'
-                            : 'bg-white text-stone-400 border-2 border-stone-200'
+                        ? 'bg-stone-900 text-white shadow-lg'
+                        : currentStep === step.id
+                          ? 'bg-stone-900 text-white ring-4 ring-stone-100 shadow-lg'
+                          : 'bg-white text-stone-400 border-2 border-stone-200'
                         }`}
                     >
                       {currentStep > step.id ? (

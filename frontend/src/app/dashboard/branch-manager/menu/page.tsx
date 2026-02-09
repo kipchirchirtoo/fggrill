@@ -518,15 +518,15 @@ export default function BranchManagerMenuPage() {
 
         {/* Item Modal */}
         <Dialog open={itemModalOpen} onOpenChange={setItemModalOpen}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
+          <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col overflow-hidden p-0">
+            <DialogHeader className="px-6 py-4 border-b border-stone-100 bg-white">
               <DialogTitle className="flex items-center gap-2 text-xl font-sf-pro-display">
                 <Soup className="h-5 w-5 text-amber-600" />
                 {selectedItem ? 'Edit Culinary Masterpiece' : 'Design New Menu Item'}
               </DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-8 py-4 px-1">
+            <div className="flex-1 overflow-y-auto p-6 space-y-8">
               {/* Media Section */}
               <div className="space-y-4">
                 <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Item Presentation</h4>
@@ -630,38 +630,38 @@ export default function BranchManagerMenuPage() {
                   />
                 </div>
               </div>
+            </div>
 
-              <div className="flex gap-4 pt-6 border-t border-stone-100">
-                <IOSButton
-                  variant="secondary"
-                  onClick={() => { setItemModalOpen(false); clearImage(); }}
-                  className="flex-1 h-12 text-base font-semibold"
-                >
-                  Discard
-                </IOSButton>
-                <IOSButton
-                  onClick={handleSaveItem}
-                  disabled={isUploadingImage}
-                  className="flex-1 h-12 text-base font-semibold"
-                >
-                  {isUploadingImage ? 'Uploading Image...' : selectedItem ? 'Update Dish' : 'Publish Dish'}
-                </IOSButton>
-              </div>
+            <div className="p-4 bg-stone-50 border-t border-stone-100 flex gap-4">
+              <IOSButton
+                variant="secondary"
+                onClick={() => { setItemModalOpen(false); clearImage(); }}
+                className="flex-1 h-12 text-base font-semibold"
+              >
+                Discard
+              </IOSButton>
+              <IOSButton
+                onClick={handleSaveItem}
+                disabled={isUploadingImage}
+                className="flex-1 h-12 text-base font-semibold"
+              >
+                {isUploadingImage ? 'Uploading Image...' : selectedItem ? 'Update Dish' : 'Publish Dish'}
+              </IOSButton>
             </div>
           </DialogContent>
         </Dialog>
 
         {/* Category Modal */}
         <Dialog open={categoryModalOpen} onOpenChange={setCategoryModalOpen}>
-          <DialogContent className="max-w-xl">
-            <DialogHeader>
+          <DialogContent className="max-w-xl flex flex-col overflow-hidden p-0 max-h-[85vh]">
+            <DialogHeader className="px-6 py-4 border-b border-stone-100 bg-white">
               <DialogTitle className="flex items-center gap-2 text-xl font-sf-pro-display">
                 <Tag className="h-5 w-5 text-stone-600" />
                 {selectedCategory ? 'Edit Menu Category' : 'Create New Category'}
               </DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-6 py-4 px-1">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
               <div className="space-y-2">
                 <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Category Label *</label>
                 <Input
@@ -680,14 +680,15 @@ export default function BranchManagerMenuPage() {
                   placeholder="Briefly describe the purpose of this section..."
                 />
               </div>
-              <div className="flex gap-4 pt-4 border-t border-stone-100">
-                <IOSButton variant="secondary" onClick={() => setCategoryModalOpen(false)} className="flex-1 h-12 text-base font-semibold">
-                  Cancel
-                </IOSButton>
-                <IOSButton onClick={handleSaveCategory} className="flex-1 h-12 text-base font-semibold">
-                  {selectedCategory ? 'Update Category' : 'Add Category'}
-                </IOSButton>
-              </div>
+            </div>
+
+            <div className="p-4 bg-stone-50 border-t border-stone-100 flex gap-4">
+              <IOSButton variant="secondary" onClick={() => setCategoryModalOpen(false)} className="flex-1 h-12 text-base font-semibold">
+                Cancel
+              </IOSButton>
+              <IOSButton onClick={handleSaveCategory} className="flex-1 h-12 text-base font-semibold">
+                {selectedCategory ? 'Update Category' : 'Add Category'}
+              </IOSButton>
             </div>
           </DialogContent>
         </Dialog>

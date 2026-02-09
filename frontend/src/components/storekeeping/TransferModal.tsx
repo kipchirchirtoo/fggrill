@@ -42,21 +42,22 @@ export function TransferModal({ isOpen, onClose, onSubmit }: TransferModalProps)
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
+      <DialogContent className="max-w-lg flex flex-col overflow-hidden max-h-[85vh] p-0">
+        <DialogHeader className="p-4 border-b">
           <DialogTitle>Request / Transfer Item</DialogTitle>
         </DialogHeader>
-          
-          <form onSubmit={handleSubmit} className="p-4 space-y-4">
+
+        <div className="flex-1 overflow-y-auto p-4">
+          <form id="transfer-form" onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-                <Label htmlFor="sku">Item SKU</Label>
-                <Input
-                  id="sku"
-                  required
-                  value={formData.sku}
-                  onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                  placeholder="Enter SKU to transfer"
-                />
+              <Label htmlFor="sku">Item SKU</Label>
+              <Input
+                id="sku"
+                required
+                value={formData.sku}
+                onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                placeholder="Enter SKU to transfer"
+              />
             </div>
 
             <div className="space-y-2">
@@ -70,21 +71,22 @@ export function TransferModal({ isOpen, onClose, onSubmit }: TransferModalProps)
                 onChange={(e) => setFormData({ ...formData, transfer_quantity: Number(e.target.value) })}
               />
             </div>
-
-            <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onClose}
-                disabled={isLoading}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? 'Processing...' : 'Transfer'}
-              </Button>
-            </div>
           </form>
+        </div>
+
+        <div className="flex justify-end gap-3 p-4 border-t bg-white">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={isLoading}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" form="transfer-form" disabled={isLoading}>
+            {isLoading ? 'Processing...' : 'Transfer'}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

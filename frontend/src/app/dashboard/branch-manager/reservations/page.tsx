@@ -217,129 +217,131 @@ export default function BranchReservationsPage() {
 
         {/* Details Modal */}
         <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
-          <DialogContent className="max-w-4xl overflow-y-auto max-h-[90vh]">
-            <DialogHeader>
+          <DialogContent className="max-w-4xl flex flex-col overflow-hidden p-0 max-h-[90vh]">
+            <DialogHeader className="px-6 py-4 border-b border-stone-100 bg-white">
               <DialogTitle className="flex items-center gap-2 text-xl font-sf-pro-display">
                 <FileText className="h-5 w-5 text-blue-600" />
                 Booking Details
               </DialogTitle>
             </DialogHeader>
 
-            {selectedBooking && (
-              <div className="space-y-6 py-4">
-                {/* Header Summary Card */}
-                <div className="bg-stone-50 rounded-2xl p-6 border border-stone-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
-                      <User className="h-8 w-8 text-blue-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-stone-900">{selectedBooking.guest_name}</h3>
-                      <p className="text-stone-500 font-medium">Room {selectedBooking.room_number} • {selectedBooking.nights} nights</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Status</p>
-                    <IOSBadge className={`${statusConfig[selectedBooking.status]?.bg || 'bg-gray-100'} ${statusConfig[selectedBooking.status]?.color || 'text-gray-700'}`}>
-                      {statusConfig[selectedBooking.status]?.label || selectedBooking.status}
-                    </IOSBadge>
-                  </div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-8">
-                  {/* Left Column: Stay Info */}
-                  <div className="space-y-6">
-                    <div className="space-y-4">
-                      <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Stay Period</h4>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="p-4 bg-white border border-stone-100 rounded-xl shadow-sm">
-                          <p className="text-[10px] text-stone-400 uppercase font-bold mb-1">Check-In</p>
-                          <p className="text-sm font-semibold text-stone-900">{new Date(selectedBooking.check_in).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                        </div>
-                        <div className="p-4 bg-white border border-stone-100 rounded-xl shadow-sm">
-                          <p className="text-[10px] text-stone-400 uppercase font-bold mb-1">Check-Out</p>
-                          <p className="text-sm font-semibold text-stone-900">{new Date(selectedBooking.check_out).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                        </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              {selectedBooking && (
+                <div className="space-y-6">
+                  {/* Header Summary Card */}
+                  <div className="bg-stone-50 rounded-2xl p-6 border border-stone-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
+                        <User className="h-8 w-8 text-blue-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-stone-900">{selectedBooking.guest_name}</h3>
+                        <p className="text-stone-500 font-medium">Room {selectedBooking.room_number} • {selectedBooking.nights} nights</p>
                       </div>
                     </div>
-
-                    <div className="space-y-4">
-                      <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Contact Details</h4>
-                      <div className="space-y-3 px-1">
-                        <div className="flex items-center gap-3 text-stone-600">
-                          <Phone className="h-4 w-4" />
-                          <span className="text-sm">+254 700 000 000</span>
-                        </div>
-                        <div className="flex items-center gap-3 text-stone-600">
-                          <Mail className="h-4 w-4" />
-                          <span className="text-sm">guest@example.com</span>
-                        </div>
-                      </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Status</p>
+                      <IOSBadge className={`${statusConfig[selectedBooking.status]?.bg || 'bg-gray-100'} ${statusConfig[selectedBooking.status]?.color || 'text-gray-700'}`}>
+                        {statusConfig[selectedBooking.status]?.label || selectedBooking.status}
+                      </IOSBadge>
                     </div>
                   </div>
 
-                  {/* Right Column: Financials & Details */}
-                  <div className="space-y-6">
-                    {(user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER) && (
+                  <div className="grid md:grid-cols-2 gap-8">
+                    {/* Left Column: Stay Info */}
+                    <div className="space-y-6">
                       <div className="space-y-4">
-                        <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Financial Summary</h4>
-                        <div className="p-5 bg-stone-900 rounded-2xl text-white shadow-lg">
-                          <div className="flex justify-between items-center mb-4">
-                            <span className="text-stone-400 text-xs font-medium">Total Booking Value</span>
-                            <IOSBadge variant="light" color="success">Paid</IOSBadge>
+                        <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Stay Period</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="p-4 bg-white border border-stone-100 rounded-xl shadow-sm">
+                            <p className="text-[10px] text-stone-400 uppercase font-bold mb-1">Check-In</p>
+                            <p className="text-sm font-semibold text-stone-900">{new Date(selectedBooking.check_in).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                           </div>
-                          <p className="text-3xl font-bold tracking-tight">KES {(selectedBooking.total || 0).toLocaleString()}</p>
-                          <p className="text-[10px] text-stone-400 mt-2 font-medium tracking-wide">INC. ALL APPLICABLE TAXES</p>
+                          <div className="p-4 bg-white border border-stone-100 rounded-xl shadow-sm">
+                            <p className="text-[10px] text-stone-400 uppercase font-bold mb-1">Check-Out</p>
+                            <p className="text-sm font-semibold text-stone-900">{new Date(selectedBooking.check_out).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                          </div>
                         </div>
                       </div>
-                    )}
 
-                    <div className="space-y-4">
-                      <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Internal Reference</h4>
-                      <div className="p-4 bg-stone-50 rounded-xl border border-stone-100 font-mono text-[10px] text-stone-500 break-all">
-                        {selectedBooking.id}
+                      <div className="space-y-4">
+                        <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Contact Details</h4>
+                        <div className="space-y-3 px-1">
+                          <div className="flex items-center gap-3 text-stone-600">
+                            <Phone className="h-4 w-4" />
+                            <span className="text-sm">+254 700 000 000</span>
+                          </div>
+                          <div className="flex items-center gap-3 text-stone-600">
+                            <Mail className="h-4 w-4" />
+                            <span className="text-sm">guest@example.com</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Column: Financials & Details */}
+                    <div className="space-y-6">
+                      {(user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER) && (
+                        <div className="space-y-4">
+                          <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Financial Summary</h4>
+                          <div className="p-5 bg-stone-900 rounded-2xl text-white shadow-lg">
+                            <div className="flex justify-between items-center mb-4">
+                              <span className="text-stone-400 text-xs font-medium">Total Booking Value</span>
+                              <IOSBadge variant="light" color="success">Paid</IOSBadge>
+                            </div>
+                            <p className="text-3xl font-bold tracking-tight">KES {(selectedBooking.total || 0).toLocaleString()}</p>
+                            <p className="text-[10px] text-stone-400 mt-2 font-medium tracking-wide">INC. ALL APPLICABLE TAXES</p>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-4">
+                        <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Internal Reference</h4>
+                        <div className="p-4 bg-stone-50 rounded-xl border border-stone-100 font-mono text-[10px] text-stone-500 break-all">
+                          {selectedBooking.id}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
+              )}
+            </div>
 
-                <div className="flex gap-3 pt-8 border-t border-stone-100">
-                  <IOSButton
-                    variant="secondary"
-                    className="flex-1 h-12 text-base font-semibold"
-                    onClick={() => setShowDetailsModal(false)}
-                  >
-                    Close Overview
-                  </IOSButton>
+            <div className="p-4 bg-stone-50 border-t border-stone-100 flex gap-4">
+              <IOSButton
+                variant="secondary"
+                className="flex-1 h-12 text-base font-semibold"
+                onClick={() => setShowDetailsModal(false)}
+              >
+                Close Overview
+              </IOSButton>
 
-                  {selectedBooking.status === 'confirmed' && (
-                    <IOSButton
-                      className="flex-1 h-12 text-base font-semibold"
-                      onClick={() => {
-                        handleCheckIn(selectedBooking.id);
-                        setShowDetailsModal(false);
-                      }}
-                      leftIcon={<CheckSquare className="h-5 w-5" />}
-                    >
-                      Process Check-In
-                    </IOSButton>
-                  )}
+              {selectedBooking && selectedBooking.status === 'confirmed' && (
+                <IOSButton
+                  className="flex-1 h-12 text-base font-semibold"
+                  onClick={() => {
+                    handleCheckIn(selectedBooking.id);
+                    setShowDetailsModal(false);
+                  }}
+                  leftIcon={<CheckSquare className="h-5 w-5" />}
+                >
+                  Process Check-In
+                </IOSButton>
+              )}
 
-                  {selectedBooking.status === 'checked_in' && (
-                    <IOSButton
-                      className="flex-1 h-12 text-base font-semibold"
-                      onClick={() => {
-                        handleCheckOut(selectedBooking.id);
-                        setShowDetailsModal(false);
-                      }}
-                      leftIcon={<LogOut className="h-5 w-5" />}
-                    >
-                      Process Check-Out
-                    </IOSButton>
-                  )}
-                </div>
-              </div>
-            )}
+              {selectedBooking && selectedBooking.status === 'checked_in' && (
+                <IOSButton
+                  className="flex-1 h-12 text-base font-semibold"
+                  onClick={() => {
+                    handleCheckOut(selectedBooking.id);
+                    setShowDetailsModal(false);
+                  }}
+                  leftIcon={<LogOut className="h-5 w-5" />}
+                >
+                  Process Check-Out
+                </IOSButton>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
       </DashboardLayout>

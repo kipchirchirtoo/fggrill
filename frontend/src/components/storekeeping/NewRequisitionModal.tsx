@@ -96,12 +96,13 @@ export function NewRequisitionModal({ isOpen, onClose, onSubmit, items }: NewReq
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden p-0">
+        <DialogHeader className="p-4 border-b">
           <DialogTitle>New Purchase Requisition</DialogTitle>
         </DialogHeader>
-          
-          <form onSubmit={handleSubmit} className="p-4 space-y-4">
+
+        <div className="flex-1 overflow-y-auto p-4">
+          <form id="requisition-form" onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="department">Department</Label>
@@ -249,21 +250,22 @@ export function NewRequisitionModal({ isOpen, onClose, onSubmit, items }: NewReq
                 placeholder="Any additional information..."
               />
             </div>
-
-            <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onClose}
-                disabled={isLoading}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? 'Creating...' : 'Create Requisition'}
-              </Button>
-            </div>
           </form>
+        </div>
+
+        <div className="flex justify-end gap-3 p-4 border-t bg-white">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={isLoading}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" form="requisition-form" disabled={isLoading}>
+            {isLoading ? 'Creating...' : 'Create Requisition'}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );
