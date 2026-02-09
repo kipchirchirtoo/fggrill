@@ -10,7 +10,7 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { storeAPI } from '@/lib/api';
-import { Building2, RefreshCw, Search, Phone, Mail, MapPin, Plus, Trash2, Edit2, Hash, FileText } from 'lucide-react';
+import { Building2, RefreshCw, Search, Phone, Mail, MapPin, Plus, Trash2, Edit2, Hash, FileText, ScanLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -182,6 +182,13 @@ export default function CentralSuppliersPage() {
                       <IOSBadge variant="light" color={supplier.status === 'active' ? 'success' : 'secondary'}>{supplier.status}</IOSBadge>
                       {isManager && (
                         <div className="flex gap-1">
+                          <button
+                            onClick={() => window.location.href = `/dashboard/central-store/receiving?supplier_id=${supplier.id}`}
+                            className="p-1 hover:bg-blue-50 rounded text-stone-400 hover:text-blue-600 transition-colors"
+                            title="Receive Goods"
+                          >
+                            <ScanLine className="h-4 w-4" />
+                          </button>
                           <button onClick={() => window.location.href = `/dashboard/central-store/suppliers/${supplier.id}`} className="p-1 hover:bg-emerald-50 rounded text-stone-400 hover:text-emerald-600 transition-colors" title="View Detailed Account"><FileText className="h-4 w-4" /></button>
                           <button onClick={() => startEdit(supplier)} className="p-1 hover:bg-stone-100 rounded text-stone-400 hover:text-[#007AFF] transition-colors" title="Edit Profile"><Edit2 className="h-4 w-4" /></button>
                           <button onClick={() => handleDelete(supplier.id)} className="p-1 hover:bg-red-50 rounded text-stone-400 hover:text-red-600 transition-colors" title="Delete Supplier"><Trash2 className="h-4 w-4" /></button>

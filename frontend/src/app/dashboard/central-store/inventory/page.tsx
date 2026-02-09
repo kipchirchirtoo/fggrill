@@ -7,7 +7,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
 import { storeAPI } from '@/lib/api';
-import { Package, Plus, RefreshCw, Search, Trash2, Edit, AlertTriangle, ChevronRight } from 'lucide-react';
+import { Package, Plus, RefreshCw, Search, Trash2, Edit, AlertTriangle, ChevronRight, ShoppingCart } from 'lucide-react';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -208,6 +208,13 @@ export default function InventoryPage() {
                           </td>
                           <td className="p-4 text-right">
                             <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => window.location.href = `/dashboard/central-store/receiving?sku=${item.sku}`}
+                                className="p-2 text-stone-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                title="Receive Stock"
+                              >
+                                <ShoppingCart className="h-4 w-4" />
+                              </button>
                               <button onClick={() => openEditModal(item)} className="p-2 text-stone-400 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors">
                                 <Edit className="h-4 w-4" />
                               </button>

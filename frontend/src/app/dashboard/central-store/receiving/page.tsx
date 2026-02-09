@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import {
     Barcode, Check, Search, Plus, Trash2, Save,
     AlertTriangle, Package, Loader2, ArrowLeft,
-    ScanLine, ShoppingCart, Info
+    ScanLine, ShoppingCart, Info, Minus, ChevronDown
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -76,6 +76,11 @@ export default function GoodsReceivingPage() {
     const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Catalog for manual selection
+    const [allCatalogItems, setAllCatalogItems] = useState<any[]>([]);
+    const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
+    const [catalogSearch, setCatalogSearch] = useState('');
+
     // Fetch Suppliers on Mount
     useEffect(() => {
         const fetchSuppliers = async () => {
@@ -91,6 +96,39 @@ export default function GoodsReceivingPage() {
         };
         fetchSuppliers();
     }, []);
+
+    // Handle SKU and Supplier query params from other pages
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const skuParam = params.get('sku');
+        const supplierIdParam = params.get('supplier_id');
+
+        // Handle Supplier ID
+        if (supplierIdParam && suppliers.length > 0 && !selectedSupplier) {
+            const supplier = suppliers.find(s => s.id === supplierIdParam);
+            if (supplier) {
+                setSelectedSupplier(supplier);
+            }
+        }
+
+        // Handle SKU (requires catalog loaded)
+        if (skuParam && allCatalogItems.length > 0) {
+            const item = allCatalogItems.find(i => i.sku === skuParam);
+            if (item) {
+                addItemToSession({
+                    id: item.id,
+                    name: item.item_name,
+                    sku: item.sku,
+                    unit: item.unit_of_measure
+                });
+                setCurrentStep(1);
+                toast.success(`Started receiving: ${item.item_name}`);
+                // Clear param from URL without reload
+                const newUrl = window.location.pathname;
+                window.history.replaceState({}, '', newUrl);
+            }
+        }
+    }, [allCatalogItems, suppliers, selectedSupplier]);
 
     // Fetch POs when supplier selected
     useEffect(() => {
@@ -126,6 +164,24 @@ export default function GoodsReceivingPage() {
         }
     }, [currentStep, isLookupOpen]);
 
+    // Fetch Catalog for manual selection
+    useEffect(() => {
+        if (currentStep === 1 && allCatalogItems.length === 0) {
+            const fetchCatalog = async () => {
+                setIsLoadingCatalog(true);
+                try {
+                    const res = await storeAPI.getItems({ limit: 1000 });
+                    if (res.success) setAllCatalogItems(res.data || []);
+                } catch (err) {
+                    console.error('Failed to load catalog');
+                } finally {
+                    setIsLoadingCatalog(false);
+                }
+            };
+            fetchCatalog();
+        }
+    }, [currentStep, allCatalogItems.length]);
+
     // --- LOGIC: Setup ---
 
     const handleStartScanning = () => {
@@ -133,14 +189,8 @@ export default function GoodsReceivingPage() {
             toast.error('Please select a supplier');
             return;
         }
-        if (!invoiceNumber && !deliveryNote) {
-            toast.error('Please enter Invoice or Delivery Note number');
-            return;
-        }
+        // Invoice and Delivery Note are now optional per user request
         setCurrentStep(1);
-        // Pre-populate items if PO selected? 
-        // Requirement says strict scanning, so we start empty even with PO.
-        // We could potentially show "Expected" items visually.
     };
 
     // --- LOGIC: Scanning ---
@@ -389,13 +439,68 @@ export default function GoodsReceivingPage() {
 
                                 {/* Scanner Input */}
                                 <div className={`card-elevated p-8 text-center transition-colors border-2 ${scanStatus === 'success' ? 'border-green-500 bg-green-50' :
-                                        scanStatus === 'error' ? 'border-red-500 bg-red-50' : 'border-blue-500'
+                                    scanStatus === 'error' ? 'border-red-500 bg-red-50' : 'border-blue-500'
                                     }`}>
                                     <ScanLine className={`h-12 w-12 mx-auto mb-4 ${scanStatus === 'success' ? 'text-green-600' :
-                                            scanStatus === 'error' ? 'text-red-600' : 'text-blue-500'
+                                        scanStatus === 'error' ? 'text-red-600' : 'text-blue-500'
                                         }`} />
                                     <h2 className="text-xl font-bold mb-2">Ready to Scan</h2>
-                                    <p className="text-stone-500 mb-6">Scan unit barcodes one by one</p>
+                                    <p className="text-stone-500 mb-6">Scan unit barcodes or select item manually</p>
+
+                                    {/* Manual Selection Dropdown */}
+                                    <div className="max-w-md mx-auto mb-6 text-left relative">
+                                        <div className="relative">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                                            <input
+                                                type="text"
+                                                className="w-full pl-10 pr-4 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 transition-all shadow-sm"
+                                                placeholder="Search & Select Item Manually..."
+                                                value={catalogSearch}
+                                                onChange={(e) => setCatalogSearch(e.target.value)}
+                                            />
+                                        </div>
+
+                                        {catalogSearch && (
+                                            <div className="absolute z-50 mt-1 w-full bg-white border border-stone-200 rounded-xl shadow-2xl max-h-[250px] overflow-y-auto divide-y divide-stone-50">
+                                                {isLoadingCatalog ? (
+                                                    <div className="p-4 text-center text-stone-400"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>
+                                                ) : allCatalogItems.filter(i =>
+                                                    (i.item_name || '').toLowerCase().includes(catalogSearch.toLowerCase()) ||
+                                                    (i.sku || '').toLowerCase().includes(catalogSearch.toLowerCase())
+                                                ).length === 0 ? (
+                                                    <div className="p-4 text-center text-stone-400 italic">No matching items</div>
+                                                ) : (
+                                                    allCatalogItems.filter(i =>
+                                                        (i.item_name || '').toLowerCase().includes(catalogSearch.toLowerCase()) ||
+                                                        (i.sku || '').toLowerCase().includes(catalogSearch.toLowerCase())
+                                                    ).map(item => (
+                                                        <button
+                                                            key={item.id}
+                                                            onClick={() => {
+                                                                addItemToSession({
+                                                                    id: item.id,
+                                                                    name: item.item_name,
+                                                                    sku: item.sku,
+                                                                    unit: item.unit_of_measure
+                                                                });
+                                                                setCatalogSearch('');
+                                                                playSuccessSound();
+                                                                setScanStatus('success');
+                                                                setTimeout(() => setScanStatus('idle'), 500);
+                                                            }}
+                                                            className="w-full p-3 text-left hover:bg-stone-50 transition-colors flex items-center justify-between group"
+                                                        >
+                                                            <div>
+                                                                <p className="font-semibold text-stone-900">{item.item_name}</p>
+                                                                <p className="text-[10px] text-stone-400 uppercase tracking-tighter">{item.sku}</p>
+                                                            </div>
+                                                            <Plus className="h-4 w-4 text-stone-300 group-hover:text-blue-500" />
+                                                        </button>
+                                                    ))
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
 
                                     <form onSubmit={handleBarcodeSubmit} className="max-w-md mx-auto relative">
                                         <input
@@ -446,11 +551,45 @@ export default function GoodsReceivingPage() {
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-6">
-                                                        <div className="text-right">
-                                                            <p className="text-2xl font-bold font-mono text-blue-600">{item.scanned_quantity}</p>
-                                                            <p className="text-[10px] uppercase text-stone-400 font-bold">{item.unit}</p>
+                                                        <div className="flex items-center bg-stone-100 rounded-lg p-1">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setScannedItems(prev => prev.map(i =>
+                                                                        i.id === item.id ? { ...i, scanned_quantity: Math.max(1, i.scanned_quantity - 1) } : i
+                                                                    ));
+                                                                }}
+                                                                className="p-1 hover:bg-white rounded-md transition-shadow"
+                                                            >
+                                                                <Minus className="h-3 w-3 text-stone-500" />
+                                                            </button>
+                                                            <input
+                                                                type="number"
+                                                                value={item.scanned_quantity}
+                                                                onChange={(e) => {
+                                                                    const val = parseInt(e.target.value) || 0;
+                                                                    setScannedItems(prev => prev.map(i =>
+                                                                        i.id === item.id ? { ...i, scanned_quantity: val } : i
+                                                                    ));
+                                                                }}
+                                                                className="w-16 h-8 text-center text-lg font-bold font-mono text-blue-600 bg-white border border-stone-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                                            />
+                                                            <button
+                                                                onClick={() => {
+                                                                    setScannedItems(prev => prev.map(i =>
+                                                                        i.id === item.id ? { ...i, scanned_quantity: i.scanned_quantity + 1 } : i
+                                                                    ));
+                                                                }}
+                                                                className="p-1 hover:bg-white rounded-md transition-shadow"
+                                                            >
+                                                                <Plus className="h-3 w-3 text-stone-500" />
+                                                            </button>
                                                         </div>
-                                                        {/* Optional Delete/Edit */}
+                                                        <button
+                                                            onClick={() => setScannedItems(prev => prev.filter(i => i.id !== item.id))}
+                                                            className="p-2 text-stone-300 hover:text-red-500 transition-colors"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
                                                     </div>
                                                 </div>
                                             ))
