@@ -385,6 +385,11 @@ export const emailPayslips = async (req: Request, res: Response, next: NextFunct
 
 /**
  * Download Batch Payslips as ZIP
+import archiver from 'archiver';
+import { generatePayslipPDF } from '../utils/pdfGenerator';
+
+/**
+ * Download Batch Payslips as ZIP
  */
 export const downloadPayslipsZip = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -421,20 +426,64 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
             period: `${month} ${year}`
         }));
 
-        // Call Python Service explicitly for ZIP
-        const pythonUrl = `${PYTHON_SERVICE_URL}/api/payroll/generate-batch-zip`;
-        logger.debug(`Calling Python service (ZIP): ${pythonUrl}`);
+        try {
+            // Attempt 1: Call Python Service explicitly for ZIP
+            const pythonUrl = `${PYTHON_SERVICE_URL}/api/payroll/generate-batch-zip`;
+            logger.debug(`Calling Python service (ZIP): ${pythonUrl}`);
 
-        // Since we want to stream the ZIP back to client, we respond with the stream
-        const pythonRes = await callPythonWithRetry(pythonUrl, {
-            payroll_records: formattedRecords,
-            period: `${month} ${year}`
-        }, { responseType: 'stream' });
+            // Since we want to stream the ZIP back to client, we respond with the stream
+            const pythonRes = await callPythonWithRetry(pythonUrl, {
+                payroll_records: formattedRecords,
+                period: `${month} ${year}`
+            }, { responseType: 'stream' });
 
-        res.setHeader('Content-Type', 'application/zip');
-        res.setHeader('Content-Disposition', `attachment; filename=Payslips_${month}_${year}.zip`);
+            res.setHeader('Content-Type', 'application/zip');
+            res.setHeader('Content-Disposition', `attachment; filename=Payslips_${month}_${year}.zip`);
 
-        pythonRes.data.pipe(res);
+            pythonRes.data.pipe(res);
+        } catch (pythonError) {
+            logger.error('Python ZIP service failed, falling back to Node.js archiver:', pythonError);
+
+            // Attempt 2: Fallback to Node.js Archiver
+            res.setHeader('Content-Type', 'application/zip');
+            res.setHeader('Content-Disposition', `attachment; filename=Payslips_${month}_${year}_Fallback.zip`);
+
+            const archive = archiver('zip', {
+                zlib: { level: 9 } // Sets the compression level.
+            });
+
+            archive.on('error', function (err) {
+                logger.error('Archiver error:', err);
+                if (!res.headersSent) {
+                    res.status(500).send({ error: err.message });
+                }
+            });
+
+            archive.pipe(res);
+
+            for (const record of formattedRecords) {
+                try {
+                    // Generate PDF buffer
+                    const monthName = new Date(0, parseInt(month) - 1).toLocaleString('en-US', { month: 'long' });
+                    const pdfBuffer = await generatePayslipPDF({
+                        ...record,
+                        month: monthName,
+                        company: 'Famous Gate Hotel',
+                        company_email: 'famousgatesbmt@gmail.com',
+                        company_address: 'Bomet, Kenya'
+                    });
+
+                    const filename = `Payslip_${record.staff.last_name}_${month}_${year}.pdf`;
+                    archive.append(pdfBuffer, { name: filename });
+                } catch (pdfErr) {
+                    logger.error(`Failed to generate PDF for ${record.staff.name} in ZIP fallback:`, pdfErr);
+                    // Add a text file indicating the error for this specific record
+                    archive.append(Buffer.from(`Error generating payslip: ${pdfErr}`), { name: `ERROR_${record.staff.last_name}.txt` });
+                }
+            }
+
+            await archive.finalize();
+        }
 
     } catch (error) {
         next(error);
