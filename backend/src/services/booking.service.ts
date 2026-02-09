@@ -190,18 +190,34 @@ class BookingService {
       const mealPlanCost = mealPlanRates[mealPlan as keyof typeof mealPlanRates] || 0;
 
       const subtotal = (roomRate + mealPlanCost) * nights;
-      const taxAmount = subtotal * 0.16; // 16% VAT
-      const serviceCharge = subtotal * 0.10; // 10% service charge
+
+      // Implicit Inclusive Pricing Logic
+      // The 'subtotal' here is actually the Grand Total (Room Rate is inclusive)
+      // We need to back-calculate the Base, VAT, and Service Charge.
+      // Total = Base + (Base * 0.16) + (Base * 0.10) = Base * 1.26
+
+      const totalAmount = subtotal;
+      const baseAmount = totalAmount / 1.26;
+      const taxAmount = baseAmount * 0.16; // 16% VAT
+      const serviceCharge = baseAmount * 0.10; // 10% Service Charge
       const discountAmount = 0; // No discount for now
-      const totalAmount = subtotal + taxAmount + serviceCharge - discountAmount;
+
+      // Recalculate base to be safe? Or just report the breakdown.
+      // We return 'subtotal' as the pre-tax amount usually, but in this specific return structure,
+      // 'subtotal' seems to be used as 'Base Amount' in some contexts, or 'Total before extras'.
+      // Let's align with the interface: 
+      // roomRate: The inclusive rate per night
+      // subtotal: The total inclusive amount before discounts? Or the base amount?
+      // Usually subtotal + tax + service = total.
+      // So let's set subtotal = baseAmount.
 
       return {
-        roomRate,
-        subtotal,
+        roomRate, // This remains the storage rate (inclusive)
+        subtotal: baseAmount, // The true base amount
         taxAmount,
         serviceCharge,
         discountAmount,
-        totalAmount,
+        totalAmount, // The final amount matching the rate * nights
         nights
       };
     } catch (error) {

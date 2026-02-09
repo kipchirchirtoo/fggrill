@@ -4,13 +4,16 @@ const dotenv = require('dotenv');
 const path = require('path');
 
 // Load environment variables from backend .env
-dotenv.config({ path: path.resolve(__dirname, '../backend/.env') });
+const envPath = path.join(process.cwd(), 'backend', '.env');
+console.log('Loading .env from:', envPath);
+dotenv.config({ path: envPath });
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+const supabaseUrl = process.env.SUPABASE_PROJECT_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !supabaseServiceKey) {
-    console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_KEY in environment variables.');
+    console.error('Missing SUPABASE_PROJECT_URL or SUPABASE_SERVICE_ROLE_KEY in environment variables.');
+    console.error('Loaded env vars:', process.env.SUPABASE_PROJECT_URL ? 'URL found' : 'URL missing', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'Key found' : 'Key missing');
     process.exit(1);
 }
 
