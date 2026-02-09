@@ -5,6 +5,8 @@ import axios from 'axios';
 import { PYTHON_SERVICE_URL } from '../config/pythonService';
 import { logger } from '../utils/logger';
 import { emailService } from '../services/email.service';
+import archiver from 'archiver';
+import { generatePayslipPDF } from '../utils/pdfGenerator';
 
 /**
  * Generate Payroll for a specific month/year
@@ -385,11 +387,6 @@ export const emailPayslips = async (req: Request, res: Response, next: NextFunct
 
 /**
  * Download Batch Payslips as ZIP
-import archiver from 'archiver';
-import { generatePayslipPDF } from '../utils/pdfGenerator';
-
-/**
- * Download Batch Payslips as ZIP
  */
 export const downloadPayslipsZip = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -427,6 +424,8 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
         }));
 
         try {
+            // ... (Python service call) ...
+
             // Attempt 1: Call Python Service explicitly for ZIP
             const pythonUrl = `${PYTHON_SERVICE_URL}/api/payroll/generate-batch-zip`;
             logger.debug(`Calling Python service (ZIP): ${pythonUrl}`);
@@ -441,7 +440,7 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
             res.setHeader('Content-Disposition', `attachment; filename=Payslips_${month}_${year}.zip`);
 
             pythonRes.data.pipe(res);
-        } catch (pythonError) {
+        } catch (pythonError: any) {
             logger.error('Python ZIP service failed, falling back to Node.js archiver:', pythonError);
 
             // Attempt 2: Fallback to Node.js Archiver
@@ -452,7 +451,7 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
                 zlib: { level: 9 } // Sets the compression level.
             });
 
-            archive.on('error', function (err) {
+            archive.on('error', function (err: any) {
                 logger.error('Archiver error:', err);
                 if (!res.headersSent) {
                     res.status(500).send({ error: err.message });
