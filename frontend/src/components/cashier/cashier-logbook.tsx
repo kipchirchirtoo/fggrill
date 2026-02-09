@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { Input } from '@/components/ui/input';
+import { CloseShiftModal, CloseShiftData } from './close-shift-modal';
 import {
     Clock, DollarSign, TrendingUp, CheckCircle,
     AlertTriangle, Loader2, PlayCircle, StopCircle
@@ -38,7 +39,7 @@ export function CashierLogbook({ type }: { type?: string }) {
     const [currentShift, setCurrentShift] = useState<ShiftLog | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [openingFloat, setOpeningFloat] = useState('');
-    const [closingFloat, setClosingFloat] = useState('');
+    const [closeShiftModalOpen, setCloseShiftModalOpen] = useState(false);
 
     const fetchShifts = async () => {
         try {
@@ -84,24 +85,19 @@ export function CashierLogbook({ type }: { type?: string }) {
         }
     };
 
-    const handleCloseShift = async () => {
-        if (!closingFloat || !currentShift) {
-            toast.error('Please enter closing float');
-            return;
-        }
+    const handleCloseShift = async (data: CloseShiftData) => {
+        if (!currentShift) return;
 
         setIsLoading(true);
         try {
             const response = await fetchAPI(`/cashier/shifts/${currentShift.id}/close`, {
                 method: 'PUT',
-                body: JSON.stringify({
-                    closing_float: parseFloat(closingFloat)
-                })
+                body: JSON.stringify(data)
             }) as any;
 
             if (response.success) {
                 toast.success('Shift closed successfully');
-                setClosingFloat('');
+                setCloseShiftModalOpen(false);
                 fetchShifts();
             }
         } catch (error: any) {
@@ -167,23 +163,14 @@ export function CashierLogbook({ type }: { type?: string }) {
                         </div>
                     </div>
 
-                    <div className="space-y-3">
-                        <Input
-                            type="number"
-                            placeholder="Enter closing float amount"
-                            value={closingFloat}
-                            onChange={(e) => setClosingFloat(e.target.value)}
-                            className="h-12 text-lg font-bold"
-                        />
-                        <IOSButton
-                            onClick={handleCloseShift}
-                            disabled={isLoading || !closingFloat}
-                            className="w-full bg-stone-900 h-12"
-                        >
-                            {isLoading ? <Loader2 className="animate-spin mr-2" /> : <StopCircle className="mr-2" />}
-                            Close Shift
-                        </IOSButton>
-                    </div>
+                    <IOSButton
+                        onClick={() => setCloseShiftModalOpen(true)}
+                        disabled={isLoading}
+                        className="w-full bg-stone-900 h-12"
+                    >
+                        <StopCircle className="mr-2" />
+                        Close Shift
+                    </IOSButton>
                 </IOSCard>
             ) : (
                 <IOSCard className="p-6">
@@ -255,6 +242,15 @@ export function CashierLogbook({ type }: { type?: string }) {
                     ))}
                 </div>
             </div>
+
+            {/* Close Shift Modal */}
+            <CloseShiftModal
+                isOpen={closeShiftModalOpen}
+                onClose={() => setCloseShiftModalOpen(false)}
+                onSubmit={handleCloseShift}
+                currentShift={currentShift}
+                isLoading={isLoading}
+            />
         </div>
     );
 }

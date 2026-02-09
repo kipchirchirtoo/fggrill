@@ -186,7 +186,31 @@ export const closeShift = async (
 ): Promise<void> => {
     try {
         const { id } = req.params;
-        const { closing_float, notes } = req.body;
+        const {
+            closing_float,
+            notes,
+            // Revenue by source
+            swimming_pool_revenue,
+            pool_token_revenue,
+            conference_revenue,
+            room_booking_revenue,
+            restaurant_revenue,
+            bar_revenue,
+            other_revenue,
+            // Credit & bills
+            credit_bills_taken,
+            credit_bills_count,
+            unpaid_bills_value,
+            unpaid_bills_count,
+            // Cash management
+            cash_at_hand,
+            cash_deposited,
+            bank_deposit_ref,
+            // N/A flags
+            pool_na,
+            conference_na,
+            rooms_na
+        } = req.body;
         const userId = req.user?.id;
 
         // Get shift
@@ -208,14 +232,14 @@ export const closeShift = async (
             throw new AppError('Shift is already closed', 400);
         }
 
-        // Calculate summary
+        // Calculate summary from transactions
         const { data: summary } = await supabase
             .rpc('calculate_shift_summary', { p_shift_id: id });
 
         const expectedClosingFloat = shift.opening_float + (summary?.total_cash || 0);
         const variance = closing_float - expectedClosingFloat;
 
-        // Update shift
+        // Update shift with all revenue breakdown
         const { data: updatedShift, error: updateError } = await supabase
             .from('cashier_shift_logs')
             .update({
@@ -223,11 +247,34 @@ export const closeShift = async (
                 closing_float,
                 expected_closing_float: expectedClosingFloat,
                 variance,
+                // Payment method totals
                 total_cash_sales: summary?.total_cash || 0,
                 total_mpesa_sales: summary?.total_mpesa || 0,
                 total_card_sales: summary?.total_card || 0,
                 total_sales: summary?.total_sales || 0,
                 transaction_count: summary?.transaction_count || 0,
+                // Revenue by source
+                swimming_pool_revenue: swimming_pool_revenue || 0,
+                pool_token_revenue: pool_token_revenue || 0,
+                conference_revenue: conference_revenue || 0,
+                room_booking_revenue: room_booking_revenue || 0,
+                restaurant_revenue: restaurant_revenue || 0,
+                bar_revenue: bar_revenue || 0,
+                other_revenue: other_revenue || 0,
+                // Credit & bills
+                credit_bills_taken: credit_bills_taken || 0,
+                credit_bills_count: credit_bills_count || 0,
+                unpaid_bills_value: unpaid_bills_value || 0,
+                unpaid_bills_count: unpaid_bills_count || 0,
+                // Cash management
+                cash_at_hand: cash_at_hand || 0,
+                cash_deposited: cash_deposited || 0,
+                bank_deposit_ref,
+                // N/A flags
+                pool_na: pool_na || false,
+                conference_na: conference_na || false,
+                rooms_na: rooms_na || false,
+                // Status
                 status: 'closed',
                 notes: notes || shift.notes,
                 updated_at: new Date().toISOString()
