@@ -12,7 +12,7 @@ import {
   DollarSign,
   ScanLine,
   Settings, ClipboardList, Truck, CalendarClock,
-  Building, Wrench, Brush, CheckCircle, FileSpreadsheet, ShieldCheck,
+  Building, Wrench, Brush, CheckCircle, CheckCircle2, FileSpreadsheet, ShieldCheck,
   Home, ArrowDownUp, LifeBuoy, Calendar, Store, TrendingUp, TrendingDown, LineChart, Award,
   UserCheck, Utensils, Wine, Receipt, CreditCard, PieChart, FileText,
   BookOpen, ChefHat, ShoppingCart, Wallet, Scale, AlertCircle, UtensilsCrossed, Trash2, Clock, Shield, Menu, X,
