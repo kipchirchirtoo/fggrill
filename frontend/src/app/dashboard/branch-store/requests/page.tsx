@@ -209,6 +209,7 @@ export default function BranchRequestsPage() {
                                         requestItems.map((item, idx) => {
                                             const stockInfo = items.find(i => (i.item_sku || i.sku) === item.item_sku);
                                             return (
+                                                <div key={idx} className="flex items-start gap-3 p-3 bg-white border border-stone-200 rounded-xl hover:border-stone-300 transition-colors">
                                                     <div className="flex-1 min-w-0">
                                                         <p className="text-sm font-bold text-stone-800 truncate">
                                                             {stockInfo?.item_name || item.item_sku}
@@ -241,122 +242,122 @@ export default function BranchRequestsPage() {
                                                         </button>
                                                     </div>
                                                 </div>
-                                );
+                                            );
                                         })
                                     )}
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Reason for Request</label>
-                            <Input
-                                value={requestReason}
-                                onChange={(e) => setRequestReason(e.target.value)}
-                                placeholder="e.g. Weekly replenishment, event preparation..."
-                                className="bg-stone-50 border-stone-200"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="p-4 bg-stone-50 border-t border-stone-100 flex gap-3">
-                        <IOSButton variant="secondary" onClick={() => setIsNewRequestModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                        <IOSButton onClick={handleCreateRequest} className="flex-1 px-8">Submit Requisition</IOSButton>
-                    </div>
-                </DialogContent>
-            </Dialog>
-
-            {/* Detail Modal */}
-            <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
-                <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 overflow-hidden shadow-2xl border-stone-200">
-                    <DialogHeader className="p-6 pb-2 border-b border-stone-50 bg-white">
-                        <DialogTitle>Request Details</DialogTitle>
-                        <p className="text-xs text-stone-500">{selectedRequest?.request_number}</p>
-                    </DialogHeader>
-
-                    {selectedRequest && (
-                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-stone-50 p-4 rounded-xl border border-stone-100">
-                                <div>
-                                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Status</label>
-                                    <p className="font-medium text-sm mt-1">
-                                        <IOSBadge variant="light" color={getStatusColor(selectedRequest.status) as any}>{selectedRequest.status}</IOSBadge>
-                                    </p>
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Date</label>
-                                    <p className="font-medium text-sm mt-1">{new Date(selectedRequest.created_at).toLocaleDateString()}</p>
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Priority</label>
-                                    <p className="font-medium text-sm mt-1 capitalize">{selectedRequest.priority?.toLowerCase()}</p>
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Type</label>
-                                    <p className="font-medium text-sm mt-1 capitalize">{selectedRequest.request_type?.toLowerCase()}</p>
                                 </div>
                             </div>
 
-                            {/* Items List */}
-                            <div>
-                                <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-2 block">Items</label>
-                                <div className="border border-stone-100 rounded-xl overflow-hidden">
-                                    <table className="w-full text-sm text-left">
-                                        <thead className="bg-stone-50 text-stone-500 font-medium border-b border-stone-100">
-                                            <tr>
-                                                <th className="px-4 py-3">Item</th>
-                                                <th className="px-4 py-3 text-right">Requested</th>
-                                                <th className="px-4 py-3 text-right">Approved</th>
-                                                <th className="px-4 py-3 text-center">Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-stone-100">
-                                            {selectedRequest.items?.map((item: any) => (
-                                                <tr key={item.id} className="hover:bg-stone-50/50">
-                                                    <td className="px-4 py-3">
-                                                        <p className="font-medium text-stone-800">{item.item_name || item.item_sku}</p>
-                                                        {item.rejection_reason && (
-                                                            <p className="text-xs text-rose-500 mt-1">Reason: {item.rejection_reason}</p>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right font-mono">{item.requested_quantity}</td>
-                                                    <td className="px-4 py-3 text-right font-mono">
-                                                        {['APPROVED', 'PARTIALLY_APPROVED', 'DELIVERED', 'RECEIVED'].includes(item.status) ? (
-                                                            <span className="text-emerald-600 font-bold">{item.approved_quantity}</span>
-                                                        ) : (
-                                                            <span className="text-stone-300">-</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-center">
-                                                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${item.status === 'APPROVED' || item.status === 'DELIVERED' ? 'bg-emerald-50 text-emerald-600' :
+                            <div className="space-y-2">
+                                <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Reason for Request</label>
+                                <Input
+                                    value={requestReason}
+                                    onChange={(e) => setRequestReason(e.target.value)}
+                                    placeholder="e.g. Weekly replenishment, event preparation..."
+                                    className="bg-stone-50 border-stone-200"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-stone-50 border-t border-stone-100 flex gap-3">
+                            <IOSButton variant="secondary" onClick={() => setIsNewRequestModalOpen(false)} className="flex-1">Cancel</IOSButton>
+                            <IOSButton onClick={handleCreateRequest} className="flex-1 px-8">Submit Requisition</IOSButton>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Detail Modal */}
+                <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
+                    <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 overflow-hidden shadow-2xl border-stone-200">
+                        <DialogHeader className="p-6 pb-2 border-b border-stone-50 bg-white">
+                            <DialogTitle>Request Details</DialogTitle>
+                            <p className="text-xs text-stone-500">{selectedRequest?.request_number}</p>
+                        </DialogHeader>
+
+                        {selectedRequest && (
+                            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-stone-50 p-4 rounded-xl border border-stone-100">
+                                    <div>
+                                        <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Status</label>
+                                        <p className="font-medium text-sm mt-1">
+                                            <IOSBadge variant="light" color={getStatusColor(selectedRequest.status) as any}>{selectedRequest.status}</IOSBadge>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Date</label>
+                                        <p className="font-medium text-sm mt-1">{new Date(selectedRequest.created_at).toLocaleDateString()}</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Priority</label>
+                                        <p className="font-medium text-sm mt-1 capitalize">{selectedRequest.priority?.toLowerCase()}</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Type</label>
+                                        <p className="font-medium text-sm mt-1 capitalize">{selectedRequest.request_type?.toLowerCase()}</p>
+                                    </div>
+                                </div>
+
+                                {/* Items List */}
+                                <div>
+                                    <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-2 block">Items</label>
+                                    <div className="border border-stone-100 rounded-xl overflow-hidden">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-stone-50 text-stone-500 font-medium border-b border-stone-100">
+                                                <tr>
+                                                    <th className="px-4 py-3">Item</th>
+                                                    <th className="px-4 py-3 text-right">Requested</th>
+                                                    <th className="px-4 py-3 text-right">Approved</th>
+                                                    <th className="px-4 py-3 text-center">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-stone-100">
+                                                {selectedRequest.items?.map((item: any) => (
+                                                    <tr key={item.id} className="hover:bg-stone-50/50">
+                                                        <td className="px-4 py-3">
+                                                            <p className="font-medium text-stone-800">{item.item_name || item.item_sku}</p>
+                                                            {item.rejection_reason && (
+                                                                <p className="text-xs text-rose-500 mt-1">Reason: {item.rejection_reason}</p>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right font-mono">{item.requested_quantity}</td>
+                                                        <td className="px-4 py-3 text-right font-mono">
+                                                            {['APPROVED', 'PARTIALLY_APPROVED', 'DELIVERED', 'RECEIVED'].includes(item.status) ? (
+                                                                <span className="text-emerald-600 font-bold">{item.approved_quantity}</span>
+                                                            ) : (
+                                                                <span className="text-stone-300">-</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${item.status === 'APPROVED' || item.status === 'DELIVERED' ? 'bg-emerald-50 text-emerald-600' :
                                                                 item.status === 'RECEIVED' ? 'bg-blue-50 text-blue-600' :
                                                                     item.status === 'REJECTED' ? 'bg-rose-50 text-rose-600' :
                                                                         'bg-amber-50 text-amber-600'
-                                                            }`}>
-                                                            {item.status}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                                                }`}>
+                                                                {item.status}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
+
+                                {(selectedRequest as any).review_notes && (
+                                    <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl">
+                                        <label className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1 block">Review Notes</label>
+                                        <p className="text-sm text-blue-900">{(selectedRequest as any).review_notes}</p>
+                                    </div>
+                                )}
                             </div>
+                        )}
 
-                            {(selectedRequest as any).review_notes && (
-                                <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl">
-                                    <label className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1 block">Review Notes</label>
-                                    <p className="text-sm text-blue-900">{(selectedRequest as any).review_notes}</p>
-                                </div>
-                            )}
+                        <div className="p-4 bg-stone-50 border-t border-stone-100 flex justify-end">
+                            <IOSButton variant="secondary" onClick={() => setIsDetailModalOpen(false)}>Close</IOSButton>
                         </div>
-                    )}
-
-                    <div className="p-4 bg-stone-50 border-t border-stone-100 flex justify-end">
-                        <IOSButton variant="secondary" onClick={() => setIsDetailModalOpen(false)}>Close</IOSButton>
-                    </div>
-                </DialogContent>
-            </Dialog>
-        </DashboardLayout>
+                    </DialogContent>
+                </Dialog>
+            </DashboardLayout>
         </ProtectedRoute >
     );
 }
