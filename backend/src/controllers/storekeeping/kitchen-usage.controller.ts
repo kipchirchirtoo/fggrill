@@ -1,11 +1,7 @@
-/**
- * Kitchen Usage Controller
- * Track how received items are consumed in the kitchen
- */
-
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import { logger } from '../../utils/logger';
+import * as BranchInventoryService from '../../services/branch-inventory.service';
 
 // ============================================================
 // GET RECEIVED ITEMS FOR TRACKING
@@ -56,13 +52,13 @@ export const getReceivedItems = async (
     // Fetch item names
     const skus = [...new Set(data?.map(r => r.item_sku) || [])];
     let itemsMap: Record<string, any> = {};
-    
+
     if (skus.length > 0) {
       const { data: items } = await supabase
         .from('simple_items')
         .select('sku, item_name, category, retail_price')
         .in('sku', skus);
-      
+
       itemsMap = (items || []).reduce((acc, item) => {
         acc[item.sku] = item;
         return acc;
@@ -118,13 +114,14 @@ export const createUsageRecord = async (
     }
 
     if (!item_sku || !received_quantity || received_quantity <= 0) {
-      res.status(400).json({ 
-        success: false, 
-        message: 'Item SKU and received quantity are required' 
+      res.status(400).json({
+        success: false,
+        message: 'Item SKU and received quantity are required'
       });
       return;
     }
 
+    // Start transaction-like flow (manual for now as we don't have a transaction wrapper here)
     const { data, error } = await supabase
       .from('kitchen_usage_records')
       .insert({
@@ -132,6 +129,7 @@ export const createUsageRecord = async (
         dispatch_id: dispatch_id || null,
         item_sku,
         received_quantity,
+        remaining_quantity: received_quantity, // Set remaining to initial received
         unit_cost: unit_cost || 0,
         expected_revenue: expected_revenue || 0,
         usage_date: usage_date || new Date().toISOString().split('T')[0],
@@ -143,9 +141,73 @@ export const createUsageRecord = async (
 
     if (error) throw error;
 
+    // Deduct from branch stock
+    try {
+      await BranchInventoryService.updateBranchStock(
+        branchId,
+        item_sku,
+        -received_quantity, // Negative because we are moving it out of main store
+        'KITCHEN_ISSUE',
+        userId,
+        'KITCHEN_USAGE',
+        data.id,
+        `KUSG-${data.id.substring(0, 8).toUpperCase()}`
+      );
+
+      // =================================================================
+      // SYNC TO KITCHEN STOCK LEDGER
+      // =================================================================
+      // 1. Get item details (name and unit)
+      const { data: itemData } = await supabase
+        .from('simple_items')
+        .select('description, unit')
+        .eq('sku', item_sku)
+        .single();
+
+      const itemName = itemData?.description || 'Unknown Item';
+      const itemUnit = itemData?.unit || 'Unit';
+
+      // 2. Get current kitchen stock balance
+      const { data: currentStock } = await supabase
+        .from('kitchen_stock')
+        .select('current_balance')
+        .eq('branch_id', branchId)
+        .eq('item_sku', item_sku)
+        .single();
+
+      const openingBalance = currentStock?.current_balance || 0;
+      const closingBalance = Number(openingBalance) + Number(received_quantity);
+
+      // 3. Insert into kitchen_stock_ledger
+      // This will trigger the update_kitchen_stock_balance trigger to update kitchen_stock table
+      await supabase
+        .from('kitchen_stock_ledger')
+        .insert({
+          branch_id: branchId,
+          item_sku,
+          item_name: itemName,
+          transaction_type: 'RECEIPT', // or TRANSFER_IN
+          reference_type: 'KITCHEN_USAGE',
+          reference_id: data.id,
+          opening_balance: openingBalance,
+          quantity_in: received_quantity,
+          quantity_out: 0,
+          closing_balance: closingBalance,
+          unit_of_measure: itemUnit,
+          user_id: userId,
+          notes: `Received from Branch Store (Ref: KUSG-${data.id.substring(0, 8).toUpperCase()})`
+        });
+      // =================================================================
+
+    } catch (stockError) {
+      // Rollback usage record if stock update fails
+      await supabase.from('kitchen_usage_records').delete().eq('id', data.id);
+      throw stockError;
+    }
+
     res.status(201).json({
       success: true,
-      message: 'Usage tracking record created',
+      message: 'Usage tracking record created and stock synced to kitchen',
       data
     });
   } catch (error) {
@@ -183,9 +245,9 @@ export const recordUsageEntry = async (
     // Validate usage type
     const validTypes = ['CONSUMED', 'SPOILT', 'LOST', 'DAMAGED', 'EXPIRED', 'RETURNED'];
     if (!validTypes.includes(usage_type)) {
-      res.status(400).json({ 
-        success: false, 
-        message: `Invalid usage type. Must be one of: ${validTypes.join(', ')}` 
+      res.status(400).json({
+        success: false,
+        message: `Invalid usage type. Must be one of: ${validTypes.join(', ')}`
       });
       return;
     }
@@ -208,9 +270,9 @@ export const recordUsageEntry = async (
     }
 
     if (quantity > record.remaining_quantity) {
-      res.status(400).json({ 
-        success: false, 
-        message: `Cannot record ${quantity} units. Only ${record.remaining_quantity} remaining` 
+      res.status(400).json({
+        success: false,
+        message: `Cannot record ${quantity} units. Only ${record.remaining_quantity} remaining`
       });
       return;
     }
@@ -299,7 +361,7 @@ export const getUsageEntries = async (
         .from('users')
         .select('id, first_name, last_name, email')
         .in('id', staffIds);
-      
+
       staffMap = (staffData || []).reduce((acc, s) => {
         acc[s.id] = s;
         return acc;
@@ -404,7 +466,7 @@ export const getStaffAccountability = async (
       staff_name: `${record.users.first_name} ${record.users.last_name}`,
       branch_name: record.branches.name,
       total_wastage: record.total_items_spoilt + record.total_items_lost + record.total_items_damaged,
-      wastage_percentage: record.total_items_used > 0 
+      wastage_percentage: record.total_items_used > 0
         ? ((record.total_items_spoilt + record.total_items_lost + record.total_items_damaged) / record.total_items_used * 100).toFixed(2)
         : 0
     }));
@@ -485,13 +547,13 @@ export const getDailyUsageSummary = async (
     // Get branch names
     const branchIds = [...new Set(Object.values(grouped).map((g: any) => g.branch_id))];
     let branchMap: Record<number, string> = {};
-    
+
     if (branchIds.length > 0) {
       const { data: branches } = await supabase
         .from('branches')
         .select('id, name')
         .in('id', branchIds);
-      
+
       branchMap = (branches || []).reduce((acc, b) => {
         acc[b.id] = b.name;
         return acc;
@@ -580,13 +642,13 @@ export const getTrackableItems = async (
     // Get item details
     const skus = (branchStock || []).map(s => s.item_sku);
     let itemsMap: Record<string, any> = {};
-    
+
     if (skus.length > 0) {
       const { data: items } = await supabase
         .from('simple_items')
         .select('sku, item_name, category, cost_price, retail_price')
         .in('sku', skus);
-      
+
       itemsMap = (items || []).reduce((acc, item) => {
         acc[item.sku] = item;
         return acc;

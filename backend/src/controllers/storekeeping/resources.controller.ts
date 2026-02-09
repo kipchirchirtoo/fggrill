@@ -326,8 +326,7 @@ export const getStockTakes = async (req: Request, res: Response) => {
       .from('stock_counts')
       .select(`
         *,
-        branch:branches(id, name, code),
-        counted_by_profile:users!counted_by(id, first_name, last_name)
+        branch:branches(id, name, code)
       `)
       .order('count_date', { ascending: false });
 
@@ -376,14 +375,14 @@ export const createStockTake = async (req: Request, res: Response) => {
     if (stockItems && stockItems.length > 0) {
       const skus = stockItems.map(i => i.item_sku);
 
-      // Resolve inventory_item IDs and unit costs
+      // Resolve store_item IDs and unit costs
       const { data: inventoryItems } = await supabase
-        .from('inventory_items')
-        .select('id, code, unit_cost')
-        .in('code', skus);
+        .from('store_items')
+        .select('id, item_code, unit_cost')
+        .in('item_code', skus);
 
       const countItems = stockItems.map(stockItem => {
-        const invItem = inventoryItems?.find(i => i.code === stockItem.item_sku);
+        const invItem = inventoryItems?.find(i => i.item_code === stockItem.item_sku);
         return {
           stock_count_id: count.id,
           item_id: invItem?.id,
@@ -427,7 +426,7 @@ export const getStockTakeItems = async (req: Request, res: Response) => {
     }
 
     const { data: inventoryItems, error: invError } = await supabase
-      .from('inventory_items')
+      .from('store_items')
       .select('id, name, item_code, category, unit')
       .in('id', itemIds);
 

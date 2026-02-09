@@ -157,6 +157,40 @@ export async function updateBranchStock(
     performed_by: userId
   });
 
+  // Notify Auditor for specific movement types
+  if (movementType === 'STOCK_OUT') {
+    try {
+      // Get item and branch names for the notification
+      const [itemRes, branchRes] = await Promise.all([
+        supabase.from('simple_items').select('item_name').eq('sku', itemSku).single(),
+        supabase.from('branches').select('name').eq('id', branchId).single()
+      ]);
+
+      const itemName = itemRes.data?.item_name || itemSku;
+      const branchName = branchRes.data?.name || `Branch #${branchId}`;
+
+      await notificationService.notifyRole(
+        'auditor',
+        'Stock Issued (Stock Out)',
+        `${branchName} has issued ${Math.abs(quantityChange)} units of ${itemName}. Reason: ${notes || 'Not specified'}`,
+        {
+          type: 'warning',
+          category: 'stock',
+          priority: 'medium',
+          actionUrl: `/dashboard/branch-store/stock-out?branch_id=${branchId}`,
+          metadata: {
+            branch_id: branchId,
+            item_sku: itemSku,
+            quantity: Math.abs(quantityChange),
+            reason: notes
+          }
+        }
+      );
+    } catch (notifyError) {
+      logger.error('Failed to notify auditor of stock out', notifyError);
+    }
+  }
+
   return { previousStock, newStock: Math.max(0, newStock) };
 }
 
@@ -759,10 +793,34 @@ export async function confirmDelivery(
 
   // Update original request
   if (dispatch.stock_request_id) {
+    // Update main request status
     await supabase
       .from('stock_requests')
       .update({ status: 'DELIVERED', updated_at: new Date().toISOString() })
       .eq('id', dispatch.stock_request_id);
+
+    // Update individual request items status to DELIVERED
+    // We match by request_id and item_sku from the dispatch items
+    const { data: updatedDispatchItems } = await supabase
+      .from('dispatch_items')
+      .select('*')
+      .eq('dispatch_id', dispatchId);
+
+    if (updatedDispatchItems) {
+      for (const dItem of updatedDispatchItems) {
+        await supabase
+          .from('stock_request_items')
+          .update({
+            status: 'DELIVERED',
+            approved_quantity: dItem.received_quantity, // Update to what was actually delivered
+            updated_at: new Date().toISOString()
+          })
+          .match({
+            request_id: dispatch.stock_request_id,
+            item_sku: dItem.item_sku
+          });
+      }
+    }
   }
 
   logger.info(`Dispatch ${dispatch.dispatch_number} confirmed at branch`);
@@ -830,10 +888,15 @@ export async function getIncomingDispatches(branchId: number) {
     driver_name: drivers?.find(d => d.id === dispatch.driver_id)?.name,
     items: (items || [])
       .filter(i => i.dispatch_id === dispatch.id)
-      .map(item => ({
-        ...item,
-        item: itemDetails?.find(d => d.sku === item.item_sku)
-      }))
+      .map(item => {
+        const details = itemDetails?.find(d => d.sku === item.item_sku);
+        return {
+          ...item,
+          item_item: details,
+          item_name: details?.item_name || item.item_sku,
+          unit: details?.unit_of_measure || 'units'
+        };
+      })
   }));
   return data;
 }
@@ -856,36 +919,49 @@ export async function getDispatchHistory(fromBranchId: number, status?: string) 
   if (error) throw error;
   if (!dispatches || dispatches.length === 0) return [];
 
-  // Get to branches
-  const branchIds = [...new Set(dispatches.map(d => d.to_branch_id))];
-  const { data: branches } = await supabase
-    .from('branches')
-    .select('id, name, code')
-    .in('id', branchIds);
-
-  // Get items with details
+  // Get metadata for enrichment
+  const toBranchIds = [...new Set(dispatches.map(d => d.to_branch_id))];
+  const vehicleIds = [...new Set(dispatches.map(d => d.vehicle_id).filter(id => id))];
+  const driverIds = [...new Set(dispatches.map(d => d.driver_id).filter(id => id))];
   const dispatchIds = dispatches.map(d => d.id);
-  const { data: items } = await supabase
-    .from('dispatch_items')
-    .select(`
-      *,
-      item:simple_items!item_sku(sku, item_name, description, unit)
-    `)
-    .in('dispatch_id', dispatchIds);
 
-  return dispatches.map(dispatch => ({
-    ...dispatch,
-    to_branch: branches?.find(b => b.id === dispatch.to_branch_id),
-    items: (items || [])
-      .filter(i => i.dispatch_id === dispatch.id)
-      .map(i => ({
-        id: i.id,
-        item_sku: i.item_sku,
-        item_name: i.item?.item_name || i.item_sku, // Handle possible missing join
-        quantity: i.dispatched_quantity,
-        unit: i.item?.unit || 'units'
-      }))
-  }));
+  // Fetch all enrichment data in parallel
+  const [branchesRes, vehiclesRes, driversRes, itemsRes] = await Promise.all([
+    supabase.from('branches').select('id, name, code').in('id', toBranchIds),
+    vehicleIds.length > 0 ? supabase.from('vehicles').select('id, registration_number, model').in('id', vehicleIds) : Promise.resolve({ data: [] }),
+    driverIds.length > 0 ? supabase.from('drivers').select('id, name, license_number, phone').in('id', driverIds) : Promise.resolve({ data: [] }),
+    supabase.from('dispatch_items').select('*, item:simple_items!item_sku(sku, item_name, description, unit_of_measure)').in('dispatch_id', dispatchIds)
+  ]);
+
+  const branches = branchesRes.data || [];
+  const vehicles = vehiclesRes.data || [];
+  const drivers = driversRes.data || [];
+  const items = itemsRes.data || [];
+
+  return dispatches.map(dispatch => {
+    const toBranch = branches.find(b => b.id === dispatch.to_branch_id);
+    const vehicle = vehicles.find(v => v.id === dispatch.vehicle_id);
+    const driver = drivers.find(d => d.id === dispatch.driver_id);
+
+    return {
+      ...dispatch,
+      to_branch,
+      to_branch_name: toBranch?.name || 'Unknown Branch',
+      vehicle,
+      vehicle_registration: vehicle?.registration_number || dispatch.vehicle_number, // Use manual entry as fallback
+      driver,
+      driver_name: driver?.name || dispatch.driver_name, // Use manual entry as fallback
+      items: (items || [])
+        .filter(i => i.dispatch_id === dispatch.id)
+        .map(i => ({
+          id: i.id,
+          item_sku: i.item_sku,
+          item_name: i.item?.item_name || i.item_sku,
+          quantity: i.dispatched_quantity,
+          unit: i.item?.unit_of_measure || 'units'
+        }))
+    };
+  });
 }
 
 // ============================================================

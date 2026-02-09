@@ -191,7 +191,7 @@ export default function BranchReceivePage() {
                     {selectedDispatch?.items.map((item) => (
                       <div key={item.id} className="group grid grid-cols-1 lg:grid-cols-12 gap-3 lg:gap-4 p-3 border border-stone-100 rounded-xl bg-white hover:bg-stone-50/50 hover:border-stone-200 transition-all">
                         <div className="lg:col-span-5 flex flex-col justify-center">
-                          <p className="font-bold text-[14px] text-stone-800 leading-tight">{item.item?.name || item.item_sku}</p>
+                          <p className="font-bold text-[14px] text-stone-800 leading-tight">{item.item_name}</p>
                           <p className="text-[10px] font-semibold text-stone-400 uppercase mt-0.5 tracking-tight">{item.item_sku}</p>
                         </div>
 

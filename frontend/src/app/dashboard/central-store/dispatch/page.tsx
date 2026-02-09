@@ -5,7 +5,8 @@ import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { storeAPI } from '@/lib/api';
-import { Truck, RefreshCw, Printer, User, Navigation, Package, CheckCircle2, ChevronRight, MapPin, Calendar, ArrowRight, Clipboard } from 'lucide-react';
+import { Truck, RefreshCw, Printer, User, Navigation, Package, CheckCircle2, ChevronRight, MapPin, Calendar, ArrowRight, Clipboard, Plus } from 'lucide-react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { formatNumber } from '@/lib/utils';
@@ -115,10 +116,19 @@ export default function DispatchPage() {
                             <p className="text-stone-500 mt-0.5">Manage branch deliveries and fleet transport tracking</p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <button onClick={fetchData} disabled={isLoading} className="btn-secondary h-10 px-3">
-                                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                            </button>
-                            <div className="flex p-1 bg-stone-100 rounded-lg">
+                            <div className="flex items-center gap-3">
+                                <Link href="/dashboard/central-store/dispatch/new" className="btn-primary">
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    New Dispatch
+                                </Link>
+                                <button
+                                    onClick={fetchData}
+                                    disabled={isLoading}
+                                    className="btn-secondary"
+                                >
+                                    <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                                </button>
+                            </div>            <div className="flex p-1 bg-stone-100 rounded-lg">
                                 {(['READY', 'IN_TRANSIT', 'DELIVERED'] as const).map((tab) => (
                                     <button
                                         key={tab}

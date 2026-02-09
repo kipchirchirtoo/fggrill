@@ -1,5 +1,7 @@
 'use client';
 
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Search, FileText, User, ShoppingCart, Hotel, CreditCard, Receipt, DollarSign, Package, Calendar, MapPin, Clock, ExternalLink, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { searchAPI } from '@/lib/api';
@@ -15,13 +17,47 @@ interface SearchResult {
     metadata: Record<string, any>;
 }
 
-import { useState } from 'react';
-
 export default function UniversalSearchPage() {
+    const router = useRouter();
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<SearchResult[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null);
+
+    const handleFullInspection = () => {
+        if (!selectedResult) return;
+
+        const { type, id } = selectedResult;
+
+        switch (type) {
+            case 'staff':
+                router.push(`/dashboard/hr/employees`);
+                break;
+            case 'order':
+                router.push(`/dashboard/auditor/revenue-oversight/details/${id}?type=restaurant_order`);
+                break;
+            case 'guest':
+                router.push(`/dashboard/branch-manager/guests/${id}`);
+                break;
+            case 'transaction':
+                router.push(`/dashboard/auditor/revenue-oversight/details/${id}?type=transaction`);
+                break;
+            case 'receipt':
+                router.push(`/dashboard/auditor/revenue-oversight/details/${id}?type=receipt`);
+                break;
+            case 'booking':
+                router.push(`/dashboard/branch-manager/reservations/${id}`);
+                break;
+            case 'payment':
+                router.push(`/dashboard/auditor/revenue-oversight/details/${id}?type=payment`);
+                break;
+            case 'bill':
+                router.push(`/dashboard/auditor/revenue-oversight/details/${id}?type=bill`);
+                break;
+            default:
+                toast.error('No specialized view available for this entity type');
+        }
+    };
 
     const handleSearch = async () => {
         if (!query.trim()) {
@@ -197,7 +233,10 @@ export default function UniversalSearchPage() {
                                                     <p className="text-[14px] text-stone-500 font-medium">{selectedResult.subtitle}</p>
                                                 </div>
                                             </div>
-                                            <button className="btn-secondary h-11 px-4 text-[11px] font-black uppercase tracking-widest flex items-center gap-2 border-2 hover:bg-stone-50">
+                                            <button
+                                                onClick={handleFullInspection}
+                                                className="btn-secondary h-11 px-4 text-[11px] font-black uppercase tracking-widest flex items-center gap-2 border-2 hover:bg-stone-50"
+                                            >
                                                 <ExternalLink className="h-4 w-4" />
                                                 Full Inspection
                                             </button>

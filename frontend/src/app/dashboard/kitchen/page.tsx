@@ -189,17 +189,6 @@ export default function KitchenDashboard() {
                   </select>
                 </div>
               )}
-              {(user?.role === UserRole.SUPER_ADMIN ||
-                user?.role === UserRole.GENERAL_MANAGER ||
-                user?.role === UserRole.BRANCH_MANAGER ||
-                user?.role === UserRole.KITCHEN_OPERATIONS) && (
-                  <Link href="/dashboard/kitchen-operations">
-                    <button className="btn-secondary h-[40px] px-4 flex items-center justify-center gap-2 flex-1 xs:flex-none">
-                      <Settings className="h-4 w-4" />
-                      <span>Kitchen Operations</span>
-                    </button>
-                  </Link>
-                )}
               <button
                 onClick={() => fetchOrders(effectiveBranchId)}
                 disabled={isLoading}

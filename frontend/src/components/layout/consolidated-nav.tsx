@@ -9,7 +9,9 @@ import { cn } from '@/lib/utils';
 import { financeAPI } from '@/lib/api';
 import {
   Building2, Package, Users, Bed, ChevronDown, Warehouse, BarChart3,
-  DollarSign, Settings, ClipboardList, Truck, CalendarClock,
+  DollarSign,
+  ScanLine,
+  Settings, ClipboardList, Truck, CalendarClock,
   Building, Wrench, Brush, CheckCircle, FileSpreadsheet, ShieldCheck,
   Home, ArrowDownUp, LifeBuoy, Calendar, Store, TrendingUp, TrendingDown, LineChart, Award,
   UserCheck, Utensils, Wine, Receipt, CreditCard, PieChart, FileText,
@@ -720,11 +722,16 @@ export function ConsolidatedNav() {
     <>
       <NavItem
         href="/dashboard/central-store"
-        icon={Warehouse}
-        label="Overview"
+        icon={Store}
+        label="Central Store"
         active={pathname === '/dashboard/central-store'}
       />
-
+      <NavItem
+        href="/dashboard/central-store/receiving"
+        icon={ScanLine}
+        label="Goods Receiving"
+        active={pathname === '/dashboard/central-store/receiving'}
+      />
       <NavGroup label="Inventory" icon={Package} defaultOpen>
         <NavItem
           href="/dashboard/central-store/foodstuffs"
@@ -1405,14 +1412,31 @@ export function ConsolidatedNav() {
     if (user.role === UserRole.KITCHEN) {
       return (
         <>
-          {kitchenNav}
+          <NavItem
+            href="/dashboard/kitchen"
+            icon={ChefHat}
+            label="KDS / Active Orders"
+            active={pathname === '/dashboard/kitchen'}
+          />
           <hr className="my-4 border-stone-100" />
+          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Kitchen Ops</p>
           {kitchenOperationsNav}
         </>
       );
     }
     if (user.role === UserRole.KITCHEN_OPERATIONS) {
-      return kitchenOperationsNav;
+      return (
+        <>
+          <NavItem
+            href="/dashboard/kitchen"
+            icon={ChefHat}
+            label="KDS / Active Orders"
+            active={pathname === '/dashboard/kitchen'}
+          />
+          <hr className="my-4 border-stone-100" />
+          {kitchenOperationsNav}
+        </>
+      );
     }
     if (user.role === UserRole.BARTENDER) {
       return barNav;

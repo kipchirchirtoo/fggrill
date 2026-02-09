@@ -18,11 +18,11 @@ import { PYTHON_API_URL } from '@/lib/config';
 import { IOSButton } from '@/components/ui/ios-button';
 import { Input } from '@/components/ui/input';
 import { IOSCard } from '@/components/ui/ios-card';
+import { CashierLogbook } from '@/components/cashier/cashier-logbook';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
 
-import { CashierLogbook } from '@/components/cashier/CashierLogbook';
 import {
     saveOfflineTransaction,
     getUnsyncedTransactions,

@@ -14,7 +14,15 @@ import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
-interface KitchenUsage { id: string; item_name: string; quantity: number; usage_date: string; recorded_by: string; }
+interface KitchenUsage {
+  id: string;
+  item_name: string;
+  received_quantity: number;
+  remaining_quantity: number;
+  usage_date: string;
+  recorded_by: string;
+  status: string;
+}
 
 export default function BranchKitchenUsagePage() {
   const { user } = useAuth();
@@ -35,7 +43,7 @@ export default function BranchKitchenUsagePage() {
 
   const fetchItems = useCallback(async () => {
     try {
-      const response = await storeAPI.getBranchStock();
+      const response = await storeAPI.getTrackableItems();
       if (response.success) setItems(response.data || []);
     } catch (error) { console.error('Error:', error); }
   }, []);
@@ -44,11 +52,23 @@ export default function BranchKitchenUsagePage() {
 
   const handleRecordUsage = async () => {
     if (!formData.item_sku || !formData.received_quantity) { toast.error('Fill required fields'); return; }
+
+    const selectedItem = items.find(i => i.item_sku === formData.item_sku);
+    if (selectedItem && formData.received_quantity > selectedItem.quantity) {
+      toast.error(`Only ${selectedItem.quantity} available in branch stock`);
+      return;
+    }
+
     try {
-      await storeAPI.createKitchenUsageRecord({ item_sku: formData.item_sku, received_quantity: formData.received_quantity, usage_date: formData.usage_date });
-      toast.success('Usage recorded');
+      await storeAPI.createKitchenUsageRecord({
+        item_sku: formData.item_sku,
+        received_quantity: formData.received_quantity,
+        usage_date: formData.usage_date
+      });
+      toast.success('Items issued to kitchen');
       setAddModalOpen(false);
       fetchRecords();
+      fetchItems();
     } catch (error: any) { toast.error(error.message || 'Failed'); }
   };
 
@@ -57,10 +77,10 @@ export default function BranchKitchenUsagePage() {
       <DashboardLayout>
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div><h1 className="text-2xl font-bold text-gray-900">Kitchen Usage</h1><p className="text-gray-500">Track kitchen consumption</p></div>
+            <div><h1 className="text-2xl font-bold text-gray-900">Kitchen Usage Tracking</h1><p className="text-gray-500">Items currently being tracked in the kitchen</p></div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchRecords} leftIcon={<RefreshCw />}>Refresh</IOSButton>
-              <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>Record Usage</IOSButton>
+              <IOSButton variant="secondary" onClick={() => { fetchRecords(); fetchItems(); }} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>Issue to Kitchen</IOSButton>
             </div>
           </div>
 
@@ -77,10 +97,22 @@ export default function BranchKitchenUsagePage() {
                       <div className="w-12 h-12 rounded-ios-lg bg-orange-100 flex items-center justify-center"><Utensils className="h-6 w-6 text-orange-600" /></div>
                       <div>
                         <p className="font-bold">{record.item_name}</p>
-                        <p className="text-xs text-gray-400 flex items-center gap-1"><Calendar className="h-3 w-3" /> {new Date(record.usage_date).toLocaleDateString()}</p>
+                        <div className="flex gap-4 mt-1">
+                          <p className="text-xs text-gray-400 flex items-center gap-1"><Calendar className="h-3 w-3" /> {new Date(record.usage_date).toLocaleDateString()}</p>
+                          <p className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 uppercase">{record.status}</p>
+                        </div>
                       </div>
                     </div>
-                    <p className="font-bold text-lg">{record.quantity}</p>
+                    <div className="text-right">
+                      <p className="font-bold text-lg">{record.remaining_quantity} / {record.received_quantity}</p>
+                      <div className="w-32 h-2 bg-gray-100 rounded-full mt-1 overflow-hidden">
+                        <div
+                          className={`h-full ${record.remaining_quantity === 0 ? 'bg-green-500' : 'bg-orange-500'}`}
+                          style={{ width: `${(record.remaining_quantity / record.received_quantity) * 100}%` }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-1 uppercase font-bold">Remaining</p>
+                    </div>
                   </div>
                 </IOSCard>
               ))}
@@ -90,19 +122,31 @@ export default function BranchKitchenUsagePage() {
 
         <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
           <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Record Kitchen Usage</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>Issue Items to Kitchen</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-4">
               <div><label className="text-sm font-medium">Item *</label>
                 <select value={formData.item_sku} onChange={(e) => setFormData({ ...formData, item_sku: e.target.value })} className="w-full p-2 border rounded-ios-lg">
-                  <option value="">Select item</option>
-                  {items.map((item) => <option key={item.sku} value={item.sku}>{item.name}</option>)}
+                  <option value="">Select item from branch stock</option>
+                  {items.map((item) => (
+                    <option key={item.item_sku} value={item.item_sku}>
+                      {item.item_name} ({item.quantity} available)
+                    </option>
+                  ))}
                 </select>
               </div>
-              <div><label className="text-sm font-medium">Quantity *</label><Input type="number" value={formData.received_quantity} onChange={(e) => setFormData({ ...formData, received_quantity: parseInt(e.target.value) || 0 })} /></div>
-              <div><label className="text-sm font-medium">Date</label><Input type="date" value={formData.usage_date} onChange={(e) => setFormData({ ...formData, usage_date: e.target.value })} /></div>
+              <div>
+                <label className="text-sm font-medium">Quantity to Issue *</label>
+                <Input
+                  type="number"
+                  value={formData.received_quantity}
+                  onChange={(e) => setFormData({ ...formData, received_quantity: parseInt(e.target.value) || 0 })}
+                  min={1}
+                />
+              </div>
+              <div><label className="text-sm font-medium">Issue Date</label><Input type="date" value={formData.usage_date} onChange={(e) => setFormData({ ...formData, usage_date: e.target.value })} /></div>
               <div className="flex gap-3">
                 <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                <IOSButton onClick={handleRecordUsage} className="flex-1">Record</IOSButton>
+                <IOSButton onClick={handleRecordUsage} className="flex-1">Issue to Kitchen</IOSButton>
               </div>
             </div>
           </DialogContent>

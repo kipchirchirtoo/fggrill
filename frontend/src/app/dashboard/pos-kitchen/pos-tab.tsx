@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -88,6 +88,11 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
   // Waiters
   const [waiters, setWaiters] = useState<Waiter[]>([]);
 
+  // Barcode scanning state
+  const barcodeBufferRef = useRef('');
+  const lastKeyTimeRef = useRef(0);
+  const barcodeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const currentBranchId = activeBranchId || user?.branch_id;
 
   const fetchMenuData = useCallback(async () => {
@@ -129,6 +134,75 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
     fetchMenuData();
     fetchTodayOrders();
   }, [fetchMenuData, fetchTodayOrders]);
+
+  // Barcode Scanner Listener
+  useEffect(() => {
+    const handleKeyPress = async (e: KeyboardEvent) => {
+      // Ignore if user is typing in an input field
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
+        return;
+      }
+
+      const currentTime = Date.now();
+      const timeDiff = currentTime - lastKeyTimeRef.current;
+
+      // Barcode scanners typically input very fast (< 50ms between chars)
+      // If time between keys is > 100ms, reset buffer (user is typing manually)
+      if (timeDiff > 100) {
+        barcodeBufferRef.current = '';
+      }
+
+      lastKeyTimeRef.current = currentTime;
+
+      // Handle Enter key (barcode scan complete)
+      if (e.key === 'Enter' && barcodeBufferRef.current.length > 0) {
+        e.preventDefault();
+        const barcode = barcodeBufferRef.current.trim();
+        barcodeBufferRef.current = '';
+
+        // Search for item by barcode/name
+        try {
+          const res = await restaurantAPI.getMenuItems(undefined, currentBranchId || undefined, true);
+          if (res.success && res.data) {
+            // Try exact match first (case-insensitive)
+            const item = res.data.find((i: MenuItem) =>
+              i.name.toLowerCase() === barcode.toLowerCase() ||
+              i.name.toLowerCase().includes(barcode.toLowerCase())
+            );
+
+            if (item && item.is_available) {
+              addToCart(item);
+              toast.success(`Added: ${item.name}`);
+            } else {
+              toast.error(`Item not found: ${barcode}`);
+            }
+          }
+        } catch (error) {
+          console.error('Barcode scan error:', error);
+        }
+      } else if (e.key.length === 1) {
+        // Accumulate character
+        barcodeBufferRef.current += e.key;
+
+        // Clear buffer after 200ms of inactivity
+        if (barcodeTimeoutRef.current) {
+          clearTimeout(barcodeTimeoutRef.current);
+        }
+        barcodeTimeoutRef.current = setTimeout(() => {
+          barcodeBufferRef.current = '';
+        }, 200);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => {
+      window.removeEventListener('keydown', handleKeyPress);
+      if (barcodeTimeoutRef.current) {
+        clearTimeout(barcodeTimeoutRef.current);
+      }
+    };
+  }, [currentBranchId, menuItems]);
 
   const addToCart = (item: MenuItem) => {
     const existing = cart.find(c => c.id === item.id);

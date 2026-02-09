@@ -26,6 +26,15 @@ import {
     initiatePOSTransactionPayment,
     getPOSReconciliation
 } from '../controllers/cashier.controller';
+import {
+    getShiftLogs,
+    getShiftLog,
+    startShift as startNewShift,
+    closeShift as closeShiftLog,
+    reconcileShift,
+    verifyShift,
+    addShiftTransaction
+} from '../controllers/cashier-shifts.controller';
 import { protect as authenticate, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
 
@@ -128,15 +137,30 @@ router.route('/credit-bills/:id/payment')
     .post(recordCreditPayment);
 
 // ============================================
-// CASHIER SHIFTS ROUTES
+// CASHIER SHIFTS ROUTES (New Shift Logbook System)
 // ============================================
 
 router.route('/shifts')
-    .get(getCashierShifts)
-    .post(startShift);
+    .get(getShiftLogs)
+    .post(startNewShift);
+
+router.route('/shifts/start')
+    .post(startNewShift);
+
+router.route('/shifts/:id')
+    .get(getShiftLog);
 
 router.route('/shifts/:id/close')
-    .post(closeShift);
+    .put(closeShiftLog);
+
+router.route('/shifts/:id/reconcile')
+    .put(authorize([UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.SUPER_ADMIN] as any), reconcileShift);
+
+router.route('/shifts/:id/verify')
+    .put(authorize(['auditor', UserRole.SUPER_ADMIN] as any), verifyShift);
+
+router.route('/shifts/:id/transactions')
+    .post(addShiftTransaction);
 
 // ============================================
 // DASHBOARD STATS

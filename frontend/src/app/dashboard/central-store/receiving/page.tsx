@@ -1,0 +1,565 @@
+'use client';
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useAuth, UserRole } from '@/lib/auth-context';
+import { ProtectedRoute } from '@/components/auth/protected-route';
+import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { storeAPI, procurementAPI } from '@/lib/api';
+import { toast } from 'sonner';
+import {
+    Barcode, Check, Search, Plus, Trash2, Save,
+    AlertTriangle, Package, Loader2, ArrowLeft,
+    ScanLine, ShoppingCart, Info
+} from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+
+// Standard sound effects (using base64 or public URLs would be better, but simulating for now)
+const playSuccessSound = () => {
+    // In a real app, use a dedicated sound library or HTML5 Audio
+    console.log('Beep! (Success)');
+};
+
+const playErrorSound = () => {
+    console.log('Buzz! (Error)');
+};
+
+interface ScannedItem {
+    id: string; // unique ID for key
+    item_id: string;
+    item_name: string;
+    sku: string;
+    unit: string;
+    scanned_quantity: number;
+    cost_price: number;
+    po_item_id?: string; // If linked to PO
+}
+
+interface Supplier {
+    id: string;
+    name: string;
+    code?: string;
+}
+
+export default function GoodsReceivingPage() {
+    const router = useRouter();
+    const { user } = useAuth();
+
+    // Steps: 0 = Setup, 1 = Scanning, 2 = Review
+    const [currentStep, setCurrentStep] = useState(0);
+
+    // Setup State
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+    const [invoiceNumber, setInvoiceNumber] = useState('');
+    const [deliveryNote, setDeliveryNote] = useState('');
+    const [poNumber, setPoNumber] = useState('');
+    const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
+    const [selectedPO, setSelectedPO] = useState<any | null>(null);
+
+    // Scanning State
+    const [scannedItems, setScannedItems] = useState<ScannedItem[]>([]);
+    const [barcodeInput, setBarcodeInput] = useState('');
+    const [lastScannedItem, setLastScannedItem] = useState<string | null>(null);
+    const [scanStatus, setScanStatus] = useState<'idle' | 'success' | 'error'>('idle');
+    const barcodeInputRef = useRef<HTMLInputElement>(null);
+
+    // Item Lookup State
+    const [isLookupOpen, setIsLookupOpen] = useState(false);
+    const [unknownBarcode, setUnknownBarcode] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+
+    // Loading States
+    const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Fetch Suppliers on Mount
+    useEffect(() => {
+        const fetchSuppliers = async () => {
+            setIsLoadingSuppliers(true);
+            try {
+                const res = await storeAPI.getSuppliers();
+                if (res.success) setSuppliers(res.data || []);
+            } catch (err) {
+                toast.error('Failed to load suppliers');
+            } finally {
+                setIsLoadingSuppliers(false);
+            }
+        };
+        fetchSuppliers();
+    }, []);
+
+    // Fetch POs when supplier selected
+    useEffect(() => {
+        if (selectedSupplier) {
+            const fetchPOs = async () => {
+                try {
+                    const res = await procurementAPI.getPurchaseOrders({
+                        supplier_id: selectedSupplier.id,
+                        status: 'approved'
+                    });
+                    if (res.success) setPurchaseOrders(res.data || []);
+                } catch (err) {
+                    console.error(err);
+                }
+            };
+            fetchPOs();
+        } else {
+            setPurchaseOrders([]);
+            setSelectedPO(null);
+        }
+    }, [selectedSupplier]);
+
+    // Focus keeper for scanning
+    useEffect(() => {
+        if (currentStep === 1 && !isLookupOpen) {
+            // Keep focus on input unless user is typing elsewhere
+            const interval = setInterval(() => {
+                if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+                    barcodeInputRef.current?.focus();
+                }
+            }, 500);
+            return () => clearInterval(interval);
+        }
+    }, [currentStep, isLookupOpen]);
+
+    // --- LOGIC: Setup ---
+
+    const handleStartScanning = () => {
+        if (!selectedSupplier) {
+            toast.error('Please select a supplier');
+            return;
+        }
+        if (!invoiceNumber && !deliveryNote) {
+            toast.error('Please enter Invoice or Delivery Note number');
+            return;
+        }
+        setCurrentStep(1);
+        // Pre-populate items if PO selected? 
+        // Requirement says strict scanning, so we start empty even with PO.
+        // We could potentially show "Expected" items visually.
+    };
+
+    // --- LOGIC: Scanning ---
+
+    const handleBarcodeSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const barcode = barcodeInput.trim();
+        if (!barcode) return;
+
+        // 1. Check if barcode maps to an item
+        try {
+            // Search in existing scanned items first (optimization) or Master Catalog
+            // Simplified: We always query backend or local cache for "Barcode -> SKU/ID" mapping
+            // For now, assuming we search by SKU/Code in search API
+
+            const res = await storeAPI.getItems({ search: barcode, limit: 1 });
+            const item = res.data && res.data.length > 0 ? res.data[0] : null;
+
+            if (item) {
+                addItemToSession(item);
+                setBarcodeInput('');
+                setScanStatus('success');
+                playSuccessSound();
+                setTimeout(() => setScanStatus('idle'), 500);
+            } else {
+                // Unknown barcode
+                setUnknownBarcode(barcode);
+                setIsLookupOpen(true);
+                setScanStatus('error');
+                playErrorSound();
+                setBarcodeInput('');
+            }
+        } catch (err) {
+            console.error(err);
+            toast.error('Error verifying barcode');
+        }
+    };
+
+    const addItemToSession = (item: any) => {
+        setScannedItems(prev => {
+            const existingIndex = prev.findIndex(i => i.item_id === item.id);
+            if (existingIndex >= 0) {
+                // Increment
+                const updated = [...prev];
+                updated[existingIndex] = {
+                    ...updated[existingIndex],
+                    scanned_quantity: updated[existingIndex].scanned_quantity + 1
+                };
+                setLastScannedItem(`${item.name} (+1)`);
+                return updated;
+            } else {
+                // Add new
+                const newItem: ScannedItem = {
+                    id: Math.random().toString(36).substr(2, 9),
+                    item_id: item.id,
+                    item_name: item.name,
+                    sku: item.sku || item.item_code,
+                    unit: item.unit,
+                    scanned_quantity: 1,
+                    cost_price: 0 // Fetch from PO or previous cost
+                };
+                setLastScannedItem(`${item.name} (Added)`);
+                return [...prev, newItem];
+            }
+        });
+    };
+
+    // Manual Lookup Handler
+    const handleManualLookup = async () => {
+        if (!searchQuery) return;
+        setIsSearching(true);
+        try {
+            const res = await storeAPI.getItems({ search: searchQuery });
+            setSearchResults(res.data || []);
+        } catch (err) {
+            toast.error('Search failed');
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
+    const selectItemFromLookup = (item: any) => {
+        // Ideally we would map the barcode to this item permanently here
+        // For now, we just add it to the session
+        addItemToSession(item);
+        setIsLookupOpen(false);
+        setSearchQuery('');
+        setSearchResults([]);
+        setUnknownBarcode('');
+        toast.success(`Identified as ${item.name}`);
+
+        // Return focus to scanner
+        setTimeout(() => barcodeInputRef.current?.focus(), 100);
+    };
+
+    // --- LOGIC: Finalize ---
+
+    const handleSubmitGRN = async () => {
+        if (scannedItems.length === 0) {
+            toast.error('No items scanned');
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            const payload = {
+                po_id: selectedPO?.id,
+                supplier_id: selectedSupplier?.id,
+                grn_date: new Date().toISOString().split('T')[0],
+                delivery_note_number: deliveryNote,
+                invoice_number: invoiceNumber,
+                items: scannedItems.map(item => ({
+                    item_id: item.item_id,
+                    quantity_received: item.scanned_quantity,
+                    unit_price: item.cost_price,
+                    quantity_ordered: 0, // Fill from PO if available
+                    quantity_accepted: item.scanned_quantity, // Assume all good for now
+                    quality_status: 'accepted'
+                }))
+            };
+
+            const res = await procurementAPI.createGRN(payload);
+            if (res.success) {
+                toast.success('Goods Received Successfully');
+                router.push('/dashboard/central-store/procurement/grn');
+            }
+        } catch (err) {
+            console.error(err);
+            toast.error('Failed to submit GRN');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    if (!user) return null;
+
+    return (
+        <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN]}>
+            <DashboardLayout>
+                <div className="max-w-5xl mx-auto space-y-6">
+
+                    {/* Header */}
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h1 className="text-2xl font-bold tracking-tight text-stone-900">Goods Receiving</h1>
+                            <p className="text-sm text-stone-500">Scan items to verify delivery and update inventory</p>
+                        </div>
+                        {currentStep > 0 && (
+                            <button
+                                onClick={() => setCurrentStep(prev => prev - 1)}
+                                className="btn-secondary"
+                            >
+                                <ArrowLeft className="h-4 w-4 mr-2" />
+                                Back
+                            </button>
+                        )}
+                    </div>
+
+                    {/* STEP 0: SETUP */}
+                    {currentStep === 0 && (
+                        <div className="card-elevated p-6 max-w-2xl mx-auto">
+                            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                <Info className="h-5 w-5 text-blue-500" />
+                                Delivery Details
+                            </h2>
+
+                            <div className="space-y-4">
+                                {/* Supplier */}
+                                <div>
+                                    <label className="label">Supplier *</label>
+                                    <select
+                                        className="input-field"
+                                        value={selectedSupplier?.id || ''}
+                                        onChange={(e) => {
+                                            const s = suppliers.find(sup => sup.id === e.target.value);
+                                            setSelectedSupplier(s || null);
+                                        }}
+                                    >
+                                        <option value="">Select Supplier</option>
+                                        {suppliers.map(s => (
+                                            <option key={s.id} value={s.id}>{s.name} {s.code ? `(${s.code})` : ''}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* PO Select (Optional) */}
+                                {purchaseOrders.length > 0 && (
+                                    <div>
+                                        <label className="label">Link to Purchase Order (Optional)</label>
+                                        <select
+                                            className="input-field"
+                                            value={selectedPO?.id || ''}
+                                            onChange={(e) => setSelectedPO(purchaseOrders.find(p => p.id === e.target.value) || null)}
+                                        >
+                                            <option value="">No PO (Direct Receive)</option>
+                                            {purchaseOrders.map(po => (
+                                                <option key={po.id} value={po.id}>{po.po_number} - {new Date(po.createdAt).toLocaleDateString()}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+
+                                {/* Doc Numbers */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="label">Invoice Number</label>
+                                        <input
+                                            type="text"
+                                            className="input-field"
+                                            placeholder="e.g. INV-2024-001"
+                                            value={invoiceNumber}
+                                            onChange={e => setInvoiceNumber(e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="label">Delivery Note</label>
+                                        <input
+                                            type="text"
+                                            className="input-field"
+                                            placeholder="e.g. DO-9988"
+                                            value={deliveryNote}
+                                            onChange={e => setDeliveryNote(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mt-8 flex justify-end">
+                                <button
+                                    onClick={handleStartScanning}
+                                    className="btn-primary w-full sm:w-auto"
+                                >
+                                    Start Scanning
+                                    <ScanLine className="h-4 w-4 ml-2" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* STEP 1: SCANNING */}
+                    {currentStep === 1 && (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                            {/* Left: Input Area */}
+                            <div className="lg:col-span-2 space-y-6">
+
+                                {/* Scanner Input */}
+                                <div className={`card-elevated p-8 text-center transition-colors border-2 ${scanStatus === 'success' ? 'border-green-500 bg-green-50' :
+                                        scanStatus === 'error' ? 'border-red-500 bg-red-50' : 'border-blue-500'
+                                    }`}>
+                                    <ScanLine className={`h-12 w-12 mx-auto mb-4 ${scanStatus === 'success' ? 'text-green-600' :
+                                            scanStatus === 'error' ? 'text-red-600' : 'text-blue-500'
+                                        }`} />
+                                    <h2 className="text-xl font-bold mb-2">Ready to Scan</h2>
+                                    <p className="text-stone-500 mb-6">Scan unit barcodes one by one</p>
+
+                                    <form onSubmit={handleBarcodeSubmit} className="max-w-md mx-auto relative">
+                                        <input
+                                            ref={barcodeInputRef}
+                                            type="text"
+                                            value={barcodeInput}
+                                            onChange={(e) => setBarcodeInput(e.target.value)}
+                                            className="w-full text-center text-2xl font-mono py-3 px-4 rounded-lg border focus:ring-4 focus:ring-blue-200 outline-none"
+                                            placeholder="Click here & scan..."
+                                            autoFocus
+                                        />
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                            {scanStatus === 'success' && <Check className="h-6 w-6 text-green-500" />}
+                                            {scanStatus === 'error' && <AlertTriangle className="h-6 w-6 text-red-500" />}
+                                        </div>
+                                    </form>
+
+                                    {lastScannedItem && (
+                                        <div className="mt-4 p-3 bg-white rounded-lg shadow-sm inline-block animate-in fade-in slide-in-from-bottom-2">
+                                            <span className="font-medium text-stone-900">{lastScannedItem}</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Scanned List */}
+                                <div className="card-elevated overflow-hidden">
+                                    <div className="p-4 bg-stone-50 border-b border-stone-100 flex justify-between items-center">
+                                        <h3 className="font-semibold text-stone-800">Scanned Items ({scannedItems.reduce((a, b) => a + b.scanned_quantity, 0)})</h3>
+                                        <div className="text-sm text-stone-500">
+                                            {scannedItems.length} unique items
+                                        </div>
+                                    </div>
+                                    <div className="divide-y divide-stone-100 max-h-[400px] overflow-y-auto">
+                                        {scannedItems.length === 0 ? (
+                                            <div className="p-8 text-center text-stone-400">
+                                                No items scanned yet.
+                                            </div>
+                                        ) : (
+                                            scannedItems.map((item, idx) => (
+                                                <div key={item.id} className="p-4 flex items-center justify-between hover:bg-stone-50">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="h-10 w-10 bg-stone-100 rounded-lg flex items-center justify-center">
+                                                            <Package className="h-5 w-5 text-stone-500" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-medium text-stone-900">{item.item_name}</p>
+                                                            <p className="text-xs text-stone-500">SKU: {item.sku}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-6">
+                                                        <div className="text-right">
+                                                            <p className="text-2xl font-bold font-mono text-blue-600">{item.scanned_quantity}</p>
+                                                            <p className="text-[10px] uppercase text-stone-400 font-bold">{item.unit}</p>
+                                                        </div>
+                                                        {/* Optional Delete/Edit */}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            {/* Right: Summary & Action */}
+                            <div className="space-y-6">
+                                <div className="card-elevated p-6 sticky top-6">
+                                    <h3 className="font-semibold text-lg mb-4">Receiving Summary</h3>
+
+                                    <div className="space-y-3 mb-6 text-sm">
+                                        <div className="flex justify-between py-2 border-b border-stone-100">
+                                            <span className="text-stone-500">Supplier</span>
+                                            <span className="font-medium">{selectedSupplier?.name}</span>
+                                        </div>
+                                        <div className="flex justify-between py-2 border-b border-stone-100">
+                                            <span className="text-stone-500">Invoice</span>
+                                            <span className="font-medium">{invoiceNumber || '-'}</span>
+                                        </div>
+                                        <div className="flex justify-between py-2 border-b border-stone-100">
+                                            <span className="text-stone-500">Total Units</span>
+                                            <span className="font-bold text-stone-900">{scannedItems.reduce((a, b) => a + b.scanned_quantity, 0)}</span>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        onClick={handleSubmitGRN}
+                                        disabled={scannedItems.length === 0 || isSubmitting}
+                                        className="btn-primary w-full py-3 text-lg"
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                                                Processing...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Check className="h-5 w-5 mr-2" />
+                                                Complete Receiving
+                                            </>
+                                        )}
+                                    </button>
+
+                                    <p className="text-xs text-stone-400 mt-4 text-center">
+                                        Strict scanning enabled. Inventory will be updated immediately upon completion.
+                                    </p>
+                                </div>
+                            </div>
+
+                        </div>
+                    )}
+
+                    {/* UNKNOWN BARCODE DIALOG */}
+                    <Dialog open={isLookupOpen} onOpenChange={setIsLookupOpen}>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Unknown Barcode: {unknownBarcode}</DialogTitle>
+                            </DialogHeader>
+                            <div className="py-4">
+                                <p className="text-stone-600 mb-4">This barcode was not found in the cache. Search for the item to map manually.</p>
+
+                                <div className="relative mb-4">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                                    <input
+                                        type="text"
+                                        className="input-field pl-9"
+                                        placeholder="Search item name or code..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleManualLookup()}
+                                    />
+                                </div>
+                                <div className="flex justify-end mb-4">
+                                    <button onClick={handleManualLookup} disabled={isSearching} className="btn-secondary btn-sm">
+                                        {isSearching ? 'Searching...' : 'Search'}
+                                    </button>
+                                </div>
+
+                                <div className="max-h-[200px] overflow-y-auto border rounded-md divide-y">
+                                    {searchResults.map(res => (
+                                        <div
+                                            key={res.id}
+                                            className="p-3 hover:bg-stone-50 cursor-pointer flex justify-between items-center"
+                                            onClick={() => selectItemFromLookup(res)}
+                                        >
+                                            <div>
+                                                <p className="font-medium text-sm">{res.name}</p>
+                                                <p className="text-xs text-stone-400">{res.sku}</p>
+                                            </div>
+                                            <Plus className="h-4 w-4 text-blue-500" />
+                                        </div>
+                                    ))}
+                                    {searchResults.length === 0 && searchQuery && !isSearching && (
+                                        <div className="p-4 text-center text-gray-500 text-sm">No items found.</div>
+                                    )}
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <button onClick={() => setIsLookupOpen(false)} className="btn-ghost">Cancel</button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+
+                </div>
+            </DashboardLayout>
+        </ProtectedRoute>
+    );
+}

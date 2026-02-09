@@ -74,7 +74,7 @@ export const getDispatchNotes = async (
         const itemSkus = [...new Set(items?.map(i => i.item_sku) || [])];
         const { data: itemDetails } = await supabase
             .from('simple_items')
-            .select('sku, item_name, unit')
+            .select('sku, item_name, unit_of_measure')
             .in('sku', itemSkus);
 
         // Get vehicle and driver details
@@ -92,24 +92,30 @@ export const getDispatchNotes = async (
             .in('id', driverIds) : { data: [] };
 
         // Map data
-        const enrichedDispatches = dispatches.map(dispatch => ({
-            ...dispatch,
-            from_branch: branches?.find(b => b.id === dispatch.from_branch_id),
-            to_branch: branches?.find(b => b.id === dispatch.to_branch_id),
-            to_branch_name: branches?.find(b => b.id === dispatch.to_branch_id)?.name,
-            items: items?.filter(i => i.dispatch_id === dispatch.id).map(i => {
-                const details = itemDetails?.find(d => d.sku === i.item_sku);
-                return {
-                    ...i,
-                    item_name: details?.item_name || i.item_sku,
-                    unit: details?.unit || 'Units'
-                };
-            }) || [],
-            vehicle: vehicles?.find(v => v.id === dispatch.vehicle_id),
-            vehicle_registration: vehicles?.find(v => v.id === dispatch.vehicle_id)?.registration_number,
-            driver: drivers?.find(d => d.id === dispatch.driver_id),
-            driver_name: drivers?.find(d => d.id === dispatch.driver_id)?.name
-        }));
+        const enrichedDispatches = dispatches.map(dispatch => {
+            const vehicle = vehicles?.find(v => v.id === dispatch.vehicle_id);
+            const driver = drivers?.find(d => d.id === dispatch.driver_id);
+            const toBranch = branches?.find(b => b.id === dispatch.to_branch_id);
+
+            return {
+                ...dispatch,
+                from_branch: branches?.find(b => b.id === dispatch.from_branch_id),
+                to_branch,
+                to_branch_name: toBranch?.name || 'Unknown Branch',
+                items: items?.filter(i => i.dispatch_id === dispatch.id).map(i => {
+                    const details = itemDetails?.find(d => d.sku === i.item_sku);
+                    return {
+                        ...i,
+                        item_name: details?.item_name || i.item_sku,
+                        unit: details?.unit_of_measure || 'Units'
+                    };
+                }) || [],
+                vehicle,
+                vehicle_registration: vehicle?.registration_number || dispatch.vehicle_number,
+                driver,
+                driver_name: driver?.name || dispatch.driver_name
+            };
+        });
 
         res.status(200).json({
             success: true,
@@ -152,7 +158,7 @@ export const getDispatchNote = async (
         stock_request:stock_requests(id, request_number, priority),
         items:dispatch_items(
           *,
-          item:simple_items!item_sku(sku, item_name, description, unit, category)
+          item:simple_items!item_sku(sku, item_name, description, unit_of_measure, category)
         )
       `)
             .eq('id', id)
@@ -330,7 +336,7 @@ export const createDispatchNote = async (
         to_branch:branches!to_branch_id(id, name, code),
         items:dispatch_items(
           *,
-          item:simple_items!item_sku(sku, item_name, description, unit)
+          item:simple_items!item_sku(sku, item_name, description, unit_of_measure)
         )
       `)
             .eq('id', newDispatch.id)

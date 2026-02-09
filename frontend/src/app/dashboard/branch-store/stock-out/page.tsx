@@ -29,7 +29,7 @@ export default function BranchStockOutPage() {
     try {
       const response = await storeAPI.getStockMovements();
       if (response.success) {
-        const stockOuts = (response.data || []).filter((m: any) => m.movement_type === 'out');
+        const stockOuts = (response.data || []).filter((m: any) => m.movement_type === 'STOCK_OUT');
         setRecords(stockOuts);
       }
     } catch (error) { console.error('Error:', error); }
@@ -39,7 +39,14 @@ export default function BranchStockOutPage() {
   const fetchItems = useCallback(async () => {
     try {
       const response = await storeAPI.getBranchStock();
-      if (response.success) setItems(response.data || []);
+      if (response.success && response.data) {
+        setItems(response.data.map((r: any) => ({
+          sku: r.item_sku,
+          name: r.item?.item_name || r.item_sku,
+          quantity: r.quantity || 0,
+          unit: r.item?.unit_of_measure || 'units'
+        })));
+      }
     } catch (error) { console.error('Error:', error); }
   }, []);
 
@@ -48,7 +55,13 @@ export default function BranchStockOutPage() {
   const handleStockOut = async () => {
     if (!formData.item_sku || !formData.quantity) { toast.error('Fill required fields'); return; }
     try {
-      await storeAPI.recordStockOut({ item_sku: formData.item_sku, quantity: formData.quantity, department: formData.department, notes: formData.notes });
+      await storeAPI.recordStockOut({
+        item_sku: formData.item_sku,
+        quantity: formData.quantity,
+        reason: formData.department,
+        notes: formData.notes,
+        movement_type: 'STOCK_OUT'
+      } as any);
       toast.success('Stock out recorded');
       setAddModalOpen(false);
       fetchRecords();
