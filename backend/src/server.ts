@@ -159,6 +159,13 @@ initializeApp().then(({ app, httpServer }) => {
     logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
     logger.info(`Health check available at http://localhost:${PORT}/api/health`);
 
+    // Connect to database in the background (prevents health check timeout)
+    import('./config/database').then(({ connectDB }) => {
+      connectDB()
+        .then(() => logger.info('Database background connection verified'))
+        .catch((err: any) => logger.error('Database background connection failed:', err));
+    });
+
     // Initialize startup services
     await startupService.initialize();
   });

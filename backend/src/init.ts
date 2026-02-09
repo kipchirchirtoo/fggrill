@@ -7,10 +7,6 @@ import { logger } from './utils/logger';
 
 export const initializeApp = async () => {
   try {
-    // Connect to Supabase
-    await connectDB();
-    logger.info('Database connection established');
-
     // Create Express app
     const app = express();
     const httpServer = createServer(app);

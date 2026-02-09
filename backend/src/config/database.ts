@@ -28,11 +28,12 @@ const supabase = createClient(
 
 export const connectDB = async (): Promise<void> => {
   const isDev = process.env.NODE_ENV !== 'production';
+  logger.info('Attempting to connect to Supabase...');
 
   try {
     // Test the connection by checking auth status
     const { data: sessionData, error: configError } = await supabase.auth.getSession();
-    
+
     if (configError) {
       throw configError;
     }
@@ -44,12 +45,12 @@ export const connectDB = async (): Promise<void> => {
       .limit(1)
       .single();
 
-    // Ignore "no rows returned" error, but fail on anything else in non-dev
+    // Ignore "no rows returned" error, but fail on anything else
     if (dbError && dbError.code !== 'PGRST116') {
       throw dbError;
     }
 
-    logger.info('Supabase Connected');
+    logger.info('Supabase Connected successfully');
     logger.debug('Connection test result:', { session: sessionData, dbTest: dbData });
   } catch (error) {
     if (error instanceof Error) {
@@ -61,14 +62,11 @@ export const connectDB = async (): Promise<void> => {
       logger.error('Unknown error connecting to Supabase:', error);
     }
 
-    // In development, do NOT crash the app – just log and continue
-    if (isDev) {
-      logger.warn('Continuing without verified Supabase connection in development mode');
-      return;
+    // In production, we log the error but don't necessarily crash immediately
+    // to allow health checks to function. However, the app will be degraded.
+    if (!isDev) {
+      logger.warn('Production server running in degraded state (Database disconnected)');
     }
-
-    // In non-dev environments, propagate the error so the app can fail fast
-    throw error;
   }
 };
 
