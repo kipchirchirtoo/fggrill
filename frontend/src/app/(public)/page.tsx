@@ -155,7 +155,8 @@ export default function HomePage() {
 
           // Calculate inclusive price (matching backend calculatePricing: 16% VAT + 10% Service Charge)
           // Pricing strategy: Frontend should show the same total the guest will pay
-          const inclusivePrice = Math.round(basePrice * 1.26);
+          // UPDATE: User confirmed basePrice is ALREADY inclusive.
+          const inclusivePrice = basePrice;
 
           return {
             id: room.id,
