@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -24,6 +25,7 @@ import { toast } from 'sonner';
 export default function NewReservationPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { activeBranchId } = useBranch();
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [roomTypes, setRoomTypes] = useState<any[]>([]);
@@ -77,10 +79,14 @@ export default function NewReservationPage() {
         const checkInFormatted = formData.check_in_date.toISOString().split('T')[0];
         const checkOutFormatted = formData.check_out_date.toISOString().split('T')[0];
 
+        // Use active branch from context, fallback to user's branch
+        const branchId = activeBranchId || user?.branch_id;
+
         const response = await bookingsAPI.getAvailableRooms(
           checkInFormatted,
           checkOutFormatted,
-          formData.adults + formData.children
+          formData.adults + formData.children,
+          branchId
         );
 
         if (response.success) {
@@ -93,7 +99,7 @@ export default function NewReservationPage() {
     }
 
     fetchAvailableRooms();
-  }, [formData.check_in_date, formData.check_out_date, formData.adults, formData.children]);
+  }, [formData.check_in_date, formData.check_out_date, formData.adults, formData.children, activeBranchId, user?.branch_id]);
 
   const handleSearchGuest = async () => {
     if (searchQuery.trim().length === 0) return;

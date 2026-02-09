@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 
 export default function BranchCheckinPage() {
   const { user } = useAuth();
@@ -169,7 +169,7 @@ export default function BranchCheckinPage() {
 
         {/* Walk-In Modal */}
         <Dialog open={showWalkInModal} onOpenChange={setShowWalkInModal}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-hidden p-0">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-xl font-sf-pro-display">
                 <UserPlus className="h-5 w-5 text-stone-600" />
@@ -177,140 +177,141 @@ export default function BranchCheckinPage() {
               </DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-8 py-4 px-1">
-              {/* Profile Information Section */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Guest Profile</h4>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">First Name *</label>
-                    <Input
-                      value={formData.first_name}
-                      onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                      placeholder="e.g. John"
-                      className="h-11 rounded-xl"
-                    />
+            <DialogBody>
+              <div className="space-y-8 py-4 px-1">
+                {/* Profile Information Section */}
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Guest Profile</h4>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">First Name *</label>
+                      <Input
+                        value={formData.first_name}
+                        onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                        placeholder="e.g. John"
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Last Name *</label>
+                      <Input
+                        value={formData.last_name}
+                        onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                        placeholder="e.g. Doe"
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Last Name *</label>
-                    <Input
-                      value={formData.last_name}
-                      onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                      placeholder="e.g. Doe"
-                      className="h-11 rounded-xl"
-                    />
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Email Address</label>
+                      <Input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        placeholder="john@example.com"
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Phone Number *</label>
+                      <Input
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        placeholder="+254..."
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-4">
+                {/* Stay Details Section */}
+                <div className="space-y-4 pt-4 border-t border-stone-100">
+                  <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Stay Details</h4>
                   <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Email Address</label>
-                    <Input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      placeholder="john@example.com"
-                      className="h-11 rounded-xl"
-                    />
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Select Available Room *</label>
+                    <select
+                      className="w-full h-11 border border-stone-200 rounded-xl px-4 text-sm bg-white focus:ring-2 focus:ring-stone-900 transition-all outline-none"
+                      value={formData.room_id}
+                      onChange={(e) => setFormData({ ...formData, room_id: e.target.value })}
+                    >
+                      <option value="">Choose a room from the inventory...</option>
+                      {availableRooms.map((room) => (
+                        <option key={room.id} value={room.id}>
+                          {room.room_number} — {room.room_type} (KES {room.rate}/night)
+                        </option>
+                      ))}
+                    </select>
                   </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Check-In *</label>
+                      <Input
+                        type="date"
+                        value={formData.check_in}
+                        onChange={(e) => setFormData({ ...formData, check_in: e.target.value })}
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Check-Out *</label>
+                      <Input
+                        type="date"
+                        value={formData.check_out}
+                        onChange={(e) => setFormData({ ...formData, check_out: e.target.value })}
+                        min={formData.check_in}
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Number of Guests *</label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={formData.guests}
+                        onChange={(e) => setFormData({ ...formData, guests: parseInt(e.target.value) || 1 })}
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Information Section */}
+                <div className="space-y-4 pt-4 border-t border-stone-100">
                   <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Phone Number *</label>
-                    <Input
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      placeholder="+254..."
-                      className="h-11 rounded-xl"
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Special Requests & Notes</label>
+                    <textarea
+                      className="w-full border border-stone-200 rounded-2xl px-4 py-3 min-h-[100px] text-sm bg-white focus:ring-2 focus:ring-stone-900 transition-all outline-none"
+                      value={formData.special_requests}
+                      onChange={(e) => setFormData({ ...formData, special_requests: e.target.value })}
+                      placeholder="Any specific guest requirements..."
                     />
                   </div>
                 </div>
               </div>
-
-              {/* Stay Details Section */}
-              <div className="space-y-4 pt-4 border-t border-stone-100">
-                <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Stay Details</h4>
-                <div className="space-y-2">
-                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Select Available Room *</label>
-                  <select
-                    className="w-full h-11 border border-stone-200 rounded-xl px-4 text-sm bg-white focus:ring-2 focus:ring-stone-900 transition-all outline-none"
-                    value={formData.room_id}
-                    onChange={(e) => setFormData({ ...formData, room_id: e.target.value })}
-                  >
-                    <option value="">Choose a room from the inventory...</option>
-                    {availableRooms.map((room) => (
-                      <option key={room.id} value={room.id}>
-                        {room.room_number} — {room.room_type} (KES {room.rate}/night)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Check-In *</label>
-                    <Input
-                      type="date"
-                      value={formData.check_in}
-                      onChange={(e) => setFormData({ ...formData, check_in: e.target.value })}
-                      className="h-11 rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Check-Out *</label>
-                    <Input
-                      type="date"
-                      value={formData.check_out}
-                      onChange={(e) => setFormData({ ...formData, check_out: e.target.value })}
-                      min={formData.check_in}
-                      className="h-11 rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Number of Guests *</label>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={formData.guests}
-                      onChange={(e) => setFormData({ ...formData, guests: parseInt(e.target.value) || 1 })}
-                      className="h-11 rounded-xl"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Additional Information Section */}
-              <div className="space-y-4 pt-4 border-t border-stone-100">
-                <div className="space-y-2">
-                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Special Requests & Notes</label>
-                  <textarea
-                    className="w-full border border-stone-200 rounded-2xl px-4 py-3 min-h-[100px] text-sm bg-white focus:ring-2 focus:ring-stone-900 transition-all outline-none"
-                    value={formData.special_requests}
-                    onChange={(e) => setFormData({ ...formData, special_requests: e.target.value })}
-                    placeholder="Any specific guest requirements..."
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-4 pt-6">
-                <IOSButton
-                  variant="secondary"
-                  onClick={() => setShowWalkInModal(false)}
-                  disabled={isSubmitting}
-                  className="flex-1 h-12 text-base font-semibold"
-                >
-                  Cancel
-                </IOSButton>
-                <IOSButton
-                  onClick={handleWalkInCheckIn}
-                  disabled={isSubmitting}
-                  className="flex-1 h-12 text-base font-semibold"
-                >
-                  {isSubmitting ? 'Processing Check-In...' : 'Complete Check-In'}
-                </IOSButton>
-              </div>
-            </div>
+            </DialogBody>
+            <DialogFooter className="p-4 bg-stone-50 border-t border-stone-100 flex gap-4">
+              <IOSButton
+                variant="secondary"
+                onClick={() => setShowWalkInModal(false)}
+                disabled={isSubmitting}
+                className="flex-1 h-12 text-base font-semibold"
+              >
+                Cancel
+              </IOSButton>
+              <IOSButton
+                onClick={handleWalkInCheckIn}
+                disabled={isSubmitting}
+                className="flex-1 h-12 text-base font-semibold"
+              >
+                {isSubmitting ? 'Checking In...' : 'Complete Check-In'}
+              </IOSButton>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
-      </DashboardLayout>
-    </ProtectedRoute>
+      </DashboardLayout >
+    </ProtectedRoute >
   );
 }

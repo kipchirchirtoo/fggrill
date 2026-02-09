@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/minimal/button";
 import { Input } from '@/components/ui/input';
 import { guestAPI } from '@/lib/api';
 import { Users, RefreshCw, Search, User, Mail, Phone, Edit2, Trash2, Plus, Bed, UserPlus } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -213,52 +213,54 @@ export default function BranchGuestsPage() {
               </DialogTitle>
             </DialogHeader>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">First Name *</label>
-                  <Input
-                    value={formData.first_name}
-                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                    placeholder="e.g. John"
-                    className="h-11 rounded-xl"
-                  />
+            <DialogBody>
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">First Name *</label>
+                    <Input
+                      value={formData.first_name}
+                      onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                      placeholder="e.g. John"
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Last Name *</label>
+                    <Input
+                      value={formData.last_name}
+                      onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                      placeholder="e.g. Doe"
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Last Name *</label>
-                  <Input
-                    value={formData.last_name}
-                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                    placeholder="e.g. Doe"
-                    className="h-11 rounded-xl"
-                  />
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Email Address</label>
+                    <Input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      placeholder="guest@example.com"
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Phone Number</label>
+                    <Input
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      placeholder="+254..."
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
                 </div>
               </div>
+            </DialogBody>
 
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Email Address</label>
-                  <Input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="guest@example.com"
-                    className="h-11 rounded-xl"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Phone Number</label>
-                  <Input
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="+254..."
-                    className="h-11 rounded-xl"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 bg-stone-50 border-t border-stone-100 flex gap-4">
+            <DialogFooter className="p-4 bg-stone-50 border-t border-stone-100 flex gap-4">
               <IOSButton
                 variant="secondary"
                 onClick={() => setAddModalOpen(false)}
@@ -273,7 +275,7 @@ export default function BranchGuestsPage() {
               >
                 {isSubmitting ? 'Registering Guest...' : 'Register Guest'}
               </IOSButton>
-            </div>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
