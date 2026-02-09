@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
     CheckCircle, Loader2, AlertTriangle, DollarSign, TrendingUp,
     Waves, Ticket, Users, Bed, UtensilsCrossed, Wine, Plus,
-    CreditCard, Landmark, Banknote
+    CreditCard, Landmark, Banknote, Building
 } from 'lucide-react';
 
 interface ShiftLog {
@@ -48,6 +48,10 @@ interface ShiftLog {
     cash_at_hand?: number;
     cash_deposited?: number;
     bank_deposit_ref?: string;
+    cashier?: {
+        first_name: string;
+        last_name: string;
+    };
     // N/A flags
     pool_na?: boolean;
     conference_na?: boolean;
@@ -153,7 +157,9 @@ export function ShiftReviewPanel({ role }: { role: 'accountant' | 'auditor' }) {
                                 <div className="grid grid-cols-2 gap-3 text-sm">
                                     <div>
                                         <p className="text-xs text-stone-500">Cashier</p>
-                                        <p className="font-bold">{shift.cashier_name}</p>
+                                        <p className="font-bold">
+                                            {shift.cashier_name || (shift.cashier ? `${shift.cashier.first_name} ${shift.cashier.last_name}` : 'N/A')}
+                                        </p>
                                     </div>
                                     <div>
                                         <p className="text-xs text-stone-500">Sales</p>
@@ -190,7 +196,9 @@ export function ShiftReviewPanel({ role }: { role: 'accountant' | 'auditor' }) {
                                     </div>
                                     <div>
                                         <p className="text-xs text-stone-500 font-bold uppercase">Cashier</p>
-                                        <p className="font-bold text-stone-900">{selectedShift.cashier_name}</p>
+                                        <p className="font-bold text-stone-900">
+                                            {selectedShift.cashier_name || (selectedShift.cashier ? `${selectedShift.cashier.first_name} ${selectedShift.cashier.last_name}` : 'N/A')}
+                                        </p>
                                     </div>
                                     <div>
                                         <p className="text-xs text-stone-500 font-bold uppercase">Start Time</p>
@@ -277,7 +285,7 @@ export function ShiftReviewPanel({ role }: { role: 'accountant' | 'auditor' }) {
                                 {/* Revenue by Source */}
                                 <div className="border-t pt-4">
                                     <h4 className="font-bold text-stone-900 mb-3 flex items-center gap-2">
-                                        <Building2 className="h-4 w-4 text-orange-600" />
+                                        <Building className="h-4 w-4 text-orange-600" />
                                         Revenue by Source
                                     </h4>
                                     <div className="space-y-2 text-sm">

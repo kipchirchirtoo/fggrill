@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     DollarSign, Waves, Ticket, Users, Bed,
     UtensilsCrossed, Wine, Plus, CreditCard,
-    Banknote, Building2, AlertCircle, CheckCircle2, Clock
+    Banknote, Building, AlertCircle, CheckCircle2, Clock
 } from 'lucide-react';
 
 interface CloseShiftModalProps {
@@ -412,7 +412,7 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
                                 </div>
                                 <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100">
                                     <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
-                                        <Building2 className="h-4 w-4 text-blue-500" />
+                                        <Building className="h-4 w-4 text-blue-500" />
                                         Commercial Bank Deposit
                                     </Label>
                                     <Input
