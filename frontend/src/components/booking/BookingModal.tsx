@@ -226,16 +226,22 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
 
     try {
       // Calculate pricing
+      // Calculate pricing (Inclusive Logic)
       const nights = Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24));
       const mealPlanPrice = MEAL_PLANS.find(plan => plan.id === mealPlan)?.price || 0;
-      const subtotal = (room.basePrice + mealPlanPrice) * nights;
-      const taxAmount = subtotal * 0.16; // 16% VAT
-      const serviceCharge = subtotal * 0.10; // 10% service charge
-      const totalAmount = subtotal + taxAmount + serviceCharge;
+
+      // Total Amount is Rate * Nights (Inclusive)
+      const totalAmount = (room.basePrice + mealPlanPrice) * nights;
+
+      // Back-calculate Base, Tax, and Service Charge
+      // Total = Base * 1.26
+      const baseAmount = totalAmount / 1.26;
+      const taxAmount = baseAmount * 0.16; // 16% VAT
+      const serviceCharge = baseAmount * 0.10; // 10% service charge
 
       setPricing({
         roomRate: room.basePrice,
-        subtotal,
+        subtotal: baseAmount, // Subtotal is essentially the base amount before taxes
         taxAmount,
         serviceCharge,
         discountAmount: 0,
