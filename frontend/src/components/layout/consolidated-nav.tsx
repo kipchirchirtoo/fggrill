@@ -607,6 +607,12 @@ export function ConsolidatedNav() {
           active={pathname.includes('/dashboard/auditor/financial-verification')}
         />
         <NavItem
+          href="/dashboard/auditor/shift-verification"
+          icon={CheckCircle2}
+          label="Shift Verification"
+          active={pathname.includes('/dashboard/auditor/shift-verification')}
+        />
+        <NavItem
           href="/dashboard/auditor/revenue-oversight"
           icon={TrendingUp}
           label="Revenue Oversight"
@@ -678,6 +684,13 @@ export function ConsolidatedNav() {
         icon={LayoutDashboard}
         label="Overview"
         active={pathname === '/dashboard/branch-accounting'}
+      />
+
+      <NavItem
+        href="/dashboard/branch-accounting/shift-review"
+        icon={BookOpen}
+        label="Shift Reconciliation"
+        active={pathname.includes('/dashboard/branch-accounting/shift-review')}
       />
 
       <NavItem

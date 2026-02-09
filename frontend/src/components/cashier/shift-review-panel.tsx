@@ -7,7 +7,11 @@ import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { Textarea } from '@/components/ui/textarea';
-import { CheckCircle, Loader2, AlertTriangle, DollarSign, TrendingUp } from 'lucide-react';
+import {
+    CheckCircle, Loader2, AlertTriangle, DollarSign, TrendingUp,
+    Waves, Ticket, Users, Bed, UtensilsCrossed, Wine, Plus,
+    CreditCard, Landmark, Banknote
+} from 'lucide-react';
 
 interface ShiftLog {
     id: string;
@@ -27,6 +31,27 @@ interface ShiftLog {
     status: 'open' | 'closed' | 'reconciled' | 'verified';
     reconciliation_notes?: string;
     verification_notes?: string;
+    // Revenue by source
+    swimming_pool_revenue?: number;
+    pool_token_revenue?: number;
+    conference_revenue?: number;
+    room_booking_revenue?: number;
+    restaurant_revenue?: number;
+    bar_revenue?: number;
+    other_revenue?: number;
+    // Credit & bills
+    credit_bills_taken?: number;
+    credit_bills_count?: number;
+    unpaid_bills_value?: number;
+    unpaid_bills_count?: number;
+    // Cash management
+    cash_at_hand?: number;
+    cash_deposited?: number;
+    bank_deposit_ref?: string;
+    // N/A flags
+    pool_na?: boolean;
+    conference_na?: boolean;
+    rooms_na?: boolean;
 }
 
 export function ShiftReviewPanel({ role }: { role: 'accountant' | 'auditor' }) {
@@ -114,8 +139,8 @@ export function ShiftReviewPanel({ role }: { role: 'accountant' | 'auditor' }) {
                             <IOSCard
                                 key={shift.id}
                                 className={`p-4 cursor-pointer transition-all ${selectedShift?.id === shift.id
-                                        ? 'ring-2 ring-orange-500 shadow-lg'
-                                        : 'hover:shadow-md'
+                                    ? 'ring-2 ring-orange-500 shadow-lg'
+                                    : 'hover:shadow-md'
                                     }`}
                                 onClick={() => setSelectedShift(shift)}
                             >
@@ -208,8 +233,8 @@ export function ShiftReviewPanel({ role }: { role: 'accountant' | 'auditor' }) {
                                     </div>
                                     {selectedShift.variance !== undefined && (
                                         <div className={`mt-3 p-3 rounded-lg border ${selectedShift.variance === 0
-                                                ? 'bg-emerald-50 border-emerald-200'
-                                                : 'bg-orange-50 border-orange-200'
+                                            ? 'bg-emerald-50 border-emerald-200'
+                                            : 'bg-orange-50 border-orange-200'
                                             }`}>
                                             <div className="flex items-center justify-between">
                                                 <span className="text-xs font-bold uppercase">Variance</span>
@@ -225,7 +250,7 @@ export function ShiftReviewPanel({ role }: { role: 'accountant' | 'auditor' }) {
                                 <div className="border-t pt-4">
                                     <h4 className="font-bold text-stone-900 mb-3 flex items-center gap-2">
                                         <TrendingUp className="h-4 w-4 text-blue-600" />
-                                        Sales Breakdown
+                                        Payment Summary
                                     </h4>
                                     <div className="space-y-2">
                                         <div className="flex justify-between text-sm">
@@ -240,17 +265,119 @@ export function ShiftReviewPanel({ role }: { role: 'accountant' | 'auditor' }) {
                                             <span className="text-stone-500">Card Sales</span>
                                             <span className="font-bold">KES {selectedShift.total_card_sales.toLocaleString()}</span>
                                         </div>
-                                        <div className="flex justify-between text-sm pt-2 border-t">
-                                            <span className="font-bold">Total Sales</span>
-                                            <span className="font-bold text-emerald-600">
+                                        <div className="flex justify-between text-sm pt-2 border-t font-bold">
+                                            <span>Total Payments</span>
+                                            <span className="text-emerald-600">
                                                 KES {selectedShift.total_sales.toLocaleString()}
                                             </span>
                                         </div>
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-stone-500">Transactions</span>
-                                            <span className="font-bold">{selectedShift.transaction_count}</span>
+                                    </div>
+                                </div>
+
+                                {/* Revenue by Source */}
+                                <div className="border-t pt-4">
+                                    <h4 className="font-bold text-stone-900 mb-3 flex items-center gap-2">
+                                        <Building2 className="h-4 w-4 text-orange-600" />
+                                        Revenue by Source
+                                    </h4>
+                                    <div className="space-y-2 text-sm">
+                                        {!selectedShift.pool_na && (
+                                            <>
+                                                <div className="flex justify-between">
+                                                    <span className="text-stone-500 flex items-center gap-1.5">
+                                                        <Waves className="h-3.5 w-3.5 text-blue-500" /> Swimming Pool
+                                                    </span>
+                                                    <span className="font-medium">KES {(selectedShift.swimming_pool_revenue || 0).toLocaleString()}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-stone-500 flex items-center gap-1.5">
+                                                        <Ticket className="h-3.5 w-3.5 text-cyan-500" /> Pool Tokens
+                                                    </span>
+                                                    <span className="font-medium">KES {(selectedShift.pool_token_revenue || 0).toLocaleString()}</span>
+                                                </div>
+                                            </>
+                                        )}
+                                        {!selectedShift.conference_na && (
+                                            <div className="flex justify-between">
+                                                <span className="text-stone-500 flex items-center gap-1.5">
+                                                    <Users className="h-3.5 w-3.5 text-purple-500" /> Conference
+                                                </span>
+                                                <span className="font-medium">KES {(selectedShift.conference_revenue || 0).toLocaleString()}</span>
+                                            </div>
+                                        )}
+                                        {!selectedShift.rooms_na && (
+                                            <div className="flex justify-between">
+                                                <span className="text-stone-500 flex items-center gap-1.5">
+                                                    <Bed className="h-3.5 w-3.5 text-indigo-500" /> Rooms
+                                                </span>
+                                                <span className="font-medium">KES {(selectedShift.room_booking_revenue || 0).toLocaleString()}</span>
+                                            </div>
+                                        )}
+                                        <div className="flex justify-between">
+                                            <span className="text-stone-500 flex items-center gap-1.5">
+                                                <UtensilsCrossed className="h-3.5 w-3.5 text-orange-500" /> Restaurant
+                                            </span>
+                                            <span className="font-medium">KES {(selectedShift.restaurant_revenue || 0).toLocaleString()}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-stone-500 flex items-center gap-1.5">
+                                                <Wine className="h-3.5 w-3.5 text-rose-500" /> Bar
+                                            </span>
+                                            <span className="font-medium">KES {(selectedShift.bar_revenue || 0).toLocaleString()}</span>
+                                        </div>
+                                        {selectedShift.other_revenue && selectedShift.other_revenue > 0 && (
+                                            <div className="flex justify-between">
+                                                <span className="text-stone-500 flex items-center gap-1.5">
+                                                    <Plus className="h-3.5 w-3.5 text-stone-500" /> Other
+                                                </span>
+                                                <span className="font-medium">KES {selectedShift.other_revenue.toLocaleString()}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Credit & Bills */}
+                                <div className="border-t pt-4">
+                                    <h4 className="font-bold text-stone-900 mb-3 flex items-center gap-2">
+                                        <CreditCard className="h-4 w-4 text-rose-600" />
+                                        Credit & Unpaid Bills
+                                    </h4>
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                        <div className="p-3 bg-rose-50 rounded-lg">
+                                            <p className="text-xs text-rose-600 font-bold uppercase">Credit Taken</p>
+                                            <p className="font-bold">KES {(selectedShift.credit_bills_taken || 0).toLocaleString()}</p>
+                                            <p className="text-[10px] text-rose-500">{selectedShift.credit_bills_count || 0} bills</p>
+                                        </div>
+                                        <div className="p-3 bg-amber-50 rounded-lg">
+                                            <p className="text-xs text-amber-600 font-bold uppercase">Unpaid Bills</p>
+                                            <p className="font-bold">KES {(selectedShift.unpaid_bills_value || 0).toLocaleString()}</p>
+                                            <p className="text-[10px] text-amber-500">{selectedShift.unpaid_bills_count || 0} bills</p>
                                         </div>
                                     </div>
+                                </div>
+
+                                {/* Banking & Cash */}
+                                <div className="border-t pt-4">
+                                    <h4 className="font-bold text-stone-900 mb-3 flex items-center gap-2">
+                                        <Landmark className="h-4 w-4 text-blue-600" />
+                                        Banking & Physical Cash
+                                    </h4>
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                        <div className="p-3 bg-emerald-50 rounded-lg">
+                                            <p className="text-xs text-emerald-600 font-bold uppercase">Cash at Hand</p>
+                                            <p className="font-bold">KES {(selectedShift.cash_at_hand || 0).toLocaleString()}</p>
+                                        </div>
+                                        <div className="p-3 bg-blue-50 rounded-lg">
+                                            <p className="text-xs text-blue-600 font-bold uppercase">Cash Deposited</p>
+                                            <p className="font-bold">KES {(selectedShift.cash_deposited || 0).toLocaleString()}</p>
+                                        </div>
+                                    </div>
+                                    {selectedShift.bank_deposit_ref && (
+                                        <div className="mt-2 text-xs flex justify-between p-2 bg-stone-50 rounded border border-dashed">
+                                            <span className="text-stone-500">Deposit Ref:</span>
+                                            <span className="font-mono font-bold">{selectedShift.bank_deposit_ref}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </IOSCard>
