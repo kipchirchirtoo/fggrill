@@ -5,13 +5,14 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';
-import { Package, CreditCard, FileText, LayoutDashboard, ShoppingCart } from 'lucide-react';
+import { Package, CreditCard, FileText, LayoutDashboard, ShoppingCart, ClipboardCheck } from 'lucide-react';
 import Link from 'next/link';
 
 export default function BranchAccountingDashboard() {
     const { user } = useAuth();
 
     const cards = [
+        { title: 'Shift Review', icon: ClipboardCheck, href: '/dashboard/branch-accounting/shift-review', desc: 'Reconcile cashier shifts' },
         { title: 'Stock Takes', icon: Package, href: '/dashboard/branch-accounting/stock-take', desc: 'Manage branch stock' },
         { title: 'Credit & Paid Bills', icon: CreditCard, href: '/dashboard/branch-accounting/credit-bills', desc: 'Manage staff and customer bills' },
         { title: 'Payments', icon: CreditCard, href: '/dashboard/branch-accounting/payments', desc: 'Record and verify payments' },

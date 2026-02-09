@@ -80,6 +80,13 @@ export default function AuditorDashboard() {
 
     const auditModules = [
         {
+            title: 'Shift Verification',
+            desc: 'Verify reconciled shifts',
+            icon: ClipboardList,
+            href: '/dashboard/auditor/shift-verification',
+            badge: 'New'
+        },
+        {
             title: 'Inventory Flow',
             desc: 'Physical vs theoretical audit',
             icon: Package,
