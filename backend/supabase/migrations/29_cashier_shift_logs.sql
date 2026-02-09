@@ -114,20 +114,20 @@ RETURNS TEXT AS $$
 DECLARE
   shift_date TEXT;
   shift_seq INT;
-  shift_number TEXT;
+  new_shift_number TEXT;
 BEGIN
   shift_date := TO_CHAR(NOW(), 'YYMMDD');
   
   WITH seq AS (
     SELECT COUNT(*) + 1 as next_seq
     FROM cashier_shift_logs
-    WHERE shift_number LIKE 'SFT' || shift_date || '%'
+    WHERE cashier_shift_logs.shift_number LIKE 'SFT' || shift_date || '%'
   )
   SELECT next_seq INTO shift_seq FROM seq;
   
-  shift_number := 'SFT' || shift_date || LPAD(shift_seq::TEXT, 4, '0');
+  new_shift_number := 'SFT' || shift_date || LPAD(shift_seq::TEXT, 4, '0');
   
-  RETURN shift_number;
+  RETURN new_shift_number;
 END;
 $$ LANGUAGE plpgsql;
 
