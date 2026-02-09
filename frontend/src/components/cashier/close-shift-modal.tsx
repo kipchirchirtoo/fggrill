@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     DollarSign, Waves, Ticket, Users, Bed,
     UtensilsCrossed, Wine, Plus, CreditCard,
-    Banknote, Building2, AlertCircle, CheckCircle2
+    Banknote, Building2, AlertCircle, CheckCircle2, Clock
 } from 'lucide-react';
 
 interface CloseShiftModalProps {
