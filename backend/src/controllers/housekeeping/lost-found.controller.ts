@@ -33,7 +33,7 @@ export const getLostFoundItems = async (
       .from('hk_lost_found')
       .select(`
         *,
-        found_by_staff:hk_staff_profiles!found_by(id, staff_code, user:users(first_name, last_name)),
+        found_by_staff:hk_staff_profiles!found_by(id, staff_code, user:users!user_id(first_name, last_name)),
         room:rooms(room_number, floor)
       `, { count: 'exact' })
       .eq('branch_id', branchId)
@@ -78,7 +78,7 @@ export const getLostFoundItem = async (
       .from('hk_lost_found')
       .select(`
         *,
-        found_by_staff:hk_staff_profiles!found_by(id, staff_code, user:users(first_name, last_name)),
+        found_by_staff:hk_staff_profiles!found_by(id, staff_code, user:users!user_id(first_name, last_name)),
         room:rooms(room_number, floor, room_type)
       `)
       .eq('id', id)
@@ -338,7 +338,7 @@ export const getExpiringItems = async (
       .from('hk_lost_found')
       .select(`
         *,
-        found_by_staff:hk_staff_profiles!found_by(user:users(first_name, last_name))
+        found_by_staff:hk_staff_profiles!found_by(user:users!user_id(first_name, last_name))
       `)
       .eq('branch_id', branchId)
       .in('status', ['found', 'guest_contacted', 'stored'])

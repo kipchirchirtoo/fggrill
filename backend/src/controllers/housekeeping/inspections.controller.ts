@@ -33,7 +33,7 @@ export const getInspections = async (
       .from('hk_inspections')
       .select(`
         *,
-        inspector:hk_staff_profiles!inspected_by(id, staff_code, user:users(first_name, last_name)),
+        inspector:hk_staff_profiles!inspected_by(id, staff_code, user:users!user_id(first_name, last_name)),
         task:hk_tasks(id, task_number, task_type)
       `, { count: 'exact' })
       .order('inspected_at', { ascending: false })
@@ -77,7 +77,7 @@ export const getInspection = async (
       .from('hk_inspections')
       .select(`
         *,
-        inspector:hk_staff_profiles!inspected_by(id, staff_code, designation, user:users(first_name, last_name)),
+        inspector:hk_staff_profiles!inspected_by(id, staff_code, designation, user:users!user_id(first_name, last_name)),
         task:hk_tasks(*),
         room:rooms(*)
       `)
@@ -321,7 +321,7 @@ export const getInspectionQueue = async (
       .select(`
         id, task_number, room_number, floor_number, task_type, is_vip, completed_at,
         room:rooms(id, room_type),
-        completed_by_staff:hk_staff_profiles!completed_by(id, staff_code, user:users(first_name, last_name))
+        completed_by_staff:hk_staff_profiles!completed_by(id, staff_code, user:users!user_id(first_name, last_name))
       `)
       .eq('status', 'pending_inspection')
       .order('is_vip', { ascending: false })

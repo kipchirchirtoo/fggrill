@@ -50,11 +50,11 @@ export const getTasks = async (
         room:rooms(id, room_number, floor, room_type, hk_status),
         assignee:hk_staff_profiles!assigned_to(
           id, staff_code,
-          user:users(first_name, last_name)
+          user:users!user_id(first_name, last_name)
         ),
         completed_by_staff:hk_staff_profiles!completed_by(
           id, staff_code,
-          user:users(first_name, last_name)
+          user:users!user_id(first_name, last_name)
         )
       `, { count: 'exact' })
       .order('priority', { ascending: true })
@@ -109,11 +109,11 @@ export const getTask = async (
         room:rooms(*),
         assignee:hk_staff_profiles!assigned_to(
           id, staff_code, designation,
-          user:users(first_name, last_name, email, phone_number)
+          user:users!user_id(first_name, last_name, email, phone_number)
         ),
         completed_by_staff:hk_staff_profiles!completed_by(
           id, staff_code,
-          user:users(first_name, last_name)
+          user:users!user_id(first_name, last_name)
         ),
         checklist:hk_task_checklists(*),
         inspection:hk_inspections(*)
@@ -407,7 +407,7 @@ export const assignTask = async (
       .from('hk_tasks')
       .update(updateData)
       .eq('id', id)
-      .select(`*, assignee:hk_staff_profiles!assigned_to(id, staff_code, user:users(first_name, last_name))`)
+      .select(`*, assignee:hk_staff_profiles!assigned_to(id, staff_code, user:users!user_id(first_name, last_name))`)
       .single();
 
     if (error) throw error;
@@ -513,7 +513,7 @@ export const autoAssignTasks = async (
       if (assignee.remainingCapacity >= parseFloat(task.credit_value || 1)) {
         assignments.push({ taskId: task.id, staffId: assignee.id });
         assignee.remainingCapacity -= parseFloat(task.credit_value || 1);
-        
+
         if (assignee.remainingCapacity <= 0) {
           staffWithCapacity.splice(staffIndex % staffWithCapacity.length, 1);
         }

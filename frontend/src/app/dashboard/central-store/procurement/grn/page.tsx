@@ -104,7 +104,7 @@ export default function GRNPage() {
                         <div className="flex gap-2">
                             <IOSButton variant="secondary" onClick={fetchGRNs} leftIcon={<RefreshCw size={16} />}>Refresh</IOSButton>
                             {(user?.role === UserRole.CENTRAL_STOREKEEPER || user?.role === UserRole.SUPER_ADMIN) && (
-                                <IOSButton onClick={() => window.location.href = '/dashboard/central-store/procurement/grn/new'} leftIcon={<Plus size={16} />}>Record Receipt</IOSButton>
+                                <IOSButton onClick={() => window.location.href = '/dashboard/central-store/receiving'} leftIcon={<Plus size={16} />}>Record Receipt</IOSButton>
                             )}
                         </div>
                     </div>

@@ -183,7 +183,11 @@ export default function BranchStaffPage() {
 
   const handleClockIn = async (staffId: string) => {
     try {
-      const response = await staffAPI.clockIn({ staff_id: staffId });
+      const response = await staffAPI.clockIn({
+        staff_id: staffId,
+        in_method: 'manual',
+        device_id: 'MANAGER_UI'
+      });
       if (response.success) {
         toast.success('Clocked in successfully');
         fetchAttendance();
@@ -195,7 +199,11 @@ export default function BranchStaffPage() {
 
   const handleClockOut = async (staffId: string) => {
     try {
-      const response = await staffAPI.clockOut({ staff_id: staffId });
+      const response = await staffAPI.clockOut({
+        staff_id: staffId,
+        out_method: 'manual',
+        device_id: 'MANAGER_UI'
+      });
       if (response.success) {
         toast.success('Clocked out successfully');
         fetchAttendance();
@@ -206,17 +214,26 @@ export default function BranchStaffPage() {
   };
 
   const getAttendanceStatus = (staffId: string) => {
-    const today = new Date().toISOString().split('T')[0];
     const records = attendance.filter(a => a.staff_id === staffId);
 
-    // Find the latest record for today
-    const todayRecords = records.filter(a => a.attendance_date === today);
-    const latestToday = todayRecords.sort((a, b) =>
-      new Date(b.clock_in || '').getTime() - new Date(a.clock_in || '').getTime()
-    )[0];
+    // 1. Check for any open shift first (spanning shifts)
+    const openShift = records.find(a => !a.clock_out);
+    if (openShift) {
+      return {
+        status: 'Clocked In',
+        canClockIn: false,
+        canClockOut: true,
+        time: openShift.clock_in
+      };
+    }
+
+    // 2. Check if they completed a shift TODAY
+    const today = new Date().toISOString().split('T')[0];
+    const latestToday = records
+      .filter(a => a.attendance_date === today)
+      .sort((a, b) => new Date(b.clock_out || '').getTime() - new Date(a.clock_out || '').getTime())[0];
 
     if (!latestToday) return { status: 'Not Clocked In', canClockIn: true, canClockOut: false };
-    if (!latestToday.clock_out) return { status: 'Clocked In', canClockIn: false, canClockOut: true, time: latestToday.clock_in };
 
     // If clocked out today, they can clock in again for a second shift
     return { status: 'Completed Shift', canClockIn: true, canClockOut: false, time: latestToday.clock_out };
@@ -557,104 +574,131 @@ export default function BranchStaffPage() {
 
           {/* Add/Edit Staff Modal */}
           <Dialog open={showStaffModal} onOpenChange={setShowStaffModal}>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
+                <DialogTitle className="flex items-center gap-2 text-xl font-sf-pro-display">
                   <UserPlus className="h-5 w-5 text-blue-600" />
-                  {editingStaff ? 'Edit Staff Member' : 'Add New Staff Member'}
+                  {editingStaff ? 'Refine Staff Profile' : 'Onboard New Staff Member'}
                 </DialogTitle>
               </DialogHeader>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">First Name *</label>
-                    <input
-                      type="text"
-                      value={staffForm.first_name}
-                      onChange={(e) => setStaffForm({ ...staffForm, first_name: e.target.value })}
-                      className="w-full h-10 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white"
-                      placeholder="First name"
-                    />
+
+              <div className="space-y-8 py-4 px-1">
+                {/* Personal Information Section */}
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Personal Details</h4>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">First Name *</label>
+                      <Input
+                        value={staffForm.first_name}
+                        onChange={(e) => setStaffForm({ ...staffForm, first_name: e.target.value })}
+                        placeholder="First name"
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Last Name *</label>
+                      <Input
+                        value={staffForm.last_name}
+                        onChange={(e) => setStaffForm({ ...staffForm, last_name: e.target.value })}
+                        placeholder="Last name"
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">Last Name *</label>
-                    <input
-                      type="text"
-                      value={staffForm.last_name}
-                      onChange={(e) => setStaffForm({ ...staffForm, last_name: e.target.value })}
-                      className="w-full h-10 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white"
-                      placeholder="Last name"
-                    />
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Email Address *</label>
+                      <Input
+                        type="email"
+                        value={staffForm.email}
+                        onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })}
+                        placeholder="email@example.com"
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Phone Number</label>
+                      <Input
+                        type="tel"
+                        value={staffForm.phone_number}
+                        onChange={(e) => setStaffForm({ ...staffForm, phone_number: e.target.value })}
+                        placeholder="Phone"
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">Email *</label>
-                  <input
-                    type="email"
-                    value={staffForm.email}
-                    onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })}
-                    className="w-full h-10 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white"
-                    placeholder="Email address"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">Role *</label>
-                  <select
-                    value={staffForm.role}
-                    onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })}
-                    className="w-full h-10 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white"
-                  >
-                    {Object.entries(getRolesByCategory()).map(([category, roles]) => (
-                      <optgroup key={category} label={category}>
-                        {roles.map(role => (
-                          <option key={role.value} value={role.value}>
-                            {role.label}
-                          </option>
+                {/* Professional Details Section */}
+                <div className="space-y-4 pt-4 border-t border-stone-100">
+                  <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Employment Details</h4>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Assigned Role *</label>
+                      <select
+                        value={staffForm.role}
+                        onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })}
+                        className="w-full h-11 border border-stone-200 rounded-xl px-4 text-sm bg-white focus:ring-2 focus:ring-stone-900 outline-none"
+                      >
+                        {Object.entries(getRolesByCategory()).map(([category, roles]) => (
+                          <optgroup key={category} label={category}>
+                            {roles.map(role => (
+                              <option key={role.value} value={role.value}>
+                                {role.label}
+                              </option>
+                            ))}
+                          </optgroup>
                         ))}
-                      </optgroup>
-                    ))}
-                  </select>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Employee ID / Serial No.</label>
+                      <Input
+                        value={staffForm.employee_id}
+                        onChange={(e) => setStaffForm({ ...staffForm, employee_id: e.target.value })}
+                        placeholder="e.g. EMP-001"
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">POS System PIN (4 Digits)</label>
+                    <div className="relative">
+                      <Input
+                        type="text"
+                        value={staffForm.pos_pin}
+                        maxLength={4}
+                        onChange={(e) => setStaffForm({ ...staffForm, pos_pin: e.target.value.toUpperCase() })}
+                        placeholder="e.g. R123"
+                        className="h-11 rounded-xl font-mono tracking-widest text-lg pl-4"
+                      />
+                      <div className="mt-1 flex gap-2">
+                        <span className="text-[10px] bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded">R - Restaurant</span>
+                        <span className="text-[10px] bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded">B - Bar</span>
+                        <span className="text-[10px] bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded">C - Cashier</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">Phone</label>
-                  <input
-                    type="tel"
-                    value={staffForm.phone_number}
-                    onChange={(e) => setStaffForm({ ...staffForm, phone_number: e.target.value })}
-                    className="w-full h-10 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white"
-                    placeholder="Phone number"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">POS PIN (Waiters: RXXX, Bar: BXXX, Cashier: CXXX)</label>
-                  <input
-                    type="text"
-                    value={staffForm.pos_pin}
-                    maxLength={4}
-                    onChange={(e) => setStaffForm({ ...staffForm, pos_pin: e.target.value.toUpperCase() })}
-                    className="w-full h-10 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white font-mono"
-                    placeholder="e.g. R123"
-                  />
-                </div>
-
-                <div className="flex gap-2 pt-4">
-                  <button
+                <div className="flex gap-4 pt-4">
+                  <IOSButton
+                    variant="secondary"
                     onClick={() => { setShowStaffModal(false); resetStaffForm(); }}
-                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded text-sm font-medium hover:bg-gray-50"
+                    className="flex-1 h-12 text-base font-semibold"
                   >
-                    Cancel
-                  </button>
-                  <button
+                    Discard Changes
+                  </IOSButton>
+                  <IOSButton
                     onClick={handleSubmitStaff}
                     disabled={isSubmitting}
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                    className="flex-1 h-12 text-base font-semibold"
                   >
-                    {isSubmitting ? 'Saving...' : editingStaff ? 'Update' : 'Add Staff'}
-                  </button>
+                    {isSubmitting ? 'Processing...' : editingStaff ? 'Save Changes' : 'Confirm Onboarding'}
+                  </IOSButton>
                 </div>
               </div>
             </DialogContent>

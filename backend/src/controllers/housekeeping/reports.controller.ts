@@ -42,7 +42,7 @@ export const getDailyReport = async (
       .from('hk_staff_schedules')
       .select(`
         status, check_in_time, check_out_time,
-        staff:hk_staff_profiles(staff_code, user:users(first_name, last_name))
+        staff:hk_staff_profiles(staff_code, user:users!user_id(first_name, last_name))
       `)
       .eq('schedule_date', date);
 
@@ -173,7 +173,7 @@ export const getStaffPerformanceReport = async (
       .from('hk_staff_daily_metrics')
       .select(`
         *,
-        staff:hk_staff_profiles(id, staff_code, designation, user:users(first_name, last_name))
+        staff:hk_staff_profiles(id, staff_code, designation, user:users!user_id(first_name, last_name))
       `)
       .gte('metric_date', startDate)
       .lte('metric_date', endDate);
@@ -496,7 +496,7 @@ export const exportReport = async (
 
     // This would integrate with a reporting library like PDFKit or csv-writer
     // For now, return a placeholder response
-    
+
     res.status(200).json({
       success: true,
       message: 'Export functionality coming soon',

@@ -97,14 +97,60 @@ export default function GoodsReceivingPage() {
         fetchSuppliers();
     }, []);
 
-    // Handle SKU and Supplier query params from other pages
+    // Handle SKU, Supplier, and PO query params from other pages
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const skuParam = params.get('sku');
         const supplierIdParam = params.get('supplier_id');
+        const poIdParam = params.get('po_id');
 
-        // Handle Supplier ID
-        if (supplierIdParam && suppliers.length > 0 && !selectedSupplier) {
+        const setupPO = async (id: string) => {
+            try {
+                const res = await procurementAPI.getPurchaseOrder(id);
+                if (res.success && res.data) {
+                    const po = res.data;
+                    setSelectedPO(po);
+                    // Find and set supplier from PO
+                    if (suppliers.length > 0) {
+                        const supplier = suppliers.find(s => s.id === po.supplier_id);
+                        if (supplier) setSelectedSupplier(supplier);
+                    }
+
+                    // Pre-populate items if step 0 (starting fresh)
+                    if (currentStep === 0 && po.items && po.items.length > 0) {
+                        const itemsToPopulate = po.items.map((pi: any) => ({
+                            id: Math.random().toString(36).substr(2, 9),
+                            item_id: pi.item_id,
+                            item_name: pi.item_name,
+                            sku: pi.sku || pi.item_code,
+                            unit: pi.unit || pi.unit_of_measure,
+                            scanned_quantity: pi.quantity, // Pre-fill with ordered quantity or 0?
+                            // Usually storekeepers want to verify, but user said "sync",
+                            // let's pre-fill with ordered quantity to save time if they match.
+                            cost_price: pi.unit_price || 0,
+                            po_item_id: pi.id
+                        }));
+                        setScannedItems(itemsToPopulate);
+                        setCurrentStep(1);
+                        toast.success(`Loaded items from PO: ${po.po_number}`);
+
+                        // Clear params from URL
+                        const newUrl = window.location.pathname;
+                        window.history.replaceState({}, '', newUrl);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to load PO:', err);
+            }
+        };
+
+        // Handle PO ID (Priority)
+        if (poIdParam && suppliers.length > 0 && !selectedPO) {
+            setupPO(poIdParam);
+        }
+
+        // Handle Supplier ID (if no PO)
+        if (supplierIdParam && suppliers.length > 0 && !selectedSupplier && !poIdParam) {
             const supplier = suppliers.find(s => s.id === supplierIdParam);
             if (supplier) {
                 setSelectedSupplier(supplier);
@@ -128,7 +174,7 @@ export default function GoodsReceivingPage() {
                 window.history.replaceState({}, '', newUrl);
             }
         }
-    }, [allCatalogItems, suppliers, selectedSupplier]);
+    }, [allCatalogItems, suppliers, selectedSupplier, selectedPO, currentStep]);
 
     // Fetch POs when supplier selected
     useEffect(() => {

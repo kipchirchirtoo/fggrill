@@ -160,20 +160,32 @@ export default function PurchaseOrdersPage() {
                                                 </IOSBadge>
                                             </td>
                                             <td className="px-4 py-3 text-center">
-                                                <button
-                                                    onClick={async () => {
-                                                        try {
-                                                            const res = await procurementAPI.getPurchaseOrder(po.id);
-                                                            if (res.success) {
-                                                                setViewPO(res.data);
-                                                                setIsViewOpen(true);
-                                                            }
-                                                        } catch (e) { toast.error('Failed to load details'); }
-                                                    }}
-                                                    className="p-1 text-stone-400 hover:text-[#007AFF]"
-                                                >
-                                                    <Eye size={16} />
-                                                </button>
+                                                <div className="flex items-center gap-1">
+                                                    <button
+                                                        onClick={async () => {
+                                                            try {
+                                                                const res = await procurementAPI.getPurchaseOrder(po.id);
+                                                                if (res.success) {
+                                                                    setViewPO(res.data);
+                                                                    setIsViewOpen(true);
+                                                                }
+                                                            } catch (e) { toast.error('Failed to load details'); }
+                                                        }}
+                                                        className="p-1 text-stone-400 hover:text-[#007AFF]"
+                                                        title="View Details"
+                                                    >
+                                                        <Eye size={16} />
+                                                    </button>
+                                                    {po.status === 'approved' && (
+                                                        <button
+                                                            onClick={() => window.location.href = `/dashboard/central-store/receiving?po_id=${po.id}`}
+                                                            className="p-1 text-stone-400 hover:text-emerald-600"
+                                                            title="Receive Goods"
+                                                        >
+                                                            <ShoppingCart size={16} />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -249,7 +261,7 @@ export default function PurchaseOrdersPage() {
                                         </>
                                     )}
                                     {viewPO.status === 'approved' && (
-                                        <IOSButton variant="secondary" leftIcon={<ShoppingCart size={14} />} className="h-9 px-4 text-xs" onClick={() => window.location.href = `/dashboard/central-store/suppliers/grn?po=${viewPO.id}`}>Receive Goods</IOSButton>
+                                        <IOSButton variant="secondary" leftIcon={<ShoppingCart size={14} />} className="h-9 px-4 text-xs" onClick={() => window.location.href = `/dashboard/central-store/receiving?po_id=${viewPO.id}`}>Receive Goods</IOSButton>
                                     )}
                                 </div>
                             </div>

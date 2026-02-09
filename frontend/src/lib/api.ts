@@ -1351,6 +1351,7 @@ export const bookingsAPI = {
   },
   cancelBooking: (id: string, reason?: string) =>
     fetchAPI<any>(`/bookings/${id}/cancel`, { method: 'PUT', body: JSON.stringify({ reason }) }),
+  checkIn: (id: string) => fetchAPI<any>(`/bookings/${id}/check-in`, { method: 'PUT' }),
   checkOut: (id: string) => fetchAPI<any>(`/bookings/${id}/check-out`, { method: 'PUT' }),
   getBookingByConfirmation: (confirmationNumber: string, email: string) =>
     fetchAPI<any>(`/bookings/confirmation/${confirmationNumber}?email=${encodeURIComponent(email)}`),

@@ -38,6 +38,7 @@ router.use(protect);
 router.use(authorize([
   UserRole.SUPER_ADMIN,
   UserRole.GENERAL_MANAGER,
+  UserRole.BRANCH_MANAGER,
   UserRole.MAINTENANCE,
   UserRole.HOUSEKEEPING
 ]));

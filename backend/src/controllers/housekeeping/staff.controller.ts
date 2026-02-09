@@ -23,7 +23,7 @@ export const getStaff = async (
       .from('hk_staff_profiles')
       .select(`
         *,
-        user:users(id, first_name, last_name, email, phone_number, status)
+        user:users!user_id(id, first_name, last_name, email, phone_number, status)
       `)
       .order('staff_code');
 
@@ -58,7 +58,7 @@ export const getStaffMember = async (
       .from('hk_staff_profiles')
       .select(`
         *,
-        user:users(id, first_name, last_name, email, phone_number, status, avatar_url)
+        user:users!user_id(id, first_name, last_name, email, phone_number, status, avatar_url)
       `)
       .eq('id', id)
       .single();
@@ -161,7 +161,7 @@ export const createStaffProfile = async (
         hire_date: hireDate || null,
         is_available: true
       }])
-      .select(`*, user:users(first_name, last_name)`)
+      .select(`*, user:users!user_id(first_name, last_name)`)
       .single();
 
     if (error) throw error;
@@ -197,7 +197,7 @@ export const updateStaffProfile = async (
       .from('hk_staff_profiles')
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', id)
-      .select(`*, user:users(first_name, last_name)`)
+      .select(`*, user:users!user_id(first_name, last_name)`)
       .single();
 
     if (error) throw error;
@@ -300,7 +300,7 @@ export const getStaffPerformance = async (
     const total = metrics?.length || 0;
     const summary = {
       totalTasks: metrics?.reduce((sum, m) => sum + m.tasks_completed, 0) || 0,
-      avgCleaningTime: total > 0 
+      avgCleaningTime: total > 0
         ? Math.round(metrics!.reduce((sum, m) => sum + (m.avg_cleaning_time_minutes || 0), 0) / total)
         : 0,
       avgQualityScore: total > 0

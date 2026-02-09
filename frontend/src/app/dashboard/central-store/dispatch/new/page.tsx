@@ -60,12 +60,16 @@ export default function NewDispatchPage() {
     const [isLookupOpen, setIsLookupOpen] = useState(false);
     const [unknownBarcode, setUnknownBarcode] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<any[]>([]);
-    const [isSearching, setIsSearching] = useState(false);
-
     // Loading
     const [isLoadingData, setIsLoadingData] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchResults, setSearchResults] = useState<any[]>([]);
+
+    // Master Catalog Data
+    const [allCatalogItems, setAllCatalogItems] = useState<any[]>([]);
+    const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
+    const [catalogSearch, setCatalogSearch] = useState('');
 
     // Fetch Initial Data
     useEffect(() => {
@@ -86,7 +90,21 @@ export default function NewDispatchPage() {
                 setIsLoadingData(false);
             }
         };
+
+        const fetchCatalog = async () => {
+            setIsLoadingCatalog(true);
+            try {
+                const res = await storeAPI.getItems({ limit: 1000 });
+                if (res.success) setAllCatalogItems(res.data || []);
+            } catch (err) {
+                console.error('Failed to load catalog');
+            } finally {
+                setIsLoadingCatalog(false);
+            }
+        };
+
         fetchInitData();
+        fetchCatalog();
     }, []);
 
     // Focus keeper
@@ -324,25 +342,67 @@ export default function NewDispatchPage() {
                             {/* Left: Scanner */}
                             <div className="lg:col-span-2 space-y-6">
                                 <div className={`card-elevated p-8 text-center border-2 transition-colors ${scanStatus === 'success' ? 'border-green-500 bg-green-50' :
-                                        scanStatus === 'error' ? 'border-red-500 bg-red-50' : 'border-blue-500'
+                                    scanStatus === 'error' ? 'border-red-500 bg-red-50' : 'border-blue-500'
                                     }`}>
                                     <ScanLine className={`h-12 w-12 mx-auto mb-4 ${scanStatus === 'success' ? 'text-green-600' :
-                                            scanStatus === 'error' ? 'text-red-600' : 'text-blue-500'
+                                        scanStatus === 'error' ? 'text-red-600' : 'text-blue-500'
                                         }`} />
                                     <h2 className="text-xl font-bold mb-2">Scan to Dispatch</h2>
                                     <p className="text-stone-500 mb-6">Stock is validated immediately</p>
 
-                                    <form onSubmit={handleBarcodeSubmit} className="max-w-md mx-auto relative">
-                                        <input
-                                            ref={barcodeInputRef}
-                                            type="text"
-                                            value={barcodeInput}
-                                            onChange={e => setBarcodeInput(e.target.value)}
-                                            className="w-full text-center text-2xl font-mono py-3 px-4 rounded-lg border focus:ring-4 focus:ring-blue-200 outline-none"
-                                            placeholder="Scan barcode..."
-                                            autoFocus
-                                        />
-                                    </form>
+                                    <div className="max-w-md mx-auto mb-6 relative">
+                                        <div className="relative mb-2">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                                            <input
+                                                type="text"
+                                                placeholder="Search master catalog..."
+                                                value={catalogSearch}
+                                                onChange={(e) => setCatalogSearch(e.target.value)}
+                                                className="w-full pl-9 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                            />
+                                            {catalogSearch && (
+                                                <div className="absolute z-50 mt-1 w-full bg-white border border-stone-200 rounded-xl shadow-2xl max-h-[250px] overflow-y-auto divide-y divide-stone-50 text-left">
+                                                    {allCatalogItems
+                                                        .filter(i =>
+                                                            i.item_name?.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+                                                            i.sku?.toLowerCase().includes(catalogSearch.toLowerCase())
+                                                        )
+                                                        .slice(0, 10)
+                                                        .map(item => (
+                                                            <button
+                                                                key={item.id}
+                                                                onClick={() => {
+                                                                    processItemScan(item);
+                                                                    setCatalogSearch('');
+                                                                }}
+                                                                className="w-full p-3 hover:bg-stone-50 transition-colors flex items-center justify-between group"
+                                                            >
+                                                                <div>
+                                                                    <p className="font-semibold text-stone-900">{item.item_name}</p>
+                                                                    <p className="text-[10px] text-stone-400 uppercase tracking-tighter">
+                                                                        {item.sku} | Stock: {item.stock_quantity || item.current_stock || 0}
+                                                                    </p>
+                                                                </div>
+                                                                <Plus className="h-4 w-4 text-stone-300 group-hover:text-blue-500" />
+                                                            </button>
+                                                        ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <p className="text-[10px] uppercase font-bold text-stone-300 mb-2">OR SCAN BARCODE</p>
+
+                                        <form onSubmit={handleBarcodeSubmit} className="relative">
+                                            <input
+                                                ref={barcodeInputRef}
+                                                type="text"
+                                                value={barcodeInput}
+                                                onChange={e => setBarcodeInput(e.target.value)}
+                                                className="w-full text-center text-2xl font-mono py-3 px-4 rounded-lg border focus:ring-4 focus:ring-blue-200 outline-none"
+                                                placeholder="Scan barcode..."
+                                            />
+                                        </form>
+                                    </div>
                                     {lastScannedItem && (
                                         <div className={`mt-4 p-3 rounded-lg shadow-sm inline-block ${lastScannedItem.status === 'error' ? 'bg-red-100 text-red-800' : 'bg-white text-stone-900'
                                             }`}>
@@ -369,9 +429,55 @@ export default function NewDispatchPage() {
                                                         <p className="text-xs text-stone-500">SKU: {item.sku} | Stock: {item.available_stock}</p>
                                                     </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <p className="text-2xl font-bold font-mono text-blue-600">{item.scanned_quantity}</p>
-                                                    <p className="text-[10px] uppercase text-stone-400 font-bold">{item.unit}</p>
+                                                <div className="flex items-center gap-4">
+                                                    <div className="flex items-center bg-stone-100 rounded-lg p-1 border border-stone-200">
+                                                        <button
+                                                            onClick={() => {
+                                                                if (item.scanned_quantity > 1) {
+                                                                    setScannedItems(prev => prev.map(i =>
+                                                                        i.id === item.id ? { ...i, scanned_quantity: i.scanned_quantity - 1 } : i
+                                                                    ));
+                                                                } else {
+                                                                    setScannedItems(prev => prev.filter(i => i.id !== item.id));
+                                                                }
+                                                            }}
+                                                            className="p-1.5 hover:bg-white rounded text-stone-500 transition-all active:scale-95"
+                                                        >
+                                                            <X className="h-4 w-4" />
+                                                        </button>
+                                                        <input
+                                                            type="number"
+                                                            value={item.scanned_quantity}
+                                                            onChange={(e) => {
+                                                                const val = parseInt(e.target.value) || 0;
+                                                                const finalVal = Math.min(val, item.available_stock);
+                                                                if (val > item.available_stock) {
+                                                                    toast.error(`Only ${item.available_stock} available`);
+                                                                }
+                                                                setScannedItems(prev => prev.map(i =>
+                                                                    i.id === item.id ? { ...i, scanned_quantity: finalVal } : i
+                                                                ));
+                                                            }}
+                                                            className="w-16 h-8 text-center text-lg font-bold font-mono text-blue-600 bg-white border border-stone-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                                        />
+                                                        <button
+                                                            onClick={() => {
+                                                                if (item.scanned_quantity < item.available_stock) {
+                                                                    setScannedItems(prev => prev.map(i =>
+                                                                        i.id === item.id ? { ...i, scanned_quantity: i.scanned_quantity + 1 } : i
+                                                                    ));
+                                                                } else {
+                                                                    toast.error(`Only ${item.available_stock} available`);
+                                                                }
+                                                            }}
+                                                            className="p-1.5 hover:bg-white rounded text-stone-500 transition-all active:scale-95"
+                                                        >
+                                                            <Plus className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                    <div className="text-right min-w-[60px]">
+                                                        <p className="text-[10px] uppercase text-stone-400 font-bold">{item.unit}</p>
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}
@@ -425,9 +531,9 @@ export default function NewDispatchPage() {
                                 </div>
                                 <button onClick={handleManualLookup} className="btn-secondary w-full">Search</button>
                                 <div className="max-h-[200px] overflow-y-auto border rounded divide-y">
-                                    {searchResults.map(res => (
-                                        <div key={res.id} onClick={() => selectItemFromLookup(res)} className="p-3 hover:bg-stone-50 cursor-pointer flex justify-between">
-                                            <span>{res.name}</span>
+                                    {searchResults.map((item: any) => (
+                                        <div key={item.id} onClick={() => selectItemFromLookup(item)} className="p-3 hover:bg-stone-50 cursor-pointer flex justify-between">
+                                            <span>{item.name}</span>
                                             <Plus className="h-4 w-4 text-blue-500" />
                                         </div>
                                     ))}

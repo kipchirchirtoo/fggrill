@@ -34,7 +34,7 @@ export const getGuestRequests = async (
       .select(`
         *,
         room:rooms(room_number, floor, room_type),
-        assignee:hk_staff_profiles!assigned_to(id, staff_code, user:users(first_name, last_name))
+        assignee:hk_staff_profiles!assigned_to(id, staff_code, user:users!user_id(first_name, last_name))
       `, { count: 'exact' })
       .eq('branch_id', branchId)
       .order('is_vip', { ascending: false })
@@ -81,8 +81,8 @@ export const getGuestRequest = async (
       .select(`
         *,
         room:rooms(*),
-        assignee:hk_staff_profiles!assigned_to(id, staff_code, user:users(first_name, last_name, phone_number)),
-        completed_by_staff:hk_staff_profiles!completed_by(id, staff_code, user:users(first_name, last_name))
+        assignee:hk_staff_profiles!assigned_to(id, staff_code, user:users!user_id(first_name, last_name, phone_number)),
+        completed_by_staff:hk_staff_profiles!completed_by(id, staff_code, user:users!user_id(first_name, last_name))
       `)
       .eq('id', id)
       .single();
@@ -185,7 +185,7 @@ export const assignGuestRequest = async (
         status: 'assigned'
       })
       .eq('id', id)
-      .select(`*, assignee:hk_staff_profiles!assigned_to(staff_code, user:users(first_name, last_name))`)
+      .select(`*, assignee:hk_staff_profiles!assigned_to(staff_code, user:users!user_id(first_name, last_name))`)
       .single();
 
     if (error) throw error;

@@ -9,20 +9,21 @@ import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription }
 import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { bookingsAPI } from '@/lib/api';
-import { ArrowUpRight, RefreshCw, User, Bed, Clock, CheckCircle, Building2, Eye } from 'lucide-react';
+import { ArrowUpRight, RefreshCw, User, Bed, Clock, CheckCircle, Building2, Eye, Phone, Mail, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-interface Arrival { 
-  id: string; 
-  guest_name: string; 
+interface Arrival {
+  id: string;
+  guest_name: string;
   guest_id?: string;
-  room_number: string; 
+  room_number: string;
   room_type?: string;
-  check_in: string; 
+  check_in: string;
   check_out: string;
-  status: string; 
+  status: string;
   nights: number;
   guests?: number;
   phone?: string;
@@ -46,8 +47,8 @@ export default function BranchArrivalsPage() {
     setIsLoading(true);
     try {
       const today = new Date().toISOString().split('T')[0];
-      const response = await bookingsAPI.getBookings({ 
-        checkIn: today, 
+      const response = await bookingsAPI.getBookings({
+        checkIn: today,
         branch_id: currentBranchId,
         status: 'confirmed' // Only show confirmed bookings
       });
@@ -56,7 +57,7 @@ export default function BranchArrivalsPage() {
       } else {
         setArrivals([]);
       }
-    } catch (error) { 
+    } catch (error) {
       console.error('Error fetching arrivals:', error);
       toast.error('Failed to load arrivals');
       setArrivals([]);
@@ -75,8 +76,8 @@ export default function BranchArrivalsPage() {
       } else {
         toast.error(response.message || 'Failed to check in');
       }
-    } catch (error: any) { 
-      toast.error(error.message || 'Failed to check in guest'); 
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check in guest');
     }
   };
 
@@ -165,78 +166,71 @@ export default function BranchArrivalsPage() {
         </div>
 
         {/* Details Modal */}
-        {showDetailsModal && selectedArrival && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowDetailsModal(false)}>
-            <div className="bg-white rounded-xl max-w-lg w-full p-6" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">Arrival Details</h2>
-                <button onClick={() => setShowDetailsModal(false)} className="text-gray-400 hover:text-gray-600">
-                  ✕
-                </button>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm text-gray-500">Guest Name</label>
-                  <p className="font-semibold">{selectedArrival.guest_name}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm text-gray-500">Room</label>
-                    <p className="font-semibold">{selectedArrival.room_number}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm text-gray-500">Room Type</label>
-                    <p className="font-semibold">{selectedArrival.room_type || 'N/A'}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm text-gray-500">Check-in</label>
-                    <p className="font-semibold">{new Date(selectedArrival.check_in).toLocaleDateString()}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm text-gray-500">Check-out</label>
-                    <p className="font-semibold">{new Date(selectedArrival.check_out).toLocaleDateString()}</p>
+        <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
+          <DialogContent className="max-w-3xl overflow-y-auto max-h-[90vh]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                <FileText className="h-5 w-5 text-blue-600" />
+                Arrival Details
+              </DialogTitle>
+            </DialogHeader>
+
+            {selectedArrival && (
+              <div className="space-y-6 py-4">
+                {/* Guest Summary Card */}
+                <div className="bg-stone-50 rounded-xl p-5 border border-stone-100">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
+                      <User className="h-8 w-8 text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-stone-900">{selectedArrival.guest_name}</h3>
+                      <p className="text-stone-500 font-medium">Room {selectedArrival.room_number}</p>
+                    </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm text-gray-500">Nights</label>
-                    <p className="font-semibold">{selectedArrival.nights}</p>
+
+                {/* Info Grid */}
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold text-stone-400 uppercase tracking-wider">Contact Information</h4>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 text-stone-600">
+                        <Phone className="h-4 w-4" />
+                        <span>{selectedArrival.phone || '+254 700 000 000'}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-stone-600">
+                        <Mail className="h-4 w-4" />
+                        <span>{selectedArrival.email || 'guest@example.com'}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-sm text-gray-500">Guests</label>
-                    <p className="font-semibold">{selectedArrival.guests || 1}</p>
+
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold text-stone-400 uppercase tracking-wider">Stay Information</h4>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 text-stone-600">
+                        <Calendar className="h-4 w-4" />
+                        <span>{new Date(selectedArrival.check_in).toLocaleDateString()} - {new Date(selectedArrival.check_out).toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-stone-600">
+                        <Clock className="h-4 w-4" />
+                        <span>Nights: {selectedArrival.nights} • Guests: {selectedArrival.guests || 1}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                {selectedArrival.phone && (
-                  <div>
-                    <label className="text-sm text-gray-500">Phone</label>
-                    <p className="font-semibold">{selectedArrival.phone}</p>
+
+                {/* Additional Details */}
+                <div className="pt-4 border-t border-stone-100">
+                  <h4 className="text-sm font-semibold text-stone-400 uppercase tracking-wider mb-3">Special Requests & Notes</h4>
+                  <div className="p-4 bg-stone-50 rounded-lg text-stone-600 text-sm italic">
+                    {selectedArrival.special_requests || "No special requests noted."}
                   </div>
-                )}
-                {selectedArrival.email && (
-                  <div>
-                    <label className="text-sm text-gray-500">Email</label>
-                    <p className="font-semibold">{selectedArrival.email}</p>
-                  </div>
-                )}
-                {selectedArrival.special_requests && (
-                  <div>
-                    <label className="text-sm text-gray-500">Special Requests</label>
-                    <p className="text-amber-600">{selectedArrival.special_requests}</p>
-                  </div>
-                )}
-                {selectedArrival.total && (
-                  <div className="pt-4 border-t">
-                    <label className="text-sm text-gray-500">Total Amount</label>
-                    <p className="text-2xl font-bold text-green-600">KES {selectedArrival.total.toLocaleString()}</p>
-                  </div>
-                )}
-                <div className="flex gap-2 pt-4">
-                  <IOSButton variant="secondary" className="flex-1" onClick={() => setShowDetailsModal(false)}>
-                    Close
-                  </IOSButton>
+                </div>
+
+                <div className="flex gap-3 pt-6">
+                  <IOSButton className="flex-1" onClick={() => setShowDetailsModal(false)}>Close Details</IOSButton>
                   {selectedArrival.status !== 'checked_in' && (
                     <IOSButton className="flex-1" onClick={() => {
                       handleCheckIn(selectedArrival.id);
@@ -247,9 +241,9 @@ export default function BranchArrivalsPage() {
                   )}
                 </div>
               </div>
-            </div>
-          </div>
-        )}
+            )}
+          </DialogContent>
+        </Dialog>
       </DashboardLayout>
     </ProtectedRoute>
   );

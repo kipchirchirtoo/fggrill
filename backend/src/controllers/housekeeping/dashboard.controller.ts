@@ -96,7 +96,7 @@ export const getDashboard = async (
       .select(`
         *,
         room:rooms(room_number, floor, room_type),
-        assignee:hk_staff_profiles(id, staff_code, user:users(first_name, last_name))
+        assignee:hk_staff_profiles(id, staff_code, user:users!user_id(first_name, last_name))
       `)
       .in('priority', ['critical', 'urgent'])
       .not('status', 'in', '("completed","cancelled","inspection_passed")')
@@ -109,7 +109,7 @@ export const getDashboard = async (
       .from('hk_tasks')
       .select(`
         id, status, room_number, completed_at, updated_at,
-        completed_by:hk_staff_profiles!completed_by(user:users(first_name, last_name))
+        completed_by:hk_staff_profiles!completed_by(user:users!user_id(first_name, last_name))
       `)
       .gte('updated_at', new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()) // Last 2 hours
       .order('updated_at', { ascending: false })
@@ -219,7 +219,7 @@ export const getRoomGrid = async (
         assigned_attendant_id, last_cleaned_at, expected_checkout, notes,
         attendant:hk_staff_profiles!assigned_attendant_id(
           id, staff_code,
-          user:users(first_name, last_name)
+          user:users!user_id(first_name, last_name)
         )
       `)
       .eq('branch_id', branchId)

@@ -33,7 +33,7 @@ export const getMaintenanceRequests = async (
       .from('hk_maintenance_requests')
       .select(`
         *,
-        reporter:hk_staff_profiles!reported_by(id, staff_code, user:users(first_name, last_name)),
+        reporter:hk_staff_profiles!reported_by(id, staff_code, user:users!user_id(first_name, last_name)),
         room:rooms(room_number, floor)
       `, { count: 'exact' })
       .eq('branch_id', branchId)
@@ -79,8 +79,8 @@ export const getMaintenanceRequest = async (
       .from('hk_maintenance_requests')
       .select(`
         *,
-        reporter:hk_staff_profiles!reported_by(id, staff_code, designation, user:users(first_name, last_name, phone_number)),
-        verifier:hk_staff_profiles!verified_by(id, staff_code, user:users(first_name, last_name)),
+        reporter:hk_staff_profiles!reported_by(id, staff_code, designation, user:users!user_id(first_name, last_name, phone_number)),
+        verifier:hk_staff_profiles!verified_by(id, staff_code, user:users!user_id(first_name, last_name)),
         room:rooms(*)
       `)
       .eq('id', id)

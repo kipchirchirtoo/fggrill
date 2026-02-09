@@ -3,7 +3,7 @@ import {
     getAttendance,
     clockIn,
     clockOut
-} from '../controllers/attendance.controller';
+} from '../controllers/staff.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
 

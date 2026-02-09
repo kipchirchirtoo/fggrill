@@ -86,7 +86,7 @@ export default function BranchCheckinPage() {
 
       // Check in immediately
       const checkinResponse = await bookingsAPI.checkIn(bookingResponse.data.id);
-      
+
       if (checkinResponse.success) {
         toast.success('Walk-in guest checked in successfully!');
         setShowWalkInModal(false);
@@ -156,8 +156,8 @@ export default function BranchCheckinPage() {
                   <p className="text-sm text-stone-500">Check in guests without prior reservations</p>
                 </div>
               </div>
-              <button 
-                onClick={openWalkInModal} 
+              <button
+                onClick={openWalkInModal}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-stone-800 text-white text-[13px] font-medium rounded-lg hover:bg-stone-700 transition-colors"
               >
                 <span>Start Walk-In</span>
@@ -169,120 +169,143 @@ export default function BranchCheckinPage() {
 
         {/* Walk-In Modal */}
         <Dialog open={showWalkInModal} onOpenChange={setShowWalkInModal}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Walk-In Check-In</DialogTitle>
+              <DialogTitle className="flex items-center gap-2 text-xl font-sf-pro-display">
+                <UserPlus className="h-5 w-5 text-stone-600" />
+                Walk-In Guest Registration
+              </DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 mt-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">First Name *</label>
-                  <Input 
-                    value={formData.first_name} 
-                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })} 
-                    placeholder="John"
-                  />
+
+            <div className="space-y-8 py-4 px-1">
+              {/* Profile Information Section */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Guest Profile</h4>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">First Name *</label>
+                    <Input
+                      value={formData.first_name}
+                      onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                      placeholder="e.g. John"
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Last Name *</label>
+                    <Input
+                      value={formData.last_name}
+                      onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                      placeholder="e.g. Doe"
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Last Name *</label>
-                  <Input 
-                    value={formData.last_name} 
-                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })} 
-                    placeholder="Doe"
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Email Address</label>
+                    <Input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      placeholder="john@example.com"
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Phone Number *</label>
+                    <Input
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      placeholder="+254..."
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Stay Details Section */}
+              <div className="space-y-4 pt-4 border-t border-stone-100">
+                <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Stay Details</h4>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Select Available Room *</label>
+                  <select
+                    className="w-full h-11 border border-stone-200 rounded-xl px-4 text-sm bg-white focus:ring-2 focus:ring-stone-900 transition-all outline-none"
+                    value={formData.room_id}
+                    onChange={(e) => setFormData({ ...formData, room_id: e.target.value })}
+                  >
+                    <option value="">Choose a room from the inventory...</option>
+                    {availableRooms.map((room) => (
+                      <option key={room.id} value={room.id}>
+                        {room.room_number} — {room.room_type} (KES {room.rate}/night)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Check-In *</label>
+                    <Input
+                      type="date"
+                      value={formData.check_in}
+                      onChange={(e) => setFormData({ ...formData, check_in: e.target.value })}
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Check-Out *</label>
+                    <Input
+                      type="date"
+                      value={formData.check_out}
+                      onChange={(e) => setFormData({ ...formData, check_out: e.target.value })}
+                      min={formData.check_in}
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Number of Guests *</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={formData.guests}
+                      onChange={(e) => setFormData({ ...formData, guests: parseInt(e.target.value) || 1 })}
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Additional Information Section */}
+              <div className="space-y-4 pt-4 border-t border-stone-100">
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Special Requests & Notes</label>
+                  <textarea
+                    className="w-full border border-stone-200 rounded-2xl px-4 py-3 min-h-[100px] text-sm bg-white focus:ring-2 focus:ring-stone-900 transition-all outline-none"
+                    value={formData.special_requests}
+                    onChange={(e) => setFormData({ ...formData, special_requests: e.target.value })}
+                    placeholder="Any specific guest requirements..."
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Email</label>
-                  <Input 
-                    type="email"
-                    value={formData.email} 
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })} 
-                    placeholder="john@example.com"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Phone *</label>
-                  <Input 
-                    value={formData.phone} 
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })} 
-                    placeholder="+254..."
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Room *</label>
-                <select 
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                  value={formData.room_id}
-                  onChange={(e) => setFormData({ ...formData, room_id: e.target.value })}
-                >
-                  <option value="">Select a room</option>
-                  {availableRooms.map((room) => (
-                    <option key={room.id} value={room.id}>
-                      Room {room.room_number} - {room.room_type} (KES {room.rate}/night)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Check-In *</label>
-                  <Input 
-                    type="date"
-                    value={formData.check_in} 
-                    onChange={(e) => setFormData({ ...formData, check_in: e.target.value })} 
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Check-Out *</label>
-                  <Input 
-                    type="date"
-                    value={formData.check_out} 
-                    onChange={(e) => setFormData({ ...formData, check_out: e.target.value })} 
-                    min={formData.check_in}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Guests *</label>
-                  <Input 
-                    type="number"
-                    min="1"
-                    value={formData.guests} 
-                    onChange={(e) => setFormData({ ...formData, guests: parseInt(e.target.value) || 1 })} 
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Special Requests</label>
-                <textarea 
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 min-h-[80px]"
-                  value={formData.special_requests}
-                  onChange={(e) => setFormData({ ...formData, special_requests: e.target.value })}
-                  placeholder="Any special requests or notes..."
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button 
+              <div className="flex gap-4 pt-6">
+                <IOSButton
+                  variant="secondary"
                   onClick={() => setShowWalkInModal(false)}
                   disabled={isSubmitting}
-                  className="flex-1 px-4 py-2.5 border border-stone-300 text-stone-700 text-[13px] font-medium rounded-lg hover:bg-stone-50 transition-colors disabled:opacity-50"
+                  className="flex-1 h-12 text-base font-semibold"
                 >
                   Cancel
-                </button>
-                <button 
+                </IOSButton>
+                <IOSButton
                   onClick={handleWalkInCheckIn}
                   disabled={isSubmitting}
-                  className="flex-1 px-4 py-2.5 bg-stone-800 text-white text-[13px] font-medium rounded-lg hover:bg-stone-700 transition-colors disabled:opacity-50"
+                  className="flex-1 h-12 text-base font-semibold"
                 >
-                  {isSubmitting ? 'Processing...' : 'Check In'}
-                </button>
+                  {isSubmitting ? 'Processing Check-In...' : 'Complete Check-In'}
+                </IOSButton>
               </div>
             </div>
           </DialogContent>

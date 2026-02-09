@@ -14,7 +14,7 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { AddRoomWizard } from '@/components/rooms/AddRoomWizard';
 import { toast } from 'sonner';
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogHeader } from '@/components/ui/dialog';
 
 interface Room { id: string; room_number: string; room_type: string; floor: number; status: string; price: number; }
 
@@ -213,28 +213,35 @@ export default function BranchRoomsPage() {
           {/* Delete Confirmation Dialog */}
           <Dialog open={!!deletingRoom} onOpenChange={() => setDeletingRoom(null)}>
             <DialogContent className="max-w-md">
-              <DialogTitle className="flex items-center gap-2 text-red-600">
-                <AlertTriangle className="h-5 w-5" />
-                Delete Room
-              </DialogTitle>
-              <DialogDescription className="text-gray-600">
-                Are you sure you want to delete Room {deletingRoom?.room_number}? This action cannot be undone.
-              </DialogDescription>
-              <div className="flex gap-3 mt-6">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-red-600 text-xl font-sf-pro-display">
+                  <AlertTriangle className="h-6 w-6" />
+                  Permanent Deletion
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="py-4">
+                <p className="text-stone-600 leading-relaxed">
+                  Are you sure you want to delete <span className="font-bold text-stone-900 text-lg">Room {deletingRoom?.room_number}</span>?
+                  <br />
+                  <span className="text-sm mt-2 block opacity-70">This action is irreversible and will remove all associated records.</span>
+                </p>
+              </div>
+
+              <div className="flex gap-4 pt-2">
                 <IOSButton
                   variant="secondary"
                   onClick={() => setDeletingRoom(null)}
-                  className="flex-1"
+                  className="flex-1 h-12 text-base font-semibold"
                 >
-                  Cancel
+                  Keep Room
                 </IOSButton>
                 <IOSButton
-                  variant="primary"
                   onClick={handleDeleteRoom}
                   disabled={isDeleting}
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                  className="flex-1 h-12 text-base font-semibold bg-red-600 hover:bg-red-700 text-white"
                 >
-                  {isDeleting ? 'Deleting...' : 'Delete'}
+                  {isDeleting ? 'Deleting...' : 'Confirm Delete'}
                 </IOSButton>
               </div>
             </DialogContent>

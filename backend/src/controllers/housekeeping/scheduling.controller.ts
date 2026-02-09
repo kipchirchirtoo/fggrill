@@ -57,7 +57,7 @@ export const getSchedules = async (
       .from('hk_staff_schedules')
       .select(`
         *,
-        staff:hk_staff_profiles(id, staff_code, designation, user:users(first_name, last_name)),
+        staff:hk_staff_profiles(id, staff_code, designation, user:users!user_id(first_name, last_name)),
         shift:hk_shift_definitions(name, shift_type, start_time, end_time)
       `)
       .gte('schedule_date', startDate)
@@ -125,7 +125,7 @@ export const createSchedule = async (
       }])
       .select(`
         *,
-        staff:hk_staff_profiles(staff_code, user:users(first_name, last_name)),
+        staff:hk_staff_profiles(staff_code, user:users!user_id(first_name, last_name)),
         shift:hk_shift_definitions(name, shift_type)
       `)
       .single();
@@ -256,7 +256,7 @@ export const getLeaveRequests = async (
       .from('hk_leave_requests')
       .select(`
         *,
-        staff:hk_staff_profiles(id, staff_code, user:users(first_name, last_name)),
+        staff:hk_staff_profiles(id, staff_code, user:users!user_id(first_name, last_name)),
         reviewer:users!reviewed_by(first_name, last_name)
       `)
       .order('requested_at', { ascending: false });
@@ -297,7 +297,7 @@ export const createLeaveRequest = async (
         reason,
         status: 'pending'
       }])
-      .select(`*, staff:hk_staff_profiles(staff_code, user:users(first_name, last_name))`)
+      .select(`*, staff:hk_staff_profiles(staff_code, user:users!user_id(first_name, last_name))`)
       .single();
 
     if (error) throw error;
@@ -379,8 +379,8 @@ export const getShiftSwaps = async (
       .from('hk_shift_swaps')
       .select(`
         *,
-        requester:hk_staff_profiles!requester_id(id, staff_code, user:users(first_name, last_name)),
-        target:hk_staff_profiles!target_id(id, staff_code, user:users(first_name, last_name)),
+        requester:hk_staff_profiles!requester_id(id, staff_code, user:users!user_id(first_name, last_name)),
+        target:hk_staff_profiles!target_id(id, staff_code, user:users!user_id(first_name, last_name)),
         requester_schedule:hk_staff_schedules!requester_schedule_id(schedule_date, shift:hk_shift_definitions(name)),
         target_schedule:hk_staff_schedules!target_schedule_id(schedule_date, shift:hk_shift_definitions(name))
       `)
@@ -562,7 +562,7 @@ export const getTodayRoster = async (
         *,
         staff:hk_staff_profiles(
           id, staff_code, designation, is_available, current_room_number,
-          user:users(first_name, last_name, phone_number)
+          user:users!user_id(first_name, last_name, phone_number)
         ),
         shift:hk_shift_definitions(name, shift_type, start_time, end_time)
       `)

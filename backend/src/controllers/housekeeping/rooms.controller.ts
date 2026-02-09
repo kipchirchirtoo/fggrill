@@ -27,7 +27,7 @@ export const getRooms = async (
         *,
         attendant:hk_staff_profiles!assigned_attendant_id(
           id, staff_code,
-          user:users(first_name, last_name)
+          user:users!user_id(first_name, last_name)
         ),
         active_task:hk_tasks!inner(id, status, task_type, priority, started_at)
       `)
@@ -68,7 +68,7 @@ export const getRoom = async (
         *,
         attendant:hk_staff_profiles!assigned_attendant_id(
           id, staff_code, designation,
-          user:users(first_name, last_name, phone_number)
+          user:users!user_id(first_name, last_name, phone_number)
         ),
         status_history:hk_room_status_history(
           id, previous_status, new_status, reason, created_at,
@@ -233,7 +233,7 @@ export const getRoomsForInspection = async (
         id, room_number, floor, room_type, hk_status, last_cleaned_at, is_vip,
         attendant:hk_staff_profiles!assigned_attendant_id(
           id, staff_code,
-          user:users(first_name, last_name)
+          user:users!user_id(first_name, last_name)
         )
       `)
       .eq('branch_id', branchId)
@@ -349,7 +349,7 @@ export const assignAttendant = async (
         *,
         attendant:hk_staff_profiles!assigned_attendant_id(
           id, staff_code,
-          user:users(first_name, last_name)
+          user:users!user_id(first_name, last_name)
         )
       `)
       .single();
@@ -404,7 +404,7 @@ export const getRoomsByFloor = async (
       }
       floors[room.floor].rooms.push(room);
       floors[room.floor].summary.total++;
-      
+
       if (room.hk_status === 'vacant_clean') floors[room.floor].summary.vacantClean++;
       else if (room.hk_status === 'vacant_dirty' || room.hk_status === 'checkout') floors[room.floor].summary.vacantDirty++;
       else if (room.hk_status?.startsWith('occupied')) floors[room.floor].summary.occupied++;

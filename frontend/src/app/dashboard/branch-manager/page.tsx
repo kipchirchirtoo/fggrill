@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 
 import { AddItemModal } from '@/components/storekeeping/AddItemModal';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export default function BranchManagerDashboard() {
   const { user } = useAuth();
@@ -319,38 +320,39 @@ export default function BranchManagerDashboard() {
           }}
         />
 
-        {/* Camera/Evidence Modal - inline implementation for simplicity */}
-        {showCamera && (
-          <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl p-6 w-full max-w-md relative">
-              <button
-                onClick={() => setShowCamera(false)}
-                className="absolute right-4 top-4 hover:bg-stone-100 p-2 rounded-full"
-              >
-                <span className="text-xl">×</span>
-              </button>
-              <h3 className="text-lg font-bold mb-4">Capture Evidence</h3>
-              <div className="aspect-video bg-black rounded-lg mb-4 flex items-center justify-center relative overflow-hidden">
+        {/* Camera/Evidence Modal */}
+        <Dialog open={showCamera} onOpenChange={setShowCamera}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Camera className="h-5 w-5 text-indigo-600" />
+                Capture Evidence
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-6 py-4">
+              <div className="aspect-video bg-black rounded-lg relative overflow-hidden ring-1 ring-stone-200">
                 {/* Mock camera view */}
                 <video autoPlay playsInline muted className="w-full h-full object-cover" />
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <span className="text-white/50 text-sm">Camera Stream Active</span>
                 </div>
               </div>
-              <div className="flex justify-center">
+
+              <div className="flex flex-col items-center gap-4">
                 <button
                   onClick={() => {
                     toast.success('Image captured and saved to incident report');
                     setShowCamera(false);
                   }}
-                  className="h-16 w-16 bg-white border-4 border-stone-200 rounded-full flex items-center justify-center hover:border-red-500 transition-colors"
+                  className="h-20 w-20 bg-white border-8 border-stone-100 rounded-full flex items-center justify-center hover:border-red-500/20 transition-all shadow-lg active:scale-95"
                 >
-                  <div className="h-12 w-12 bg-red-500 rounded-full" />
+                  <div className="h-12 w-12 bg-red-500 rounded-full shadow-inner" />
                 </button>
+                <p className="text-xs text-stone-500 font-medium uppercase tracking-wider">Tap to capture frame</p>
               </div>
             </div>
-          </div>
-        )}
+          </DialogContent>
+        </Dialog>
 
       </DashboardLayout>
     </ProtectedRoute>

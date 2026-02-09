@@ -8,18 +8,18 @@ import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription }
 import { Button } from "@/components/ui/minimal/button";
 import { Input } from '@/components/ui/input';
 import { guestAPI } from '@/lib/api';
-import { Users, RefreshCw, Search, User, Mail, Phone, Edit2, Trash2, Plus, Bed } from 'lucide-react';
+import { Users, RefreshCw, Search, User, Mail, Phone, Edit2, Trash2, Plus, Bed, UserPlus } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
-interface Guest { 
-  id: string; 
-  first_name: string; 
-  last_name: string; 
-  email?: string; 
-  phone?: string; 
+interface Guest {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email?: string;
+  phone?: string;
   room_number?: string;
   total_bookings?: number;
   last_visit?: string;
@@ -48,7 +48,7 @@ export default function BranchGuestsPage() {
       } else {
         setGuests([]);
       }
-    } catch (error) { 
+    } catch (error) {
       console.error('Error fetching guests:', error);
       toast.error('Failed to load guests');
       setGuests([]);
@@ -61,9 +61,9 @@ export default function BranchGuestsPage() {
   const resetForm = () => setFormData({ first_name: '', last_name: '', email: '', phone: '' });
 
   const handleAddGuest = async () => {
-    if (!formData.first_name || !formData.last_name) { 
-      toast.error('First name and last name are required'); 
-      return; 
+    if (!formData.first_name || !formData.last_name) {
+      toast.error('First name and last name are required');
+      return;
     }
     setIsSubmitting(true);
     try {
@@ -76,8 +76,8 @@ export default function BranchGuestsPage() {
       } else {
         toast.error(response.message || 'Failed to add guest');
       }
-    } catch (error: any) { 
-      toast.error(error.message || 'Failed to add guest'); 
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to add guest');
     }
     finally { setIsSubmitting(false); }
   };
@@ -89,9 +89,9 @@ export default function BranchGuestsPage() {
   };
 
   const handleUpdateGuest = async () => {
-    if (!selectedGuest || !formData.first_name || !formData.last_name) { 
-      toast.error('First name and last name are required'); 
-      return; 
+    if (!selectedGuest || !formData.first_name || !formData.last_name) {
+      toast.error('First name and last name are required');
+      return;
     }
     setIsSubmitting(true);
     try {
@@ -105,8 +105,8 @@ export default function BranchGuestsPage() {
       } else {
         toast.error(response.message || 'Failed to update guest');
       }
-    } catch (error: any) { 
-      toast.error(error.message || 'Failed to update guest'); 
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update guest');
     }
     finally { setIsSubmitting(false); }
   };
@@ -124,8 +124,8 @@ export default function BranchGuestsPage() {
       } else {
         toast.error(response.message || 'Failed to delete guest');
       }
-    } catch (error: any) { 
-      toast.error(error.message || 'Failed to delete guest'); 
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete guest');
     }
     finally { setIsSubmitting(false); }
   };
@@ -161,9 +161,8 @@ export default function BranchGuestsPage() {
                 <IOSCard key={guest.id} className="p-4 hover:shadow-md transition-shadow">
                   <div className="flex items-start gap-4">
                     <div className="relative">
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold ${
-                        guest.vip ? 'bg-gradient-to-br from-amber-500 to-orange-600' : 'bg-gradient-to-br from-blue-500 to-indigo-600'
-                      }`}>
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold ${guest.vip ? 'bg-gradient-to-br from-amber-500 to-orange-600' : 'bg-gradient-to-br from-blue-500 to-indigo-600'
+                        }`}>
                         {(guest.first_name || 'G')[0]}{(guest.last_name || '')[0]}
                       </div>
                       {guest.vip && (
@@ -206,16 +205,73 @@ export default function BranchGuestsPage() {
 
         {/* Add Modal */}
         <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Add Guest</DialogTitle></DialogHeader>
-            <div className="space-y-4 mt-4">
-              <div><label className="text-sm font-medium">First Name *</label><Input value={formData.first_name} onChange={(e) => setFormData({ ...formData, first_name: e.target.value })} /></div>
-              <div><label className="text-sm font-medium">Last Name *</label><Input value={formData.last_name} onChange={(e) => setFormData({ ...formData, last_name: e.target.value })} /></div>
-              <div><label className="text-sm font-medium">Email</label><Input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} /></div>
-              <div><label className="text-sm font-medium">Phone</label><Input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} /></div>
-              <div className="flex gap-3">
-                <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                <IOSButton onClick={handleAddGuest} disabled={isSubmitting} className="flex-1">{isSubmitting ? 'Adding...' : 'Add'}</IOSButton>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl font-sf-pro-display">
+                <UserPlus className="h-5 w-5 text-indigo-600" />
+                Register New Guest
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-6 py-4 px-1">
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">First Name *</label>
+                  <Input
+                    value={formData.first_name}
+                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                    placeholder="e.g. John"
+                    className="h-11 rounded-xl"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Last Name *</label>
+                  <Input
+                    value={formData.last_name}
+                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                    placeholder="e.g. Doe"
+                    className="h-11 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Email Address</label>
+                  <Input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="guest@example.com"
+                    className="h-11 rounded-xl"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Phone Number</label>
+                  <Input
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    placeholder="+254..."
+                    className="h-11 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <IOSButton
+                  variant="secondary"
+                  onClick={() => setAddModalOpen(false)}
+                  className="flex-1 h-12 text-base font-semibold"
+                >
+                  Cancel
+                </IOSButton>
+                <IOSButton
+                  onClick={handleAddGuest}
+                  disabled={isSubmitting}
+                  className="flex-1 h-12 text-base font-semibold"
+                >
+                  {isSubmitting ? 'Registering Guest...' : 'Register Guest'}
+                </IOSButton>
               </div>
             </div>
           </DialogContent>
@@ -223,16 +279,73 @@ export default function BranchGuestsPage() {
 
         {/* Edit Modal */}
         <Dialog open={editModalOpen} onOpenChange={(open) => { setEditModalOpen(open); if (!open) setSelectedGuest(null); }}>
-          <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Edit Guest</DialogTitle></DialogHeader>
-            <div className="space-y-4 mt-4">
-              <div><label className="text-sm font-medium">First Name *</label><Input value={formData.first_name} onChange={(e) => setFormData({ ...formData, first_name: e.target.value })} /></div>
-              <div><label className="text-sm font-medium">Last Name *</label><Input value={formData.last_name} onChange={(e) => setFormData({ ...formData, last_name: e.target.value })} /></div>
-              <div><label className="text-sm font-medium">Email</label><Input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} /></div>
-              <div><label className="text-sm font-medium">Phone</label><Input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} /></div>
-              <div className="flex gap-3">
-                <IOSButton variant="secondary" onClick={() => setEditModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                <IOSButton onClick={handleUpdateGuest} disabled={isSubmitting} className="flex-1">{isSubmitting ? 'Updating...' : 'Update'}</IOSButton>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl font-sf-pro-display">
+                <Edit2 className="h-5 w-5 text-stone-600" />
+                Edit Guest Profile
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-6 py-4 px-1">
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">First Name *</label>
+                  <Input
+                    value={formData.first_name}
+                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                    placeholder="First name"
+                    className="h-11 rounded-xl"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Last Name *</label>
+                  <Input
+                    value={formData.last_name}
+                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                    placeholder="Last name"
+                    className="h-11 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Email Address</label>
+                  <Input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="Email"
+                    className="h-11 rounded-xl"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Phone Number</label>
+                  <Input
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    placeholder="Phone"
+                    className="h-11 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <IOSButton
+                  variant="secondary"
+                  onClick={() => setEditModalOpen(false)}
+                  className="flex-1 h-12 text-base font-semibold"
+                >
+                  Discard Changes
+                </IOSButton>
+                <IOSButton
+                  onClick={handleUpdateGuest}
+                  disabled={isSubmitting}
+                  className="flex-1 h-12 text-base font-semibold"
+                >
+                  {isSubmitting ? 'Saving Changes...' : 'Save Profile Changes'}
+                </IOSButton>
               </div>
             </div>
           </DialogContent>

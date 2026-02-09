@@ -10,10 +10,11 @@ import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
 import { bookingsAPI } from '@/lib/api';
-import { Calendar, RefreshCw, Search, User, Bed, Clock, Plus, CheckSquare, LogOut, Building2 } from 'lucide-react';
+import { Calendar, RefreshCw, Search, User, Bed, Clock, Plus, CheckSquare, LogOut, Building2, FileText, Phone, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface Booking { id: string; guest_name: string; room_number: string; check_in: string; check_out: string; status: string; total: number; nights: number; }
 
@@ -215,109 +216,132 @@ export default function BranchReservationsPage() {
         </div>
 
         {/* Details Modal */}
-        {showDetailsModal && selectedBooking && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowDetailsModal(false)}>
-            <div className="bg-white rounded-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">Booking Details</h2>
-                <button onClick={() => setShowDetailsModal(false)} className="text-gray-400 hover:text-gray-600">
-                  ✕
-                </button>
-              </div>
+        <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
+          <DialogContent className="max-w-4xl overflow-y-auto max-h-[90vh]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl font-sf-pro-display">
+                <FileText className="h-5 w-5 text-blue-600" />
+                Booking Details
+              </DialogTitle>
+            </DialogHeader>
 
-              <div className="space-y-4">
-                <div className="flex items-center justify-between pb-4 border-b">
-                  <div>
-                    <p className="text-sm text-gray-500">Booking ID</p>
-                    <p className="font-semibold">{selectedBooking.id}</p>
-                  </div>
-                  <IOSBadge className={`${statusConfig[selectedBooking.status]?.bg || 'bg-gray-100'} ${statusConfig[selectedBooking.status]?.color || 'text-gray-700'}`}>
-                    {statusConfig[selectedBooking.status]?.label || selectedBooking.status}
-                  </IOSBadge>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-500">Guest Name</p>
-                  <p className="font-semibold text-lg">{selectedBooking.guest_name}</p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Room Number</p>
-                    <p className="font-semibold">{selectedBooking.room_number}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Nights</p>
-                    <p className="font-semibold">{selectedBooking.nights}</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Check-In</p>
-                    <p className="font-semibold">{new Date(selectedBooking.check_in).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Check-Out</p>
-                    <p className="font-semibold">{new Date(selectedBooking.check_out).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}</p>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t">
-                  {(user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER) && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">Total Amount</span>
-                      <span className="text-2xl font-bold text-green-600">KES {(selectedBooking.total || 0).toLocaleString()}</span>
+            {selectedBooking && (
+              <div className="space-y-6 py-4">
+                {/* Header Summary Card */}
+                <div className="bg-stone-50 rounded-2xl p-6 border border-stone-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
+                      <User className="h-8 w-8 text-blue-600" />
                     </div>
-                  )}
+                    <div>
+                      <h3 className="text-xl font-bold text-stone-900">{selectedBooking.guest_name}</h3>
+                      <p className="text-stone-500 font-medium">Room {selectedBooking.room_number} • {selectedBooking.nights} nights</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Status</p>
+                    <IOSBadge className={`${statusConfig[selectedBooking.status]?.bg || 'bg-gray-100'} ${statusConfig[selectedBooking.status]?.color || 'text-gray-700'}`}>
+                      {statusConfig[selectedBooking.status]?.label || selectedBooking.status}
+                    </IOSBadge>
+                  </div>
                 </div>
 
-                <div className="flex gap-2 pt-4">
-                  <IOSButton variant="secondary" className="flex-1" onClick={() => setShowDetailsModal(false)}>
-                    Close
+                <div className="grid md:grid-cols-2 gap-8">
+                  {/* Left Column: Stay Info */}
+                  <div className="space-y-6">
+                    <div className="space-y-4">
+                      <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Stay Period</h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-4 bg-white border border-stone-100 rounded-xl shadow-sm">
+                          <p className="text-[10px] text-stone-400 uppercase font-bold mb-1">Check-In</p>
+                          <p className="text-sm font-semibold text-stone-900">{new Date(selectedBooking.check_in).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                        </div>
+                        <div className="p-4 bg-white border border-stone-100 rounded-xl shadow-sm">
+                          <p className="text-[10px] text-stone-400 uppercase font-bold mb-1">Check-Out</p>
+                          <p className="text-sm font-semibold text-stone-900">{new Date(selectedBooking.check_out).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Contact Details</h4>
+                      <div className="space-y-3 px-1">
+                        <div className="flex items-center gap-3 text-stone-600">
+                          <Phone className="h-4 w-4" />
+                          <span className="text-sm">+254 700 000 000</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-stone-600">
+                          <Mail className="h-4 w-4" />
+                          <span className="text-sm">guest@example.com</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Financials & Details */}
+                  <div className="space-y-6">
+                    {(user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER) && (
+                      <div className="space-y-4">
+                        <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Financial Summary</h4>
+                        <div className="p-5 bg-stone-900 rounded-2xl text-white shadow-lg">
+                          <div className="flex justify-between items-center mb-4">
+                            <span className="text-stone-400 text-xs font-medium">Total Booking Value</span>
+                            <IOSBadge variant="light" color="success">Paid</IOSBadge>
+                          </div>
+                          <p className="text-3xl font-bold tracking-tight">KES {(selectedBooking.total || 0).toLocaleString()}</p>
+                          <p className="text-[10px] text-stone-400 mt-2 font-medium tracking-wide">INC. ALL APPLICABLE TAXES</p>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-4">
+                      <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Internal Reference</h4>
+                      <div className="p-4 bg-stone-50 rounded-xl border border-stone-100 font-mono text-[10px] text-stone-500 break-all">
+                        {selectedBooking.id}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-8 border-t border-stone-100">
+                  <IOSButton
+                    variant="secondary"
+                    className="flex-1 h-12 text-base font-semibold"
+                    onClick={() => setShowDetailsModal(false)}
+                  >
+                    Close Overview
                   </IOSButton>
 
                   {selectedBooking.status === 'confirmed' && (
-                    <>
-                      <IOSButton
-                        className="flex-1"
-                        onClick={() => {
-                          handleCheckIn(selectedBooking.id);
-                          setShowDetailsModal(false);
-                        }}
-                        leftIcon={<CheckSquare />}
-                      >
-                        Check In
-                      </IOSButton>
-                      <IOSButton
-                        variant="destructive"
-                        onClick={() => {
-                          handleCancelBooking(selectedBooking.id);
-                          setShowDetailsModal(false);
-                        }}
-                      >
-                        Cancel
-                      </IOSButton>
-                    </>
+                    <IOSButton
+                      className="flex-1 h-12 text-base font-semibold"
+                      onClick={() => {
+                        handleCheckIn(selectedBooking.id);
+                        setShowDetailsModal(false);
+                      }}
+                      leftIcon={<CheckSquare className="h-5 w-5" />}
+                    >
+                      Process Check-In
+                    </IOSButton>
                   )}
 
                   {selectedBooking.status === 'checked_in' && (
                     <IOSButton
-                      className="flex-1"
+                      className="flex-1 h-12 text-base font-semibold"
                       onClick={() => {
                         handleCheckOut(selectedBooking.id);
                         setShowDetailsModal(false);
                       }}
-                      leftIcon={<LogOut />}
+                      leftIcon={<LogOut className="h-5 w-5" />}
                     >
-                      Check Out
+                      Process Check-Out
                     </IOSButton>
                   )}
                 </div>
               </div>
-            </div>
-          </div>
-        )}
+            )}
+          </DialogContent>
+        </Dialog>
       </DashboardLayout>
     </ProtectedRoute>
   );

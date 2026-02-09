@@ -13,15 +13,17 @@ import { UserCheck, RefreshCw, User, Bed, Clock, LogOut, Building2 } from 'lucid
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { FileText, Phone, Mail, Calendar } from 'lucide-react';
 
-interface Departure { 
-  id: string; 
-  guest_name: string; 
+interface Departure {
+  id: string;
+  guest_name: string;
   guest_id?: string;
-  room_number: string; 
+  room_number: string;
   room_type?: string;
   check_in: string;
-  check_out: string; 
+  check_out: string;
   status: string;
   nights?: number;
   total?: number;
@@ -45,8 +47,8 @@ export default function BranchDeparturesPage() {
     setIsLoading(true);
     try {
       const today = new Date().toISOString().split('T')[0];
-      const response = await bookingsAPI.getBookings({ 
-        checkOut: today, 
+      const response = await bookingsAPI.getBookings({
+        checkOut: today,
         branch_id: currentBranchId,
         status: 'checked_in' // Only show checked-in guests
       });
@@ -55,7 +57,7 @@ export default function BranchDeparturesPage() {
       } else {
         setDepartures([]);
       }
-    } catch (error) { 
+    } catch (error) {
       console.error('Error fetching departures:', error);
       toast.error('Failed to load departures');
       setDepartures([]);
@@ -74,8 +76,8 @@ export default function BranchDeparturesPage() {
       } else {
         toast.error(response.message || 'Failed to check out');
       }
-    } catch (error: any) { 
-      toast.error(error.message || 'Failed to check out guest'); 
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check out guest');
     }
   };
 
@@ -163,93 +165,97 @@ export default function BranchDeparturesPage() {
         </div>
 
         {/* Details Modal */}
-        {showDetailsModal && selectedDeparture && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowDetailsModal(false)}>
-            <div className="bg-white rounded-xl max-w-lg w-full p-6" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">Departure Details</h2>
-                <button onClick={() => setShowDetailsModal(false)} className="text-gray-400 hover:text-gray-600">
-                  ✕
-                </button>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm text-gray-500">Guest Name</label>
-                  <p className="font-semibold">{selectedDeparture.guest_name}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm text-gray-500">Room</label>
-                    <p className="font-semibold">{selectedDeparture.room_number}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm text-gray-500">Room Type</label>
-                    <p className="font-semibold">{selectedDeparture.room_type || 'N/A'}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm text-gray-500">Check-in</label>
-                    <p className="font-semibold">{new Date(selectedDeparture.check_in).toLocaleDateString()}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm text-gray-500">Check-out</label>
-                    <p className="font-semibold">{new Date(selectedDeparture.check_out).toLocaleDateString()}</p>
-                  </div>
-                </div>
-                {selectedDeparture.nights && (
-                  <div>
-                    <label className="text-sm text-gray-500">Total Nights</label>
-                    <p className="font-semibold">{selectedDeparture.nights}</p>
-                  </div>
-                )}
-                {selectedDeparture.phone && (
-                  <div>
-                    <label className="text-sm text-gray-500">Phone</label>
-                    <p className="font-semibold">{selectedDeparture.phone}</p>
-                  </div>
-                )}
-                {selectedDeparture.email && (
-                  <div>
-                    <label className="text-sm text-gray-500">Email</label>
-                    <p className="font-semibold">{selectedDeparture.email}</p>
-                  </div>
-                )}
-                {selectedDeparture.total && (
-                  <div className="pt-4 border-t">
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-500">Total Amount</span>
-                        <span className="font-semibold">KES {selectedDeparture.total.toLocaleString()}</span>
-                      </div>
-                      {selectedDeparture.balance !== undefined && (
-                        <div className="flex justify-between">
-                          <span className="text-sm text-gray-500">Balance Due</span>
-                          <span className={`font-bold ${selectedDeparture.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            KES {selectedDeparture.balance.toLocaleString()}
-                          </span>
-                        </div>
-                      )}
+        <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
+          <DialogContent className="max-w-3xl overflow-y-auto max-h-[90vh]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl font-sf-pro-display">
+                <FileText className="h-5 w-5 text-blue-600" />
+                Departure Details
+              </DialogTitle>
+            </DialogHeader>
+
+            {selectedDeparture && (
+              <div className="space-y-6 py-4">
+                {/* Guest Summary Card */}
+                <div className="bg-stone-50 rounded-xl p-5 border border-stone-100">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
+                      <User className="h-8 w-8 text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-stone-900">{selectedDeparture.guest_name}</h3>
+                      <p className="text-stone-500 font-medium">Room {selectedDeparture.room_number} • {selectedDeparture.room_type || 'Standard'}</p>
                     </div>
                   </div>
-                )}
-                <div className="flex gap-2 pt-4">
-                  <IOSButton variant="secondary" className="flex-1" onClick={() => setShowDetailsModal(false)}>
-                    Close
-                  </IOSButton>
+                </div>
+
+                {/* Info Grid */}
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold text-stone-400 uppercase tracking-wider">Contact Details</h4>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 text-stone-600">
+                        <Phone className="h-4 w-4" />
+                        <span>{selectedDeparture.phone || '+254 700 000 000'}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-stone-600">
+                        <Mail className="h-4 w-4" />
+                        <span>{selectedDeparture.email || 'guest@example.com'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold text-stone-400 uppercase tracking-wider">Stay Period</h4>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 text-stone-600">
+                        <Calendar className="h-4 w-4" />
+                        <span>{new Date(selectedDeparture.check_in).toLocaleDateString()} - {new Date(selectedDeparture.check_out).toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-stone-600">
+                        <Clock className="h-4 w-4" />
+                        <span>Nights stayed: {selectedDeparture.nights || '-'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Financial Overview */}
+                <div className="pt-6 border-t border-stone-100">
+                  <h4 className="text-sm font-semibold text-stone-400 uppercase tracking-wider mb-4">Financial Summary</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-stone-50 rounded-xl border border-stone-100">
+                      <p className="text-xs text-stone-500 mb-1">Total Bill</p>
+                      <p className="text-xl font-bold text-stone-900">KES {(selectedDeparture.total || 0).toLocaleString()}</p>
+                    </div>
+                    <div className={`p-4 rounded-xl border ${selectedDeparture.balance && selectedDeparture.balance > 0 ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'}`}>
+                      <p className="text-xs text-stone-500 mb-1">Outstanding Balance</p>
+                      <p className={`text-xl font-bold ${selectedDeparture.balance && selectedDeparture.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        KES {(selectedDeparture.balance || 0).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-6">
+                  <IOSButton className="flex-1" onClick={() => setShowDetailsModal(false)}>Close Overview</IOSButton>
                   {selectedDeparture.status !== 'checked_out' && (
-                    <IOSButton className="flex-1" onClick={() => {
-                      handleCheckOut(selectedDeparture.id);
-                      setShowDetailsModal(false);
-                    }} leftIcon={<LogOut />}>
-                      Check Out
+                    <IOSButton
+                      className="flex-1"
+                      onClick={() => {
+                        handleCheckOut(selectedDeparture.id);
+                        setShowDetailsModal(false);
+                      }}
+                      leftIcon={<LogOut />}
+                    >
+                      Check Out Guest
                     </IOSButton>
                   )}
                 </div>
               </div>
-            </div>
-          </div>
-        )}
+            )}
+          </DialogContent>
+        </Dialog>
       </DashboardLayout>
     </ProtectedRoute>
   );

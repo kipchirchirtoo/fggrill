@@ -3,7 +3,8 @@
 import React, { useState, useCallback } from 'react';
 import { Bed, Building2, DollarSign, Camera, Upload, Check } from 'lucide-react';
 import { toast } from 'sonner';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogHeader } from '@/components/ui/dialog';
+import { IOSButton } from '@/components/ui/ios-button';
 import { Input } from '@/components/ui/input';
 import { roomsAPI } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
@@ -343,8 +344,8 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
                     type="button"
                     onClick={() => setFormData({ ...formData, room_type_id: type.id })}
                     className={`p-4 rounded-lg border-2 text-left transition-all ${formData.room_type_id === type.id
-                        ? 'border-blue-600 bg-blue-50'
-                        : 'border-slate-200 hover:border-slate-300'
+                      ? 'border-blue-600 bg-blue-50'
+                      : 'border-slate-200 hover:border-slate-300'
                       }`}
                   >
                     <div className="font-semibold text-slate-800">{type.name}</div>
@@ -428,8 +429,8 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
                     type="button"
                     onClick={() => toggleAmenity(amenity)}
                     className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${formData.amenities.includes(amenity)
-                        ? 'border-blue-600 bg-blue-600 text-white'
-                        : 'border-slate-200 text-slate-700 hover:border-slate-300'
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-slate-200 text-slate-700 hover:border-slate-300'
                       }`}
                   >
                     {amenity}
@@ -514,93 +515,96 @@ export function AddRoomWizard({ isOpen, onClose, onRoomAdded, branchId, editRoom
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[95vh] overflow-hidden p-8">
-        <DialogTitle className="text-3xl font-bold text-slate-800 mb-8">
-          {mode === 'edit' ? `Edit Room ${editRoom?.room_number}` : 'Add New Room'}
-        </DialogTitle>
+      <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto p-0 border-none bg-stone-50/50 backdrop-blur-xl">
+        <div className="flex flex-col h-full bg-white/90 shadow-2xl overflow-hidden rounded-2xl">
+          <DialogHeader className="p-8 pb-4 bg-stone-50 border-b border-stone-100">
+            <DialogTitle className="text-3xl font-sf-pro-display font-bold tracking-tight text-stone-900">
+              {mode === 'edit' ? `Refine Room ${editRoom?.room_number}` : 'Onboard New Room'}
+            </DialogTitle>
+            <p className="text-stone-500 text-sm mt-1">Complete the steps below to {mode === 'edit' ? 'update' : 'register'} a room in the system.</p>
+          </DialogHeader>
 
-        <div className="relative">
-          {/* Progress Line */}
-          <div className="absolute top-5 left-0 right-0 h-0.5 bg-slate-200">
-            <div
-              className="h-full bg-blue-600 transition-all duration-500"
-              style={{ width: `${((currentStep - 1) / (WIZARD_STEPS.length - 1)) * 100}%` }}
-            />
-          </div>
-
-          {/* Steps */}
-          <div className="relative flex justify-between mb-12">
-            {WIZARD_STEPS.map((step) => (
-              <div key={step.id} className="flex flex-col items-center">
-                <button
-                  onClick={() => setCurrentStep(step.id)}
-                  className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-all duration-300 ${currentStep > step.id
-                      ? 'bg-blue-600 text-white'
-                      : currentStep === step.id
-                        ? 'bg-blue-600 text-white ring-4 ring-blue-100'
-                        : 'bg-white text-slate-400 border-2 border-slate-200'
-                    }`}
-                >
-                  {currentStep > step.id ? (
-                    <Check className="w-5 h-5" />
-                  ) : (
-                    step.id
-                  )}
-                </button>
-                <div className="mt-3 text-center">
-                  <div className={`text-sm font-semibold ${currentStep >= step.id ? 'text-slate-800' : 'text-slate-400'
-                    }`}>
-                    {step.title}
-                  </div>
-                  <div className="text-xs text-slate-500 mt-1">
-                    {step.description}
-                  </div>
+          <div className="flex-1 overflow-y-auto p-8 pt-6">
+            <div className="relative">
+              {/* Progress Stepper */}
+              <div className="relative flex justify-between mb-12 px-4">
+                <div className="absolute top-5 left-8 right-8 h-[2px] bg-stone-100">
+                  <div
+                    className="h-full bg-stone-900 transition-all duration-500 ease-in-out"
+                    style={{ width: `${((currentStep - 1) / (WIZARD_STEPS.length - 1)) * 100}%` }}
+                  />
                 </div>
+
+                {WIZARD_STEPS.map((step) => (
+                  <div key={step.id} className="relative z-10 flex flex-col items-center group">
+                    <button
+                      onClick={() => setCurrentStep(step.id)}
+                      className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-sf-pro-display font-bold transition-all duration-300 ${currentStep > step.id
+                          ? 'bg-stone-900 text-white shadow-lg'
+                          : currentStep === step.id
+                            ? 'bg-stone-900 text-white ring-4 ring-stone-100 shadow-lg'
+                            : 'bg-white text-stone-400 border-2 border-stone-200'
+                        }`}
+                    >
+                      {currentStep > step.id ? (
+                        <Check className="w-5 h-5" />
+                      ) : (
+                        step.id
+                      )}
+                    </button>
+                    <div className="mt-4 text-center">
+                      <div className={`text-[11px] font-bold uppercase tracking-widest ${currentStep >= step.id ? 'text-stone-900' : 'text-stone-400'}`}>
+                        {step.title}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+
+              {/* Step Content with Animation Placeholder (Simplified) */}
+              <div className="bg-white rounded-2xl p-2 min-h-[400px]">
+                {renderStep()}
+              </div>
+            </div>
           </div>
 
-          {/* Step Content */}
-          <div className="mb-6 min-h-[400px]">
-            {renderStep()}
-          </div>
-
-          {/* Navigation Buttons */}
-          <div className="flex justify-between">
-            <button
+          {/* Action Footer */}
+          <div className="p-8 bg-stone-50 border-t border-stone-100 flex justify-between items-center">
+            <IOSButton
+              variant="secondary"
               onClick={prevStep}
               disabled={currentStep === 1}
-              className={`px-6 py-2.5 rounded-lg font-medium transition-all ${currentStep === 1
-                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                }`}
+              className="h-12 px-8 rounded-xl font-sf-pro-text font-semibold border-stone-200"
             >
-              Previous
-            </button>
-            <div className="flex gap-3">
-              <button
+              Back
+            </IOSButton>
+
+            <div className="flex gap-4">
+              <IOSButton
+                variant="ghost"
                 onClick={onClose}
                 disabled={isSubmitting || uploadingImages}
-                className="px-6 py-2.5 rounded-lg font-medium transition-all bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-50"
+                className="h-12 px-6 rounded-xl font-bold text-stone-500 hover:text-stone-900"
               >
-                Cancel
-              </button>
+                Discard
+              </IOSButton>
+
               {currentStep === WIZARD_STEPS.length ? (
-                <button
+                <IOSButton
                   onClick={handleSubmit}
                   disabled={isSubmitting || uploadingImages || !canProceed()}
-                  className="px-6 py-2.5 rounded-lg font-medium transition-all bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                  className="h-12 px-10 rounded-xl font-sf-pro-display font-bold shadow-xl shadow-stone-900/10"
                 >
-                  {isSubmitting ? 'Creating Room...' : uploadingImages ? 'Uploading Images...' : 'Complete'}
-                </button>
+                  {isSubmitting ? 'Syncing...' : uploadingImages ? 'Uploading Assets...' : 'Complete Registration'}
+                </IOSButton>
               ) : (
-                <button
+                <IOSButton
                   onClick={nextStep}
                   disabled={!canProceed()}
-                  className="px-6 py-2.5 rounded-lg font-medium transition-all bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                  className="h-12 px-10 rounded-xl font-sf-pro-display font-bold shadow-xl shadow-stone-900/10"
                 >
-                  Next
-                </button>
+                  Next Step
+                </IOSButton>
               )}
             </div>
           </div>

@@ -14,6 +14,9 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { IOSButton } from '@/components/ui/ios-button';
+import { FileText, Phone, Mail, Clock, User } from 'lucide-react';
 
 interface AttendanceRecord {
   id: string;
@@ -317,77 +320,79 @@ export default function BranchAttendancePage() {
           </Card>
 
           {/* Details Modal */}
-          {selectedRecord && (
-            <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
-                <div className="px-6 py-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
-                  <h3 className="font-semibold text-stone-900">Attendance Details</h3>
-                  <button
-                    onClick={() => setSelectedRecord(null)}
-                    className="text-stone-400 hover:text-stone-600 transition-colors"
-                  >
-                    <span className="sr-only">Close</span>
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-                <div className="p-6 space-y-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 rounded-full bg-stone-100 flex items-center justify-center text-stone-600 font-bold text-xl">
+          <Dialog open={!!selectedRecord} onOpenChange={(open) => !open && setSelectedRecord(null)}>
+            <DialogContent className="max-w-2xl overflow-y-auto max-h-[90vh]">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-xl font-sf-pro-display">
+                  <FileText className="h-5 w-5 text-stone-600" />
+                  Attendance Details
+                </DialogTitle>
+              </DialogHeader>
+
+              {selectedRecord && (
+                <div className="space-y-6 py-4">
+                  <div className="flex items-center gap-5 p-4 bg-stone-50 rounded-2xl border border-stone-100">
+                    <div className="w-16 h-16 rounded-full bg-stone-200 flex items-center justify-center text-stone-700 font-bold text-xl shadow-sm">
                       {selectedRecord.staff?.user.first_name?.[0]}{selectedRecord.staff?.user.last_name?.[0]}
                     </div>
                     <div>
-                      <h4 className="text-lg font-semibold text-stone-900">
+                      <h4 className="text-xl font-bold text-stone-900 tracking-tight">
                         {selectedRecord.staff?.user.first_name} {selectedRecord.staff?.user.last_name}
                       </h4>
-                      <p className="text-sm text-stone-500">{selectedRecord.staff?.user.email}</p>
-                      <p className="text-xs font-mono text-stone-400 mt-1">{selectedRecord.staff?.id_number}</p>
+                      <p className="text-sm text-stone-500 font-medium">{selectedRecord.staff?.user.email}</p>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest bg-stone-100 px-2 py-0.5 rounded">ID: {selectedRecord.staff?.id_number}</span>
+                        <IOSBadge color={getStatusColor(selectedRecord.status)} variant="light" size="sm">
+                          {selectedRecord.status.toUpperCase()}
+                        </IOSBadge>
+                      </div>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
-                      <div className="text-xs text-stone-400 uppercase tracking-wider font-semibold mb-1">Clock In</div>
-                      <div className="text-stone-900 font-medium">
+                    <div className="p-4 bg-white border border-stone-200 rounded-xl shadow-sm">
+                      <div className="flex items-center gap-2 text-stone-400 mb-2">
+                        <Clock className="h-3.5 w-3.5" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Clock In</span>
+                      </div>
+                      <div className="text-lg font-semibold text-stone-900 leading-none">
                         {selectedRecord.clock_in ? format(new Date(selectedRecord.clock_in), 'HH:mm:ss') : '--:--'}
                       </div>
+                      <p className="text-[10px] text-stone-400 mt-2 font-medium">{selectedDate}</p>
                     </div>
-                    <div className="p-3 bg-stone-50 rounded-lg border border-stone-100">
-                      <div className="text-xs text-stone-400 uppercase tracking-wider font-semibold mb-1">Clock Out</div>
-                      <div className="text-stone-900 font-medium">
+                    <div className="p-4 bg-white border border-stone-200 rounded-xl shadow-sm">
+                      <div className="flex items-center gap-2 text-stone-400 mb-2">
+                        <Clock className="h-3.5 w-3.5" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Clock Out</span>
+                      </div>
+                      <div className="text-lg font-semibold text-stone-900 leading-none">
                         {selectedRecord.clock_out ? format(new Date(selectedRecord.clock_out), 'HH:mm:ss') : 'Active'}
                       </div>
+                      <p className="text-[10px] text-stone-400 mt-2 font-medium">{selectedDate}</p>
                     </div>
-                  </div>
-
-                  <div>
-                    <div className="text-xs text-stone-400 uppercase tracking-wider font-semibold mb-2">Status</div>
-                    <IOSBadge color={getStatusColor(selectedRecord.status)} variant="light" size="lg" className="w-full justify-center">
-                      {selectedRecord.status.toUpperCase()}
-                    </IOSBadge>
                   </div>
 
                   {selectedRecord.notes && (
-                    <div>
-                      <div className="text-xs text-stone-400 uppercase tracking-wider font-semibold mb-2">Notes</div>
-                      <div className="p-3 bg-stone-50 rounded-lg border border-stone-100 text-sm text-stone-600">
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider px-1">Supervisor Notes</label>
+                      <div className="p-4 bg-amber-50/50 border border-amber-100 rounded-xl text-stone-700 text-sm leading-relaxed">
                         {selectedRecord.notes}
                       </div>
                     </div>
                   )}
+
+                  <div className="pt-6 border-t border-stone-100">
+                    <IOSButton
+                      className="w-full h-12 text-base font-semibold"
+                      onClick={() => setSelectedRecord(null)}
+                    >
+                      Close Report
+                    </IOSButton>
+                  </div>
                 </div>
-                <div className="px-6 py-4 bg-stone-50 border-t border-stone-100 flex justify-end">
-                  <button
-                    onClick={() => setSelectedRecord(null)}
-                    className="px-4 py-2 bg-white border border-stone-200 rounded-lg text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
       </DashboardLayout>
     </ProtectedRoute>

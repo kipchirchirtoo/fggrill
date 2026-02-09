@@ -168,7 +168,7 @@ export const getTransactions = async (
       .select(`
         *,
         linen_type:hk_linen_types(name, category),
-        staff:hk_staff_profiles(staff_code, user:users(first_name, last_name)),
+        staff:hk_staff_profiles(staff_code, user:users!user_id(first_name, last_name)),
         created_by_user:users!created_by(first_name, last_name)
       `, { count: 'exact' })
       .order('created_at', { ascending: false })

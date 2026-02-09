@@ -1178,14 +1178,32 @@ export const clockIn = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { staff_id, notes, in_method, device_id } = req.body;
+    let { staff_id, notes, in_method, device_id } = req.body;
     const attendance_date = new Date().toISOString().split('T')[0];
     const clock_in = new Date().toISOString();
 
-    // 1. Fetch Staff Profile to check branch and permissions
+    // 1. If staff_id is missing, try to find it from the logged-in user's profile
+    if (!staff_id && req.user?.id) {
+      const { data: profile, error: profileError } = await supabase
+        .from('staff_profiles')
+        .select('id')
+        .eq('user_id', req.user.id)
+        .single();
+
+      if (!profileError && profile) {
+        staff_id = profile.id;
+      }
+    }
+
+    if (!staff_id) {
+      res.status(400).json({ success: false, message: 'Staff ID is required' });
+      return;
+    }
+
+    // 2. Fetch Staff Profile to check branch and permissions
     const { data: staff, error: staffError } = await supabase
       .from('staff_profiles')
-      .select('id, branch_id, status')
+      .select('id, branch_id, status, user_id')
       .eq('id', staff_id)
       .single();
 
@@ -1199,7 +1217,7 @@ export const clockIn = async (
       return;
     }
 
-    // 2. Branch Validation (Only if logged in)
+    // 3. Branch Validation (Only if logged in)
     if (device_id && device_id.startsWith('FG-') && req.user?.branch_id) {
       if (staff.branch_id !== req.user.branch_id) {
         res.status(403).json({
@@ -1210,7 +1228,7 @@ export const clockIn = async (
       }
     }
 
-    // 3. Check if there's an open shift for this staff member
+    // 4. Check if there's an open shift for this staff member
     const { data: openShift, error: checkError } = await supabase
       .from('staff_attendance')
       .select('id')
@@ -1227,18 +1245,23 @@ export const clockIn = async (
       return;
     }
 
+    // A manager clocking someone else in should be auto-approved
+    const isManagerAction = req.user &&
+      ['super_admin', 'general_manager', 'branch_manager', 'hr_manager'].includes(req.user.role) &&
+      req.user.id !== staff.user_id;
+
     const is_pin_fallback = (in_method === 'pin' || in_method === 'manual');
 
     const attendance = {
       staff_id,
-      branch_id: staff.branch_id, // Ensure branch_id is recorded
+      branch_id: staff.branch_id,
       attendance_date,
       clock_in,
       in_method: in_method || 'pin',
       device_id,
       status: 'present',
       notes,
-      is_approved: !is_pin_fallback, // PIN fallback requires supervisor approval
+      is_approved: isManagerAction || !is_pin_fallback,
       created_at: new Date().toISOString()
     };
 
@@ -1268,8 +1291,26 @@ export const clockOut = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { staff_id, notes, out_method, device_id } = req.body;
+    let { staff_id, notes, out_method, device_id } = req.body;
     const clock_out = new Date().toISOString();
+
+    // 1. If staff_id is missing, try to find it from the logged-in user's profile
+    if (!staff_id && req.user?.id) {
+      const { data: profile, error: profileError } = await supabase
+        .from('staff_profiles')
+        .select('id')
+        .eq('user_id', req.user.id)
+        .single();
+
+      if (!profileError && profile) {
+        staff_id = profile.id;
+      }
+    }
+
+    if (!staff_id) {
+      res.status(400).json({ success: false, message: 'Staff ID is required' });
+      return;
+    }
 
     // Find the latest open shift
     const { data: openShift, error: findError } = await supabase

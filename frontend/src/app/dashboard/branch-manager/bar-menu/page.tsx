@@ -490,8 +490,8 @@ export default function BarMenuManagementPage() {
                     <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                       <button
                         className={`font-normal border-none cursor-pointer text-center py-2 px-4 rounded-[1rem] text-sm transition-colors ${drink.is_available
-                            ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            : 'bg-[#141417] text-white hover:bg-[#2a2a2f]'
+                          ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          : 'bg-[#141417] text-white hover:bg-[#2a2a2f]'
                           }`}
                         onClick={() => handleToggleAvailability(drink)}
                       >
@@ -525,18 +525,22 @@ export default function BarMenuManagementPage() {
 
         {/* Drink Modal */}
         <Dialog open={drinkModalOpen} onOpenChange={setDrinkModalOpen}>
-          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{selectedDrink ? 'Edit Drink' : 'Add New Drink'}</DialogTitle>
+              <DialogTitle className="flex items-center gap-2 text-xl font-sf-pro-display">
+                <Wine className="h-5 w-5 text-stone-600" />
+                {selectedDrink ? 'Refine Drink Selection' : 'Create New Collection Entry'}
+              </DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 mt-4">
-              {/* Image Upload */}
-              <div>
-                <label className="text-sm font-medium mb-2 block">Drink Image</label>
-                <div className="border-2 border-dashed rounded-ios-lg p-4">
+
+            <div className="space-y-8 py-4 px-1">
+              {/* Image Section */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Product Visual</h4>
+                <div className="border border-stone-200 rounded-3xl p-6 bg-stone-50/50">
                   {imagePreview ? (
-                    <div className="relative">
-                      <div className="relative h-40 w-full rounded-ios-lg overflow-hidden">
+                    <div className="relative group">
+                      <div className="relative h-64 w-full rounded-2xl overflow-hidden shadow-inner bg-white">
                         <Image
                           src={imagePreview}
                           alt="Preview"
@@ -547,19 +551,21 @@ export default function BarMenuManagementPage() {
                       <button
                         type="button"
                         onClick={clearImage}
-                        className="absolute top-2 right-2 p-1 bg-[#FF3B30] text-white rounded-full hover:bg-[#FF3B30]"
+                        className="absolute top-4 right-4 p-2 bg-white/90 backdrop-blur-md text-red-600 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
                       >
-                        <X className="h-4 w-4" />
+                        <X className="h-5 w-5" />
                       </button>
                     </div>
                   ) : (
                     <div
-                      className="flex flex-col items-center justify-center py-6 cursor-pointer hover:bg-gray-50 rounded-ios-lg"
+                      className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-stone-300 rounded-2xl cursor-pointer hover:bg-white hover:border-stone-400 transition-all"
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      <Camera className="h-10 w-10 text-gray-400 mb-2" />
-                      <p className="text-sm text-gray-500">Click to upload image</p>
-                      <p className="text-xs text-gray-400">PNG, JPG up to 5MB</p>
+                      <div className="w-16 h-16 rounded-full bg-stone-200/50 flex items-center justify-center mb-4">
+                        <Camera className="h-8 w-8 text-stone-400" />
+                      </div>
+                      <p className="text-sm font-semibold text-stone-600">Capture Product Image</p>
+                      <p className="text-xs text-stone-400 mt-1">Recommended: Square Aspect Ratio (Max 5MB)</p>
                     </div>
                   )}
                   <input
@@ -572,86 +578,90 @@ export default function BarMenuManagementPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="text-sm font-medium">Name *</label>
-                <Input
-                  value={drinkFormData.name}
-                  onChange={(e) => setDrinkFormData({ ...drinkFormData, name: e.target.value })}
-                  placeholder="e.g., Tusker Lager"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Price (KES) *</label>
+              {/* Basic Info Section */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Product Identities</h4>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Drink Designation *</label>
                   <Input
-                    type="number"
-                    value={drinkFormData.price}
-                    onChange={(e) => setDrinkFormData({ ...drinkFormData, price: parseFloat(e.target.value) || 0 })}
-                    placeholder="300"
+                    value={drinkFormData.name}
+                    onChange={(e) => setDrinkFormData({ ...drinkFormData, name: e.target.value })}
+                    placeholder="e.g. Johnnie Walker Black Label"
+                    className="h-11 rounded-xl"
                   />
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Cost Price (KES)</label>
-                  <Input
-                    type="number"
-                    value={drinkFormData.cost_price}
-                    onChange={(e) => setDrinkFormData({ ...drinkFormData, cost_price: parseFloat(e.target.value) || 0 })}
-                    placeholder="150"
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Selling Price (KES) *</label>
+                    <Input
+                      type="number"
+                      value={drinkFormData.price}
+                      onChange={(e) => setDrinkFormData({ ...drinkFormData, price: parseFloat(e.target.value) || 0 })}
+                      className="h-11 rounded-xl font-sf-pro-display text-lg"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Acquisition Cost (KES)</label>
+                    <Input
+                      type="number"
+                      value={drinkFormData.cost_price}
+                      onChange={(e) => setDrinkFormData({ ...drinkFormData, cost_price: parseFloat(e.target.value) || 0 })}
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Inventory Category *</label>
+                    <select
+                      value={drinkFormData.category_id}
+                      onChange={(e) => setDrinkFormData({ ...drinkFormData, category_id: e.target.value })}
+                      className="w-full h-11 border border-stone-200 rounded-xl px-4 text-sm bg-white focus:ring-2 focus:ring-stone-900 outline-none"
+                    >
+                      <option value="">Choose a collection...</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Unit of Measure</label>
+                    <select
+                      value={drinkFormData.unit}
+                      onChange={(e) => setDrinkFormData({ ...drinkFormData, unit: e.target.value })}
+                      className="w-full h-11 border border-stone-200 rounded-xl px-4 text-sm bg-white focus:ring-2 focus:ring-stone-900 outline-none"
+                    >
+                      <option value="glass">Glass</option>
+                      <option value="bottle">Bottle</option>
+                      <option value="shot">Shot</option>
+                      <option value="can">Can</option>
+                      <option value="500ml">500ml</option>
+                      <option value="300ml">300ml</option>
+                      <option value="750ml">750ml</option>
+                      <option value="tot">Tot</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Serving Notes</label>
+                  <textarea
+                    value={drinkFormData.description}
+                    onChange={(e) => setDrinkFormData({ ...drinkFormData, description: e.target.value })}
+                    className="w-full border border-stone-200 rounded-xl px-4 py-3 min-h-[100px] text-sm bg-white focus:ring-2 focus:ring-stone-900 outline-none"
+                    placeholder="Optional details about the drink..."
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Category *</label>
-                  <select
-                    value={drinkFormData.category_id}
-                    onChange={(e) => setDrinkFormData({ ...drinkFormData, category_id: e.target.value })}
-                    className="w-full p-2 border rounded-ios-lg text-sm"
-                  >
-                    <option value="">Select category</option>
-                    {categories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>{cat.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Unit</label>
-                  <select
-                    value={drinkFormData.unit}
-                    onChange={(e) => setDrinkFormData({ ...drinkFormData, unit: e.target.value })}
-                    className="w-full p-2 border rounded-ios-lg text-sm"
-                  >
-                    <option value="glass">Glass</option>
-                    <option value="bottle">Bottle</option>
-                    <option value="shot">Shot</option>
-                    <option value="can">Can</option>
-                    <option value="500ml">500ml</option>
-                    <option value="300ml">300ml</option>
-                    <option value="750ml">750ml</option>
-                    <option value="tot">Tot</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Description</label>
-                <textarea
-                  value={drinkFormData.description}
-                  onChange={(e) => setDrinkFormData({ ...drinkFormData, description: e.target.value })}
-                  className="w-full p-2 border rounded-ios-lg text-sm"
-                  rows={2}
-                  placeholder="Optional description"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <IOSButton variant="secondary" onClick={() => setDrinkModalOpen(false)} className="flex-1">
+              <div className="flex gap-4 pt-6 border-t border-stone-100">
+                <IOSButton variant="secondary" onClick={() => setDrinkModalOpen(false)} className="flex-1 h-12 text-base font-semibold">
                   Cancel
                 </IOSButton>
-                <IOSButton onClick={handleSaveDrink} disabled={isSubmitting || isUploadingImage} className="flex-1">
-                  {isUploadingImage ? 'Uploading...' : isSubmitting ? 'Saving...' : selectedDrink ? 'Update' : 'Create'}
+                <IOSButton onClick={handleSaveDrink} disabled={isSubmitting || isUploadingImage} className="flex-1 h-12 text-base font-semibold">
+                  {isUploadingImage ? 'Uploading Image...' : isSubmitting ? 'Processing...' : selectedDrink ? 'Save Variations' : 'Add to Collection'}
                 </IOSButton>
               </div>
             </div>
@@ -660,44 +670,50 @@ export default function BarMenuManagementPage() {
 
         {/* Category Modal */}
         <Dialog open={categoryModalOpen} onOpenChange={setCategoryModalOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-xl">
             <DialogHeader>
-              <DialogTitle>{selectedCategory ? 'Edit Category' : 'Add New Category'}</DialogTitle>
+              <DialogTitle className="flex items-center gap-2 text-xl font-sf-pro-display">
+                <Tag className="h-5 w-5 text-stone-600" />
+                {selectedCategory ? 'Edit Bar Category' : 'Create Bar Collection'}
+              </DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 mt-4">
-              <div>
-                <label className="text-sm font-medium">Name *</label>
+
+            <div className="space-y-6 py-4 px-1">
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Collection Title *</label>
                 <Input
                   value={categoryFormData.name}
                   onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
-                  placeholder="e.g., Beers, Whisky, Cocktails"
+                  placeholder="e.g. Rare Malts"
+                  className="h-11 rounded-xl"
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium">Sort Order</label>
-                <Input
-                  type="number"
-                  value={categoryFormData.sort_order}
-                  onChange={(e) => setCategoryFormData({ ...categoryFormData, sort_order: parseInt(e.target.value) || 1 })}
-                  placeholder="1"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Menu Order</label>
+                  <Input
+                    type="number"
+                    value={categoryFormData.sort_order}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, sort_order: parseInt(e.target.value) || 1 })}
+                    className="h-11 rounded-xl"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-sm font-medium">Description</label>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Collection Summary</label>
                 <textarea
                   value={categoryFormData.description}
                   onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
-                  className="w-full p-2 border rounded-ios-lg text-sm"
-                  rows={2}
-                  placeholder="Optional description"
+                  className="w-full border border-stone-200 rounded-xl px-4 py-3 min-h-[100px] text-sm bg-white focus:ring-2 focus:ring-stone-900 outline-none"
+                  placeholder="Strategic description for the bar team..."
                 />
               </div>
-              <div className="flex gap-3 pt-2">
-                <IOSButton variant="secondary" onClick={() => setCategoryModalOpen(false)} className="flex-1">
-                  Cancel
+              <div className="flex gap-4 pt-4 border-t border-stone-100">
+                <IOSButton variant="secondary" onClick={() => setCategoryModalOpen(false)} className="flex-1 h-12 text-base font-semibold">
+                  Discard
                 </IOSButton>
-                <IOSButton onClick={handleSaveCategory} disabled={isSubmitting} className="flex-1">
-                  {isSubmitting ? 'Saving...' : selectedCategory ? 'Update' : 'Create'}
+                <IOSButton onClick={handleSaveCategory} disabled={isSubmitting} className="flex-1 h-12 text-base font-semibold">
+                  {isSubmitting ? 'Saving...' : selectedCategory ? 'Apply Changes' : 'Initialize Collection'}
                 </IOSButton>
               </div>
             </div>
