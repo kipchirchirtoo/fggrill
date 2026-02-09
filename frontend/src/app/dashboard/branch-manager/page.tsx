@@ -9,7 +9,7 @@ import { financeAPI, bookingsAPI, staffAPI, housekeepingAPI, notificationsAPI } 
 import {
   DollarSign, Users, Bed, TrendingUp, RefreshCw, Calendar,
   UserCheck, Utensils, Wrench, Package, ClipboardList, ArrowUpRight, ArrowDownRight,
-  Soup, ChevronRight, Clock, Building2, Plus, AlertTriangle, CheckCircle, Eye, Info
+  Soup, ChevronRight, Clock, Building2, Plus, AlertTriangle, CheckCircle, Eye, Info, Camera
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
