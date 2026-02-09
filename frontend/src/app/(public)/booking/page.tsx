@@ -96,12 +96,9 @@ function BookingContent() {
 
   const calculateTotal = () => {
     if (!roomDetails) return 0;
-    // Use basePrice for calculation to match the breakdown
-    // Total = Base + Tax (16%) + Service (10%)
-    const subtotal = roomDetails.basePrice * calculateNights();
-    const tax = subtotal * 0.16;
-    const serviceCharge = subtotal * 0.10;
-    return subtotal + tax + serviceCharge;
+    // The basePrice from DB is the INCLUSIVE price.
+    // So Total = BasePrice * Nights.
+    return roomDetails.basePrice * calculateNights();
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -548,19 +545,22 @@ function BookingContent() {
                         Room Rate ({nights} night{nights !== 1 ? 's' : ''})
                       </span>
                       <span className="font-medium text-stone-900">
-                        KES {formatNumber((roomDetails?.basePrice || 0) * nights)}
+                        {/* Back-calculate Base Rate: Total / 1.26 */}
+                        KES {formatNumber(total / 1.26)}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-stone-600">VAT (16%)</span>
                       <span className="font-medium text-stone-900">
-                        KES {formatNumber(Math.round((roomDetails?.basePrice || 0) * nights * 0.16))}
+                        {/* Back-calculate VAT: (Total / 1.26) * 0.16 */}
+                        KES {formatNumber((total / 1.26) * 0.16)}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-stone-600">Service Charge (10%)</span>
                       <span className="font-medium text-stone-900">
-                        KES {formatNumber(Math.round((roomDetails?.basePrice || 0) * nights * 0.10))}
+                        {/* Back-calculate Service: (Total / 1.26) * 0.10 */}
+                        KES {formatNumber((total / 1.26) * 0.10)}
                       </span>
                     </div>
                   </div >
