@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
-import { AppError } from '../middleware/error.middleware';
+import { AppError } from '../middleware/errorHandler';
 
 // ==========================================
 // SHIFT LOGBOOK
