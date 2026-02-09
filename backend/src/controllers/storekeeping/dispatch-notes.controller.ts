@@ -100,7 +100,7 @@ export const getDispatchNotes = async (
             return {
                 ...dispatch,
                 from_branch: branches?.find(b => b.id === dispatch.from_branch_id),
-                to_branch,
+                to_branch: toBranch,
                 to_branch_name: toBranch?.name || 'Unknown Branch',
                 items: items?.filter(i => i.dispatch_id === dispatch.id).map(i => {
                     const details = itemDetails?.find(d => d.sku === i.item_sku);

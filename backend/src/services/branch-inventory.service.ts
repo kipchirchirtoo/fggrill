@@ -945,7 +945,7 @@ export async function getDispatchHistory(fromBranchId: number, status?: string) 
 
     return {
       ...dispatch,
-      to_branch,
+      to_branch: toBranch,
       to_branch_name: toBranch?.name || 'Unknown Branch',
       vehicle,
       vehicle_registration: vehicle?.registration_number || dispatch.vehicle_number, // Use manual entry as fallback
