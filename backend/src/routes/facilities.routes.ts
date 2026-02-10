@@ -54,7 +54,9 @@ router.get('/staff/list', authorize(ALL_FACILITIES_ROLES), async (req: Request, 
     const department = req.query.department as string;
 
     let query = `
-      SELECT sp.id, sp.department, sp.role, sp.status, (u.first_name || ' ' || u.last_name) as name, u.email
+      SELECT sp.id, sp.department, sp.role, sp.status, 
+             COALESCE(sp.first_name || ' ' || sp.last_name, u.first_name || ' ' || u.last_name) as name, 
+             COALESCE(sp.email, u.email) as email
       FROM staff_profiles sp
       LEFT JOIN users u ON sp.user_id = u.id
       WHERE sp.status = 'active'
@@ -442,7 +444,10 @@ router.get('/staff', authorize(SUPERVISOR_ROLES), async (req: Request, res: Resp
   try {
     const branchId = req.query.branch_id || req.headers['x-branch-id'];
     const result = await pool.query(`
-      SELECT sp.*, (u.first_name || ' ' || u.last_name) as name, u.email FROM staff_profiles sp
+      SELECT sp.*, 
+             COALESCE(sp.first_name || ' ' || sp.last_name, u.first_name || ' ' || u.last_name) as name, 
+             COALESCE(sp.email, u.email) as email 
+      FROM staff_profiles sp
       LEFT JOIN users u ON sp.user_id = u.id
       WHERE sp.department IN('housekeeping', 'maintenance') AND sp.status = 'active'
   `);
@@ -455,27 +460,34 @@ router.get('/staff', authorize(SUPERVISOR_ROLES), async (req: Request, res: Resp
 
 router.post('/staff', authorize(SUPERVISOR_ROLES), async (req: Request, res: Response) => {
   try {
-    const { name, email, phone, department, position, role, shift, salary, start_date, id_number, branch_id } = req.body;
+    const { name, first_name, last_name, national_id, id_number, email, phone, department, position, role, shift, salary, start_date, branch_id } = req.body;
 
-    // Split name into first and last name
-    const nameParts = name.trim().split(/\s+/);
-    const firstName = nameParts[0] || '';
-    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Staff';
+    // Determine names
+    let finalFirstName = first_name;
+    let finalLastName = last_name;
 
-    // First create user
-    const userResult = await pool.query(`
-      INSERT INTO users(id, first_name, last_name, email, role) 
-      VALUES($1, $2, $3, $4, $5) 
-      RETURNING id
-  `, [require('crypto').randomUUID(), firstName, lastName, email, (role || 'HOUSEKEEPING').toLowerCase()]);
-    const newUserId = userResult.rows[0].id;
+    if (!finalFirstName && name) {
+      const nameParts = name.trim().split(/\s+/);
+      finalFirstName = nameParts[0] || '';
+      finalLastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Staff';
+    }
 
-    // Then create staff profile
+    // Create staff profile directly (DECOUPLED from user account)
     const result = await pool.query(`
-      INSERT INTO staff_profiles(user_id, role, department, shift, salary, start_date, id_number, status)
-VALUES($1, $2, $3, $4, $5, $6, $7, 'active') RETURNING *
-  `, [newUserId, position || 'staff', department || 'housekeeping', shift || 'morning', salary || 0, start_date || new Date(), id_number || 'N/A']);
-    res.json({ success: true, data: { ...result.rows[0], name, email } });
+      INSERT INTO staff_profiles(
+        first_name, last_name, national_id, id_number, 
+        email, phone, department, position, role, 
+        status, branch_id, salary, hire_date
+      )
+      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, 'active', $10, $11, $12) 
+      RETURNING *
+    `, [
+      finalFirstName, finalLastName, national_id, id_number || `SFT-${Date.now()}`,
+      email, phone, department || 'housekeeping', position || role || 'staff', role || position || 'staff',
+      branch_id, salary || 0, start_date || new Date()
+    ]);
+
+    res.json({ success: true, data: { ...result.rows[0], name: `${finalFirstName} ${finalLastName}`, email } });
   } catch (error: any) {
     logger.error('Error creating staff:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to create staff' });

@@ -34,7 +34,15 @@ export const getStaff = async (
     const { data: staff, error } = await query;
     if (error) throw error;
 
-    res.status(200).json({ success: true, count: staff?.length || 0, data: staff });
+    const formattedStaff = staff?.map(s => ({
+      ...s,
+      first_name: s.first_name || s.user?.first_name || '',
+      last_name: s.last_name || s.user?.last_name || '',
+      email: s.email || s.user?.email || '',
+      phone: s.phone || s.user?.phone_number || ''
+    }));
+
+    res.status(200).json({ success: true, count: staff?.length || 0, data: formattedStaff });
   } catch (error) {
     logger.error('Error fetching staff:', error);
     next(error);
@@ -88,6 +96,10 @@ export const getStaffMember = async (
       success: true,
       data: {
         ...staff,
+        first_name: staff.first_name || staff.user?.first_name || '',
+        last_name: staff.last_name || staff.user?.last_name || '',
+        email: staff.email || staff.user?.email || '',
+        phone: staff.phone || staff.user?.phone_number || '',
         todayTasks,
         recentMetrics
       }
@@ -111,8 +123,13 @@ export const createStaffProfile = async (
   try {
     const {
       userId,
+      first_name,
+      last_name,
+      national_id,
       staffCode,
       designation,
+      email,
+      phone,
       assignedFloors,
       assignedSections,
       maxRoomsPerShift,
@@ -122,35 +139,42 @@ export const createStaffProfile = async (
       hireDate
     } = req.body;
 
-    // Check if user exists
-    const { data: user } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', userId)
-      .single();
+    // Optional user check if userId provided
+    if (userId) {
+      const { data: user } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', userId)
+        .single();
 
-    if (!user) {
-      res.status(404).json({ success: false, message: 'User not found' });
-      return;
-    }
+      if (!user) {
+        res.status(404).json({ success: false, message: 'User not found' });
+        return;
+      }
 
-    // Check if profile already exists
-    const { data: existing } = await supabase
-      .from('hk_staff_profiles')
-      .select('id')
-      .eq('user_id', userId)
-      .single();
+      // Check if profile already exists for this user
+      const { data: existing } = await supabase
+        .from('hk_staff_profiles')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
 
-    if (existing) {
-      res.status(400).json({ success: false, message: 'Staff profile already exists for this user' });
-      return;
+      if (existing) {
+        res.status(400).json({ success: false, message: 'Staff profile already exists for this user' });
+        return;
+      }
     }
 
     const { data: profile, error } = await supabase
       .from('hk_staff_profiles')
       .insert([{
-        user_id: userId,
-        staff_code: staffCode,
+        user_id: userId || null,
+        first_name,
+        last_name,
+        email: email || null,
+        phone: phone || null,
+        national_id,
+        staff_code: staffCode || `HK-${Date.now()}`,
         designation,
         assigned_floors: assignedFloors || [],
         assigned_sections: assignedSections || [],
@@ -161,7 +185,7 @@ export const createStaffProfile = async (
         hire_date: hireDate || null,
         is_available: true
       }])
-      .select(`*, user:users!user_id(first_name, last_name)`)
+      .select(`*`)
       .single();
 
     if (error) throw error;

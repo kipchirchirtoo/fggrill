@@ -40,14 +40,25 @@ export default function AdminStaffPage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [branches, setBranches] = useState<any[]>([]);
-  const [departments, setDepartments] = useState<any[]>([]);
-  const [roles, setRoles] = useState<any[]>([]);
+  const [departments] = useState([
+    { id: 'housekeeping', name: 'Housekeeping' },
+    { id: 'restaurant', name: 'Restaurant' },
+    { id: 'reception', name: 'Reception' },
+    { id: 'maintenance', name: 'Maintenance' },
+    { id: 'finance', name: 'Finance' },
+    { id: 'management', name: 'Management' },
+    { id: 'security', name: 'Security' },
+    { id: 'bar_lounge', name: 'Bar & Lounge' },
+    { id: 'administration', name: 'Administration' },
+    { id: 'general', name: 'General' },
+  ]);
   const [formData, setFormData] = useState({
     id: '',
     first_name: '',
     last_name: '',
     email: '',
-    role: '',
+    national_id: '',
+    position: '',
     branch_id: '',
     department: '',
     phone: '',
@@ -63,17 +74,13 @@ export default function AdminStaffPage() {
   const fetchStaff = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [staffRes, branchesRes, departmentsRes, rolesRes] = await Promise.all([
+      const [staffRes, branchesRes] = await Promise.all([
         staffAPI.getStaff(),
         systemAPI.getBranches(),
-        systemAPI.getDepartments(),
-        staffAPI.getRoles(),
       ]);
 
       if (staffRes.success) setStaff(staffRes.data || []);
       if (branchesRes.success) setBranches(branchesRes.data || []);
-      if (departmentsRes.success) setDepartments(departmentsRes.data || []);
-      if (rolesRes.success) setRoles(rolesRes.data || []);
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
   }, []);
@@ -103,7 +110,8 @@ export default function AdminStaffPage() {
       first_name: '',
       last_name: '',
       email: '',
-      role: '',
+      national_id: '',
+      position: '',
       branch_id: '',
       department: '',
       phone: '',
@@ -118,11 +126,7 @@ export default function AdminStaffPage() {
 
     if (!formData.first_name) errors.first_name = 'First name is required';
     if (!formData.last_name) errors.last_name = 'Last name is required';
-
-    if (!formData.email) errors.email = 'Email is required';
-    else if (!/\S+@\S+\.\S+/.test(formData.email)) errors.email = 'Email is invalid';
-
-    if (!formData.role) errors.role = 'Role is required';
+    if (!formData.national_id) errors.national_id = 'National ID is required';
     if (!formData.department) errors.department = 'Department is required';
 
     setFormErrors(errors);
@@ -152,7 +156,8 @@ export default function AdminStaffPage() {
       first_name: member.first_name,
       last_name: member.last_name,
       email: member.email,
-      role: member.role,
+      national_id: (member as any).national_id || '',
+      position: (member as any).position || member.role || '',
       branch_id: member.branch_id?.toString() || '',
       department: member.department || '',
       phone: member.phone || '',
@@ -420,8 +425,8 @@ export default function AdminStaffPage() {
               {/* Wizard Step Indicator */}
               <WizardStepIndicator
                 steps={[
-                  { id: 1, title: 'Personal Info', description: 'Basic details' },
-                  { id: 2, title: 'Role & Department', description: 'Work assignment' },
+                  { id: 1, title: 'Personal Info', description: 'Name & contact' },
+                  { id: 2, title: 'Department & Position', description: 'Work assignment' },
                   { id: 3, title: 'Review', description: 'Confirm details' },
                 ]}
                 currentStep={wizardStep - 1}
@@ -461,15 +466,23 @@ export default function AdminStaffPage() {
                       </div>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-gray-700 mb-1 block">Email <span className="text-red-500">*</span></label>
+                      <label className="text-sm font-medium text-gray-700 mb-1 block">National ID <span className="text-red-500">*</span></label>
+                      <Input
+                        value={formData.national_id}
+                        onChange={(e) => setFormData({ ...formData, national_id: e.target.value })}
+                        className={formErrors.national_id ? 'border-red-500' : ''}
+                        placeholder="Enter National ID number"
+                      />
+                      {formErrors.national_id && <p className="text-red-500 text-xs mt-1">{formErrors.national_id}</p>}
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1 block">Email</label>
                       <Input
                         type="email"
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className={formErrors.email ? 'border-red-500' : ''}
                         placeholder="email@example.com"
                       />
-                      {formErrors.email && <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>}
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700 mb-1 block">Phone</label>
@@ -491,18 +504,6 @@ export default function AdminStaffPage() {
                     className="space-y-4 mt-6"
                   >
                     <div>
-                      <label className="text-sm font-medium text-gray-700 mb-1 block">Role <span className="text-red-500">*</span></label>
-                      <select
-                        value={formData.role}
-                        onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                        className={`w-full p-2 border rounded-lg ${formErrors.role ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                      >
-                        <option value="">Select role</option>
-                        {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
-                      </select>
-                      {formErrors.role && <p className="text-red-500 text-xs mt-1">{formErrors.role}</p>}
-                    </div>
-                    <div>
                       <label className="text-sm font-medium text-gray-700 mb-1 block">Department <span className="text-red-500">*</span></label>
                       <select
                         value={formData.department}
@@ -510,9 +511,17 @@ export default function AdminStaffPage() {
                         className={`w-full p-2 border rounded-lg ${formErrors.department ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
                       >
                         <option value="">Select department</option>
-                        {departments.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                        {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                       </select>
                       {formErrors.department && <p className="text-red-500 text-xs mt-1">{formErrors.department}</p>}
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1 block">Position / Function</label>
+                      <Input
+                        value={formData.position}
+                        onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                        placeholder="e.g. Head Chef, Waiter, Room Attendant"
+                      />
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700 mb-1 block">Branch</label>
@@ -523,17 +532,6 @@ export default function AdminStaffPage() {
                       >
                         <option value="">Select branch</option>
                         {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700 mb-1 block">Status</label>
-                      <select
-                        value={formData.status}
-                        onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
-                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
                       </select>
                     </div>
                   </motion.div>
@@ -555,35 +553,37 @@ export default function AdminStaffPage() {
                           <span className="font-medium text-gray-900">{formData.first_name} {formData.last_name}</span>
                         </div>
                         <div className="flex justify-between py-2 border-b">
-                          <span className="text-gray-600">Email:</span>
-                          <span className="font-medium text-gray-900">{formData.email}</span>
-                        </div>
-                        {formData.phone && (
-                          <div className="flex justify-between py-2 border-b">
-                            <span className="text-gray-600">Phone:</span>
-                            <span className="font-medium text-gray-900">{formData.phone}</span>
-                          </div>
-                        )}
-                        <div className="flex justify-between py-2 border-b">
-                          <span className="text-gray-600">Role:</span>
-                          <span className="font-medium text-gray-900">{formData.role}</span>
+                          <span className="text-gray-600">National ID:</span>
+                          <span className="font-medium text-gray-900">{formData.national_id}</span>
                         </div>
                         <div className="flex justify-between py-2 border-b">
                           <span className="text-gray-600">Department:</span>
-                          <span className="font-medium text-gray-900">{formData.department}</span>
+                          <span className="font-medium text-gray-900">{departments.find(d => d.id === formData.department)?.name || formData.department}</span>
                         </div>
+                        {formData.position && (
+                          <div className="flex justify-between py-2 border-b">
+                            <span className="text-gray-600">Position:</span>
+                            <span className="font-medium text-gray-900">{formData.position}</span>
+                          </div>
+                        )}
                         {formData.branch_id && (
                           <div className="flex justify-between py-2 border-b">
                             <span className="text-gray-600">Branch:</span>
                             <span className="font-medium text-gray-900">{branches.find(b => b.id.toString() === formData.branch_id)?.name}</span>
                           </div>
                         )}
-                        <div className="flex justify-between py-2">
-                          <span className="text-gray-600">Status:</span>
-                          <IOSBadge className={formData.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                            {formData.status}
-                          </IOSBadge>
-                        </div>
+                        {formData.email && (
+                          <div className="flex justify-between py-2 border-b">
+                            <span className="text-gray-600">Email:</span>
+                            <span className="font-medium text-gray-900">{formData.email}</span>
+                          </div>
+                        )}
+                        {formData.phone && (
+                          <div className="flex justify-between py-2">
+                            <span className="text-gray-600">Phone:</span>
+                            <span className="font-medium text-gray-900">{formData.phone}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </motion.div>
@@ -611,8 +611,7 @@ export default function AdminStaffPage() {
                       const errors: any = {};
                       if (!formData.first_name) errors.first_name = 'First name is required';
                       if (!formData.last_name) errors.last_name = 'Last name is required';
-                      if (!formData.email) errors.email = 'Email is required';
-                      else if (!/\S+@\S+\.\S+/.test(formData.email)) errors.email = 'Email is invalid';
+                      if (!formData.national_id) errors.national_id = 'National ID is required';
                       if (Object.keys(errors).length > 0) {
                         setFormErrors(errors);
                         toast.error('Please fill in required fields');
@@ -621,7 +620,6 @@ export default function AdminStaffPage() {
                     }
                     if (wizardStep === 2) {
                       const errors: any = {};
-                      if (!formData.role) errors.role = 'Role is required';
                       if (!formData.department) errors.department = 'Department is required';
                       if (Object.keys(errors).length > 0) {
                         setFormErrors(errors);
@@ -688,23 +686,21 @@ export default function AdminStaffPage() {
                 {formErrors.email && <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>}
               </div>
               <div>
+                <label className="text-sm font-medium">National ID <span className="text-red-500">*</span></label>
+                <Input
+                  value={formData.national_id}
+                  onChange={(e) => setFormData({ ...formData, national_id: e.target.value })}
+                  className={formErrors.national_id ? 'border-red-500' : ''}
+                  placeholder="Enter National ID"
+                />
+                {formErrors.national_id && <p className="text-red-500 text-xs mt-1">{formErrors.national_id}</p>}
+              </div>
+              <div>
                 <label className="text-sm font-medium">Phone</label>
                 <Input
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Role <span className="text-red-500">*</span></label>
-                <select
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  className={`w-full p-2 border rounded-ios-lg ${formErrors.role ? 'border-red-500' : ''}`}
-                >
-                  <option value="">Select role</option>
-                  {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
-                </select>
-                {formErrors.role && <p className="text-red-500 text-xs mt-1">{formErrors.role}</p>}
               </div>
               <div>
                 <label className="text-sm font-medium">Department <span className="text-red-500">*</span></label>
@@ -714,9 +710,17 @@ export default function AdminStaffPage() {
                   className={`w-full p-2 border rounded-ios-lg ${formErrors.department ? 'border-red-500' : ''}`}
                 >
                   <option value="">Select department</option>
-                  {departments.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                  {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
                 {formErrors.department && <p className="text-red-500 text-xs mt-1">{formErrors.department}</p>}
+              </div>
+              <div>
+                <label className="text-sm font-medium">Position / Function</label>
+                <Input
+                  value={formData.position}
+                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                  placeholder="e.g. Head Chef, Waiter"
+                />
               </div>
               <div>
                 <label className="text-sm font-medium">Branch</label>

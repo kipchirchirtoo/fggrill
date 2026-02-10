@@ -102,16 +102,14 @@ A comprehensive restaurant inventory management system that tracks kitchen suppl
 - `restaurant_wastage_items` - Wastage line items
 
 ### Views for Reporting
-- `restaurant_recipe_cost_analysis` - Recipe costa cost breakdown
- */
--ANI: `  restaurant_consumptionefs_summary - Daily consumption summarymate
--EntityType: restaurant  restaurant_wacha_summary - Dailyrna wastage >
-- which  restaurantTypeEnum:  restaurant和行为
-ermann
-- 
-## Frontend along Features
+- `restaurant_recipe_cost_analysis` - Recipe cost breakdown
+- `restaurant_consumption_summary` - Daily consumption summary
+- `restaurant_wastage_summary` - Daily wastage analysis
+- `restaurant_inventory_alerts` - Items requiring immediate attention
 
-ITE: - **Dashboard factoring**: Real-timem stock level alerts
+## Frontend Features
+
+- **Dashboard Alerts**: Real-time stock level alerts
 - **Dashboard Analytics**: Comprehensive metrics and KPIs
 - **Tabbed Interface**: Organized access to all functions
 - **Filtering & Search**: Advanced filtering by date, category, reason

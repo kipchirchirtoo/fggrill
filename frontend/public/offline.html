@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Offline - Famous Gate Housekeeping</title>
+  <title>Offline - Famous Gate Hotels</title>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#0ea5e9">
   <style>
@@ -12,7 +13,7 @@
       padding: 0;
       box-sizing: border-box;
     }
-    
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
       background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
@@ -22,13 +23,13 @@
       justify-content: center;
       color: #f1f5f9;
     }
-    
+
     .container {
       text-align: center;
       padding: 2rem;
       max-width: 400px;
     }
-    
+
     .icon {
       width: 120px;
       height: 120px;
@@ -39,26 +40,26 @@
       align-items: center;
       justify-content: center;
     }
-    
+
     .icon svg {
       width: 60px;
       height: 60px;
       color: #0ea5e9;
     }
-    
+
     h1 {
       font-size: 1.75rem;
       font-weight: 600;
       margin-bottom: 0.75rem;
       color: #f1f5f9;
     }
-    
+
     p {
       color: #94a3b8;
       line-height: 1.6;
       margin-bottom: 2rem;
     }
-    
+
     .status {
       display: inline-flex;
       align-items: center;
@@ -70,12 +71,12 @@
       font-size: 0.875rem;
       margin-bottom: 2rem;
     }
-    
+
     .status.online {
       background: rgba(34, 197, 94, 0.1);
       color: #4ade80;
     }
-    
+
     .status-dot {
       width: 8px;
       height: 8px;
@@ -83,16 +84,23 @@
       background: #f87171;
       animation: pulse 2s infinite;
     }
-    
+
     .status.online .status-dot {
       background: #4ade80;
     }
-    
+
     @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.5;
+      }
     }
-    
+
     .btn {
       display: inline-flex;
       align-items: center;
@@ -107,16 +115,16 @@
       cursor: pointer;
       transition: background 0.2s;
     }
-    
+
     .btn:hover {
       background: #0284c7;
     }
-    
+
     .btn:disabled {
       background: #475569;
       cursor: not-allowed;
     }
-    
+
     .cached-data {
       margin-top: 2rem;
       padding: 1rem;
@@ -124,7 +132,7 @@
       border-radius: 0.5rem;
       text-align: left;
     }
-    
+
     .cached-data h3 {
       font-size: 0.875rem;
       color: #94a3b8;
@@ -132,7 +140,7 @@
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
-    
+
     .cached-item {
       display: flex;
       align-items: center;
@@ -140,11 +148,11 @@
       padding: 0.5rem 0;
       border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     }
-    
+
     .cached-item:last-child {
       border-bottom: none;
     }
-    
+
     .pending-sync {
       margin-top: 1rem;
       padding: 0.75rem;
@@ -155,41 +163,45 @@
     }
   </style>
 </head>
+
 <body>
   <div class="container">
     <div class="icon">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
       </svg>
     </div>
-    
+
     <div id="status" class="status">
       <span class="status-dot"></span>
       <span>Offline</span>
     </div>
-    
+
     <h1>You're Offline</h1>
-    <p>Don't worry! Your pending tasks and recent data are saved locally. They'll sync automatically when you're back online.</p>
-    
+    <p>Don't worry! Your pending tasks and recent data are saved locally. They'll sync automatically when you're back
+      online.</p>
+
     <button class="btn" onclick="tryReconnect()">
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2">
         <path d="M23 4v6h-6M1 20v-6h6"></path>
         <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
       </svg>
       Try Again
     </button>
-    
+
     <div id="cached-data" class="cached-data" style="display: none;">
       <h3>Available Offline</h3>
       <div id="cached-items"></div>
     </div>
-    
+
     <div id="pending-sync" class="pending-sync" style="display: none;">
       <strong>Pending Sync:</strong>
       <span id="pending-count">0</span> actions queued
     </div>
   </div>
-  
+
   <script>
     // Check online status
     function updateOnlineStatus() {
@@ -205,10 +217,10 @@
         statusEl.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
       }
     }
-    
+
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
-    
+
     function tryReconnect() {
       if (navigator.onLine) {
         window.location.reload();
@@ -216,7 +228,7 @@
         const btn = document.querySelector('.btn');
         btn.disabled = true;
         btn.innerHTML = 'Checking...';
-        
+
         setTimeout(() => {
           if (navigator.onLine) {
             window.location.reload();
@@ -233,30 +245,30 @@
         }, 2000);
       }
     }
-    
+
     // Check for cached data
     async function checkCachedData() {
       try {
         const cache = await caches.open('fg-housekeeping-api-v1');
         const keys = await cache.keys();
-        
+
         if (keys.length > 0) {
           const container = document.getElementById('cached-data');
           const items = document.getElementById('cached-items');
           container.style.display = 'block';
-          
+
           const displayNames = {
             'dashboard': 'Dashboard Data',
             'tasks': 'My Tasks',
             'rooms': 'Room Status',
             'staff': 'Staff Info'
           };
-          
+
           keys.forEach(request => {
             const url = new URL(request.url);
             const path = url.pathname.split('/').pop();
             const name = displayNames[path] || path;
-            
+
             const div = document.createElement('div');
             div.className = 'cached-item';
             div.innerHTML = `<span>${name}</span><span>✓</span>`;
@@ -267,7 +279,7 @@
         console.log('Cache check failed:', e);
       }
     }
-    
+
     // Check for pending sync items
     async function checkPendingSync() {
       try {
@@ -275,7 +287,7 @@
         const tx = db.transaction('pending-requests', 'readonly');
         const store = tx.objectStore('pending-requests');
         const count = await store.count();
-        
+
         if (count > 0) {
           document.getElementById('pending-sync').style.display = 'block';
           document.getElementById('pending-count').textContent = count;
@@ -284,7 +296,7 @@
         console.log('Pending sync check failed:', e);
       }
     }
-    
+
     function openDB() {
       return new Promise((resolve, reject) => {
         const request = indexedDB.open('fg-housekeeping-offline', 1);
@@ -292,11 +304,12 @@
         request.onsuccess = () => resolve(request.result);
       });
     }
-    
+
     // Initialize
     updateOnlineStatus();
     checkCachedData();
     checkPendingSync();
   </script>
 </body>
+
 </html>

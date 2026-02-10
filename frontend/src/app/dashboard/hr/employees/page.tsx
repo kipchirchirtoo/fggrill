@@ -49,11 +49,11 @@ export default function HREmployeesPage() {
         first_name: '',
         last_name: '',
         email: '',
-        role: '',
-        branch_id: '',
-        department: '',
-        phone_number: '',
         national_id: '',
+        department: '',
+        position: '',
+        branch_id: '',
+        phone_number: '',
         pos_pin: '',
         shift: 'morning',
         address: '',
@@ -116,11 +116,11 @@ export default function HREmployeesPage() {
             first_name: '',
             last_name: '',
             email: '',
-            role: '',
-            branch_id: '',
-            department: '',
-            phone_number: '',
             national_id: '',
+            department: '',
+            position: '',
+            branch_id: '',
+            phone_number: '',
             pos_pin: '',
             shift: 'morning',
             address: '',
@@ -140,10 +140,9 @@ export default function HREmployeesPage() {
         const errors: { [key: string]: string } = {};
         if (!formData.first_name) errors.first_name = 'First name is required';
         if (!formData.last_name) errors.last_name = 'Last name is required';
-        if (!formData.email) errors.email = 'Email is required';
-        else if (!/\S+@\S+\.\S+/.test(formData.email)) errors.email = 'Email is invalid';
-        if (!formData.role) errors.role = 'Role is required';
+        if (!formData.national_id) errors.national_id = 'National ID is required';
         if (!formData.department) errors.department = 'Department is required';
+        if (!formData.basic_salary || formData.basic_salary <= 0) errors.basic_salary = 'Salary is mandatory';
 
         setFormErrors(errors);
         return Object.keys(errors).length === 0;
@@ -179,11 +178,11 @@ export default function HREmployeesPage() {
             first_name: member.first_name,
             last_name: member.last_name,
             email: member.email,
-            role: member.role,
-            branch_id: member.branch_id?.toString() || '',
-            department: member.department || '',
-            phone_number: member.phone || (member as any).phone_number || '',
             national_id: member.national_id || '',
+            department: member.department || '',
+            position: (member as any).position || member.role || '',
+            branch_id: member.branch_id?.toString() || '',
+            phone_number: member.phone || (member as any).phone_number || '',
             status: member.status,
             pos_pin: (member as any).pos_pin || '',
             shift: (member as any).shift || 'morning',
@@ -582,15 +581,13 @@ export default function HREmployeesPage() {
                                     >
                                         <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-stone-100">
                                             <div className="p-4 border-b border-stone-50">
-                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">System Role</label>
-                                                <select
-                                                    value={formData.role}
-                                                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                                                    className="w-full bg-transparent border-none p-0 h-auto focus:ring-0 text-lg appearance-none cursor-pointer"
-                                                >
-                                                    <option value="">Select role</option>
-                                                    {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
-                                                </select>
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Position / Job Function</label>
+                                                <Input
+                                                    value={formData.position}
+                                                    onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                                                    className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
+                                                    placeholder="e.g. Head Chef, HR Officer"
+                                                />
                                             </div>
                                             <div className="p-4 border-b border-stone-50">
                                                 <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Department</label>
@@ -629,13 +626,13 @@ export default function HREmployeesPage() {
                                             </div>
 
                                             <div className="p-4">
-                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Basic Salary (Monthly)</label>
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1">Basic Salary (Monthly) *</label>
                                                 <Input
                                                     type="number"
                                                     value={formData.basic_salary}
                                                     onChange={(e) => setFormData({ ...formData, basic_salary: Number(e.target.value) })}
-                                                    className="border-none p-0 h-auto focus-visible:ring-0 text-lg"
-                                                    placeholder="e.g. 25000"
+                                                    className={`border-none p-0 h-auto focus-visible:ring-0 text-lg ${formErrors.basic_salary ? 'text-red-500' : ''}`}
+                                                    placeholder="Required for HR"
                                                 />
                                             </div>
                                         </div>

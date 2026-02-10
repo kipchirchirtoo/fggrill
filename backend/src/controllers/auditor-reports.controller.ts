@@ -37,6 +37,28 @@ export const getBranchPerformanceReport = async (req: Request, res: Response, ne
             .gte('expense_date', start_date)
             .lte('expense_date', end_date);
 
+        // Check data availability
+        const hasData = (restSales && restSales.length > 0) ||
+            (barSales && barSales.length > 0) ||
+            (expenses && expenses.length > 0);
+
+        if (!hasData) {
+            // Provide helpful guidance when no data exists
+            logger.warn(`No data found for ${queryInfo}`);
+            return res.status(200).json({
+                success: true,
+                message: 'No data available for the selected filters',
+                suggestion: 'Try selecting Branch 2 (BOMET TOWN) with date range Feb 1-28, 2026, or check if transactions exist for this branch',
+                data: {
+                    period: { start: start_date, end: end_date },
+                    sales: { restaurant: 0, bar: 0, total: 0 },
+                    expenses: { total: 0, breakdown: {} },
+                    netProfit: 0,
+                    profitMargin: 0
+                }
+            });
+        }
+
         // Calculate Totals
         const totalRestSales = restSales?.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0) || 0;
         const totalBarSales = barSales?.reduce((sum, order) => sum + (Number(order.total) || 0), 0) || 0;

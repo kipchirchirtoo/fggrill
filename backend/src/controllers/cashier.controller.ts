@@ -5,6 +5,7 @@ import { logger } from '../utils/logger';
 import { paymentVerificationService } from '../services/payment.verification.service';
 import { mpesaService } from '../services/mpesa.service';
 import notificationService from '../services/notification.service';
+import { deductIngredientsForItem } from './kitchen/recipes.controller';
 
 /**
  * Get Bill Details by Booking ID (or Barcode)
@@ -468,6 +469,30 @@ export const processCashierPayment = async (
                             status: 'delivered'
                         })
                         .eq('id', order.id);
+
+                    // Auto-deduct ingredients
+                    try {
+                        const { data: orderWithItems } = await supabase
+                            .from('restaurant_orders')
+                            .select('*, items:restaurant_order_items(*)')
+                            .eq('id', order.id)
+                            .single();
+
+                        if (orderWithItems && orderWithItems.items) {
+                            for (const item of orderWithItems.items) {
+                                await deductIngredientsForItem({
+                                    order_id: orderWithItems.id,
+                                    menu_item_id: item.menu_item_id,
+                                    quantity: item.quantity,
+                                    branch_id: orderWithItems.branch_id,
+                                    user_id: req.user?.id
+                                });
+                            }
+                            logger.info(`Ingredients auto-deducted for restaurant order ${orderWithItems.order_number}`);
+                        }
+                    } catch (deductError) {
+                        logger.error(`Error in auto-deduction for restaurant order ${order.id}:`, deductError);
+                    }
                 } else if (totalPaid > 0) {
                     await supabase
                         .from('restaurant_orders')

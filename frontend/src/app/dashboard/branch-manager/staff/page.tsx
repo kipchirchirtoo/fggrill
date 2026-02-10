@@ -30,70 +30,17 @@ interface Staff {
   created_at?: string;
 }
 
-const STAFF_ROLES = [
-  // Management
-  { value: 'general_manager', label: 'General Manager', category: 'Management' },
-  { value: 'branch_manager', label: 'Branch Manager', category: 'Management' },
-  { value: 'restaurant_manager', label: 'Restaurant Manager', category: 'Management' },
-
-  // Front Office & Reception
-  { value: 'receptionist', label: 'Receptionist', category: 'Front Office' },
-  { value: 'front_desk_supervisor', label: 'Front Desk Supervisor', category: 'Front Office' },
-  { value: 'concierge', label: 'Concierge', category: 'Front Office' },
-  { value: 'bell_captain', label: 'Bell Captain', category: 'Front Office' },
-  { value: 'bellhop', label: 'Bellhop', category: 'Front Office' },
-
-  // Restaurant & Food Service
-  { value: 'restaurant', label: 'Restaurant Staff', category: 'Restaurant' },
-  { value: 'head_chef', label: 'Head Chef', category: 'Kitchen' },
-  { value: 'sous_chef', label: 'Sous Chef', category: 'Kitchen' },
-  { value: 'line_cook', label: 'Line Cook', category: 'Kitchen' },
-  { value: 'prep_cook', label: 'Prep Cook', category: 'Kitchen' },
-  { value: 'waiter', label: 'Waiter', category: 'Restaurant' },
-  { value: 'waitress', label: 'Waitress', category: 'Restaurant' },
-  { value: 'head_waiter', label: 'Head Waiter', category: 'Restaurant' },
-  { value: 'bartender', label: 'Bartender', category: 'Restaurant' },
-  { value: 'barista', label: 'Barista', category: 'Restaurant' },
-  { value: 'food_runner', label: 'Food Runner', category: 'Restaurant' },
-  { value: 'busser', label: 'Busser', category: 'Restaurant' },
-  { value: 'host_hostess', label: 'Host/Hostess', category: 'Restaurant' },
-  { value: 'pos_kitchen', label: 'POS Kitchen', category: 'Kitchen' },
-  { value: 'kitchen_helper', label: 'Kitchen Helper', category: 'Kitchen' },
-  { value: 'dishwasher', label: 'Dishwasher', category: 'Kitchen' },
-
-  // Housekeeping
-  { value: 'housekeeping', label: 'Housekeeping', category: 'Housekeeping' },
-  { value: 'housekeeping_supervisor', label: 'Housekeeping Supervisor', category: 'Housekeeping' },
-  { value: 'room_attendant', label: 'Room Attendant', category: 'Housekeeping' },
-  { value: 'laundry_attendant', label: 'Laundry Attendant', category: 'Housekeeping' },
-
-  // Maintenance
-  { value: 'maintenance', label: 'Maintenance', category: 'Maintenance' },
-  { value: 'maintenance_supervisor', label: 'Maintenance Supervisor', category: 'Maintenance' },
-  { value: 'electrician', label: 'Electrician', category: 'Maintenance' },
-  { value: 'plumber', label: 'Plumber', category: 'Maintenance' },
-  { value: 'hvac_technician', label: 'HVAC Technician', category: 'Maintenance' },
-  { value: 'groundskeeper', label: 'Groundskeeper', category: 'Maintenance' },
-
-  // Security
-  { value: 'security_supervisor', label: 'Security Supervisor', category: 'Security' },
-  { value: 'security_guard', label: 'Security Guard', category: 'Security' },
-  { value: 'night_auditor', label: 'Night Auditor', category: 'Security' },
-
-  // Administration
-  { value: 'accountant', label: 'Accountant', category: 'Finance' },
-  { value: 'finance_manager', label: 'Finance Manager', category: 'Finance' },
-  { value: 'hr_manager', label: 'HR Manager', category: 'Administration' },
-  { value: 'payroll_clerk', label: 'Payroll Clerk', category: 'Administration' },
-
-  // Store & Inventory
-  { value: 'central_storekeeper', label: 'Central Storekeeper', category: 'Inventory' },
-  { value: 'branch_storekeeper', label: 'Branch Storekeeper', category: 'Inventory' },
-  { value: 'inventory_clerk', label: 'Inventory Clerk', category: 'Inventory' },
-  { value: 'purchasing_manager', label: 'Purchasing Manager', category: 'Inventory' },
-
-  // General
-  { value: 'employee', label: 'General Employee', category: 'General' }
+const DEPARTMENTS = [
+  { value: 'housekeeping', label: 'Housekeeping' },
+  { value: 'restaurant', label: 'Restaurant' },
+  { value: 'reception', label: 'Reception' },
+  { value: 'maintenance', label: 'Maintenance' },
+  { value: 'finance', label: 'Finance' },
+  { value: 'management', label: 'Management' },
+  { value: 'security', label: 'Security' },
+  { value: 'bar_lounge', label: 'Bar & Lounge' },
+  { value: 'administration', label: 'Administration' },
+  { value: 'general', label: 'General' },
 ];
 
 export default function BranchStaffPage() {
@@ -117,9 +64,10 @@ export default function BranchStaffPage() {
     last_name: '',
     email: '',
     phone_number: '',
-    employee_id: '',
-    pos_pin: '',
-    role: 'employee'
+    national_id: '',
+    department: '',
+    position: '',
+    employee_id: ''
   });
 
   const STAFF_LIMIT = 10;
@@ -141,14 +89,15 @@ export default function BranchStaffPage() {
         // Map backend response to frontend format
         const mappedStaff = (response.data || []).map((s: any) => ({
           id: s.id,
-          first_name: s.user?.first_name || s.first_name || '',
-          last_name: s.user?.last_name || s.last_name || '',
-          email: s.user?.email || s.email || '',
-          phone: s.user?.phone_number || s.phone || '',
-          role: s.role || s.department || 'employee',
+          first_name: s.first_name || s.user?.first_name || '',
+          last_name: s.last_name || s.user?.last_name || '',
+          email: s.email || s.user?.email || '',
+          phone: s.phone || s.user?.phone_number || '',
+          role: s.position || s.role || s.department || 'Staff',
+          department: s.department || '',
+          national_id: s.national_id || '',
           status: s.status || 'active',
-          employee_id: s.employee_id || '',
-          pos_pin: s.user?.pos_pin || s.pos_pin || '',
+          employee_id: s.employee_id || s.id_number || '',
           created_at: s.created_at
         }));
         setStaff(mappedStaff);
@@ -253,9 +202,10 @@ export default function BranchStaffPage() {
       last_name: '',
       email: '',
       phone_number: '',
-      employee_id: '',
-      pos_pin: '',
-      role: 'employee'
+      national_id: '',
+      department: '',
+      position: '',
+      employee_id: ''
     });
     setEditingStaff(null);
   };
@@ -271,17 +221,18 @@ export default function BranchStaffPage() {
       last_name: member.last_name,
       email: member.email,
       phone_number: member.phone || (member as any).phone_number || '',
-      employee_id: member.employee_id || '',
-      pos_pin: member.pos_pin || '',
-      role: member.role
+      national_id: (member as any).national_id || '',
+      department: (member as any).department || '',
+      position: (member as any).position || member.role || '',
+      employee_id: member.employee_id || (member as any).id_number || ''
     });
     setEditingStaff(member);
     setShowStaffModal(true);
   };
 
   const handleSubmitStaff = async () => {
-    if (!staffForm.first_name || !staffForm.last_name || !staffForm.email || !staffForm.role) {
-      toast.error('Please fill in all required fields');
+    if (!staffForm.first_name || !staffForm.last_name || !staffForm.national_id || !staffForm.department) {
+      toast.error('Please fill in required fields: Name, National ID, Department');
       return;
     }
 
@@ -296,12 +247,11 @@ export default function BranchStaffPage() {
       const staffData = {
         first_name: staffForm.first_name,
         last_name: staffForm.last_name,
-        email: staffForm.email,
-        phone_number: staffForm.phone_number,
-        role: staffForm.role,
-        department: staffForm.role, // Use role as department for now
-        employee_id: staffForm.employee_id,
-        pos_pin: staffForm.pos_pin || null,
+        email: staffForm.email || null,
+        phone: staffForm.phone_number || null,
+        national_id: staffForm.national_id,
+        department: staffForm.department,
+        position: staffForm.position,
         branch_id: currentBranchId,
         status: 'active'
       };
@@ -339,38 +289,11 @@ export default function BranchStaffPage() {
   };
 
   const getRoleLabel = (roleValue: string) => {
-    const role = STAFF_ROLES.find(r => r.value === roleValue);
-    return role ? role.label : roleValue;
+    return roleValue;
   };
 
   const getRolesByCategory = () => {
-    const categories: { [key: string]: typeof STAFF_ROLES } = {};
-
-    // Filter roles based on user role
-    const filteredRoles = STAFF_ROLES.filter(role => {
-      if (user?.role === UserRole.BRANCH_MANAGER) {
-        // Branch Manager can only add restaurant and hotel employees
-        // Exclude management and high-level admin roles
-        const excludedRoles = [
-          'super_admin',
-          'general_manager',
-          'branch_manager',
-          'finance_manager',
-          'hr_manager',
-          'central_storekeeper'
-        ];
-        return !excludedRoles.includes(role.value);
-      }
-      return true; // Super Admin and General Manager can see all roles
-    });
-
-    filteredRoles.forEach(role => {
-      if (!categories[role.category]) {
-        categories[role.category] = [];
-      }
-      categories[role.category].push(role);
-    });
-    return categories;
+    return {};
   };
 
   return (
@@ -421,18 +344,9 @@ export default function BranchStaffPage() {
                   onChange={(e) => setRoleFilter(e.target.value)}
                   className="w-full h-10 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white"
                 >
-                  <option value="all">All Roles ({staff.length})</option>
-                  {Object.entries(getRolesByCategory()).map(([category, roles]) => (
-                    <optgroup key={category} label={category}>
-                      {roles.map(role => {
-                        const count = staff.filter(s => s.role === role.value).length;
-                        return (
-                          <option key={role.value} value={role.value}>
-                            {role.label} ({count})
-                          </option>
-                        );
-                      })}
-                    </optgroup>
+                  <option value="all">All Departments ({staff.length})</option>
+                  {DEPARTMENTS.map(dept => (
+                    <option key={dept.value} value={dept.value}>{dept.label}</option>
                   ))}
                 </select>
               </div>
@@ -609,7 +523,16 @@ export default function BranchStaffPage() {
 
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Email Address *</label>
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">National ID *</label>
+                      <Input
+                        value={staffForm.national_id}
+                        onChange={(e) => setStaffForm({ ...staffForm, national_id: e.target.value })}
+                        placeholder="Enter National ID"
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Email Address</label>
                       <Input
                         type="email"
                         value={staffForm.email}
@@ -636,22 +559,26 @@ export default function BranchStaffPage() {
                   <h4 className="text-xs font-bold text-stone-400 uppercase tracking-widest px-1">Employment Details</h4>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Assigned Role *</label>
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Department *</label>
                       <select
-                        value={staffForm.role}
-                        onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })}
+                        value={staffForm.department}
+                        onChange={(e) => setStaffForm({ ...staffForm, department: e.target.value })}
                         className="w-full h-11 border border-stone-200 rounded-xl px-4 text-sm bg-white focus:ring-2 focus:ring-stone-900 outline-none"
                       >
-                        {Object.entries(getRolesByCategory()).map(([category, roles]) => (
-                          <optgroup key={category} label={category}>
-                            {roles.map(role => (
-                              <option key={role.value} value={role.value}>
-                                {role.label}
-                              </option>
-                            ))}
-                          </optgroup>
+                        <option value="">Select Department</option>
+                        {DEPARTMENTS.map(dept => (
+                          <option key={dept.value} value={dept.value}>{dept.label}</option>
                         ))}
                       </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Position / Function</label>
+                      <Input
+                        value={staffForm.position}
+                        onChange={(e) => setStaffForm({ ...staffForm, position: e.target.value })}
+                        placeholder="e.g. Head Chef, Room Attendant"
+                        className="h-11 rounded-xl"
+                      />
                     </div>
                     <div className="space-y-2">
                       <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">Employee ID / Serial No.</label>
@@ -661,25 +588,6 @@ export default function BranchStaffPage() {
                         placeholder="e.g. EMP-001"
                         className="h-11 rounded-xl"
                       />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">POS System PIN (4 Digits)</label>
-                    <div className="relative">
-                      <Input
-                        type="text"
-                        value={staffForm.pos_pin}
-                        maxLength={4}
-                        onChange={(e) => setStaffForm({ ...staffForm, pos_pin: e.target.value.toUpperCase() })}
-                        placeholder="e.g. R123"
-                        className="h-11 rounded-xl font-mono tracking-widest text-lg pl-4"
-                      />
-                      <div className="mt-1 flex gap-2">
-                        <span className="text-[10px] bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded">R - Restaurant</span>
-                        <span className="text-[10px] bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded">B - Bar</span>
-                        <span className="text-[10px] bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded">C - Cashier</span>
-                      </div>
                     </div>
                   </div>
                 </div>

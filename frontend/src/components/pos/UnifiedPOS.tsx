@@ -650,7 +650,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                             viewMode === 'grid' ? "aspect-square w-full mb-3" : "w-14 h-14"
                                         )}>
                                             {item.image_url ? (
-                                                <Image src={item.image_url} alt={item.name} width={200} height={200} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                                                <Image src={item.image_url} alt={item.name} width={200} height={200} className="w-full h-full object-cover transition-transform group-hover:scale-110" style={{ height: 'auto' }} />
                                             ) : (
                                                 <div className={cn("h-full w-full flex items-center justify-center text-3xl group-hover:scale-110 transition-transform duration-500 opacity-60", accentText)}>
                                                     {isRestaurant ? <UtensilsCrossed className="w-8 h-8 opacity-20" /> : <WineIcon className="w-8 h-8 opacity-20" />}

@@ -23,6 +23,7 @@ interface Staff {
   id: string;
   first_name: string;
   last_name: string;
+  national_id?: string;
   email?: string;
   phone?: string;
   designation?: string;
@@ -52,6 +53,7 @@ export default function HousekeepingStaffPage() {
   const [newStaff, setNewStaff] = useState({
     first_name: '',
     last_name: '',
+    national_id: '',
     email: '',
     phone: '',
     designation: 'Room Attendant'
@@ -75,8 +77,8 @@ export default function HousekeepingStaffPage() {
   }, [statusFilter, activeBranchId, user?.branch_id]);
 
   const handleCreateStaff = async () => {
-    if (!newStaff.first_name || !newStaff.last_name) {
-      toast.error('First and last name are required');
+    if (!newStaff.first_name || !newStaff.last_name || !newStaff.national_id) {
+      toast.error('First name, last name, and national ID are required');
       return;
     }
     try {
@@ -88,7 +90,7 @@ export default function HousekeepingStaffPage() {
       if (response.success) {
         toast.success('Staff member added successfully');
         setAddModalOpen(false);
-        setNewStaff({ first_name: '', last_name: '', email: '', phone: '', designation: 'Room Attendant' });
+        setNewStaff({ first_name: '', last_name: '', national_id: '', email: '', phone: '', designation: 'Room Attendant' });
         fetchStaff();
       }
     } catch (error: any) {
@@ -303,6 +305,14 @@ export default function HousekeepingStaffPage() {
                 <label className="text-sm font-medium">Last Name *</label>
                 <Input value={newStaff.last_name} onChange={(e) => setNewStaff({ ...newStaff, last_name: e.target.value })} placeholder="Doe" />
               </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">National ID *</label>
+              <Input
+                value={newStaff.national_id}
+                onChange={(e) => setNewStaff({ ...newStaff, national_id: e.target.value })}
+                placeholder="National ID Number"
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Email</label>

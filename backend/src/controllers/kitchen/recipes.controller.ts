@@ -220,7 +220,94 @@ export const deleteRecipe = async (req: Request, res: Response) => {
 };
 
 /**
- * Auto-deduct ingredients from POS order
+ * Internal helper to deduct ingredients for a specific order item
+ */
+export async function deductIngredientsForItem(params: {
+    order_id: number | string;
+    menu_item_id: string;
+    quantity: number;
+    branch_id: number;
+    user_id?: string;
+}) {
+    const { order_id, menu_item_id, quantity, branch_id, user_id } = params;
+
+    // Get recipe for menu item
+    const { data: recipe, error: recipeError } = await supabase
+        .from('recipes')
+        .select('*, ingredients:recipe_items(*)')
+        .eq('menu_item_id', menu_item_id)
+        .eq('is_active', true)
+        .single();
+
+    if (recipeError || !recipe) {
+        console.warn(`No active recipe found for menu item ${menu_item_id}`);
+        return null;
+    }
+
+    // Deduct each ingredient
+    for (const ingredient of recipe.ingredients) {
+        const totalQuantity = Number(ingredient.quantity_per_portion) * Number(quantity);
+
+        // Create usage entry
+        await supabase
+            .from('kitchen_usage')
+            .insert({
+                branch_id,
+                usage_date: new Date().toISOString().split('T')[0],
+                usage_type: 'SALES',
+                item_sku: ingredient.item_sku,
+                item_name: ingredient.item_name,
+                quantity: totalQuantity,
+                unit_of_measure: ingredient.unit_of_measure,
+                linked_order_id: order_id,
+                linked_menu_item_id: menu_item_id,
+                recipe_id: recipe.id
+            });
+
+        // Create ledger entry
+        await createLedgerEntry({
+            branch_id,
+            item_sku: ingredient.item_sku,
+            item_name: ingredient.item_name,
+            transaction_type: 'USAGE',
+            reference_type: 'POS_ORDER',
+            reference_id: order_id.toString(),
+            quantity_out: totalQuantity,
+            unit_of_measure: ingredient.unit_of_measure,
+            user_id,
+            notes: `Auto-deducted for ${recipe.menu_item_name} (Order #${order_id})`
+        });
+
+        // --- PORTION DEDUCTION LOGIC ---
+        // Check if this item is tracked as portions
+        const { data: portionStock } = await supabase
+            .from('kitchen_portion_stock')
+            .select('*')
+            .eq('branch_id', branch_id)
+            .eq('item_sku', ingredient.item_sku)
+            .single();
+
+        if (portionStock) {
+            // Deduct from portion stock
+            await createPortionLedgerEntry({
+                branch_id,
+                item_sku: ingredient.item_sku,
+                portion_name: portionStock.portion_name,
+                transaction_type: 'POS_SALE',
+                reference_type: 'POS_ORDER',
+                reference_id: order_id.toString(),
+                quantity_out: totalQuantity,
+                user_id,
+                notes: `POS Sale: ${recipe.menu_item_name} (Order #${order_id}) - ${new Date().toLocaleTimeString()}`
+            });
+        }
+    }
+
+    return recipe;
+}
+
+/**
+ * Auto-deduct ingredients from POS order (Controller version)
  * POST /api/kitchen/recipes/auto-deduct
  */
 export const autoDeductIngredients = async (req: Request, res: Response) => {
@@ -231,75 +318,16 @@ export const autoDeductIngredients = async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, message: 'Order ID, menu item ID, quantity, and branch ID are required' });
         }
 
-        // Get recipe for menu item
-        const { data: recipe, error: recipeError } = await supabase
-            .from('recipes')
-            .select('*, ingredients:recipe_items(*)')
-            .eq('menu_item_id', menu_item_id)
-            .eq('is_active', true)
-            .single();
+        const result = await deductIngredientsForItem({
+            order_id,
+            menu_item_id,
+            quantity,
+            branch_id,
+            user_id: (req as any).user?.id
+        });
 
-        if (recipeError || !recipe) {
-            console.warn(`No active recipe found for menu item ${menu_item_id}`);
+        if (!result) {
             return res.json({ success: true, message: 'No recipe found, skipping deduction' });
-        }
-
-        // Deduct each ingredient
-        for (const ingredient of recipe.ingredients) {
-            const totalQuantity = ingredient.quantity_per_portion * quantity;
-
-            // Create usage entry
-            await supabase
-                .from('kitchen_usage')
-                .insert({
-                    branch_id,
-                    usage_date: new Date().toISOString().split('T')[0],
-                    usage_type: 'SALES',
-                    item_sku: ingredient.item_sku,
-                    item_name: ingredient.item_name,
-                    quantity: totalQuantity,
-                    unit_of_measure: ingredient.unit_of_measure,
-                    linked_order_id: order_id,
-                    linked_menu_item_id: menu_item_id,
-                    recipe_id: recipe.id
-                });
-
-            // Create ledger entry
-            await createLedgerEntry({
-                branch_id,
-                item_sku: ingredient.item_sku,
-                item_name: ingredient.item_name,
-                transaction_type: 'USAGE',
-                reference_type: 'POS_ORDER',
-                reference_id: order_id.toString(),
-                quantity_out: totalQuantity,
-                unit_of_measure: ingredient.unit_of_measure,
-                notes: `Auto-deducted for ${recipe.menu_item_name} (Order #${order_id})`
-            });
-
-            // --- PORTION DEDUCTION LOGIC ---
-            // Check if this item is tracked as portions
-            const { data: portionStock } = await supabase
-                .from('kitchen_portion_stock')
-                .select('*')
-                .eq('branch_id', branch_id)
-                .eq('item_sku', ingredient.item_sku)
-                .single();
-
-            if (portionStock) {
-                // Deduct from portion stock
-                await createPortionLedgerEntry({
-                    branch_id,
-                    item_sku: ingredient.item_sku,
-                    portion_name: portionStock.portion_name,
-                    transaction_type: 'POS_SALE',
-                    reference_type: 'POS_ORDER',
-                    reference_id: order_id.toString(),
-                    quantity_out: totalQuantity,
-                    user_id: (req as any).user?.id, // Tie to user (waiter/cashier)
-                    notes: `POS Sale: ${recipe.menu_item_name} (Order #${order_id}) - ${new Date().toLocaleTimeString()}`
-                });
-            }
         }
 
         res.json({ success: true, message: 'Ingredients deducted successfully' });

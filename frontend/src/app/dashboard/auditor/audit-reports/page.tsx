@@ -41,9 +41,20 @@ export default function AuditReporting() {
             });
 
             toast.success('Report generated successfully');
-        } catch (e) {
+        } catch (e: any) {
             console.error("Export failed:", e);
-            toast.error('Failed to generate report');
+
+            // Check if backend returned a helpful message about no data
+            if (e.response?.data?.message && e.response?.data?.suggestion) {
+                toast.warning(e.response.data.message, {
+                    description: e.response.data.suggestion,
+                    duration: 6000
+                });
+            } else if (e.response?.data?.message) {
+                toast.info(e.response.data.message);
+            } else {
+                toast.error('Failed to generate report');
+            }
         } finally {
             setIsExporting(null);
         }

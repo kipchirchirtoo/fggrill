@@ -277,10 +277,10 @@ export default function HomePage() {
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm border-b border-stone-200">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Image src="/fglogo.png" alt="Logo" width={48} height={48} className="object-contain" priority />
+            <Image src="/fglogo.png" alt="Logo" width={48} height={48} className="object-contain" style={{ height: 'auto' }} priority />
             <div>
-              <span className="font-semibold text-stone-900 text-lg">Famous Gates</span>
-              <span className="text-xs text-amber-600 block -mt-1 font-medium">HOTELS</span>
+              <span className="font-semibold text-stone-900 text-lg">FAMOUS GATES</span>
+              <span className="text-xs text-amber-600 block -mt-1 font-medium">SYSTEM</span>
             </div>
           </div>
 
@@ -321,7 +321,7 @@ export default function HomePage() {
               Welcome to
             </p>
             <h1 className="text-5xl md:text-7xl font-dm-serif text-white mb-4 tracking-tight">
-              Famous Gates <span className="italic">Hotels</span>
+              FAMOUSGATES <span className="italic">HOTELS</span>
             </h1>
             <p className="text-xl text-white/80 max-w-xl mx-auto mb-8">
               Experience unmatched hospitality and comfort across our 6 branches in Kenya
@@ -596,8 +596,12 @@ export default function HomePage() {
                   <div className="text-stone-600 text-sm">Happy Guests</div>
                 </div>
                 <div className="p-6 bg-white rounded-xl border border-stone-200">
-                  <div className="text-3xl font-bold text-amber-500 mb-1">4.8</div>
-                  <div className="text-stone-600 text-sm">Guest Rating</div>
+                  <h1 className="text-6xl md:text-8xl font-black text-stone-900 tracking-tighter leading-[0.9] uppercase mb-8">
+                    FAMOUS GATES <br />
+                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-600 to-orange-600">
+                      SYSTEM
+                    </span>
+                  </h1>
                 </div>
               </div>
             </motion.div>

@@ -58,6 +58,7 @@ import payrollRoutes from './payroll-simple.routes';
 import procurementRoutes from './procurement.routes';
 import hrReportRoutes from './hr-reports.routes';
 import stockTakeRoutes from './stock-take.routes';
+import verifyRoutes from './verify.routes';
 
 console.log('Index routes: importing staffRoutes', staffRoutes);
 
@@ -72,6 +73,9 @@ router.get('/health', (req, res) => {
     uptime: process.uptime()
   });
 });
+
+// Public ID verification (no auth required)
+router.use('/verify', verifyRoutes);
 
 // API routes
 router.use('/staff', staffRoutes);

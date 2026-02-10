@@ -161,10 +161,10 @@ export const getStaff = async (
 
     const formattedData = staff.map((s: any) => ({
       ...s,
-      first_name: s.user?.first_name || '',
-      last_name: s.user?.last_name || '',
-      email: s.user?.email || '',
-      phone_number: s.user?.phone_number || '',
+      first_name: s.first_name || s.user?.first_name || '',
+      last_name: s.last_name || s.user?.last_name || '',
+      email: s.email || s.user?.email || '',
+      phone_number: s.phone || s.user?.phone_number || '',
       avatar: s.user?.avatar || '',
       profile_photo: s.user?.avatar || s.profile_photo
     }));
@@ -260,10 +260,10 @@ export const getStaffMember = async (
       success: true,
       data: {
         ...staff,
-        first_name: staff.user?.first_name || '',
-        last_name: staff.user?.last_name || '',
-        email: staff.user?.email || '',
-        phone_number: staff.user?.phone_number || '',
+        first_name: staff.first_name || staff.user?.first_name || '',
+        last_name: staff.last_name || staff.user?.last_name || '',
+        email: staff.email || staff.user?.email || '',
+        phone_number: staff.phone || staff.user?.phone_number || '',
         avatar: staff.user?.avatar || '',
         profile_photo: staff.user?.avatar || staff.profile_photo
       }
@@ -274,7 +274,7 @@ export const getStaffMember = async (
   }
 };
 
-// @desc    Create new staff member
+// @desc    Create new staff member (staff profile only, no user account)
 // @route   POST /api/staff
 // @access  Private (Admin, Manager)
 export const createStaffMember = async (
@@ -284,292 +284,19 @@ export const createStaffMember = async (
 ): Promise<void> => {
   try {
     const {
-      firstName,
-      lastName,
-      email,
-      phone,
-      role,
+      first_name,
+      last_name,
+      national_id,
       department,
-      shift,
+      position,
+      branch_id,
+      phone,
+      email,
       basic_salary,
-      startDate,
-      idNumber,
-      employeeId,
-      nationalId,
-      pos_pin,
-      emergencyContact,
-      address,
-      branchId,
-      kra_pin,
-      nssf_number,
-      nhif_number,
-      shif_number,
-      bank_name,
-      bank_branch,
-      account_number,
-      mpesa_number,
+      shift,
+      start_date,
       employment_type,
       contract_expiry,
-      next_of_kin_name,
-      next_of_kin_phone,
-      next_of_kin_relationship,
-      supervisor_id
-    } = req.body;
-
-    // Generate Staff ID if not provided
-    const actualIdNumber = idNumber || await generateStaffId(branchId, role);
-
-    // Validate required fields
-    if (!firstName || !lastName || !email || !role) {
-      res.status(400).json({
-        success: false,
-        message: 'Please provide all required fields: firstName, lastName, email, role'
-      });
-      return;
-    }
-
-    // Generate strong password
-    const generatedPassword = generateStrongPassword();
-
-    // Check if user with email already exists
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', email)
-      .single();
-
-    let userId: string;
-
-    if (existingUser) {
-      // User already exists, use their ID
-      userId = existingUser.id;
-    } else {
-      // Map staff role to user role enum
-      // The users table has a limited set of roles, so we map detailed staff roles to basic user roles
-      const userRoleMap: { [key: string]: string } = {
-        // Management
-        'super_admin': 'super_admin',
-        'general_manager': 'manager',
-        'branch_manager': 'manager',
-        'restaurant_manager': 'manager',
-        // Sometimes department-like values may be sent
-        'management': 'manager',
-
-        // Front Office
-        'receptionist': 'receptionist',
-        'front_desk_supervisor': 'receptionist',
-        'concierge': 'receptionist',
-        'bell_captain': 'receptionist',
-        'bellhop': 'receptionist',
-        // Department-like aliases
-        'front_office': 'receptionist',
-        'reception': 'receptionist',
-
-        // Housekeeping
-        'housekeeping': 'housekeeping',
-        'housekeeping_supervisor': 'housekeeping',
-        'room_attendant': 'housekeeping',
-        'laundry_attendant': 'housekeeping',
-
-        // Restaurant & Kitchen
-        'restaurant': 'restaurant',
-        'head_chef': 'restaurant',
-        'sous_chef': 'restaurant',
-        'line_cook': 'restaurant',
-        'prep_cook': 'restaurant',
-        'waiter': 'restaurant',
-        'waitress': 'restaurant',
-        'head_waiter': 'restaurant',
-        'bartender': 'restaurant',
-        'barista': 'restaurant',
-        'food_runner': 'restaurant',
-        'host': 'restaurant',
-        'hostess': 'restaurant',
-        'sommelier': 'restaurant',
-        'kitchen_helper': 'restaurant',
-        'dishwasher': 'restaurant',
-
-        // Maintenance
-        'maintenance': 'maintenance',
-        'maintenance_supervisor': 'maintenance',
-        'electrician': 'maintenance',
-        'plumber': 'maintenance',
-        'hvac_technician': 'maintenance',
-        'carpenter': 'maintenance',
-        'painter': 'maintenance',
-        'groundskeeper': 'maintenance',
-        // Department-like alias
-        'security': 'maintenance',
-
-        // Security
-        'security_guard': 'maintenance',
-        'night_auditor': 'receptionist',
-
-        // Finance & Admin
-        'accountant': 'accountant',
-        'auditor': 'accountant',
-        'hr_manager': 'manager',
-        'payroll_clerk': 'accountant',
-        // Department-like alias
-        'finance': 'accountant',
-
-        // Inventory
-        'central_storekeeper': 'accountant',
-        'branch_storekeeper': 'accountant',
-        'inventory_clerk': 'accountant',
-        'purchasing_manager': 'accountant',
-        'driver': 'restaurant' // default for others not in enum
-      };
-
-      const normalizedRole = String(role || '').toLowerCase();
-      let userRole = userRoleMap[normalizedRole];
-      // Fallback heuristics
-      if (!userRole) {
-        if (normalizedRole.includes('manager')) userRole = 'manager';
-        else if (normalizedRole.includes('housekeep')) userRole = 'housekeeping';
-        else if (normalizedRole.includes('maint')) userRole = 'maintenance';
-        else if (normalizedRole.includes('front') || normalizedRole.includes('recept')) userRole = 'receptionist';
-        else if (normalizedRole.includes('account') || normalizedRole.includes('finance')) userRole = 'accountant';
-        else userRole = 'restaurant';
-      }
-
-      logger.debug?.('createStaffMember role mapping', { incomingRole: role, normalizedRole, mappedUserRole: userRole, department });
-
-      // Generate UUID for the user using Node's crypto module
-      const newUserId = crypto.randomUUID();
-
-      // Create user directly in users table (skip Supabase Auth for now)
-      const { data: newUser, error: userError } = await supabase
-        .from('users')
-        .insert([{
-          id: newUserId,
-          email,
-          first_name: firstName,
-          last_name: lastName,
-          phone_number: phone,
-          role: userRole,
-          department: department,
-          pos_pin: pos_pin,
-          address: address,
-          emergency_contact: emergencyContact ? JSON.stringify(emergencyContact) : null,
-          shift: shift || 'morning',
-          branch_id: branchId ? parseInt(branchId) : null,
-          created_at: new Date().toISOString()
-        }])
-        .select()
-        .single();
-
-      if (userError) {
-        logger.error('Error creating user:', userError);
-        logger.error('User insert payload:', { id: newUserId, email, userRole, department });
-        throw new Error('Database error creating new user');
-      }
-
-      if (!newUser) {
-        throw new Error('Failed to create user account');
-      }
-
-      userId = newUser.id;
-    }
-
-    // Map role to valid department for staff_profiles table
-    // The staff_profiles table only allows: housekeeping, restaurant, reception, maintenance, finance, management
-    const departmentMap: { [key: string]: string } = {
-      // Management roles
-      'super_admin': 'management',
-      'general_manager': 'management',
-      'branch_manager': 'management',
-      'restaurant_manager': 'management',
-      'management': 'management',
-
-      // Restaurant & Kitchen roles
-      'restaurant': 'restaurant',
-      'head_chef': 'restaurant',
-      'sous_chef': 'restaurant',
-      'line_cook': 'restaurant',
-      'prep_cook': 'restaurant',
-      'waiter': 'restaurant',
-      'waitress': 'restaurant',
-      'head_waiter': 'restaurant',
-      'bartender': 'restaurant',
-      'barista': 'restaurant',
-      'food_runner': 'restaurant',
-      'host': 'restaurant',
-      'hostess': 'restaurant',
-      'sommelier': 'restaurant',
-      'kitchen_helper': 'restaurant',
-      'dishwasher': 'restaurant',
-
-      // Housekeeping roles
-      'housekeeping': 'housekeeping',
-      'housekeeping_supervisor': 'housekeeping',
-      'room_attendant': 'housekeeping',
-      'laundry_attendant': 'housekeeping',
-
-      // Reception roles
-      'receptionist': 'reception',
-      'front_desk_supervisor': 'reception',
-      'concierge': 'reception',
-      'bell_captain': 'reception',
-      'bellhop': 'reception',
-      'front_office': 'reception',
-      'reception': 'reception',
-      'night_auditor': 'reception',
-
-      // Maintenance roles
-      'maintenance': 'maintenance',
-      'maintenance_supervisor': 'maintenance',
-      'electrician': 'maintenance',
-      'plumber': 'maintenance',
-      'hvac_technician': 'maintenance',
-      'carpenter': 'maintenance',
-      'painter': 'maintenance',
-      'groundskeeper': 'maintenance',
-      'security_guard': 'maintenance',
-      'security': 'maintenance',
-
-      // Finance roles
-      'accountant': 'finance',
-      'auditor': 'finance',
-      'hr_manager': 'finance',
-      'payroll_clerk': 'finance',
-      'finance': 'finance',
-      'central_storekeeper': 'finance',
-      'branch_storekeeper': 'finance',
-      'inventory_clerk': 'finance',
-      'purchasing_manager': 'finance',
-      'driver': 'maintenance'
-    };
-
-    const normalizedRole = String(role || '').toLowerCase();
-    let validDepartment = departmentMap[normalizedRole];
-
-    // Fallback heuristics for department
-    if (!validDepartment) {
-      if (normalizedRole.includes('manager') || normalizedRole.includes('admin')) validDepartment = 'management';
-      else if (normalizedRole.includes('housekeep') || normalizedRole.includes('clean')) validDepartment = 'housekeeping';
-      else if (normalizedRole.includes('maint') || normalizedRole.includes('repair')) validDepartment = 'maintenance';
-      else if (normalizedRole.includes('front') || normalizedRole.includes('recept') || normalizedRole.includes('desk')) validDepartment = 'reception';
-      else if (normalizedRole.includes('account') || normalizedRole.includes('finance') || normalizedRole.includes('store')) validDepartment = 'finance';
-      else validDepartment = 'restaurant'; // Default fallback
-    }
-
-    // Map role to position (human readable label)
-    const position = role.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-
-    logger.debug?.('createStaffMember mapping', { incomingRole: role, normalizedRole, mappedDepartment: validDepartment, position });
-
-    // Create staff profile
-    const staffData: any = {
-      user_id: userId,
-      department: validDepartment,
-      role: role, // Changed from position to role to match schema
-      shift: shift || 'morning',
-      basic_salary: basic_salary ? parseFloat(basic_salary) : 0,
-      start_date: startDate || new Date().toISOString().split('T')[0], // Changed from hire_date to start_date
-      id_number: actualIdNumber,
-      national_id: nationalId || 'pending',
-      status: 'active',
       kra_pin,
       nssf_number,
       nhif_number,
@@ -578,72 +305,128 @@ export const createStaffMember = async (
       bank_branch,
       account_number,
       mpesa_number,
-      employment_type: employment_type || 'permanent',
-      contract_expiry,
       next_of_kin_name,
       next_of_kin_phone,
       next_of_kin_relationship,
       supervisor_id,
+      // Legacy field support (frontends may still send these)
+      firstName,
+      lastName,
+      nationalId,
+      branchId
+    } = req.body;
+
+    // Normalize legacy field names
+    const staffFirstName = first_name || firstName;
+    const staffLastName = last_name || lastName;
+    const staffNationalId = national_id || nationalId;
+    const staffBranchId = branch_id || branchId;
+
+    // Validate required fields
+    if (!staffFirstName || !staffLastName || !staffNationalId || !department) {
+      res.status(400).json({
+        success: false,
+        message: 'Please provide all required fields: first_name, last_name, national_id, department'
+      });
+      return;
+    }
+
+    // Validate department against allowed values
+    const validDepartments = [
+      'housekeeping', 'restaurant', 'reception', 'maintenance',
+      'finance', 'management', 'security', 'bar_lounge', 'administration', 'general'
+    ];
+    if (!validDepartments.includes(department)) {
+      res.status(400).json({
+        success: false,
+        message: `Invalid department. Must be one of: ${validDepartments.join(', ')}`
+      });
+      return;
+    }
+
+    // Branch Manager staff limit enforcement (max 10 staff per branch)
+    const callerRole = (req as any).user?.role;
+    if (callerRole === 'branch_manager' && staffBranchId) {
+      const { count, error: countError } = await supabase
+        .from('staff_profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('branch_id', parseInt(staffBranchId))
+        .eq('status', 'active');
+
+      if (countError) {
+        logger.error('Error counting branch staff:', countError);
+      } else if ((count || 0) >= 10) {
+        res.status(400).json({
+          success: false,
+          message: 'Staff limit reached. Branch managers can only add up to 10 staff members per branch.'
+        });
+        return;
+      }
+    }
+
+    // Generate Staff ID
+    const idNumber = await generateStaffId(staffBranchId, department);
+
+    // Create staff profile (NO user account created)
+    const staffData: any = {
+      first_name: staffFirstName,
+      last_name: staffLastName,
+      email: email || null,
+      phone: phone || null,
+      national_id: staffNationalId,
+      department,
+      position: position || department,
+      role: position || department, // legacy 'role' column stores position
+      shift: shift || 'morning',
+      basic_salary: basic_salary ? parseFloat(basic_salary) : 0,
+      start_date: start_date || new Date().toISOString().split('T')[0],
+      id_number: idNumber,
+      status: 'active',
+      employment_type: employment_type || 'permanent',
+      contract_expiry: contract_expiry || null,
+      kra_pin: kra_pin || null,
+      nssf_number: nssf_number || null,
+      nhif_number: nhif_number || null,
+      shif_number: shif_number || null,
+      bank_name: bank_name || null,
+      bank_branch: bank_branch || null,
+      account_number: account_number || null,
+      mpesa_number: mpesa_number || null,
+      next_of_kin_name: next_of_kin_name || null,
+      next_of_kin_phone: next_of_kin_phone || null,
+      next_of_kin_relationship: next_of_kin_relationship || null,
+      supervisor_id: supervisor_id || null,
       updated_at: new Date().toISOString()
     };
 
     // Add branch_id if provided
-    if (branchId) {
-      staffData.branch_id = parseInt(branchId);
+    if (staffBranchId) {
+      staffData.branch_id = parseInt(staffBranchId);
     }
 
-    // Use upsert to handle the trigger conflict (trigger might have already created a profile)
+    logger.debug?.('createStaffMember inserting staff profile', { staffData });
+
     const { data: staffProfile, error: staffError } = await supabase
       .from('staff_profiles')
-      .upsert([staffData], { onConflict: 'user_id' })
-      .select(`
-      *,
-        user: users!user_id(
-          id,
-          email,
-          first_name,
-          last_name,
-          phone_number,
-          role
-        )
-        `)
+      .insert([staffData])
+      .select()
       .single();
 
     if (staffError) {
-      // If staff profile creation fails, clean up the user if we just created them
-      if (!existingUser) {
-        await supabase.from('users').delete().eq('id', userId);
-      }
       logger.error('Error creating staff profile:', staffError);
       logger.error('Staff profile payload:', staffData);
       throw new Error(`Failed to create staff profile: ${staffError.message}`);
     }
 
-    // ALSO update the user record if it already existed to ensure sync
-    if (existingUser) {
-      const userUpdateData: any = {
-        phone_number: phone,
-        pos_pin: pos_pin,
-        address: address,
-        emergency_contact: emergencyContact ? JSON.stringify(emergencyContact) : null,
-        shift: shift || 'morning',
-        branch_id: branchId ? parseInt(branchId) : null,
-        department: department
-      };
-
-      await supabase.from('users').update(userUpdateData).eq('id', userId);
-    }
-
     res.status(201).json({
       success: true,
       data: {
-        staff: staffProfile,
-        generatedPassword: existingUser ? undefined : generatedPassword
+        staff: staffProfile
       },
       message: 'Staff member created successfully'
     });
 
-    logger.info(`Staff member created: ${email} with role ${role} `);
+    logger.info(`Staff member created: ${staffFirstName} ${staffLastName} in ${department}`);
   } catch (error) {
     next(error);
   }
@@ -794,6 +577,12 @@ export const updateStaffMember = async (
     if (next_of_kin_relationship !== undefined) staffUpdateData.next_of_kin_relationship = next_of_kin_relationship;
     if (supervisor_id !== undefined) staffUpdateData.supervisor_id = supervisor_id;
     if (archive_notes !== undefined) staffUpdateData.archive_notes = archive_notes;
+
+    // Sync contact fields to staff_profiles (decoupled architecture support)
+    if (first_name !== undefined) staffUpdateData.first_name = first_name;
+    if (last_name !== undefined) staffUpdateData.last_name = last_name;
+    if (email !== undefined) staffUpdateData.email = email;
+    if (phone_number !== undefined) staffUpdateData.phone = phone_number;
 
     const { data: updatedStaff, error: updateError } = await supabase
       .from('staff_profiles')

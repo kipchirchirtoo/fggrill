@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
+import { autoDeductIngredients, deductIngredientsForItem } from './kitchen/recipes.controller';
 
 // @desc    Get all menu categories
 // @route   GET /api/restaurant/menu/categories
@@ -528,6 +529,39 @@ export const updateOrderStatus = async (
     });
 
     logger.info(`Order ${order.order_number} status updated to ${status} `);
+
+    // Auto-deduct ingredients if served or delivered
+    if (['served', 'delivered'].includes(status)) {
+      try {
+        // Get order items if not already joined
+        const { data: orderWithItems } = await supabase
+          .from('restaurant_orders')
+          .select('*, items:restaurant_order_items(*)')
+          .eq('id', req.params.id)
+          .single();
+
+        if (orderWithItems && orderWithItems.items) {
+          for (const item of orderWithItems.items) {
+            await deductIngredientsForItem({
+              order_id: orderWithItems.id,
+              menu_item_id: item.menu_item_id,
+              quantity: item.quantity,
+              branch_id: orderWithItems.branch_id,
+              user_id: req.user?.id
+            });
+          }
+          logger.info(`Ingredients auto-deducted for order ${orderWithItems.order_number}`);
+        }
+      } catch (deductError) {
+        logger.error(`Error in auto-deduction for order ${req.params.id}:`, deductError);
+        // Don't fail the request if deduction fails
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: updatedOrder
+    });
   } catch (error) {
     next(error);
   }

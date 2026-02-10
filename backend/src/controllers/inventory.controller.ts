@@ -103,7 +103,7 @@ export const createItem = async (
     };
 
     const { data, error } = await supabase
-      .from('restaurant_inventory_items') // Use correct table name
+      .from('inventory_items') // Standardize on inventory_items for general module
       .insert([item])
       .select()
       .single();

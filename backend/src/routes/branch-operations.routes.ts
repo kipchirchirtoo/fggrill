@@ -284,11 +284,17 @@ router.get('/staff', protect, validateBranch, async (req, res) => {
 
     // Build the SQL query with filters
     let query = `
-      SELECT s.id, s.employee_id, (u.first_name || ' ' || u.last_name) as name, s.department, s.position, s.status, 
-             u.email, s.phone, s.hire_date, s.created_at,
-             u.first_name as firstName, u.last_name as lastName
+      SELECT s.id, s.id_number as employee_id, 
+             COALESCE(s.first_name || ' ' || s.last_name, u.first_name || ' ' || u.last_name) as name, 
+             s.department, s.position, s.status, 
+             COALESCE(s.email, u.email) as email, 
+             COALESCE(s.phone, u.phone_number) as phone, 
+             s.start_date as hire_date, s.created_at,
+             COALESCE(s.first_name, u.first_name) as firstName, 
+             COALESCE(s.last_name, u.last_name) as lastName,
+             s.national_id
       FROM staff_profiles s
-      JOIN users u ON s.user_id = u.id
+      LEFT JOIN users u ON s.user_id = u.id
       WHERE s.branch_id = $1
     `;
 
@@ -3347,82 +3353,48 @@ router.delete('/rooms/:roomId', protect, async (req, res) => {
 // POST /staff - Create a new staff member
 router.post('/staff', protect, validateBranch, async (req, res) => {
   try {
-    const { name, email, phone, position, department, status } = req.body;
+    const { first_name, last_name, email, phone, position, department, national_id, status } = req.body;
     const branchId = req.headers['x-branch-id'] || req.query.branch_id;
 
     // Validate required fields
-    if (!name || !email || !position || !department) {
+    if (!first_name || !last_name || !national_id || !department) {
       return res.status(400).json({
         success: false,
-        message: 'Name, email, position, and department are required'
+        message: 'First name, last name, national ID, and department are required'
       });
     }
 
-    // Check if user with email already exists
-    let userId;
-    const userCheck = await db.query(
-      'SELECT id FROM users WHERE email = $1',
-      [email]
-    );
-
-    if (userCheck.rows.length > 0) {
-      userId = userCheck.rows[0].id;
-    } else {
-      // Split name into first and last name
-      const nameParts = name.trim().split(/\s+/);
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Staff';
-
-      // Create new user account (public.users table)
-      // Note: In production we should use supabase.auth.admin.createUser
-      const newUser = await db.query(
-        `INSERT INTO users(id, first_name, last_name, email, phone_number, role)
-         VALUES($1, $2, $3, $4, $5, $6)
-         RETURNING id`,
-        [require('crypto').randomUUID(), firstName, lastName, email, phone || '', 'staff']
-      );
-      userId = newUser.rows[0].id;
-    }
-
-    // Check if staff profile already exists
-    const staffCheck = await db.query(
-      'SELECT id FROM staff_profiles WHERE user_id = $1 AND branch_id = $2',
-      [userId, branchId]
-    );
-
-    if (staffCheck.rows.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Staff member already exists for this branch'
-      });
-    }
-
-    // Insert staff profile
+    // Insert staff profile (Decoupled from users)
     const insertQuery = `
       INSERT INTO staff_profiles(
-  user_id, branch_id, position, department, status, hire_date
-)
-VALUES($1, $2, $3, $4, $5, NOW())
-      RETURNING id, position, department, status
-  `;
+        first_name, last_name, email, phone, national_id, 
+        branch_id, position, department, status, hire_date, start_date,
+        id_number
+      )
+      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW(), $10)
+      RETURNING id, first_name, last_name, email, phone, national_id, position, department, status
+    `;
+
+    // Generate a simple temporary employee ID for now
+    const idNumber = `STF${Math.floor(1000 + Math.random() * 9000)}`;
 
     const { rows } = await db.query(insertQuery, [
-      userId,
+      first_name,
+      last_name,
+      email || null,
+      phone || null,
+      national_id,
       branchId,
-      position,
+      position || department,
       department,
-      status || 'active'
+      status || 'active',
+      idNumber
     ]);
 
     res.status(201).json({
       success: true,
       message: 'Staff member created successfully',
-      data: {
-        ...rows[0],
-        name,
-        email,
-        phone
-      }
+      data: rows[0]
     });
   } catch (error) {
     console.error('Error creating staff member:', error);
@@ -3430,6 +3402,76 @@ VALUES($1, $2, $3, $4, $5, NOW())
       success: false,
       message: 'Failed to create staff member',
       error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+router.put('/staff/:id', protect, validateBranch, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { first_name, last_name, email, phone, position, department, national_id, status } = req.body;
+    const branchId = req.headers['x-branch-id'] || req.query.branch_id;
+
+    // Check if staff belongs to branch
+    const checkStaff = await db.query('SELECT id FROM staff_profiles WHERE id = $1 AND branch_id = $2', [id, branchId]);
+    if (checkStaff.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Staff member not found in this branch' });
+    }
+
+    const updateQuery = `
+      UPDATE staff_profiles
+      SET 
+        first_name = COALESCE($1, first_name),
+        last_name = COALESCE($2, last_name),
+        email = COALESCE($3, email),
+        phone = COALESCE($4, phone),
+        position = COALESCE($5, position),
+        department = COALESCE($6, department),
+        national_id = COALESCE($7, national_id),
+        status = COALESCE($8, status),
+        updated_at = NOW()
+      WHERE id = $9
+      RETURNING *
+    `;
+
+    const { rows } = await db.query(updateQuery, [
+      first_name, last_name, email, phone, position, department, national_id, status, id
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: 'Staff member updated successfully',
+      data: rows[0]
+    });
+  } catch (error) {
+    console.error('Error updating staff member:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update staff member',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+router.delete('/staff/:id', protect, validateBranch, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const branchId = req.headers['x-branch-id'] || req.query.branch_id;
+
+    const result = await db.query('DELETE FROM staff_profiles WHERE id = $1 AND branch_id = $2 RETURNING id', [id, branchId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Staff member not found in this branch' });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Staff member deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting staff member:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete staff member'
     });
   }
 });

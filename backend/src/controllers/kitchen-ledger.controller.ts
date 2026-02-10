@@ -80,16 +80,23 @@ export const createLedgerEntry = async (req: Request, res: Response) => {
 
     // Calculate closing balance
     const closing_balance =
-      (opening_balance || 0) +
-      (received_quantity || 0) -
-      (used_quantity || 0) -
-      (wastage_quantity || 0);
+      (Number(opening_balance) || 0) +
+      (Number(received_quantity) || 0) -
+      (Number(used_quantity) || 0) -
+      (Number(wastage_quantity) || 0);
 
     // Generate entry number
-    const { data: entryNumberData } = await supabase
-      .rpc('generate_kitchen_ledger_number');
+    let entry_number: string;
+    try {
+      const { data: entryNumberData, error: rpcError } = await supabase
+        .rpc('generate_kitchen_ledger_number');
 
-    const entry_number = entryNumberData || `KL${Date.now()}`;
+      if (rpcError) throw rpcError;
+      entry_number = entryNumberData;
+    } catch (rpcErr) {
+      console.warn('RPC generate_kitchen_ledger_number failed, using fallback:', rpcErr);
+      entry_number = `KL${Date.now()}`;
+    }
 
     const { data, error } = await supabase
       .from('kitchen_ledger_entries')
@@ -109,7 +116,7 @@ export const createLedgerEntry = async (req: Request, res: Response) => {
         unit_of_measure,
         remarks,
         status: status || 'draft',
-        created_by: req.user?.id
+        created_by: (req as any).user?.id
       })
       .select()
       .single();
@@ -118,7 +125,7 @@ export const createLedgerEntry = async (req: Request, res: Response) => {
 
     // Record movements in kitchen_stock_ledger for real-time stock tracking
     try {
-      if (received_quantity && received_quantity > 0) {
+      if (received_quantity && Number(received_quantity) > 0) {
         await recordStockMovement({
           branch_id,
           item_sku: item_id, // item_id is used as SKU here
@@ -126,14 +133,14 @@ export const createLedgerEntry = async (req: Request, res: Response) => {
           transaction_type: 'RECEIPT',
           reference_type: 'MANUAL_LEDGER',
           reference_id: data.entry_number,
-          quantity_in: received_quantity,
+          quantity_in: Number(received_quantity),
           unit_of_measure,
-          user_id: req.user?.id,
+          user_id: (req as any).user?.id,
           notes: remarks || 'Manual daily entry'
         });
       }
 
-      if (used_quantity && used_quantity > 0) {
+      if (used_quantity && Number(used_quantity) > 0) {
         await recordStockMovement({
           branch_id,
           item_sku: item_id,
@@ -141,14 +148,14 @@ export const createLedgerEntry = async (req: Request, res: Response) => {
           transaction_type: 'USAGE',
           reference_type: 'MANUAL_LEDGER',
           reference_id: data.entry_number,
-          quantity_out: used_quantity,
+          quantity_out: Number(used_quantity),
           unit_of_measure,
-          user_id: req.user?.id,
+          user_id: (req as any).user?.id,
           notes: remarks || 'Manual daily entry'
         });
       }
 
-      if (wastage_quantity && wastage_quantity > 0) {
+      if (wastage_quantity && Number(wastage_quantity) > 0) {
         await recordStockMovement({
           branch_id,
           item_sku: item_id,
@@ -156,9 +163,9 @@ export const createLedgerEntry = async (req: Request, res: Response) => {
           transaction_type: 'WASTAGE',
           reference_type: 'MANUAL_LEDGER',
           reference_id: data.entry_number,
-          quantity_out: wastage_quantity,
+          quantity_out: Number(wastage_quantity),
           unit_of_measure,
-          user_id: req.user?.id,
+          user_id: (req as any).user?.id,
           notes: remarks || 'Manual daily entry'
         });
       }
@@ -336,10 +343,17 @@ export const createStoreReceipt = async (req: Request, res: Response) => {
     } = req.body;
 
     // Generate receipt number
-    const { data: receiptNumberData } = await supabase
-      .rpc('generate_kitchen_receipt_number');
+    let receipt_number: string;
+    try {
+      const { data: receiptNumberData, error: rpcError } = await supabase
+        .rpc('generate_kitchen_receipt_number');
 
-    const receipt_number = receiptNumberData || `KR${Date.now()}`;
+      if (rpcError) throw rpcError;
+      receipt_number = receiptNumberData;
+    } catch (rpcErr) {
+      console.warn('RPC generate_kitchen_receipt_number failed, using fallback:', rpcErr);
+      receipt_number = `KR${Date.now()}`;
+    }
 
     // Create receipt header
     const { data: receipt, error: receiptError } = await supabase
@@ -349,7 +363,7 @@ export const createStoreReceipt = async (req: Request, res: Response) => {
         branch_id,
         dispatch_note_id,
         received_from,
-        received_by: req.user?.id,
+        received_by: (req as any).user?.id,
         total_items: items?.length || 0,
         remarks,
         status: 'pending'
@@ -369,8 +383,8 @@ export const createStoreReceipt = async (req: Request, res: Response) => {
         received_quantity: item.received_quantity,
         unit_of_measure: item.unit_of_measure,
         expected_portions: item.expected_portions,
-        status: item.received_quantity < item.expected_quantity ? 'shortage' :
-          item.received_quantity > item.expected_quantity ? 'excess' : 'ok',
+        status: Number(item.received_quantity) < Number(item.expected_quantity) ? 'shortage' :
+          Number(item.received_quantity) > Number(item.expected_quantity) ? 'excess' : 'ok',
         remarks: item.remarks
       }));
 
@@ -501,10 +515,17 @@ export const createPortionTracking = async (req: Request, res: Response) => {
     } = req.body;
 
     // Generate tracking number
-    const { data: trackingNumberData } = await supabase
-      .rpc('generate_portion_tracking_number');
+    let tracking_number: string;
+    try {
+      const { data: trackingNumberData, error: rpcError } = await supabase
+        .rpc('generate_portion_tracking_number');
 
-    const tracking_number = trackingNumberData || `PT${Date.now()}`;
+      if (rpcError) throw rpcError;
+      tracking_number = trackingNumberData;
+    } catch (rpcErr) {
+      console.warn('RPC generate_portion_tracking_number failed, using fallback:', rpcErr);
+      tracking_number = `PT${Date.now()}`;
+    }
 
     const { data, error } = await supabase
       .from('kitchen_portion_tracking')
@@ -519,7 +540,7 @@ export const createPortionTracking = async (req: Request, res: Response) => {
         received_quantity,
         unit_of_measure,
         expected_portions,
-        chef_id: req.user?.id,
+        chef_id: (req as any).user?.id,
         status: 'tracking'
       })
       .select()
@@ -569,9 +590,9 @@ export const updatePortionTracking = async (req: Request, res: Response) => {
 
     // If there is a variance and no reason provided, we might want to flag it
     // but for now we'll just store what's given.
-    if (actual_portions_produced !== current.expected_portions && !variance_reason) {
+    if (Number(actual_portions_produced) !== Number(current.expected_portions) && !variance_reason) {
       updateData.status = 'variance_pending_reason';
-    } else if (actual_portions_produced !== current.expected_portions && variance_reason) {
+    } else if (Number(actual_portions_produced) !== Number(current.expected_portions) && variance_reason) {
       updateData.status = 'variance_reported';
     } else {
       updateData.status = 'completed';
@@ -665,7 +686,7 @@ export const createVarianceLog = async (req: Request, res: Response) => {
         variance_amount,
         reason,
         corrective_action,
-        reported_by: req.user?.id,
+        reported_by: (req as any).user?.id,
         approval_status: 'pending'
       })
       .select()
@@ -697,8 +718,9 @@ export const approveVarianceLog = async (req: Request, res: Response) => {
       .from('kitchen_variance_logs')
       .update({
         approval_status,
-        approved_by: req.user?.id,
-        approved_at: new Date().toISOString()
+        approved_by: (req as any).user?.id,
+        approved_at: new Date().toISOString(),
+        remarks
       })
       .eq('id', id)
       .select()

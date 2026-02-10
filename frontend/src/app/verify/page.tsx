@@ -16,14 +16,24 @@ function VerificationContent() {
             return;
         }
 
-        // Simulate API verification
-        const timer = setTimeout(() => {
-            // For demo purposes, we assume checks pass if ID is present
-            // In production, fetch(`/api/verify/${id}`) would go here
-            setStatus('valid');
-        }, 1500);
+        // Call the backend API to verify the ID
+        const verifyId = async () => {
+            try {
+                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/verify/${id}`);
+                const data = await response.json();
 
-        return () => clearTimeout(timer);
+                if (data.success && data.valid) {
+                    setStatus('valid');
+                } else {
+                    setStatus('invalid');
+                }
+            } catch (error) {
+                console.error('Verification error:', error);
+                setStatus('invalid');
+            }
+        };
+
+        verifyId();
     }, [id]);
 
     return (

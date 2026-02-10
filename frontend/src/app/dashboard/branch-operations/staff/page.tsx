@@ -19,10 +19,13 @@ import { Label } from '@/components/ui/label';
 // Staff member interface
 interface StaffMember {
   id: string;
+  first_name: string;
+  last_name: string;
   name: string;
   position: string;
   department: string;
   status: string;
+  national_id?: string;
   email?: string;
   phone?: string;
   avatar?: string;
@@ -48,11 +51,13 @@ function BranchStaffManagementContent() {
   // Form data
   const [formData, setFormData] = useState({
     id: '',
-    name: '',
+    first_name: '',
+    last_name: '',
     email: '',
     phone: '',
     position: '',
     department: '',
+    national_id: '',
     status: 'active'
   });
 
@@ -161,11 +166,13 @@ function BranchStaffManagementContent() {
     setSelectedStaff(null);
     setFormData({
       id: '',
-      name: '',
+      first_name: '',
+      last_name: '',
       email: '',
       phone: '',
       position: '',
       department: '',
+      national_id: '',
       status: 'active'
     });
   };
@@ -208,11 +215,13 @@ function BranchStaffManagementContent() {
     setSelectedStaff(staff);
     setFormData({
       id: staff.id,
-      name: staff.name,
+      first_name: staff.first_name || '',
+      last_name: staff.last_name || '',
       email: staff.email || '',
       phone: staff.phone || '',
       position: staff.position,
       department: staff.department,
+      national_id: staff.national_id || '',
       status: staff.status
     });
     setShowEditStaffModal(true);
@@ -308,11 +317,14 @@ function BranchStaffManagementContent() {
                   className="w-full h-10 px-3 rounded-ios-lg border border-gray-200"
                 >
                   <option value="all">All Departments</option>
-                  <option value="Front Office">Front Office</option>
-                  <option value="Housekeeping">Housekeeping</option>
-                  <option value="Kitchen">Kitchen</option>
-                  <option value="Restaurant">Restaurant</option>
-                  <option value="Security">Security</option>
+                  <option value="reception">Reception</option>
+                  <option value="housekeeping">Housekeeping</option>
+                  <option value="kitchen">Kitchen</option>
+                  <option value="restaurant">Restaurant</option>
+                  <option value="bar_lounge">Bar & Lounge</option>
+                  <option value="security">Security</option>
+                  <option value="maintenance">Maintenance</option>
+                  <option value="management">Management</option>
                 </select>
               </div>
 
@@ -395,15 +407,15 @@ function BranchStaffManagementContent() {
                         </td>
                         <td className="px-4 py-4 text-center">
                           <div className="flex justify-center space-x-2">
-                            <IOSButton 
-                              size="sm" 
+                            <IOSButton
+                              size="sm"
                               variant="secondary"
                               onClick={() => handleViewStaff(person)}
                             >
                               View
                             </IOSButton>
-                            <IOSButton 
-                              size="sm" 
+                            <IOSButton
+                              size="sm"
                               variant="outline"
                               onClick={() => handleEditStaff(person)}
                             >
@@ -432,14 +444,37 @@ function BranchStaffManagementContent() {
           </DialogHeader>
 
           <form onSubmit={handleCreateStaff} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="first_name">First Name *</Label>
+                <Input
+                  id="first_name"
+                  required
+                  value={formData.first_name}
+                  onChange={(e) => handleFormChange('first_name', e.target.value)}
+                  placeholder="John"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="last_name">Last Name *</Label>
+                <Input
+                  id="last_name"
+                  required
+                  value={formData.last_name}
+                  onChange={(e) => handleFormChange('last_name', e.target.value)}
+                  placeholder="Doe"
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name *</Label>
+              <Label htmlFor="national_id">National ID *</Label>
               <Input
-                id="name"
+                id="national_id"
                 required
-                value={formData.name}
-                onChange={(e) => handleFormChange('name', e.target.value)}
-                placeholder="John Doe"
+                value={formData.national_id}
+                onChange={(e) => handleFormChange('national_id', e.target.value)}
+                placeholder="ID Number"
               />
             </div>
 
@@ -487,14 +522,16 @@ function BranchStaffManagementContent() {
                 className="w-full h-10 px-3 rounded-ios-lg border border-gray-200"
               >
                 <option value="">Select Department</option>
-                <option value="Front Office">Front Office</option>
-                <option value="Housekeeping">Housekeeping</option>
-                <option value="Kitchen">Kitchen</option>
-                <option value="Restaurant">Restaurant</option>
-                <option value="Bar & Lounge">Bar & Lounge</option>
-                <option value="Security">Security</option>
-                <option value="Maintenance">Maintenance</option>
-                <option value="Management">Management</option>
+                <option value="reception">Reception</option>
+                <option value="housekeeping">Housekeeping</option>
+                <option value="kitchen">Kitchen</option>
+                <option value="restaurant">Restaurant</option>
+                <option value="bar_lounge">Bar & Lounge</option>
+                <option value="security">Security</option>
+                <option value="maintenance">Maintenance</option>
+                <option value="management">Management</option>
+                <option value="finance">Finance</option>
+                <option value="administration">Administration</option>
               </select>
             </div>
 
@@ -531,14 +568,14 @@ function BranchStaffManagementContent() {
           </form>
         </DialogContent>
       </Dialog>
-      
+
       {/* View Staff Modal */}
       <Dialog open={showViewStaffModal} onOpenChange={setShowViewStaffModal}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Staff Details</DialogTitle>
           </DialogHeader>
-          
+
           {selectedStaff && (
             <div className="space-y-6">
               {/* Staff Profile Header */}
@@ -554,30 +591,35 @@ function BranchStaffManagementContent() {
                   </div>
                 </div>
               </div>
-              
+
               {/* Staff Details */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-500">Department</p>
                   <p className="font-medium">{selectedStaff.department}</p>
                 </div>
-                
+
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-500">Email</p>
                   <p className="font-medium">{selectedStaff.email || 'Not provided'}</p>
                 </div>
-                
+
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-500">Phone</p>
                   <p className="font-medium">{selectedStaff.phone || 'Not provided'}</p>
                 </div>
-                
+
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-gray-500">National ID</p>
+                  <p className="font-medium">{selectedStaff.national_id || 'Not provided'}</p>
+                </div>
+
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-500">Status</p>
                   <p className="font-medium capitalize">{selectedStaff.status}</p>
                 </div>
               </div>
-              
+
               <DialogFooter>
                 <IOSButton variant="outline" onClick={handleCloseModal}>
                   Close
@@ -593,7 +635,7 @@ function BranchStaffManagementContent() {
           )}
         </DialogContent>
       </Dialog>
-      
+
       {/* Edit Staff Modal */}
       <Dialog open={showEditStaffModal} onOpenChange={setShowEditStaffModal}>
         <DialogContent className="sm:max-w-lg">
@@ -605,13 +647,34 @@ function BranchStaffManagementContent() {
           </DialogHeader>
 
           <form onSubmit={handleUpdateStaff} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-first_name">First Name *</Label>
+                <Input
+                  id="edit-first_name"
+                  required
+                  value={formData.first_name}
+                  onChange={(e) => handleFormChange('first_name', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-last_name">Last Name *</Label>
+                <Input
+                  id="edit-last_name"
+                  required
+                  value={formData.last_name}
+                  onChange={(e) => handleFormChange('last_name', e.target.value)}
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
-              <Label htmlFor="edit-name">Full Name *</Label>
+              <Label htmlFor="edit-national_id">National ID *</Label>
               <Input
-                id="edit-name"
+                id="edit-national_id"
                 required
-                value={formData.name}
-                onChange={(e) => handleFormChange('name', e.target.value)}
+                value={formData.national_id}
+                onChange={(e) => handleFormChange('national_id', e.target.value)}
               />
             </div>
 
@@ -656,14 +719,16 @@ function BranchStaffManagementContent() {
                 className="w-full h-10 px-3 rounded-ios-lg border border-gray-200"
               >
                 <option value="">Select Department</option>
-                <option value="Front Office">Front Office</option>
-                <option value="Housekeeping">Housekeeping</option>
-                <option value="Kitchen">Kitchen</option>
-                <option value="Restaurant">Restaurant</option>
-                <option value="Bar & Lounge">Bar & Lounge</option>
-                <option value="Security">Security</option>
-                <option value="Maintenance">Maintenance</option>
-                <option value="Management">Management</option>
+                <option value="reception">Reception</option>
+                <option value="housekeeping">Housekeeping</option>
+                <option value="kitchen">Kitchen</option>
+                <option value="restaurant">Restaurant</option>
+                <option value="bar_lounge">Bar & Lounge</option>
+                <option value="security">Security</option>
+                <option value="maintenance">Maintenance</option>
+                <option value="management">Management</option>
+                <option value="finance">Finance</option>
+                <option value="administration">Administration</option>
               </select>
             </div>
 

@@ -17,7 +17,9 @@ import { BranchPageWrapper } from '@/components/branch/branch-page-wrapper';
 
 interface StaffMember {
   id: string;
-  name: string;
+  first_name: string;
+  last_name: string;
+  national_id?: string;
   email: string;
   phone: string;
   department: string;
@@ -36,18 +38,29 @@ function StaffManagementContent() {
   const [filter, setFilter] = useState({ department: '' });
   const [showModal, setShowModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({ name: '', email: '', phone: '', department: 'housekeeping', position: '' });
+  const [formData, setFormData] = useState({
+    first_name: '',
+    last_name: '',
+    national_id: '',
+    email: '',
+    phone: '',
+    department: 'housekeeping',
+    position: ''
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.department) { toast.error('Please fill required fields'); return; }
+    if (!formData.first_name || !formData.last_name || !formData.national_id || !formData.department) {
+      toast.error('Please fill required fields (First Name, Last Name, National ID, Department)');
+      return;
+    }
     setIsSubmitting(true);
     try {
       const response = await facilitiesAPI.createStaff({ ...formData, branch_id: activeBranchId });
       if (response.success) {
         toast.success('Staff member added successfully');
         setShowModal(false);
-        setFormData({ name: '', email: '', phone: '', department: 'housekeeping', position: '' });
+        setFormData({ first_name: '', last_name: '', national_id: '', email: '', phone: '', department: 'housekeeping', position: '' });
         fetchStaff();
       } else { toast.error(response.error || 'Failed to add staff'); }
     } catch (error) { toast.error('Failed to add staff'); }
@@ -76,8 +89,9 @@ function StaffManagementContent() {
   const getStatusColor = (_status?: string, _active?: boolean) => 'bg-gray-100 text-gray-700 border border-gray-200';
 
   const filteredStaff = staff.filter(member => {
-    const matchesSearch = member.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         member.email?.toLowerCase().includes(searchTerm.toLowerCase());
+    const fullName = `${member.first_name} ${member.last_name}`.toLowerCase();
+    const matchesSearch = fullName.includes(searchTerm.toLowerCase()) ||
+      member.email?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDept = !filter.department || member.department === filter.department;
     return matchesSearch && matchesDept;
   });
@@ -158,12 +172,12 @@ function StaffManagementContent() {
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
                       <span className="text-lg font-bold text-gray-600">
-                        {member.name?.charAt(0)?.toUpperCase() || '?'}
+                        {member.first_name?.[0]?.toUpperCase() || '?'}
                       </span>
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
-                        <h3 className="font-medium text-gray-900">{member.name}</h3>
+                        <h3 className="font-medium text-gray-900">{member.first_name} {member.last_name}</h3>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(member.status, member.active)}`}>
                           {member.active ? (member.status?.replace('_', ' ') || 'Active') : 'Inactive'}
                         </span>
@@ -207,16 +221,77 @@ function StaffManagementContent() {
             </Card>
           )}
         </div>
-      <Dialog open={showModal} onOpenChange={setShowModal}>
+        <Dialog open={showModal} onOpenChange={setShowModal}>
           <DialogContent className="max-w-md">
             <DialogHeader><DialogTitle>Add Staff Member</DialogTitle></DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div><Label>Full Name *</Label><Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g., John Doe" /></div>
-              <div><Label>Department *</Label><select value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} className="w-full px-3 py-2 border rounded-lg"><option value="housekeeping">Housekeeping</option><option value="maintenance">Maintenance</option><option value="facilities">Facilities</option></select></div>
-              <div><Label>Position</Label><Input value={formData.position} onChange={(e) => setFormData({ ...formData, position: e.target.value })} placeholder="e.g., Room Attendant" /></div>
-              <div><Label>Email</Label><Input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="email@example.com" /></div>
-              <div><Label>Phone</Label><Input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="+254..." /></div>
-              <div className="flex gap-2 justify-end"><IOSButton type="button" variant="secondary" onClick={() => setShowModal(false)}>Cancel</IOSButton><IOSButton type="submit" disabled={isSubmitting}>{isSubmitting ? 'Adding...' : 'Add Staff'}</IOSButton></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>First Name *</Label>
+                  <Input
+                    value={formData.first_name}
+                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                    placeholder="John"
+                  />
+                </div>
+                <div>
+                  <Label>Last Name *</Label>
+                  <Input
+                    value={formData.last_name}
+                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                    placeholder="Doe"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>National ID *</Label>
+                <Input
+                  value={formData.national_id}
+                  onChange={(e) => setFormData({ ...formData, national_id: e.target.value })}
+                  placeholder="National ID Number"
+                />
+              </div>
+              <div>
+                <Label>Department *</Label>
+                <select
+                  value={formData.department}
+                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg"
+                >
+                  <option value="housekeeping">Housekeeping</option>
+                  <option value="maintenance">Maintenance</option>
+                  <option value="facilities">Facilities</option>
+                </select>
+              </div>
+              <div>
+                <Label>Position</Label>
+                <Input
+                  value={formData.position}
+                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                  placeholder="e.g., Room Attendant"
+                />
+              </div>
+              <div>
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="email@example.com"
+                />
+              </div>
+              <div>
+                <Label>Phone</Label>
+                <Input
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="+254..."
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <IOSButton type="button" variant="secondary" onClick={() => setShowModal(false)}>Cancel</IOSButton>
+                <IOSButton type="submit" disabled={isSubmitting}>{isSubmitting ? 'Adding...' : 'Add Staff'}</IOSButton>
+              </div>
             </form>
           </DialogContent>
         </Dialog>
