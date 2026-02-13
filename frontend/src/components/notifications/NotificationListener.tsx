@@ -34,14 +34,14 @@ export function NotificationListener() {
                     // Show a test notification immediately
                     await showTestNotification();
                 } else {
-                    console.error('❌ Notification permission DENIED!');
+                    console.log('🔔 Notification permission DENIED');
                 }
             } else if (Notification.permission === 'granted') {
-                console.log('✅ Notification permission already granted');
+                console.log('✅ Notification permission granted');
                 // Show a test notification
                 await showTestNotification();
             } else {
-                console.error('❌ Notification permission is denied');
+                console.log('ℹ️ Notification permission is currently denied');
             }
         };
         requestPermission();

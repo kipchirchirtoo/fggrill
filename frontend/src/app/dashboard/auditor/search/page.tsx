@@ -95,29 +95,23 @@ export default function UniversalSearchPage() {
 
     const getIcon = (type: string) => {
         switch (type) {
-            case 'staff': return <User className="h-5 w-5" />;
-            case 'order': return <ShoppingCart className="h-5 w-5" />;
-            case 'guest': return <Hotel className="h-5 w-5" />;
-            case 'transaction': return <CreditCard className="h-5 w-5" />;
-            case 'receipt': return <Receipt className="h-5 w-5" />;
-            case 'booking': return <Calendar className="h-5 w-5" />;
-            case 'payment': return <DollarSign className="h-5 w-5" />;
-            case 'bill': return <FileText className="h-5 w-5" />;
-            default: return <Package className="h-5 w-5" />;
+            case 'staff': return <User className="h-4 w-4" />;
+            case 'order': return <ShoppingCart className="h-4 w-4" />;
+            case 'booking': return <Calendar className="h-4 w-4" />;
+            case 'transaction': return <CreditCard className="h-4 w-4" />;
+            case 'supplier_invoice': return <Receipt className="h-4 w-4" />;
+            default: return <FileText className="h-4 w-4" />;
         }
     };
 
     const getTypeColor = (type: string) => {
         switch (type) {
             case 'staff': return 'bg-blue-100 text-blue-700';
-            case 'order': return 'bg-purple-100 text-purple-700';
-            case 'guest': return 'bg-green-100 text-green-700';
-            case 'transaction': return 'bg-amber-100 text-amber-700';
-            case 'receipt': return 'bg-rose-100 text-rose-700';
-            case 'booking': return 'bg-indigo-100 text-indigo-700';
-            case 'payment': return 'bg-emerald-100 text-emerald-700';
-            case 'bill': return 'bg-orange-100 text-orange-700';
-            default: return 'bg-stone-100 text-stone-700';
+            case 'order': return 'bg-green-100 text-green-700';
+            case 'booking': return 'bg-purple-100 text-purple-700';
+            case 'transaction': return 'bg-orange-100 text-orange-700';
+            case 'supplier_invoice': return 'bg-amber-100 text-amber-700';
+            default: return 'bg-gray-100 text-gray-700';
         }
     };
 

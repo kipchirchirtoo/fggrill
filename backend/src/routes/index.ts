@@ -59,6 +59,7 @@ import procurementRoutes from './procurement.routes';
 import hrReportRoutes from './hr-reports.routes';
 import stockTakeRoutes from './stock-take.routes';
 import verifyRoutes from './verify.routes';
+import auditorVoidBillsRoutes from './auditor-void-bills.routes';
 
 console.log('Index routes: importing staffRoutes', staffRoutes);
 
@@ -105,6 +106,7 @@ router.use('/folios', folioRoutes);
 router.use('/audit', auditRoutes);
 router.use('/maintenance-enhanced', maintenanceEnhancedRoutes);
 router.use('/auditor', auditorRoutes);
+router.use('/auditor', auditorVoidBillsRoutes);
 router.use('/accounting', accountingRoutes);
 router.use('/receipts', receiptsRoutes);
 router.use('/branch-operations', branchOperationsRoutes);

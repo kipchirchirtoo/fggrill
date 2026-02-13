@@ -617,7 +617,14 @@ export async function createDispatchFromRequest(
  */
 export async function dispatchItems(
   dispatchId: string,
-  dispatcherId: string
+  dispatcherId: string,
+  updates?: {
+    vehicle_number?: string;
+    driver_name?: string;
+    driver_phone?: string;
+    estimated_delivery?: string;
+    notes?: string;
+  }
 ) {
   try {
     // Validate dispatch ID
@@ -685,15 +692,27 @@ export async function dispatchItems(
       }
     }
 
-    // Update dispatch status
+    // Prepare update data
+    const updateData: any = {
+      status: 'IN_TRANSIT',
+      dispatcher_id: dispatcherId,
+      dispatched_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    // Add optional fields if provided
+    if (updates) {
+      if (updates.vehicle_number) updateData.vehicle_number = updates.vehicle_number;
+      if (updates.driver_name) updateData.driver_name = updates.driver_name;
+      if (updates.driver_phone) updateData.driver_phone = updates.driver_phone;
+      if (updates.estimated_delivery) updateData.estimated_delivery = updates.estimated_delivery;
+      if (updates.notes) updateData.notes = updates.notes;
+    }
+
+    // Update dispatch status and details
     const { data: updatedDispatch, error: updateError } = await supabase
       .from('dispatch_notes')
-      .update({
-        status: 'IN_TRANSIT',
-        dispatcher_id: dispatcherId,
-        dispatched_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', dispatchId)
       .select()
       .single();
@@ -707,10 +726,73 @@ export async function dispatchItems(
 
     return updatedDispatch || dispatch;
   } catch (error) {
-    // Rollback logic could be implemented here for transactional integrity
-    logger.error(`Failed to dispatch items:`, error);
+    logger.error(`Error in dispatchItems:`, error);
     throw error;
   }
+}
+
+/**
+ * Update dispatch logistics (vehicle/driver) after dispatch
+ */
+export async function updateDispatchLogistics(
+  dispatchId: string,
+  userId: string,
+  updates: {
+    vehicle_number?: string;
+    driver_name?: string;
+    driver_phone?: string;
+    estimated_delivery?: string;
+    notes?: string;
+  }
+) {
+  // Validate dispatch ID
+  if (!dispatchId) {
+    throw new Error('Dispatch ID is required');
+  }
+
+  // Get dispatch details to verify existence and status
+  const { data: dispatch, error: fetchError } = await supabase
+    .from('dispatch_notes')
+    .select('id, status, dispatch_number')
+    .eq('id', dispatchId)
+    .single();
+
+  if (fetchError) {
+    logger.error(`Error fetching dispatch ${dispatchId}:`, fetchError);
+    throw new Error(`Dispatch not found: ${fetchError.message}`);
+  }
+
+  // Allow updates only if IN_TRANSIT (or READY, though READY is usually handled by dispatchItems)
+  if (!['READY', 'IN_TRANSIT'].includes(dispatch.status)) {
+    throw new Error(`Cannot update logistics for dispatch in ${dispatch.status} status`);
+  }
+
+  // Update fields
+  const updateData: any = {
+    updated_at: new Date().toISOString()
+  };
+
+  if (updates.vehicle_number !== undefined) updateData.vehicle_number = updates.vehicle_number;
+  if (updates.driver_name !== undefined) updateData.driver_name = updates.driver_name;
+  if (updates.driver_phone !== undefined) updateData.driver_phone = updates.driver_phone;
+  if (updates.estimated_delivery !== undefined) updateData.estimated_delivery = updates.estimated_delivery;
+  if (updates.notes !== undefined) updateData.dispatch_notes = updates.notes; // Note mapping to dispatch_notes col
+
+  const { data: updatedDispatch, error: updateError } = await supabase
+    .from('dispatch_notes')
+    .update(updateData)
+    .eq('id', dispatchId)
+    .select()
+    .single();
+
+  if (updateError) {
+    logger.error(`Error updating dispatch logistics:`, updateError);
+    throw updateError;
+  }
+
+  logger.info(`Dispatch ${dispatch.dispatch_number} logistics updated by ${userId}`);
+
+  return updatedDispatch;
 }
 
 /**
@@ -925,18 +1007,29 @@ export async function getDispatchHistory(fromBranchId: number, status?: string) 
   const driverIds = [...new Set(dispatches.map(d => d.driver_id).filter(id => id))];
   const dispatchIds = dispatches.map(d => d.id);
 
-  // Fetch all enrichment data in parallel
+  // Fetch all enrichment data in parallel (no FK join for dispatch_items → simple_items)
   const [branchesRes, vehiclesRes, driversRes, itemsRes] = await Promise.all([
     supabase.from('branches').select('id, name, code').in('id', toBranchIds),
     vehicleIds.length > 0 ? supabase.from('vehicles').select('id, registration_number, model').in('id', vehicleIds) : Promise.resolve({ data: [] }),
     driverIds.length > 0 ? supabase.from('drivers').select('id, name, license_number, phone').in('id', driverIds) : Promise.resolve({ data: [] }),
-    supabase.from('dispatch_items').select('*, item:simple_items!item_sku(sku, item_name, description, unit_of_measure)').in('dispatch_id', dispatchIds)
+    supabase.from('dispatch_items').select('*').in('dispatch_id', dispatchIds)
   ]);
 
   const branches = branchesRes.data || [];
   const vehicles = vehiclesRes.data || [];
   const drivers = driversRes.data || [];
-  const items = itemsRes.data || [];
+  const dispatchItems = itemsRes.data || [];
+
+  // Fetch item details separately (no FK exists between dispatch_items and simple_items)
+  const allSkus = [...new Set(dispatchItems.map(i => i.item_sku).filter(Boolean))];
+  let itemDetails: any[] = [];
+  if (allSkus.length > 0) {
+    const { data: details } = await supabase
+      .from('simple_items')
+      .select('sku, item_name, description, unit_of_measure, cost_price')
+      .in('sku', allSkus);
+    itemDetails = details || [];
+  }
 
   return dispatches.map(dispatch => {
     const toBranch = branches.find(b => b.id === dispatch.to_branch_id);
@@ -948,18 +1041,22 @@ export async function getDispatchHistory(fromBranchId: number, status?: string) 
       to_branch: toBranch,
       to_branch_name: toBranch?.name || 'Unknown Branch',
       vehicle,
-      vehicle_registration: vehicle?.registration_number || dispatch.vehicle_number, // Use manual entry as fallback
+      vehicle_registration: dispatch.vehicle_number || vehicle?.registration_number,
       driver,
-      driver_name: driver?.name || dispatch.driver_name, // Use manual entry as fallback
-      items: (items || [])
+      driver_name: dispatch.driver_name || driver?.name,
+      items: dispatchItems
         .filter(i => i.dispatch_id === dispatch.id)
-        .map(i => ({
-          id: i.id,
-          item_sku: i.item_sku,
-          item_name: i.item?.item_name || i.item_sku,
-          quantity: i.dispatched_quantity,
-          unit: i.item?.unit_of_measure || 'units'
-        }))
+        .map(i => {
+          const detail = itemDetails.find(d => d.sku === i.item_sku);
+          return {
+            id: i.id,
+            item_sku: i.item_sku,
+            item_name: detail?.item_name || i.item_sku,
+            quantity: i.dispatched_quantity,
+            cost_price: detail?.cost_price || 0,
+            unit: detail?.unit_of_measure || 'units'
+          };
+        })
     };
   });
 }

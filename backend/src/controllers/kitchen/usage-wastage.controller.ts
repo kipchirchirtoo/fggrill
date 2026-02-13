@@ -29,6 +29,7 @@ export const recordUsage = async (req: Request, res: Response) => {
                 unit_of_measure,
                 shift,
                 chef_on_duty: userId,
+                status: 'pending_review',
                 notes
             })
             .select()
@@ -70,7 +71,7 @@ export const getUsageEntries = async (req: Request, res: Response) => {
         const effectiveBranchId = branch_id || userBranchId;
 
         // Auditors/Admins can view all if no branch specified
-        const canViewAll = userRole === 'AUDITOR' || userRole === 'SUPER_ADMIN' || userRole === 'GENERAL_MANAGER';
+        const canViewAll = userRole?.toLowerCase() === 'auditor' || userRole?.toLowerCase() === 'super_admin' || userRole?.toLowerCase() === 'general_manager';
 
         if (!effectiveBranchId && !canViewAll) {
             return res.status(400).json({ success: false, message: 'Branch ID is required' });
@@ -139,7 +140,8 @@ export const recordWastage = async (req: Request, res: Response) => {
                 estimated_value,
                 photo_url,
                 shift,
-                reported_by: userId
+                reported_by: userId,
+                status: 'pending_review'
             })
             .select()
             .single();
@@ -180,7 +182,7 @@ export const getWastageRecords = async (req: Request, res: Response) => {
         const effectiveBranchId = branch_id || userBranchId;
 
         // Auditors/Admins can view all if no branch specified
-        const canViewAll = userRole === 'AUDITOR' || userRole === 'SUPER_ADMIN' || userRole === 'GENERAL_MANAGER';
+        const canViewAll = userRole?.toLowerCase() === 'auditor' || userRole?.toLowerCase() === 'super_admin' || userRole?.toLowerCase() === 'general_manager';
 
         if (!effectiveBranchId && !canViewAll) {
             return res.status(400).json({ success: false, message: 'Branch ID is required' });
@@ -262,6 +264,138 @@ export const deleteWastage = async (req: Request, res: Response) => {
         res.json({ success: true, message: 'Wastage record deleted' });
     } catch (error: any) {
         console.error('Error deleting wastage:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Review wastage record (Branch Accountant)
+ * PUT /api/kitchen/wastage/:id/review
+ */
+export const reviewWastage = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { notes } = req.body;
+        const userId = (req as any).user?.id;
+
+        const { data, error } = await supabase
+            .from('kitchen_wastage')
+            .update({
+                status: 'reviewed',
+                reviewed_by: userId,
+                reviewed_at: new Date().toISOString(),
+                review_notes: notes
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.json({ success: true, data });
+    } catch (error: any) {
+        console.error('Error reviewing wastage:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Audit wastage record (Auditor)
+ * PUT /api/kitchen/wastage/:id/audit
+ */
+export const auditWastage = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { status, notes } = req.body; // status should be 'approved' or 'rejected'
+        const userId = (req as any).user?.id;
+
+        if (!['approved', 'rejected'].includes(status)) {
+            return res.status(400).json({ success: false, message: 'Invalid status. Must be approved or rejected' });
+        }
+
+        const { data, error } = await supabase
+            .from('kitchen_wastage')
+            .update({
+                status,
+                auditor_id: userId,
+                audited_at: new Date().toISOString(),
+                review_notes: notes
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.json({ success: true, data });
+    } catch (error: any) {
+        console.error('Error auditing wastage:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Review usage record (Branch Accountant)
+ * PUT /api/kitchen/usage/:id/review
+ */
+export const reviewUsage = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { notes } = req.body;
+        const userId = (req as any).user?.id;
+
+        const { data, error } = await supabase
+            .from('kitchen_usage')
+            .update({
+                status: 'reviewed',
+                reviewed_by: userId,
+                reviewed_at: new Date().toISOString(),
+                review_notes: notes
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.json({ success: true, data });
+    } catch (error: any) {
+        console.error('Error reviewing usage:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Audit usage record (Auditor)
+ * PUT /api/kitchen/usage/:id/audit
+ */
+export const auditUsage = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { status, notes } = req.body; // status should be 'approved' or 'rejected'
+        const userId = (req as any).user?.id;
+
+        if (!['approved', 'rejected'].includes(status)) {
+            return res.status(400).json({ success: false, message: 'Invalid status. Must be approved or rejected' });
+        }
+
+        const { data, error } = await supabase
+            .from('kitchen_usage')
+            .update({
+                status,
+                auditor_id: userId,
+                audited_at: new Date().toISOString(),
+                review_notes: notes
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.json({ success: true, data });
+    } catch (error: any) {
+        console.error('Error auditing usage:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 };

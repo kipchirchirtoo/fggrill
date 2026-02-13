@@ -11,21 +11,21 @@ class SchedulerService {
    */
   startAll() {
     this.stopAll(); // Clear any existing jobs first
-    
+
     // Daily tasks
     this.scheduleDaily();
-    
+
     // Weekly tasks
     this.scheduleWeekly();
-    
+
     // Hourly tasks
     this.scheduleHourly();
-    
+
     // Every 5 minute tasks
     this.schedule5Minutes();
-    
+
     logger.info('All scheduled jobs started');
-    
+
     return Object.fromEntries(this.jobs);
   }
 
@@ -63,7 +63,7 @@ class SchedulerService {
       }
     });
     this.jobs.set('daily-reports', dailyReports);
-    
+
     // Run budget variance check at 2:00 AM
     const budgetCheck = cron.schedule('0 2 * * *', async () => {
       try {
@@ -75,7 +75,7 @@ class SchedulerService {
       }
     });
     this.jobs.set('budget-variance-check', budgetCheck);
-    
+
     // Run performance metrics check at 3:00 AM
     const performanceCheck = cron.schedule('0 3 * * *', async () => {
       try {
@@ -104,7 +104,7 @@ class SchedulerService {
       }
     });
     this.jobs.set('weekly-reports', weeklyReports);
-    
+
     // Run compliance check at 3:00 AM on Monday
     const complianceCheck = cron.schedule('0 3 * * 1', async () => {
       try {
@@ -133,6 +133,19 @@ class SchedulerService {
       }
     });
     this.jobs.set('low-stock-check', lowStockCheck);
+
+    // Migrate pending bills to credit bills every hour
+    const { migratePendingBills } = require('../jobs/migrate-pending-bills.job');
+    const pendingBillsMigration = cron.schedule('0 * * * *', async () => {
+      try {
+        logger.info('Running pending bills migration');
+        await migratePendingBills();
+        logger.info('Pending bills migration completed');
+      } catch (error) {
+        logger.error('Error in pending bills migration:', error);
+      }
+    });
+    this.jobs.set('pending-bills-migration', pendingBillsMigration);
   }
 
   /**
@@ -151,7 +164,7 @@ class SchedulerService {
       this.jobs.get(name)?.stop();
       this.jobs.delete(name);
     }
-    
+
     // Create and start new job
     const job = cron.schedule(cronExpression, async () => {
       try {
@@ -162,7 +175,7 @@ class SchedulerService {
         logger.error(`Error in custom job ${name}:`, error);
       }
     });
-    
+
     this.jobs.set(name, job);
     logger.info(`Added custom scheduled job: ${name} with cron: ${cronExpression}`);
     return true;

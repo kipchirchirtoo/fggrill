@@ -11,7 +11,7 @@ import { FileText, Plus, Search, Building2, User, ShoppingBag, CheckCircle, Down
 import { toast } from 'sonner';
 
 import { CreateInvoiceModal } from '@/components/dashboard/branch/CreateInvoiceModal';
-import { accountingAPI } from '@/lib/api';
+import { api } from '@/lib/api';
 import { downloadInvoicePDF, printInvoicePDF } from '@/lib/invoice-pdf';
 
 /* 
@@ -26,6 +26,8 @@ interface InvoiceData {
     };
     invoice_date: string;
     due_date: string;
+    subtotal: number;
+    vat_amount: number;
     total_amount: number;
     balance: number;
     status: string;
@@ -35,7 +37,6 @@ interface InvoiceData {
 }
 
 export default function BranchInvoicesPage() {
-    console.log('BranchInvoicesPage starting...');
     const { user } = useAuth();
     const { activeBranchId } = useBranch();
     const [invoices, setInvoices] = useState<InvoiceData[]>([]);
@@ -48,9 +49,14 @@ export default function BranchInvoicesPage() {
     const fetchInvoices = async () => {
         setLoading(true);
         try {
-            const response = await accountingAPI.getInvoices();
+            const response = await api.accounting.getInvoices();
             if (response.success) {
-                setInvoices(response.data);
+                const mappedData = response.data.map((inv: any) => ({
+                    ...inv,
+                    subtotal: inv.subtotal || inv.total_amount || 0,
+                    vat_amount: inv.vat_amount || 0
+                }));
+                setInvoices(mappedData);
             }
         } catch (error) {
             console.error('Error fetching invoices:', error);

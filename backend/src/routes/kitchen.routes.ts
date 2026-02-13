@@ -34,7 +34,11 @@ import {
     recordWastage,
     getWastageRecords,
     updateWastage,
-    deleteWastage
+    deleteWastage,
+    reviewWastage,
+    auditWastage,
+    reviewUsage,
+    auditUsage
 } from '../controllers/kitchen/usage-wastage.controller';
 
 import {
@@ -133,16 +137,20 @@ router.post('/recipes/auto-deduct', authorize([...kitchenStaff, UserRole.RECEPTI
 // =====================================================
 
 router.post('/usage', authorize(kitchenStaff), recordUsage);
-router.get('/usage', authorize([...kitchenStaff, ...kitchenManagers, UserRole.AUDITOR]), getUsageEntries);
+router.get('/usage', authorize([...kitchenStaff, ...kitchenManagers, UserRole.AUDITOR, UserRole.BRANCH_ACCOUNTANT]), getUsageEntries);
+router.put('/usage/:id/review', authorize([UserRole.BRANCH_ACCOUNTANT, UserRole.SUPER_ADMIN]), reviewUsage);
+router.put('/usage/:id/audit', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), auditUsage);
 
 // =====================================================
 // WASTAGE ROUTES
 // =====================================================
 
 router.post('/wastage', authorize(kitchenStaff), recordWastage);
-router.get('/wastage', authorize([...kitchenStaff, ...kitchenManagers, UserRole.AUDITOR]), getWastageRecords);
+router.get('/wastage', authorize([...kitchenStaff, ...kitchenManagers, UserRole.AUDITOR, UserRole.BRANCH_ACCOUNTANT]), getWastageRecords);
 router.put('/wastage/:id', authorize(kitchenStaff), updateWastage);
 router.delete('/wastage/:id', authorize(kitchenManagers), deleteWastage);
+router.put('/wastage/:id/review', authorize([UserRole.BRANCH_ACCOUNTANT, UserRole.SUPER_ADMIN]), reviewWastage);
+router.put('/wastage/:id/audit', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), auditWastage);
 
 // =====================================================
 // FOOD CONTROL (YIELD) ROUTES

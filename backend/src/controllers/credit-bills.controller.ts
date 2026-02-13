@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { AppError } from '../middleware/errorHandler';
+import { migratePendingBills } from '../jobs/migrate-pending-bills.job';
 
 export const createCreditBill = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -15,6 +16,7 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
             .insert({
                 staff_id,
                 amount,
+                balance: amount,
                 description,
                 date: date || new Date().toISOString().split('T')[0],
                 is_paid: false
@@ -44,6 +46,8 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
                 staff:staff_profiles(
                     id, 
                     role,
+                    first_name,
+                    last_name,
                     user:users!user_id(id, first_name, last_name)
                 )
             `)
@@ -65,8 +69,8 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
             staff: bill.staff ? {
                 id: bill.staff.id,
                 role: bill.staff.role,
-                first_name: bill.staff.user?.first_name || '',
-                last_name: bill.staff.user?.last_name || ''
+                first_name: bill.staff.first_name || bill.staff.user?.first_name || '',
+                last_name: bill.staff.last_name || bill.staff.user?.last_name || ''
             } : null
         }));
 
@@ -91,7 +95,10 @@ export const updateCreditBillStatus = async (req: Request, res: Response, next: 
 
         const { data, error } = await supabase
             .from('staff_credit_bills')
-            .update({ is_paid })
+            .update({
+                is_paid,
+                balance: is_paid ? 0 : undefined // Reset balance to 0 if marking as paid
+            })
             .eq('id', id)
             .select()
             .single();
@@ -101,6 +108,26 @@ export const updateCreditBillStatus = async (req: Request, res: Response, next: 
         res.status(200).json({
             success: true,
             data
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Manually trigger pending bills migration
+// @route   POST /api/credit-bills/migrate-pending
+// @access  Private (Branch Accountant, Manager)
+export const triggerPendingBillsMigration = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        await migratePendingBills();
+
+        res.status(200).json({
+            success: true,
+            message: 'Pending bills migration completed successfully'
         });
     } catch (error) {
         next(error);

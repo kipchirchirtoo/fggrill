@@ -101,12 +101,18 @@ export const generatePurchaseOrderPDF = async (po: PurchaseOrderData) => {
     cursorY += 15;
 
     // 4. Items Table
-    const tableData = (po.items || []).map(item => [
-        item.item?.name || `Item #${item.item_id}`,
-        item.quantity,
-        new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(item.unit_price),
-        new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(item.quantity * item.unit_price)
-    ]);
+    const tableData = (po.items || []).map(item => {
+        const qty = Number(item.quantity) || 0;
+        const price = Number(item.unit_price) || 0;
+        const total = qty * price;
+
+        return [
+            item.item?.name || `Item #${item.item_id}`,
+            qty,
+            new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(price).replace('KES', 'Ksh'),
+            new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(total).replace('KES', 'Ksh')
+        ];
+    });
 
     autoTable(doc, {
         startY: cursorY,
@@ -117,27 +123,28 @@ export const generatePurchaseOrderPDF = async (po: PurchaseOrderData) => {
         margin: { left: margin, right: margin }
     });
 
-    cursorY = (doc as any).lastAutoTable.finalY + 10;
+    cursorY = (doc as any).lastAutoTable.finalY + 15;
 
     // 5. Totals
-    const totalLabelX = 140;
+    const totalLabelX = 110; // Increased gap to avoid overlap with large amounts
     const totalValueX = 190;
 
-    const subtotal = po.subtotal || po.total_amount;
-    const tax = po.tax_amount || 0;
+    const subtotal = Number(po.subtotal || po.total_amount) || 0;
+    const tax = Number(po.tax_amount) || 0;
 
+    doc.setFont('helvetica', 'normal');
     doc.text('Subtotal:', totalLabelX, cursorY);
-    doc.text(new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(subtotal), totalValueX, cursorY, { align: 'right' });
+    doc.text(new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(subtotal).replace('KES', 'Ksh'), totalValueX, cursorY, { align: 'right' });
 
-    cursorY += 7;
+    cursorY += 10; // Increased spacing
     doc.text('Tax:', totalLabelX, cursorY);
-    doc.text(new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(tax), totalValueX, cursorY, { align: 'right' });
+    doc.text(new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(tax).replace('KES', 'Ksh'), totalValueX, cursorY, { align: 'right' });
 
-    cursorY += 10;
-    doc.setFontSize(12);
+    cursorY += 15; // Increased spacing for Grand Total
+    doc.setFontSize(14); // Slightly larger for emphasis
     doc.setFont('helvetica', 'bold');
     doc.text('GRAND TOTAL:', totalLabelX, cursorY);
-    doc.text(new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(po.total_amount), totalValueX, cursorY, { align: 'right' });
+    doc.text(new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(po.total_amount).replace('KES', 'Ksh'), totalValueX, cursorY, { align: 'right' });
 
     // 6. Notes & Approval
     if (po.notes) {

@@ -156,10 +156,11 @@ export const createPurchaseOrder = async (
             throw new AppError('Failed to generate PO number', 500);
         }
 
-        // Calculate totals
+        // Calculate totals based on item-level VAT rates
         const subtotal = items.reduce((sum: number, item: any) =>
             sum + (item.quantity * item.unit_price), 0);
-        const tax_amount = subtotal * 0.16; // 16% VAT
+        const tax_amount = items.reduce((sum: number, item: any) =>
+            sum + (item.quantity * item.unit_price * ((item.vat_rate || 0) / 100)), 0);
         const total_amount = subtotal + tax_amount;
 
         // Create purchase order
@@ -184,15 +185,15 @@ export const createPurchaseOrder = async (
 
         if (poError) throw poError;
 
-        // Insert PO items
+        // Insert PO items with item-level VAT
         const poItems = items.map((item: any) => ({
             po_id: newPO.id,
             item_id: item.item_id,
             quantity_ordered: item.quantity,
             quantity_pending: item.quantity,
             unit_price: item.unit_price,
-            total_price: item.quantity * item.unit_price,
-            tax_amount: (item.quantity * item.unit_price) * 0.16
+            total_price: item.quantity * item.unit_price * (1 + (item.vat_rate || 0) / 100),
+            tax_amount: (item.quantity * item.unit_price) * ((item.vat_rate || 0) / 100)
         }));
 
         const { error: itemsError } = await supabase

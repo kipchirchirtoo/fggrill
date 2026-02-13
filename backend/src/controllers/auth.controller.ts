@@ -558,12 +558,12 @@ export const posLogin = async (
       return;
     }
 
-    // Validate PIN format (RXXX, BXXX, or CXXX)
-    const pinRegex = /^[RBC]\d{3}$/;
+    // Validate PIN format (RXXXX, BXXXX, or CXXXX — letter + 4 digits)
+    const pinRegex = /^[RBC]\d{4}$/;
     if (!pinRegex.test(pin)) {
       res.status(400).json({
         success: false,
-        message: 'Invalid PIN format. Waiters use RXXX, Bar staff use BXXX, Cashiers use CXXX'
+        message: 'Invalid PIN format. Waiters use RXXXX, Bar staff use BXXXX, Cashiers use CXXXX'
       });
       return;
     }

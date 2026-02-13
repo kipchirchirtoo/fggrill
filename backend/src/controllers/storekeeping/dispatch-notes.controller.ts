@@ -476,7 +476,27 @@ export const dispatchItems = async (
             throw new AppError('Dispatch is already in transit', 400);
         }
 
-        const { vehicle_id, driver_id } = req.body;
+        const { vehicle_id, driver_id, vehicle_number, driver_name, driver_phone, estimated_delivery, notes } = req.body;
+
+        // Resolve vehicle and driver names from IDs if not provided as text
+        let resolvedVehicleNumber = vehicle_number || '';
+        let resolvedDriverName = driver_name || '';
+        let resolvedDriverPhone = driver_phone || '';
+
+        if (vehicle_id && !resolvedVehicleNumber) {
+            const { data: vehicle } = await supabase.from('vehicles')
+                .select('registration_number').eq('id', vehicle_id).single();
+            if (vehicle) resolvedVehicleNumber = vehicle.registration_number;
+        }
+
+        if (driver_id && !resolvedDriverName) {
+            const { data: driver } = await supabase.from('drivers')
+                .select('name, phone').eq('id', driver_id).single();
+            if (driver) {
+                resolvedDriverName = driver.name;
+                if (!resolvedDriverPhone) resolvedDriverPhone = driver.phone || '';
+            }
+        }
 
         // Update dispatch status to IN_TRANSIT
         const updateData: any = {
@@ -488,6 +508,11 @@ export const dispatchItems = async (
 
         if (vehicle_id) updateData.vehicle_id = vehicle_id;
         if (driver_id) updateData.driver_id = driver_id;
+        if (resolvedVehicleNumber) updateData.vehicle_number = resolvedVehicleNumber;
+        if (resolvedDriverName) updateData.driver_name = resolvedDriverName;
+        if (resolvedDriverPhone) updateData.driver_phone = resolvedDriverPhone;
+        if (estimated_delivery) updateData.estimated_delivery = estimated_delivery;
+        if (notes) updateData.notes = notes;
 
         const { error: updateError } = await supabase
             .from('dispatch_notes')

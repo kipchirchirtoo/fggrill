@@ -24,6 +24,49 @@ export const getBillDetails = async (
 
         const searchId = bookingId.toUpperCase();
 
+        // Check if it's an accounting invoice (starts with INV)
+        if (searchId.startsWith('INV')) {
+            const { data: invoice, error: invoiceError } = await supabase
+                .from('accounting_ar_invoices')
+                .select(`
+                    *,
+                    customer:accounting_customers(id, customer_name, email, phone)
+                `)
+                .eq('invoice_number', searchId)
+                .single();
+
+            if (invoiceError || !invoice) {
+                throw new AppError('Invoice not found', 404);
+            }
+
+            res.json({
+                success: true,
+                data: {
+                    type: 'invoice',
+                    invoice: {
+                        id: invoice.id,
+                        invoice_number: invoice.invoice_number,
+                        customer_name: invoice.customer?.customer_name || 'Walk-in',
+                        status: invoice.status,
+                        items: (invoice.items || []).map((item: any) => ({
+                            name: item.description || item.item_name || 'Item',
+                            quantity: item.quantity || item.qty || 1,
+                            price: item.unit_price || item.unitPrice || 0,
+                            total: item.total_amount || item.totalAmount || 0
+                        }))
+                    },
+                    financials: {
+                        total_amount: invoice.total_amount,
+                        amount_paid: invoice.total_amount - invoice.balance,
+                        balance: invoice.balance,
+                        currency: 'KES'
+                    },
+                    payment_status: invoice.status === 'paid' ? 'paid' : (invoice.balance < invoice.total_amount ? 'partial' : 'unpaid')
+                }
+            });
+            return;
+        }
+
         // Check if it's a restaurant order (starts with ORD)
         if (searchId.startsWith('ORD')) {
             // Fetch restaurant order details
@@ -409,6 +452,83 @@ export const processCashierPayment = async (
         }
 
         const paymentRef = reference || `CASH-${Date.now()}`;
+
+        // Check if it's an accounting invoice
+        if (bookingId.startsWith('INV')) {
+            // 1. Fetch the invoice
+            const { data: invoice, error: invoiceError } = await supabase
+                .from('accounting_ar_invoices')
+                .select('id, total_amount, balance')
+                .eq('invoice_number', bookingId)
+                .single();
+
+            if (invoiceError || !invoice) {
+                throw new AppError('Invoice not found', 404);
+            }
+
+            // 2. Record Payment in Database
+            const isVerifiedMethod = method === 'cash';
+            const initialStatus = isVerifiedMethod ? 'completed' : 'pending';
+
+            const { data: payment, error: paymentError } = await supabase
+                .from('payments')
+                .insert({
+                    invoice_id: invoice.id,
+                    amount: amount,
+                    currency: 'KES',
+                    payment_method: method,
+                    status: initialStatus,
+                    reference: paymentRef,
+                    metadata: {
+                        processed_by: 'cashier',
+                        processed_at: new Date().toISOString(),
+                        invoice_number: bookingId,
+                        verification_required: !isVerifiedMethod
+                    }
+                })
+                .select()
+                .single();
+
+            if (paymentError) {
+                throw new AppError(`Payment recording failed: ${paymentError.message}`, 500);
+            }
+
+            // 3. Update Invoice Balance (Only if payment is completed)
+            if (initialStatus === 'completed') {
+                const newBalance = Math.max(0, invoice.balance - amount);
+                const newStatus = newBalance <= 0 ? 'paid' : (newBalance < invoice.total_amount ? 'partial' : 'unpaid');
+
+                await supabase
+                    .from('accounting_ar_invoices')
+                    .update({
+                        balance: newBalance,
+                        status: newStatus,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', invoice.id);
+
+                // Record cashier transaction
+                await supabase.from('cashier_transactions').insert({
+                    transaction_number: `PAY-${Date.now()}`,
+                    branch_id: req.user?.branch_id,
+                    cashier_id: req.user?.id,
+                    transaction_type: 'payment',
+                    revenue_type: 'INVOICE_SETTLEMENT',
+                    reference_type: 'invoice',
+                    reference_id: invoice.id,
+                    payment_method: method,
+                    amount: amount,
+                    customer_name: 'Invoice Customer'
+                });
+            }
+
+            res.json({
+                success: true,
+                message: 'Invoice payment processed successfully',
+                data: payment
+            });
+            return;
+        }
 
         // Check if it's a restaurant order
         if (bookingId.startsWith('ORD')) {

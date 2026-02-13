@@ -59,7 +59,7 @@ router.get('/verify/:id', async (req, res) => {
                 name: `${staff.first_name} ${staff.last_name}`,
                 position: staff.position,
                 department: staff.department,
-                branch: staff.branch?.name || 'N/A',
+                branch: (staff.branch as any)?.name || 'N/A',
                 status: staff.status
             }
         });

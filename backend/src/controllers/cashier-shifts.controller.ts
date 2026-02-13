@@ -200,8 +200,12 @@ export const closeShift = async (
             // Credit & bills
             credit_bills_taken,
             credit_bills_count,
+            credit_bills_details,
             unpaid_bills_value,
             unpaid_bills_count,
+            paid_bills_value,
+            paid_bills_count,
+            paid_bills_details,
             // Cash management
             cash_at_hand,
             cash_deposited,
@@ -264,8 +268,12 @@ export const closeShift = async (
                 // Credit & bills
                 credit_bills_taken: credit_bills_taken || 0,
                 credit_bills_count: credit_bills_count || 0,
+                credit_bills_details: credit_bills_details || [],
                 unpaid_bills_value: unpaid_bills_value || 0,
                 unpaid_bills_count: unpaid_bills_count || 0,
+                paid_bills_value: paid_bills_value || 0,
+                paid_bills_count: paid_bills_count || 0,
+                paid_bills_details: paid_bills_details || [],
                 // Cash management
                 cash_at_hand: cash_at_hand || 0,
                 cash_deposited: cash_deposited || 0,
@@ -284,6 +292,90 @@ export const closeShift = async (
             .single();
 
         if (updateError) throw updateError;
+
+        // SYNC WITH BRANCH ACCOUNTANT: Create staff_credit_bills records
+        try {
+            // 1. Process Credit Bills (Unpaid)
+            if (credit_bills_details && Array.isArray(credit_bills_details)) {
+                const creditBillsToInsert = credit_bills_details
+                    .filter((bill: any) => bill.staff_id)
+                    .map((bill: any) => ({
+                        staff_id: bill.staff_id,
+                        amount: bill.amount,
+                        balance: bill.amount,
+                        description: `Shift Credit - Shift #${shift.shift_number} - ${bill.name}`,
+                        date: new Date().toISOString().split('T')[0],
+                        is_paid: false
+                    }));
+
+                if (creditBillsToInsert.length > 0) {
+                    const { error: creditError } = await supabase
+                        .from('staff_credit_bills')
+                        .insert(creditBillsToInsert);
+
+                    if (creditError) {
+                        logger.error(`Failed to sync credit bills for shift ${id}`, creditError);
+                    }
+                }
+            }
+
+            // 2. Process Paid Bills (Settle existing credits)
+            if (paid_bills_details && Array.isArray(paid_bills_details)) {
+                for (const bill of paid_bills_details) {
+                    if (!bill.staff_id) continue;
+
+                    let amountPaid = parseFloat(bill.amount);
+                    if (isNaN(amountPaid) || amountPaid <= 0) continue;
+
+                    // A. Record the payment itself for audit trail
+                    await supabase.from('staff_credit_bills').insert({
+                        staff_id: bill.staff_id,
+                        amount: amountPaid,
+                        balance: 0,
+                        description: `Shift Payment - Shift #${shift.shift_number} - ${bill.name}`,
+                        date: new Date().toISOString().split('T')[0],
+                        is_paid: true
+                    });
+
+                    // B. SETTLE FIFO: Find pending credits (balance > 0) ordered by oldest first
+                    const { data: credits, error: fetchError } = await supabase
+                        .from('staff_credit_bills')
+                        .select('id, balance')
+                        .eq('staff_id', bill.staff_id)
+                        .gt('balance', 0)
+                        .order('created_at', { ascending: true });
+
+                    if (fetchError) {
+                        logger.error(`Error fetching credits for settlement: ${bill.staff_id}`, fetchError);
+                        continue;
+                    }
+
+                    if (credits && credits.length > 0) {
+                        let remainingPayment = amountPaid;
+                        for (const credit of credits) {
+                            if (remainingPayment <= 0) break;
+
+                            const creditBalance = parseFloat(credit.balance);
+                            const settlement = Math.min(remainingPayment, creditBalance);
+                            const newBalance = creditBalance - settlement;
+
+                            await supabase
+                                .from('staff_credit_bills')
+                                .update({
+                                    balance: newBalance,
+                                    is_paid: newBalance <= 0
+                                })
+                                .eq('id', credit.id);
+
+                            remainingPayment -= settlement;
+                        }
+                    }
+                }
+            }
+        } catch (syncError) {
+            // Log but don't fail the request since shift is already closed
+            logger.error(`Error in shift sync logic for ${id}`, syncError);
+        }
 
         res.status(200).json({
             success: true,

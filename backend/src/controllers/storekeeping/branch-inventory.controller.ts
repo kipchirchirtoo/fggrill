@@ -534,7 +534,35 @@ export const dispatchItems = async (
     }
 
     try {
-      const dispatch = await BranchInventoryService.dispatchItems(id, req.user.id);
+      const { vehicle_number, driver_name, driver_phone, estimated_delivery, notes, vehicle_id, driver_id } = req.body;
+
+      // Resolve vehicle and driver names from IDs if text fields not provided
+      let resolvedVehicleNumber = vehicle_number || '';
+      let resolvedDriverName = driver_name || '';
+      let resolvedDriverPhone = driver_phone || '';
+
+      if (vehicle_id && !resolvedVehicleNumber) {
+        const { data: vehicle } = await supabase.from('vehicles')
+          .select('registration_number').eq('id', vehicle_id).single();
+        if (vehicle) resolvedVehicleNumber = vehicle.registration_number;
+      }
+
+      if (driver_id && !resolvedDriverName) {
+        const { data: driver } = await supabase.from('drivers')
+          .select('name, phone').eq('id', driver_id).single();
+        if (driver) {
+          resolvedDriverName = driver.name;
+          if (!resolvedDriverPhone) resolvedDriverPhone = driver.phone || '';
+        }
+      }
+
+      const dispatch = await BranchInventoryService.dispatchItems(id, req.user.id, {
+        vehicle_number: resolvedVehicleNumber,
+        driver_name: resolvedDriverName,
+        driver_phone: resolvedDriverPhone,
+        estimated_delivery,
+        notes
+      });
 
       logger.info(`Dispatch ${dispatch.dispatch_number} successfully sent by ${req.user.email}`);
 
@@ -571,6 +599,78 @@ export const dispatchItems = async (
 };
 
 /**
+ * Update dispatch logistics (vehicle/driver)
+ */
+export const updateDispatchLogistics = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      res.status(400).json({
+        success: false,
+        message: 'Dispatch ID is required'
+      });
+      return;
+    }
+
+    // Validate user
+    if (!req.user?.id) {
+      res.status(401).json({
+        success: false,
+        message: 'User authentication required'
+      });
+      return;
+    }
+
+    try {
+      const { vehicle_number, driver_name, driver_phone, estimated_delivery, notes } = req.body;
+
+      const dispatch = await BranchInventoryService.updateDispatchLogistics(id, req.user.id, {
+        vehicle_number,
+        driver_name,
+        driver_phone,
+        estimated_delivery,
+        notes
+      });
+
+      logger.info(`Dispatch ${dispatch.dispatch_number} logistics updated by ${req.user.email}`);
+
+      res.status(200).json({
+        success: true,
+        message: 'Dispatch logistics updated successfully',
+        data: dispatch
+      });
+    } catch (serviceError: any) {
+      logger.error(`Dispatch update error for ID ${id}:`, serviceError);
+
+      if (serviceError.message.includes('not found')) {
+        res.status(404).json({
+          success: false,
+          message: serviceError.message
+        });
+      } else if (serviceError.message.includes('Cannot update')) {
+        res.status(409).json({
+          success: false,
+          message: serviceError.message
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          message: `Failed to update dispatch: ${serviceError.message}`
+        });
+      }
+    }
+  } catch (error: any) {
+    logger.error('Unexpected error in updateDispatchLogistics controller:', error);
+    next(error);
+  }
+};
+
+/**
  * Get dispatch history from central
  */
 export const getDispatchHistory = async (
@@ -587,6 +687,14 @@ export const getDispatchHistory = async (
 
     const status = req.query.status as string;
     const data = await BranchInventoryService.getDispatchHistory(central.id, status);
+
+    if (data?.length > 0) {
+      // Debug logging for PDF generation issues
+      logger.info(`Fetched ${data.length} dispatches. First dispatch ${data[0].dispatch_number} has ${data[0].items?.length} items.`);
+      if (data[0].items?.length > 0) {
+        logger.info(`First Item Sample: ${JSON.stringify(data[0].items[0])}`);
+      }
+    }
 
     res.status(200).json({
       success: true,

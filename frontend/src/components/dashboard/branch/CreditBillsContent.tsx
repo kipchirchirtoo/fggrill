@@ -9,6 +9,7 @@ import {
     XCircle, Clock, AlertTriangle, FileText
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { BillDetailsModal } from './BillDetailsModal';
 
 interface CreditBillsContentProps {
     branchId: number | null;
@@ -52,6 +53,83 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
     const [loans, setLoans] = useState<any[]>([]);
     const [advances, setAdvances] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isMigrating, setIsMigrating] = useState(false);
+
+    // Bill Details Modal State
+    const [selectedBill, setSelectedBill] = useState<any>(null);
+    const [showDetailsModal, setShowDetailsModal] = useState(false);
+    const [verifyingId, setVerifyingId] = useState<string | null>(null);
+
+    const handleVerifyAdvance = async (advance: any) => {
+        if (!confirm(`Are you sure you want to approve this advance of KES ${advance.amount.toLocaleString()} for ${advance.staff?.first_name} ${advance.staff?.last_name}?`)) {
+            return;
+        }
+
+        setVerifyingId(advance.id);
+        try {
+            const res = await api.staff.simplePayroll.approveAdvance(advance.id);
+            if (res.success) {
+                toast.success('Advance approved successfully');
+                loadData();
+            } else {
+                toast.error(res.message || 'Failed to approve advance');
+            }
+        } catch (error) {
+            console.error('Verification error', error);
+            toast.error('An error occurred during verification');
+        } finally {
+            setVerifyingId(null);
+        }
+    };
+
+    const handleVerifyLoan = async (loan: any) => {
+        if (!confirm(`Are you sure you want to approve this loan of KES ${loan.total_amount.toLocaleString()} for ${loan.staff?.first_name} ${loan.staff?.last_name}?`)) {
+            return;
+        }
+
+        setVerifyingId(loan.id);
+        try {
+            const res = await api.staff.simplePayroll.approveLoan(loan.id);
+            if (res.success) {
+                toast.success('Loan approved successfully');
+                loadData();
+            } else {
+                toast.error(res.message || 'Failed to approve loan');
+            }
+        } catch (error) {
+            console.error('Verification error', error);
+            toast.error('An error occurred during verification');
+        } finally {
+            setVerifyingId(null);
+        }
+    };
+
+    const handleTriggerMigration = async () => {
+        if (!confirm('Are you sure you want to trigger a manual migration of pending bills older than 8 hours? This will convert pending orders to credit bills and notify waiters.')) {
+            return;
+        }
+
+        setIsMigrating(true);
+        try {
+            const res = await api.staff.simplePayroll.triggerPendingBillsMigration();
+            if (res.success) {
+                toast.success('Migration completed successfully');
+                loadData();
+            } else {
+                toast.error(res.message || 'Migration failed');
+            }
+        } catch (error) {
+            console.error('Migration error', error);
+            toast.error('An error occurred during migration');
+        } finally {
+            setIsMigrating(false);
+        }
+    };
+
+    const handleDetailsClick = (bill: any) => {
+        setSelectedBill(bill);
+        setShowDetailsModal(true);
+    };
 
     const loadData = async () => {
         if (!branchId) return;
@@ -59,7 +137,7 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
         try {
             // Fetch based on active tab
             if (activeTab === 'staff_credit') {
-                const res = await api.staff.simplePayroll.getCreditBills({ status: 'pending' });
+                const res = await api.staff.simplePayroll.getCreditBills(); // Fetch all statuses
                 if (res.success && Array.isArray(res.data)) {
                     // Filter by branch locally since API doesn't support branch_id filtering yet for these endpoints
                     const filtered = res.data.filter((item: any) =>
@@ -68,7 +146,7 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
                     setCreditBills(filtered);
                 }
             } else if (activeTab === 'loans') {
-                const res = await api.staff.simplePayroll.getLoans({ status: 'active' });
+                const res = await api.staff.simplePayroll.getLoans(); // Fetch all statuses
                 if (res.success && Array.isArray(res.data)) {
                     const filtered = res.data.filter((item: any) =>
                         !item.staff || item.staff.branch_id === branchId || !item.staff.branch_id
@@ -76,7 +154,7 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
                     setLoans(filtered);
                 }
             } else if (activeTab === 'advances') {
-                const res = await api.staff.simplePayroll.getAdvances({ status: 'pending' });
+                const res = await api.staff.simplePayroll.getAdvances(); // Fetch all statuses
                 if (res.success && Array.isArray(res.data)) {
                     const filtered = res.data.filter((item: any) =>
                         !item.staff || item.staff.branch_id === branchId || !item.staff.branch_id
@@ -112,6 +190,16 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
                     <button className="px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors flex items-center shadow-sm" onClick={loadData}>
                         <Clock className="h-4 w-4 mr-2" /> Refresh
                     </button>
+                    {!isAuditor && activeTab === 'staff_credit' && (
+                        <button
+                            className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm font-medium text-amber-700 hover:bg-amber-100 transition-colors flex items-center shadow-sm disabled:opacity-50"
+                            onClick={handleTriggerMigration}
+                            disabled={isMigrating}
+                        >
+                            <Clock className={`h-4 w-4 mr-2 ${isMigrating ? 'animate-spin' : ''}`} />
+                            {isMigrating ? 'Migrating...' : 'Trigger Migration'}
+                        </button>
+                    )}
                     {/* Global Action Button based on tab - Only show for Branch Accountant or if Auditor needs to create */}
                     {!isAuditor && (
                         <button
@@ -177,9 +265,11 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
                                 <thead className="text-xs text-stone-500 uppercase bg-stone-50/50">
                                     <tr>
                                         <th className="px-4 py-3 font-medium">Date</th>
+                                        {activeTab === 'staff_credit' && <th className="px-4 py-3 font-medium text-center">Source</th>}
                                         <th className="px-4 py-3 font-medium">Staff Member</th>
                                         <th className="px-4 py-3 font-medium">Description/Reason</th>
                                         <th className="px-4 py-3 font-medium text-right">Amount</th>
+                                        <th className="px-4 py-3 font-medium text-right">Balance</th>
                                         <th className="px-4 py-3 font-medium text-center">Status</th>
                                         <th className="px-4 py-3 font-medium text-right">Action</th>
                                     </tr>
@@ -189,20 +279,52 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
                                     {activeTab === 'staff_credit' && creditBills.map((bill) => (
                                         <tr key={bill.id} className="hover:bg-stone-50 transition-colors">
                                             <td className="px-4 py-3 text-stone-600">{bill.date}</td>
+                                            <td className="px-4 py-3 text-center">
+                                                {bill.migrated_from_order ? (
+                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700 border border-purple-200">
+                                                        POS ORDER
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-stone-100 text-stone-600 border border-stone-200">
+                                                        MANUAL
+                                                    </span>
+                                                )}
+                                            </td>
                                             <td className="px-4 py-3 font-medium text-stone-900">
                                                 {bill.staff?.first_name} {bill.staff?.last_name}
                                             </td>
                                             <td className="px-4 py-3 text-stone-600">{bill.description}</td>
-                                            <td className="px-4 py-3 text-right font-semibold text-stone-900">
+                                            <td className="px-4 py-3 text-right font-medium text-stone-600">
                                                 {bill.amount.toLocaleString()}
                                             </td>
+                                            <td className="px-4 py-3 text-right font-semibold text-blue-600">
+                                                {(bill.balance ?? bill.amount).toLocaleString()}
+                                            </td>
                                             <td className="px-4 py-3 text-center">
-                                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${bill.is_paid ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                                                    {bill.is_paid ? 'Paid/Deducted' : 'Pending'}
+                                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${bill.is_paid
+                                                    ? 'bg-emerald-100 text-emerald-700'
+                                                    : (bill.balance < bill.amount && bill.balance > 0)
+                                                        ? 'bg-blue-100 text-blue-700'
+                                                        : 'bg-amber-100 text-amber-700'
+                                                    }`}>
+                                                    {bill.is_paid
+                                                        ? 'Settled'
+                                                        : (bill.balance < bill.amount && bill.balance > 0)
+                                                            ? 'Partial'
+                                                            : 'Pending'}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3 text-right">
-                                                <button className="text-blue-600 hover:text-blue-700 text-xs font-medium">Details</button>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDetailsClick(bill);
+                                                    }}
+                                                    className="text-blue-600 hover:text-blue-700 text-xs font-medium cursor-pointer"
+                                                >
+                                                    Details
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}
@@ -216,15 +338,48 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
                                             <td className="px-4 py-3 text-stone-600">{loan.reason}</td>
                                             <td className="px-4 py-3 text-right font-semibold text-stone-900">
                                                 {loan.total_amount.toLocaleString()}
-                                                <div className="text-[10px] font-normal text-stone-400">Bal: {loan.remaining_balance.toLocaleString()}</div>
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-bold text-blue-600">
+                                                {loan.remaining_balance.toLocaleString()}
                                             </td>
                                             <td className="px-4 py-3 text-center">
-                                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${loan.status === 'active' ? 'bg-blue-100 text-blue-700' : 'bg-stone-100 text-stone-700'}`}>
+                                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${loan.status === 'active'
+                                                    ? 'bg-blue-100 text-blue-700'
+                                                    : loan.status === 'completed'
+                                                        ? 'bg-emerald-100 text-emerald-700'
+                                                        : loan.status === 'pending'
+                                                            ? 'bg-amber-100 text-amber-700'
+                                                            : 'bg-stone-100 text-stone-700'
+                                                    }`}>
                                                     {loan.status}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3 text-right">
-                                                <button className="text-blue-600 hover:text-blue-700 text-xs font-medium">Schedule</button>
+                                                <div className="flex items-center justify-end gap-3">
+                                                    {loan.status === 'pending' && (
+                                                        <button
+                                                            type="button"
+                                                            disabled={verifyingId === loan.id}
+                                                            onClick={() => handleVerifyLoan(loan)}
+                                                            className="text-blue-600 hover:text-blue-700 text-xs font-semibold cursor-pointer flex items-center disabled:opacity-50"
+                                                        >
+                                                            {verifyingId === loan.id ? (
+                                                                <div className="h-3 w-3 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+                                                            ) : (
+                                                                <>
+                                                                    <CheckCircle className="h-3 w-3 mr-1" /> Approve
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDetailsClick(loan)}
+                                                        className="text-stone-500 hover:text-stone-700 text-xs font-medium cursor-pointer"
+                                                    >
+                                                        Details
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -236,16 +391,52 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
                                                 {advance.staff?.first_name} {advance.staff?.last_name}
                                             </td>
                                             <td className="px-4 py-3 text-stone-600">{advance.reason}</td>
-                                            <td className="px-4 py-3 text-right font-semibold text-stone-900">
+                                            <td className="px-4 py-3 text-right font-medium text-stone-900">
+                                                {advance.amount.toLocaleString()}
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-semibold text-blue-600">
                                                 {advance.amount.toLocaleString()}
                                             </td>
                                             <td className="px-4 py-3 text-center">
-                                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${advance.status === 'approved' ? 'bg-green-100 text-green-700' : advance.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-700'}`}>
-                                                    {advance.status}
+                                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${advance.status === 'deducted'
+                                                    ? 'bg-emerald-100 text-emerald-700'
+                                                    : advance.status === 'approved'
+                                                        ? 'bg-blue-100 text-blue-700'
+                                                        : advance.status === 'pending'
+                                                            ? 'bg-amber-100 text-amber-700'
+                                                            : advance.status === 'rejected'
+                                                                ? 'bg-red-100 text-red-700'
+                                                                : 'bg-stone-100 text-stone-700'
+                                                    }`}>
+                                                    {advance.status === 'deducted' ? 'Settled' : advance.status}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3 text-right">
-                                                <button className="text-blue-600 hover:text-blue-700 text-xs font-medium">Verify</button>
+                                                <div className="flex items-center justify-end gap-3">
+                                                    {advance.status === 'pending' && (
+                                                        <button
+                                                            type="button"
+                                                            disabled={verifyingId === advance.id}
+                                                            onClick={() => handleVerifyAdvance(advance)}
+                                                            className="text-blue-600 hover:text-blue-700 text-xs font-semibold cursor-pointer flex items-center disabled:opacity-50"
+                                                        >
+                                                            {verifyingId === advance.id ? (
+                                                                <div className="h-3 w-3 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+                                                            ) : (
+                                                                <>
+                                                                    <CheckCircle className="h-3 w-3 mr-1" /> Approve
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDetailsClick(advance)}
+                                                        className="text-stone-500 hover:text-stone-700 text-xs font-medium cursor-pointer"
+                                                    >
+                                                        Details
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -255,7 +446,7 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
                                         (!loans.length && activeTab === 'loans' && !isLoading) ||
                                         (!advances.length && activeTab === 'advances' && !isLoading)) && (
                                             <tr>
-                                                <td colSpan={6} className="px-4 py-12 text-center">
+                                                <td colSpan={7} className="px-4 py-12 text-center">
                                                     <div className="mx-auto h-12 w-12 rounded-full bg-stone-100 flex items-center justify-center mb-3">
                                                         <Search className="h-6 w-6 text-stone-400" />
                                                     </div>
@@ -269,7 +460,7 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
 
                                     {isLoading && (
                                         <tr>
-                                            <td colSpan={6} className="px-4 py-12 text-center text-stone-500">
+                                            <td colSpan={7} className="px-4 py-12 text-center text-stone-500">
                                                 <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2"></div>
                                                 Loading records...
                                             </td>
@@ -292,6 +483,14 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
                         setShowModal(false);
                         loadData();
                     }}
+                />
+            )}
+            {showDetailsModal && selectedBill && (
+                <BillDetailsModal
+                    bill={selectedBill}
+                    onClose={() => setShowDetailsModal(false)}
+                    onUpdate={loadData}
+                    isAuditor={isAuditor}
                 />
             )}
         </div>

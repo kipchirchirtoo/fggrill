@@ -366,7 +366,9 @@ export const createStockTake = async (req: Request, res: Response) => {
 
     if (countError) throw countError;
 
-    // Get branch stock items and map them to inventory_items
+    let countItems: any[] = [];
+
+    // 1. Try to get from branch stock
     const { data: stockItems } = await supabase
       .from('branch_stock')
       .select('item_sku, quantity')
@@ -381,20 +383,38 @@ export const createStockTake = async (req: Request, res: Response) => {
         .select('id, item_code, unit_cost')
         .in('item_code', skus);
 
-      const countItems = stockItems.map(stockItem => {
+      countItems = stockItems.map(stockItem => {
         const invItem = inventoryItems?.find(i => i.item_code === stockItem.item_sku);
         return {
           stock_count_id: count.id,
           item_id: invItem?.id,
-          system_quantity: stockItem.quantity,
-          physical_quantity: stockItem.quantity, // Default to system quantity for initialization
+          system_quantity: stockItem.quantity || 0,
+          physical_quantity: stockItem.quantity || 0,
           unit_cost: invItem?.unit_cost || 0
         };
-      }).filter(item => item.item_id); // Only include items found in inventory_items
+      }).filter(item => item.item_id);
+    }
 
-      if (countItems.length > 0) {
-        await supabase.from('stock_count_items').insert(countItems);
+    // 2. If no branch stock or countItems, fall back to general inventory_items/store_items
+    if (countItems.length === 0) {
+      const { data: allItems } = await supabase
+        .from('store_items')
+        .select('id, item_code, unit_cost')
+        .eq('is_active', true);
+
+      if (allItems && allItems.length > 0) {
+        countItems = allItems.map(item => ({
+          stock_count_id: count.id,
+          item_id: item.id,
+          system_quantity: 0,
+          physical_quantity: 0,
+          unit_cost: item.unit_cost || 0
+        }));
       }
+    }
+
+    if (countItems.length > 0) {
+      await supabase.from('stock_count_items').insert(countItems);
     }
 
     res.status(201).json({ success: true, data: count });
@@ -432,11 +452,20 @@ export const getStockTakeItems = async (req: Request, res: Response) => {
 
     if (invError) throw invError;
 
-    // 3. Manually merge
-    const mergedData = items.map(item => ({
-      ...item,
-      item: inventoryItems?.find(inv => inv.id === item.item_id) || null
-    }));
+    // 3. Manually merge and flatten for frontend
+    const mergedData = items.map(item => {
+      const invItem = inventoryItems?.find(inv => inv.id === item.item_id);
+      return {
+        ...item,
+        item_name: invItem?.name || 'Unknown Item',
+        item_sku: invItem?.item_code || 'N/A',
+        unit: invItem?.unit || 'pcs',
+        // Support frontend expectation of actual_quantity mapping to physical_quantity
+        actual_quantity: item.physical_quantity,
+        variance: (item.physical_quantity || 0) - (item.system_quantity || 0),
+        item: invItem || null
+      };
+    });
 
     res.json({ success: true, data: mergedData });
   } catch (error: any) {
@@ -447,14 +476,17 @@ export const getStockTakeItems = async (req: Request, res: Response) => {
 export const updateStockTakeItem = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { physical_quantity, reason } = req.body;
+    const { physical_quantity, actual_quantity, reason } = req.body;
+
+    // Support both field names for flexibility
+    const newQuantity = physical_quantity !== undefined ? physical_quantity : actual_quantity;
 
     const { data, error } = await supabase
       .from('stock_count_items')
       .update({
-        physical_quantity,
+        physical_quantity: newQuantity,
         reason,
-        created_at: new Date().toISOString() // Using created_at as an 'updated_at' for the item if no updated_at exists
+        created_at: new Date().toISOString()
       })
       .eq('id', id)
       .select()

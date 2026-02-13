@@ -299,7 +299,7 @@ function CashierPageContent() {
 
         setIsProcessing(true);
         try {
-            const identifier = (billData.type === 'restaurant' || billData.type === 'bar') ? billData.order.order_number : billData.booking.id;
+            const identifier = (billData.type === 'restaurant' || billData.type === 'bar') ? billData.order.order_number : (billData.type === 'invoice' ? billData.invoice.invoice_number : billData.booking.id);
             const methodKey = paymentMethod === 'mpesa' ? 'mpesa_manual' : (paymentMethod === 'card' ? 'card_manual' : 'cash');
 
             const response = await fetchAPI('/cashier/pay', {
@@ -332,7 +332,7 @@ function CashierPageContent() {
                 // Add to local history
                 const newTxn = {
                     id: response.data.id,
-                    customerName: (billData.type === 'restaurant' || billData.type === 'bar') ? billData.order.guest_name : billData.booking.guest_name,
+                    customerName: billData.type === 'invoice' ? billData.invoice.customer_name : ((billData.type === 'restaurant' || billData.type === 'bar') ? billData.order.guest_name : billData.booking.guest_name),
                     billNo: identifier,
                     amount: amount,
                     paymentMethod: paymentMethod,
@@ -441,7 +441,7 @@ function CashierPageContent() {
         }
         setIsProcessing(true);
         try {
-            const identifier = (billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos') ? billData.order.order_number : billData.booking.id;
+            const identifier = (billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos') ? billData.order.order_number : (billData.type === 'invoice' ? billData.invoice.invoice_number : billData.booking.id);
             // Correct path: /payments/mpesa/...
             const response = await fetchAPI('/payments/mpesa/initiate', {
                 method: 'POST',
@@ -735,7 +735,7 @@ function CashierPageContent() {
                     amount_paid: billData.financials.amount_paid,
                     change_amount: 0
                 };
-            } else {
+            } else if (billData.type === 'hotel') {
                 // Hotel bill
                 receiptData = {
                     receipt_type: 'invoice' as const,
@@ -754,6 +754,21 @@ function CashierPageContent() {
                     tax: vatAmount,
                     amount: totalAmount,
                     notes: `Stay from ${new Date(billData.booking.check_in).toLocaleDateString()} to ${new Date(billData.booking.check_out).toLocaleDateString()}`
+                };
+            } else if (billData.type === 'invoice') {
+                receiptData = {
+                    receipt_type: 'invoice' as const,
+                    invoice_number: billData.invoice.invoice_number,
+                    date: new Date().toISOString(),
+                    customer_name: billData.invoice.customer_name,
+                    items: (billData.invoice.items || []).map((item: any) => ({
+                        description: item.name,
+                        quantity: item.quantity,
+                        unit_price: item.price,
+                    })),
+                    subtotal: subtotal,
+                    tax: vatAmount,
+                    amount: totalAmount
                 };
             }
 
@@ -1123,22 +1138,38 @@ function CashierPageContent() {
                                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8">
                                                     <div>
                                                         <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">Bill Number</p>
-                                                        <p className="font-bold text-stone-900">{(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos') ? billData.order.order_number : billData.booking.id.slice(0, 8)}</p>
+                                                        <p className="font-bold text-stone-900">
+                                                            {(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos')
+                                                                ? billData.order.order_number
+                                                                : (billData.type === 'invoice' ? billData.invoice.invoice_number : billData.booking.id.slice(0, 8))}
+                                                        </p>
                                                     </div>
                                                     <div>
                                                         <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">Customer</p>
-                                                        <p className="font-bold text-stone-900">{(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos') ? billData.order.guest_name : billData.booking.guest_name}</p>
+                                                        <p className="font-bold text-stone-900">
+                                                            {(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos')
+                                                                ? billData.order.guest_name
+                                                                : (billData.type === 'invoice' ? billData.invoice.customer_name : billData.booking.guest_name)}
+                                                        </p>
                                                     </div>
                                                     <div>
                                                         <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">Module</p>
                                                         <p className="font-bold text-stone-900 capitalize">{billData.type}</p>
                                                     </div>
                                                     <div>
-                                                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">{billData.type === 'hotel' ? 'Room' : (billData.type === 'pos' ? 'Source' : 'Table')}</p>
+                                                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">
+                                                            {billData.type === 'hotel' ? 'Room' : (billData.type === 'pos' ? 'Source' : (billData.type === 'invoice' ? 'Reference' : 'Table'))}
+                                                        </p>
                                                         <p className="font-bold text-stone-900">
-                                                            {billData.type === 'hotel' ? billData.booking.room_number : (billData.type === 'pos' ? 'POS Terminal' : (billData.order.table_number || 'N/A'))}
+                                                            {billData.type === 'hotel' ? billData.booking.room_number : (billData.type === 'pos' ? 'POS Terminal' : (billData.type === 'invoice' ? 'AR Invoice' : (billData.order.table_number || 'N/A')))}
                                                         </p>
                                                     </div>
+                                                    {billData.type === 'invoice' && (
+                                                        <div>
+                                                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">Status</p>
+                                                            <p className="font-bold text-stone-900 capitalize">{billData.invoice.status}</p>
+                                                        </div>
+                                                    )}
                                                     {billData.type === 'hotel' && (
                                                         <>
                                                             <div>
@@ -1152,11 +1183,13 @@ function CashierPageContent() {
                                                         </>
                                                     )}
                                                 </div>
-                                                {(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos') && billData.order.items && (
+                                                {(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos' || billData.type === 'invoice') && (
                                                     <div className="mb-8">
-                                                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight mb-3">Order Items</p>
+                                                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight mb-3">
+                                                            {billData.type === 'invoice' ? 'Invoice Items' : 'Order Items'}
+                                                        </p>
                                                         <div className="bg-stone-50 rounded-xl p-4 space-y-2 border border-stone-100">
-                                                            {billData.order.items.map((item: any, idx: number) => (
+                                                            {(billData.type === 'invoice' ? billData.invoice.items : billData.order.items).map((item: any, idx: number) => (
                                                                 <div key={idx} className="flex justify-between text-sm">
                                                                     <span className="text-stone-600">{item.name} <span className="text-stone-400 text-xs">x{item.quantity}</span></span>
                                                                     <span className="font-bold text-stone-900">KES {(item.total || (item.price * item.quantity)).toLocaleString()}</span>

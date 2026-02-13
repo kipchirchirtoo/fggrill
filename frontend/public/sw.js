@@ -1,5 +1,5 @@
 // Service Worker for Famous Gate Housekeeping PWA
-const CACHE_NAME = 'fg-housekeeping-v1';
+const CACHE_NAME = 'fg-housekeeping-v2';
 const OFFLINE_URL = '/offline.html';
 
 // Resources to cache immediately
@@ -51,7 +51,7 @@ self.addEventListener('fetch', (event) => {
 
   // Handle API requests
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(handleApiRequest(request));
+    event.respondWith(handleApiRequest(request.clone()));
     return;
   }
 
@@ -73,10 +73,12 @@ self.addEventListener('fetch', (event) => {
           return response;
         }
         // Cache successful responses
-        const responseToCache = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(request, responseToCache);
-        });
+        if (request.url.startsWith('http')) {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, responseToCache);
+          });
+        }
         return response;
       });
     })
@@ -118,10 +120,14 @@ async function handleApiRequest(request) {
   // For POST/PUT/DELETE requests, queue if offline
   if (['POST', 'PUT', 'DELETE'].includes(request.method)) {
     try {
-      return await fetch(request);
+      // Create a clone for the actual network fetch
+      const fetchRequest = request.clone();
+      return await fetch(fetchRequest);
     } catch (error) {
-      // Queue the request for later sync
-      await queueRequest(request);
+      console.log('[SW] Network error for mutation, queuing request:', url.pathname);
+      // Create another clone for queuing (if the original isn't already used)
+      const queueR = request.clone();
+      await queueRequest(queueR);
 
       return new Response(
         JSON.stringify({
@@ -166,11 +172,22 @@ async function handleNavigationRequest(request) {
 // Queue requests for background sync
 async function queueRequest(request) {
   const db = await openIndexedDB();
+  const method = request.method;
+  let body = null;
+
+  if (method !== 'GET' && method !== 'HEAD') {
+    try {
+      body = await request.text();
+    } catch (e) {
+      console.error('[SW] Could not read request body for queue:', e);
+    }
+  }
+
   const requestData = {
     url: request.url,
-    method: request.method,
+    method: method,
     headers: Object.fromEntries(request.headers.entries()),
-    body: await request.text(),
+    body: body,
     timestamp: Date.now()
   };
 
@@ -187,25 +204,29 @@ async function queueRequest(request) {
 // Open IndexedDB for offline storage
 function openIndexedDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('fg-housekeeping-offline', 1);
+    try {
+      const request = indexedDB.open('fg-housekeeping-offline', 1);
 
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
 
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result;
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
 
-      // Store for pending requests
-      if (!db.objectStoreNames.contains('pending-requests')) {
-        db.createObjectStore('pending-requests', { keyPath: 'timestamp' });
-      }
+        // Store for pending requests
+        if (!db.objectStoreNames.contains('pending-requests')) {
+          db.createObjectStore('pending-requests', { keyPath: 'id', autoIncrement: true });
+        }
 
-      // Store for offline data
-      if (!db.objectStoreNames.contains('offline-data')) {
-        const store = db.createObjectStore('offline-data', { keyPath: 'key' });
-        store.createIndex('type', 'type');
-      }
-    };
+        // Store for offline data
+        if (!db.objectStoreNames.contains('offline-data')) {
+          const store = db.createObjectStore('offline-data', { keyPath: 'key' });
+          store.createIndex('type', 'type');
+        }
+      };
+    } catch (e) {
+      reject(e);
+    }
   });
 }
 

@@ -2,7 +2,8 @@ import { Router } from 'express';
 import {
     createCreditBill,
     getCreditBills,
-    updateCreditBillStatus
+    updateCreditBillStatus,
+    triggerPendingBillsMigration
 } from '../controllers/credit-bills.controller';
 import {
     createAdvance,
@@ -11,7 +12,8 @@ import {
 } from '../controllers/advances.controller';
 import {
     createLoan,
-    getLoans
+    getLoans,
+    approveLoan
 } from '../controllers/loans.controller';
 import {
     generatePayroll,
@@ -36,6 +38,7 @@ router.use(protect);
 router.post('/credit-bills', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST, UserRole.RESTAURANT, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), createCreditBill);
 router.get('/credit-bills', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.EMPLOYEE]), getCreditBills);
 router.patch('/credit-bills/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), updateCreditBillStatus);
+router.post('/credit-bills/migrate-pending', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), triggerPendingBillsMigration);
 
 // ==========================================
 // ADVANCES
@@ -49,6 +52,7 @@ router.patch('/advances/:id/approve', authorize([UserRole.SUPER_ADMIN, UserRole.
 // ==========================================
 router.post('/loans', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), createLoan);
 router.get('/loans', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.EMPLOYEE]), getLoans);
+router.patch('/loans/:id/approve', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), approveLoan);
 
 // ==========================================
 // PAYROLL GENERATION

@@ -183,6 +183,29 @@ def universal_search():
             except Exception as e:
                 logger.error(f"Error searching bills: {e}")
 
+            # Search Supplier Invoices
+            try:
+                invoices_res = supabase.table('store_supplier_invoices').select('*, supplier:store_suppliers(name)').or_(
+                    f'invoice_number.ilike.%{query}%'
+                ).limit(5).execute()
+                
+                for inv in invoices_res.data:
+                    results.append({
+                        'type': 'supplier_invoice',
+                        'id': str(inv['id']),
+                        'title': f"Supplier Invoice #{inv.get('invoice_number', 'N/A')}",
+                        'subtitle': f"{inv.get('supplier', {}).get('name', 'N/A')} • KES {inv.get('total_amount', 0):,.2f}",
+                        'metadata': {
+                            'invoice_number': inv.get('invoice_number', 'N/A'),
+                            'amount': inv.get('total_amount', 0),
+                            'status': inv.get('status', 'N/A'),
+                            'supplier_name': inv.get('supplier', {}).get('name', 'N/A'),
+                            'created_at': inv.get('created_at', 'N/A')
+                        }
+                    })
+            except Exception as e:
+                logger.error(f"Error searching supplier invoices: {e}")
+
             return jsonify({'success': True, 'data': results, 'count': len(results)})
         
         return jsonify({'success': False, 'error': 'Database not available'}), 503

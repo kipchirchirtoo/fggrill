@@ -104,23 +104,39 @@ export const createInvoice = async (
             vat_rate_type,
             notes,
             items,
-            invoice_document_url
+            invoice_document_url,
+            other_supplier_name,
+            manual_supplier_pin
         } = req.body;
 
         const userId = req.user?.id;
 
-        if (!supplier_id || !invoice_number || (!grn_id && !po_id)) {
-            throw new AppError('Supplier, invoice number, and either GRN or PO are required', 400);
+        if (!invoice_number) {
+            throw new AppError('Invoice number is required', 400);
         }
 
-        // 1. Get supplier details for VAT validation
-        const { data: supplier, error: supplierError } = await supabase
-            .from('store_suppliers')
-            .select('tax_id, vat_registered, vat_number')
-            .eq('id', supplier_id)
-            .single();
+        if (!supplier_id && !other_supplier_name) {
+            throw new AppError('Supplier or manual supplier name is required', 400);
+        }
 
-        if (supplierError || !supplier) throw new AppError('Supplier not found', 404);
+        let final_supplier_pin = manual_supplier_pin || null;
+        let final_vat_registered = false;
+        let final_vat_number = null;
+
+        // 1. Get supplier details for VAT validation if supplier_id is provided
+        if (supplier_id && supplier_id !== 'other') {
+            const { data: supplier, error: supplierError } = await supabase
+                .from('store_suppliers')
+                .select('tax_id, vat_registered, vat_number')
+                .eq('id', supplier_id)
+                .single();
+
+            if (supplierError || !supplier) throw new AppError('Supplier not found', 404);
+
+            final_supplier_pin = supplier.tax_id;
+            final_vat_registered = supplier.vat_registered;
+            final_vat_number = supplier.vat_number;
+        }
 
         // 2. If GRN provided, find GRNI entry
         let grni_cleared_id = null;
@@ -137,21 +153,32 @@ export const createInvoice = async (
             }
         }
 
+        // Calculate totals from items
+        const calculated_vat_amount = (items || []).reduce((sum: number, item: any) =>
+            sum + ((item.quantity * item.unit_price) * (item.vat_rate || 16.00) / 100), 0);
+        const calculated_subtotal = (items || []).reduce((sum: number, item: any) =>
+            sum + (item.quantity * item.unit_price), 0);
+        const calculated_total_amount = calculated_subtotal + calculated_vat_amount;
+
         // 3. Create invoice header
         const { data: newInvoice, error: invError } = await supabase
             .from('store_supplier_invoices')
             .insert({
                 invoice_number,
-                supplier_id,
+                supplier_id: (supplier_id === 'other' || !supplier_id) ? null : supplier_id,
+                other_supplier_name: (supplier_id === 'other' || !supplier_id) ? other_supplier_name : null,
                 grn_id,
                 po_id,
                 invoice_date,
                 due_date,
-                supplier_pin: supplier.tax_id,
-                supplier_vat_registered: supplier.vat_registered,
-                supplier_vat_number: supplier.vat_number,
-                subtotal,
+                supplier_pin: final_supplier_pin || 'N/A',
+                supplier_vat_registered: final_vat_registered,
+                supplier_vat_number: final_vat_number,
+                subtotal: subtotal || calculated_subtotal,
                 vat_rate_type: vat_rate_type || 'standard_16',
+                vat_amount: calculated_vat_amount,
+                total_amount: calculated_total_amount,
+                balance_due: calculated_total_amount,
                 grni_cleared_id,
                 notes,
                 invoice_document_url,

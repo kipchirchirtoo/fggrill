@@ -54,7 +54,8 @@ import {
   getBranchesWithStock,
   getMasterCatalog,
   getStockMovements,
-  updateBranchStock
+  updateBranchStock,
+  updateDispatchLogistics
 } from '../controllers/storekeeping/branch-inventory.controller';
 
 import {
@@ -216,6 +217,7 @@ router.put('/stock-requests/:id/reject', authorize(auditorRoles), rejectStockReq
 router.post('/dispatch-notes', authorize(centralRoles), createDispatch);
 router.get('/dispatch-notes', authorize(centralRoles), getDispatchHistory);
 router.put('/dispatch-notes/:id/dispatch', authorize(centralRoles), dispatchItems);
+router.put('/dispatch-notes/:id/logistics', authorize(centralRoles), updateDispatchLogistics);
 
 // Incoming dispatches (Branch receives)
 router.get('/incoming-dispatches', authorize(branchRoles), getIncomingDispatches);

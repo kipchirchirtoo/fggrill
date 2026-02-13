@@ -99,7 +99,7 @@ export function DashboardLayout(props: DashboardLayoutProps) {
                             width={28}
                             height={28}
                             className="object-cover scale-150"
-                            style={{ objectPosition: 'center 30%', height: 'auto' }}
+                            style={{ objectPosition: 'center 30%', width: 'auto', height: 'auto' }}
                           />
                         </div>
                         <div>
@@ -175,7 +175,7 @@ export function DashboardLayout(props: DashboardLayoutProps) {
                             width={24}
                             height={24}
                             className="object-cover scale-150"
-                            style={{ objectPosition: 'center 30%', height: 'auto' }}
+                            style={{ objectPosition: 'center 30%' }}
                           />
                         </div>
                         <span className="text-[15px] font-semibold text-stone-900">Famous Gates</span>

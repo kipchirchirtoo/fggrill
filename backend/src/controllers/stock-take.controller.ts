@@ -51,11 +51,15 @@ export const getStockTake = async (req: Request, res: Response) => {
 
         const { data: items, error: itemsError } = await supabase
             .from('stock_take_items')
-            .select('*')
+            .select('*, item:inventory_items(name, unit)')
             .eq('stock_take_id', id)
             .order('item_sku');
 
         if (itemsError) throw itemsError;
+
+        // Flatten item names for frontend compatibility if needed, 
+        // or keep as nested objects and update frontend.
+        // Let's keep nested and update frontend for cleaner data structure.
 
         res.json({
             success: true,
@@ -105,9 +109,10 @@ export const createStockTake = async (req: Request, res: Response) => {
 
         if (takeError) throw takeError;
 
-        // Create stock take items if provided
+        // Create stock take items if provided, or auto-populate if not
+        let itemsToInsert = [];
         if (items && items.length > 0) {
-            const itemsToInsert = items.map((item: any) => ({
+            itemsToInsert = items.map((item: any) => ({
                 stock_take_id: stockTake.id,
                 item_sku: item.item_sku,
                 system_quantity: item.system_quantity,
@@ -117,7 +122,32 @@ export const createStockTake = async (req: Request, res: Response) => {
                 notes: item.notes,
                 status: item.counted_quantity !== null ? 'COUNTED' : 'PENDING'
             }));
+        } else {
+            // Auto-populate from inventory_items
+            let query = supabase
+                .from('inventory_items')
+                .select('item_code, current_stock, unit_cost')
+                .eq('is_active', true);
 
+            if (category_filter && category_filter !== 'ALL') {
+                query = query.eq('category', category_filter);
+            }
+
+            const { data: activeItems, error: fetchError } = await query;
+            if (fetchError) throw fetchError;
+
+            if (activeItems && activeItems.length > 0) {
+                itemsToInsert = activeItems.map((item: any) => ({
+                    stock_take_id: stockTake.id,
+                    item_sku: item.item_code,
+                    system_quantity: item.current_stock || 0,
+                    unit_cost: item.unit_cost || 0,
+                    status: 'PENDING'
+                }));
+            }
+        }
+
+        if (itemsToInsert.length > 0) {
             const { error: itemsError } = await supabase
                 .from('stock_take_items')
                 .insert(itemsToInsert);

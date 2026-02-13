@@ -11,8 +11,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     DollarSign, Waves, Ticket, Users, Bed,
     UtensilsCrossed, Wine, Plus, CreditCard,
-    Banknote, Building, AlertCircle, CheckCircle2, Clock
+    Banknote, Building, AlertCircle, CheckCircle2, Clock,
+    Trash2, User
 } from 'lucide-react';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { fetchAPI } from '@/lib/api';
+import { useEffect } from 'react';
 
 interface CloseShiftModalProps {
     isOpen: boolean;
@@ -35,14 +45,19 @@ export interface CloseShiftData {
     // Credit & bills
     credit_bills_taken?: number;
     credit_bills_count?: number;
-    unpaid_bills_value?: number;
-    unpaid_bills_count?: number;
+    credit_bills_details?: any[];
+    unpaid_bills_value?: number; // Kept for backward compatibility but hidden
+    unpaid_bills_count?: number; // Kept for backward compatibility but hidden
+    paid_bills_value?: number;
+    paid_bills_count?: number;
+    paid_bills_details?: any[];
     // Cash management
     cash_at_hand?: number;
     cash_deposited?: number;
     bank_deposit_ref?: string;
     // N/A flags
     pool_na?: boolean;
+    pool_tokens_na?: boolean;
     conference_na?: boolean;
     rooms_na?: boolean;
     // Notes
@@ -61,16 +76,118 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
         other_revenue: 0,
         credit_bills_taken: 0,
         credit_bills_count: 0,
+        credit_bills_details: [],
         unpaid_bills_value: 0,
         unpaid_bills_count: 0,
+        paid_bills_value: 0,
+        paid_bills_count: 0,
+        paid_bills_details: [],
         cash_at_hand: 0,
         cash_deposited: 0,
         bank_deposit_ref: '',
         pool_na: false,
+        pool_tokens_na: false,
         conference_na: false,
         rooms_na: false,
         notes: ''
     });
+
+    const [staffList, setStaffList] = useState<any[]>([]);
+    const [newCreditBill, setNewCreditBill] = useState({ staffId: '', amount: '', name: '' });
+
+
+    const [newPaidBill, setNewPaidBill] = useState({ staffId: '', amount: '', name: '' });
+
+    useEffect(() => {
+        if (isOpen) {
+            loadStaff();
+        }
+    }, [isOpen]);
+
+    const loadStaff = async () => {
+        try {
+            const res = await fetchAPI('/staff?status=active') as any;
+            if (res.success) setStaffList(res.data);
+        } catch (error) {
+            console.error('Failed to load staff list', error);
+        }
+    };
+
+    const addCreditBill = () => {
+        if (!newCreditBill.staffId || !newCreditBill.amount) return;
+
+        const amount = parseFloat(newCreditBill.amount);
+        if (isNaN(amount) || amount <= 0) return;
+
+        const staff = staffList.find(s => s.id === newCreditBill.staffId);
+        const bill = {
+            id: Date.now().toString(),
+            staff_id: newCreditBill.staffId,
+            name: staff ? `${staff.first_name} ${staff.last_name}` : 'Unknown Staff',
+            amount: amount,
+            timestamp: new Date().toISOString()
+        };
+
+        const updatedList = [...(formData.credit_bills_details || []), bill];
+
+        setFormData(prev => ({
+            ...prev,
+            credit_bills_details: updatedList,
+            credit_bills_taken: updatedList.reduce((sum, item) => sum + item.amount, 0),
+            credit_bills_count: updatedList.length
+        }));
+
+        setNewCreditBill({ staffId: '', amount: '', name: '' });
+    };
+
+    const removeCreditBill = (id: string) => {
+        const updatedList = (formData.credit_bills_details || []).filter(item => item.id !== id);
+
+        setFormData(prev => ({
+            ...prev,
+            credit_bills_details: updatedList,
+            credit_bills_taken: updatedList.reduce((sum, item) => sum + item.amount, 0),
+            credit_bills_count: updatedList.length
+        }));
+    };
+
+    const addPaidBill = () => {
+        if (!newPaidBill.staffId || !newPaidBill.amount) return;
+
+        const amount = parseFloat(newPaidBill.amount);
+        if (isNaN(amount) || amount <= 0) return;
+
+        const staff = staffList.find(s => s.id === newPaidBill.staffId);
+        const bill = {
+            id: Date.now().toString(),
+            staff_id: newPaidBill.staffId,
+            name: staff ? `${staff.first_name} ${staff.last_name}` : 'Unknown Staff',
+            amount: amount,
+            timestamp: new Date().toISOString()
+        };
+
+        const updatedList = [...(formData.paid_bills_details || []), bill];
+
+        setFormData(prev => ({
+            ...prev,
+            paid_bills_details: updatedList,
+            paid_bills_value: updatedList.reduce((sum, item) => sum + item.amount, 0),
+            paid_bills_count: updatedList.length
+        }));
+
+        setNewPaidBill({ staffId: '', amount: '', name: '' });
+    };
+
+    const removePaidBill = (id: string) => {
+        const updatedList = (formData.paid_bills_details || []).filter(item => item.id !== id);
+
+        setFormData(prev => ({
+            ...prev,
+            paid_bills_details: updatedList,
+            paid_bills_value: updatedList.reduce((sum, item) => sum + item.amount, 0),
+            paid_bills_count: updatedList.length
+        }));
+    };
 
     const updateField = (field: keyof CloseShiftData, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -79,7 +196,7 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
     const calculateTotalRevenue = () => {
         const revenue = [
             formData.pool_na ? 0 : (formData.swimming_pool_revenue || 0),
-            formData.pool_na ? 0 : (formData.pool_token_revenue || 0),
+            formData.pool_tokens_na ? 0 : (formData.pool_token_revenue || 0),
             formData.conference_na ? 0 : (formData.conference_revenue || 0),
             formData.rooms_na ? 0 : (formData.room_booking_revenue || 0),
             formData.restaurant_revenue || 0,
@@ -209,8 +326,8 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
                                         </Label>
                                         <div className="flex items-center gap-2">
                                             <Checkbox
-                                                checked={formData.pool_na}
-                                                onCheckedChange={(checked) => updateField('pool_na', checked)}
+                                                checked={formData.pool_tokens_na}
+                                                onCheckedChange={(checked) => updateField('pool_tokens_na', checked)}
                                                 className="border-stone-300"
                                             />
                                             <span className="text-[10px] font-bold text-stone-500 uppercase">N/A</span>
@@ -218,8 +335,8 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
                                     </div>
                                     <Input
                                         type="number"
-                                        disabled={formData.pool_na}
-                                        value={formData.pool_na ? '' : formData.pool_token_revenue || ''}
+                                        disabled={formData.pool_tokens_na}
+                                        value={formData.pool_tokens_na ? '' : formData.pool_token_revenue || ''}
                                         onChange={(e) => updateField('pool_token_revenue', parseFloat(e.target.value) || 0)}
                                         placeholder="0.00"
                                         className="h-11 font-bold bg-white rounded-lg px-4"
@@ -335,63 +452,152 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
                         {/* Tab 3: Credit & Bills */}
                         <TabsContent value="credit" className="space-y-6 mt-0">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-3 p-4 bg-rose-50/30 rounded-xl border border-rose-100">
-                                    <Label className="text-[11px] font-bold text-rose-600 uppercase tracking-widest">Credit Bills Taken (Value)</Label>
-                                    <Input
-                                        type="number"
-                                        value={formData.credit_bills_taken || ''}
-                                        onChange={(e) => updateField('credit_bills_taken', parseFloat(e.target.value) || 0)}
-                                        placeholder="0.00"
-                                        className="h-11 font-bold bg-white border-rose-200"
-                                    />
-                                    <p className="text-[10px] text-rose-400 font-medium">Sum of all bills taken on credit</p>
+                                {/* Credit Bills Section */}
+                                <div className="space-y-4">
+                                    <div className="p-4 bg-rose-50/50 rounded-xl border border-rose-100">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <Label className="text-[11px] font-bold text-rose-600 uppercase tracking-widest flex items-center gap-2">
+                                                <User className="h-4 w-4" /> Credit Bills (Staff)
+                                            </Label>
+                                            <span className="text-xs font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full">
+                                                Total: {formData.credit_bills_taken?.toLocaleString()} ({formData.credit_bills_count})
+                                            </span>
+                                        </div>
+
+                                        <div className="space-y-3 mb-4">
+                                            <Select
+                                                value={newCreditBill.staffId}
+                                                onValueChange={(val) => setNewCreditBill({ ...newCreditBill, staffId: val })}
+                                            >
+                                                <SelectTrigger className="bg-white">
+                                                    <SelectValue placeholder="Select Staff Member" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {staffList.map((staff) => (
+                                                        <SelectItem key={staff.id} value={staff.id}>
+                                                            {staff.first_name} {staff.last_name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <div className="flex gap-2">
+                                                <Input
+                                                    type="number"
+                                                    placeholder="Amount"
+                                                    value={newCreditBill.amount}
+                                                    onChange={(e) => setNewCreditBill({ ...newCreditBill, amount: e.target.value })}
+                                                    className="bg-white"
+                                                />
+                                                <IOSButton
+                                                    onClick={addCreditBill}
+                                                    variant="secondary"
+                                                    className="bg-rose-100 text-rose-700 hover:bg-rose-200"
+                                                    disabled={!newCreditBill.staffId || !newCreditBill.amount}
+                                                >
+                                                    <Plus className="h-4 w-4" />
+                                                </IOSButton>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                                            {formData.credit_bills_details?.map((bill: any) => (
+                                                <div key={bill.id} className="flex items-center justify-between p-2 bg-white rounded-lg border border-rose-100 text-sm">
+                                                    <div>
+                                                        <p className="font-bold text-stone-700">{bill.name}</p>
+                                                        <p className="text-xs text-stone-400">{new Date(bill.timestamp).toLocaleTimeString()}</p>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="font-bold text-rose-600">{bill.amount.toLocaleString()}</span>
+                                                        <button
+                                                            onClick={() => removeCreditBill(bill.id)}
+                                                            className="text-stone-400 hover:text-rose-600 transition-colors"
+                                                        >
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {(!formData.credit_bills_details || formData.credit_bills_details.length === 0) && (
+                                                <p className="text-center text-xs text-stone-400 py-4 italic">No credit bills added</p>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100">
-                                    <Label className="text-[11px] font-bold text-stone-500 uppercase tracking-widest">Count: Credit Bills</Label>
-                                    <Input
-                                        type="number"
-                                        value={formData.credit_bills_count || ''}
-                                        onChange={(e) => updateField('credit_bills_count', parseInt(e.target.value) || 0)}
-                                        placeholder="0"
-                                        className="h-11 font-bold bg-white"
-                                    />
-                                </div>
-                                <div className="space-y-3 p-4 bg-amber-50/30 rounded-xl border border-amber-100">
-                                    <Label className="text-[11px] font-bold text-amber-600 uppercase tracking-widest">Unpaid Bills (Value)</Label>
-                                    <Input
-                                        type="number"
-                                        value={formData.unpaid_bills_value || ''}
-                                        onChange={(e) => updateField('unpaid_bills_value', parseFloat(e.target.value) || 0)}
-                                        placeholder="0.00"
-                                        className="h-11 font-bold bg-white border-amber-200"
-                                    />
-                                    <p className="text-[10px] text-amber-400 font-medium">Bills pending payment at shift end</p>
-                                </div>
-                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100">
-                                    <Label className="text-[11px] font-bold text-stone-500 uppercase tracking-widest">Count: Unpaid Bills</Label>
-                                    <Input
-                                        type="number"
-                                        value={formData.unpaid_bills_count || ''}
-                                        onChange={(e) => updateField('unpaid_bills_count', parseInt(e.target.value) || 0)}
-                                        placeholder="0"
-                                        className="h-11 font-bold bg-white"
-                                    />
+
+                                {/* Paid Bills Section */}
+                                <div className="space-y-4">
+                                    <div className="p-4 bg-emerald-50/50 rounded-xl border border-emerald-100">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <Label className="text-[11px] font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-2">
+                                                <CheckCircle2 className="h-4 w-4" /> Paid Bills
+                                            </Label>
+                                            <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                                                Total: {formData.paid_bills_value?.toLocaleString()} ({formData.paid_bills_count})
+                                            </span>
+                                        </div>
+
+                                        <div className="space-y-3 mb-4">
+                                            <Select
+                                                value={newPaidBill.staffId}
+                                                onValueChange={(val) => setNewPaidBill({ ...newPaidBill, staffId: val })}
+                                            >
+                                                <SelectTrigger className="bg-white">
+                                                    <SelectValue placeholder="Select Payer (Staff)" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {staffList.map((staff) => (
+                                                        <SelectItem key={staff.id} value={staff.id}>
+                                                            {staff.first_name} {staff.last_name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <div className="flex gap-2">
+                                                <Input
+                                                    type="number"
+                                                    placeholder="Amount"
+                                                    value={newPaidBill.amount}
+                                                    onChange={(e) => setNewPaidBill({ ...newPaidBill, amount: e.target.value })}
+                                                    className="bg-white"
+                                                />
+                                                <IOSButton
+                                                    onClick={addPaidBill}
+                                                    variant="secondary"
+                                                    className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                                                    disabled={!newPaidBill.staffId || !newPaidBill.amount}
+                                                >
+                                                    <Plus className="h-4 w-4" />
+                                                </IOSButton>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                                            {formData.paid_bills_details?.map((bill: any) => (
+                                                <div key={bill.id} className="flex items-center justify-between p-2 bg-white rounded-lg border border-emerald-100 text-sm">
+                                                    <div>
+                                                        <p className="font-bold text-stone-700">{bill.name}</p>
+                                                        <p className="text-xs text-stone-400">{new Date(bill.timestamp).toLocaleTimeString()}</p>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="font-bold text-emerald-600">{bill.amount.toLocaleString()}</span>
+                                                        <button
+                                                            onClick={() => removePaidBill(bill.id)}
+                                                            className="text-stone-400 hover:text-emerald-600 transition-colors"
+                                                        >
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {(!formData.paid_bills_details || formData.paid_bills_details.length === 0) && (
+                                                <p className="text-center text-xs text-stone-400 py-4 italic">No paid bills added</p>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="p-5 bg-stone-50 border border-dashed border-stone-300 rounded-2xl">
-                                <div className="flex items-start gap-3">
-                                    <div className="p-2 bg-stone-200/50 rounded-lg">
-                                        <AlertCircle className="h-5 w-5 text-stone-500" />
-                                    </div>
-                                    <div>
-                                        <p className="text-[13px] font-bold text-stone-900 mb-1">Financial Reconciliation Insight</p>
-                                        <p className="text-[12px] text-stone-500 leading-relaxed">
-                                            Accounting for credit and unpaid bills is critical for revenue verification. Ensure all counts match physical bills recorded.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
+
                         </TabsContent>
 
                         {/* Tab 4: Banking */}
@@ -449,25 +655,29 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
                     </Tabs>
                 </div>
 
-                <div className="px-6 py-5 border-t border-stone-100 bg-stone-50/30 flex gap-4">
+                <div className="p-6 border-t border-stone-100 bg-white flex items-center justify-end gap-3">
                     <IOSButton
                         onClick={onClose}
-                        variant="outline"
-                        className="flex-1 h-13 rounded-xl font-bold uppercase tracking-widest text-[11px] border-stone-200 text-stone-500 hover:bg-white"
+                        variant="ghost"
+                        className="h-12 px-6 rounded-xl font-medium text-stone-500 hover:bg-stone-100 hover:text-stone-900 transition-colors"
                         disabled={isLoading}
                     >
                         Keep Open
                     </IOSButton>
                     <IOSButton
                         onClick={handleSubmit}
-                        className="flex-[1.5] h-13 rounded-xl font-bold uppercase tracking-widest text-[11px] bg-stone-900 text-white shadow-xl shadow-stone-900/20 hover:bg-stone-800"
+                        className="h-12 px-8 rounded-xl font-bold bg-stone-900 text-white shadow-lg shadow-stone-900/20 hover:bg-stone-800 hover:shadow-stone-900/30 transition-all active:scale-95"
                         disabled={isLoading || !formData.closing_float}
                     >
                         {isLoading ? (
                             <span className="flex items-center gap-2">
-                                <Plus className="h-4 w-4 animate-spin" /> Finalizing Shift...
+                                <Plus className="h-4 w-4 animate-spin" /> Finalizing...
                             </span>
-                        ) : 'Confirm closure & Archive'}
+                        ) : (
+                            <span className="flex items-center gap-2">
+                                <CheckCircle2 className="h-4 w-4" /> Confirm & Archive
+                            </span>
+                        )}
                     </IOSButton>
                 </div>
             </DialogContent>

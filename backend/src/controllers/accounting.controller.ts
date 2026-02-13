@@ -464,7 +464,7 @@ export const recordInvoicePayment = async (req: Request, res: Response, next: Ne
 
 export const createBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { vendor_id, bill_date, due_date, subtotal, tax_amount, reference, notes } = req.body;
+    const { vendor_id, bill_date, due_date, subtotal, tax_amount, reference, notes, items } = req.body;
 
     // Validate required fields
     if (!vendor_id) {
@@ -585,6 +585,7 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
         status: 'unpaid',
         reference,
         notes,
+        items, // Save items as JSONB
         created_by: req.user?.id
       }])
       .select()

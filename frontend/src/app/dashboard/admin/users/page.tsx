@@ -211,11 +211,11 @@ export default function AdminUsersPage() {
     if (!formData.id && !formData.password) errors.password = 'Password is required';
     else if (!formData.id && formData.password.length < 6) errors.password = 'Password must be at least 6 characters';
 
-    // Validate POS PIN format if provided (RXXX, BXXX, or CXXX)
+    // Validate POS PIN format if provided (RXXXX, BXXXX, or CXXXX)
     if (formData.pos_pin) {
-      const pinRegex = /^[RBC]\d{3}$/;
+      const pinRegex = /^[RBC]\d{4}$/;
       if (!pinRegex.test(formData.pos_pin)) {
-        errors.pos_pin = 'PIN must be RXXX, BXXX, or CXXX (e.g. R123)';
+        errors.pos_pin = 'PIN must be RXXXX, BXXXX, or CXXXX (e.g. R1234)';
       }
     }
 
@@ -752,10 +752,10 @@ export default function AdminUsersPage() {
                         value={formData.pos_pin}
                         onChange={(e) => setFormData({ ...formData, pos_pin: e.target.value.toUpperCase() })}
                         className={`font-mono ${formErrors.pos_pin ? 'border-red-500' : ''}`}
-                        placeholder="e.g. R123"
-                        maxLength={4}
+                        placeholder="e.g. R1234"
+                        maxLength={5}
                       />
-                      <p className="text-xs text-gray-500 mt-1">Waiters: RXXX, Bar: BXXX, Cashiers: CXXX</p>
+                      <p className="text-xs text-gray-500 mt-1">Waiters: RXXXX, Bar: BXXXX, Cashiers: CXXXX</p>
                       {formErrors.pos_pin && <p className="text-red-500 text-xs mt-1">{formErrors.pos_pin}</p>}
                     </div>
                   </motion.div>

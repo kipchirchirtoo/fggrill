@@ -117,22 +117,31 @@ export default function BranchStockTakePage() {
                                     ) : (
                                         stockTakes.map((take) => (
                                             <tr key={take.id} className="hover:bg-gray-50">
-                                                <td className="px-6 py-4 font-medium">{new Date(take.date).toLocaleDateString()}</td>
+                                                <td className="px-6 py-4 font-medium">
+                                                    {take.created_at || take.date ?
+                                                        new Date(take.created_at || take.date).toLocaleDateString() :
+                                                        'N/A'}
+                                                </td>
                                                 <td className="px-6 py-4">{take.type || 'Regular'}</td>
                                                 <td className="px-6 py-4">
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${take.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                                        take.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                                            take.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                                                                'bg-gray-100 text-gray-800'
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${take.status?.toLowerCase() === 'completed' ? 'bg-green-100 text-green-800' :
+                                                            take.status?.toLowerCase() === 'pending' || take.status?.toLowerCase() === 'pending_audit' ? 'bg-yellow-100 text-yellow-800' :
+                                                                take.status?.toLowerCase() === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                                                                    'bg-gray-100 text-gray-800'
                                                         }`}>
-                                                        {take.status === 'pending' ? 'Pending Audit' : take.status.replace('_', ' ')}
+                                                        {take.status === 'PENDING' || take.status === 'pending' ? 'Pending Audit' : (take.status || 'unknown').replace('_', ' ')}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    {take.variance !== 0 ? (
-                                                        <span className="text-red-600 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> {take.variance}</span>
+                                                    {(take.variance !== undefined && take.variance !== 0) || (take.total_variance_value !== undefined && take.total_variance_value !== 0) ? (
+                                                        <span className="text-red-600 flex items-center gap-1">
+                                                            <AlertTriangle className="h-3 w-3" />
+                                                            KES {(take.total_variance_value || take.variance || 0).toLocaleString()}
+                                                        </span>
                                                     ) : (
-                                                        <span className="text-green-600 flex items-center gap-1"><CheckCircle className="h-3 w-3" /> Balanced</span>
+                                                        <span className="text-green-600 flex items-center gap-1">
+                                                            <CheckCircle className="h-3 w-3" /> Balanced
+                                                        </span>
                                                     )}
                                                 </td>
                                                 <td className="px-6 py-4 text-right">

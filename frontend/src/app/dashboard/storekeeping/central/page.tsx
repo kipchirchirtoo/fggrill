@@ -28,6 +28,8 @@ import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { storeAPI } from '@/lib/api';
+import { printDispatchPDF, downloadDispatchPDF } from '@/lib/dispatch-pdf';
+import { Download, Printer, User, Navigation, Calendar } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -158,6 +160,7 @@ export default function CentralWarehousePage() {
   // Dispatch states
   const [dispatchHistory, setDispatchHistory] = useState<any[]>([]);
   const [dispatchLoading, setDispatchLoading] = useState<{ [key: string]: boolean }>({});
+  const [isPrinting, setIsPrinting] = useState<string | null>(null);
   const [isCreateDispatchOpen, setIsCreateDispatchOpen] = useState(false);
   const [dispatchForm, setDispatchForm] = useState({
     request_id: '',
@@ -168,6 +171,8 @@ export default function CentralWarehousePage() {
     estimated_delivery: '',
     notes: ''
   });
+  const [selectedDispatch, setSelectedDispatch] = useState<any | null>(null);
+  const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
 
   // Transfer states
   const [transfers, setTransfers] = useState<any[]>([]);
@@ -246,9 +251,10 @@ export default function CentralWarehousePage() {
         .filter(i => i.status === 'APPROVED' || i.status === 'PARTIALLY_APPROVED')
         .map(i => ({
           item_sku: i.item_sku,
-          dispatched_quantity: i.approved_quantity || i.requested_quantity
+          quantity: i.approved_quantity || i.requested_quantity || 0,
+          item_name: i.item?.item_name || i.item_sku,
+          unit: i.item?.unit_of_measure || 'units'
         }));
-
       if (items.length === 0) {
         toast.error('No approved items to dispatch');
         return;
@@ -371,6 +377,64 @@ export default function CentralWarehousePage() {
     } finally {
       // Clear loading state
       setDispatchLoading(prev => ({ ...prev, [dispatchId]: false }));
+    }
+  };
+
+  const handleOpenDispatch = (dispatch: any) => {
+    setSelectedDispatch(dispatch);
+    setDispatchForm({
+      request_id: '',
+      to_branch_id: 0,
+      vehicle_number: dispatch.vehicle_number || '',
+      driver_name: dispatch.driver_name || '',
+      driver_phone: dispatch.driver_phone || '',
+      estimated_delivery: dispatch.estimated_delivery ? new Date(dispatch.estimated_delivery).toISOString().split('T')[0] : '',
+      notes: dispatch.notes || ''
+    });
+    setIsDispatchModalOpen(true);
+  };
+
+  const handleConfirmDispatch = async () => {
+    if (!selectedDispatch) return;
+
+    try {
+      setDispatchLoading(prev => ({ ...prev, [selectedDispatch.id]: true }));
+
+      let response;
+
+      // Check if we are UPDATING an existing dispatch (IN_TRANSIT) or CREATING a new one (READY/PENDING)
+      if (selectedDispatch.status === 'IN_TRANSIT') {
+        response = await storeAPI.updateDispatchLogistics(selectedDispatch.id, {
+          vehicle_number: dispatchForm.vehicle_number,
+          driver_name: dispatchForm.driver_name,
+          driver_phone: dispatchForm.driver_phone,
+          estimated_delivery: dispatchForm.estimated_delivery,
+          notes: dispatchForm.notes
+        });
+      } else {
+        response = await storeAPI.dispatchItems(selectedDispatch.id, {
+          vehicle_number: dispatchForm.vehicle_number,
+          driver_name: dispatchForm.driver_name,
+          driver_phone: dispatchForm.driver_phone,
+          estimated_delivery: dispatchForm.estimated_delivery,
+          notes: dispatchForm.notes
+        });
+      }
+
+      if (response.success) {
+        toast.success(selectedDispatch.status === 'IN_TRANSIT'
+          ? `Dispatch ${selectedDispatch.dispatch_number} logistics updated`
+          : `Dispatch ${response.data?.dispatch_number} is now in transit`
+        );
+        setIsDispatchModalOpen(false);
+        fetchDashboardData();
+      } else {
+        throw new Error(response.message || 'Failed to process dispatch');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to process dispatch');
+    } finally {
+      setDispatchLoading(prev => ({ ...prev, [selectedDispatch.id]: false }));
     }
   };
 
@@ -1089,13 +1153,60 @@ export default function CentralWarehousePage() {
                                 </button>
                               )}
                               {dispatch.status === 'IN_TRANSIT' && (
-                                <IOSBadge size="sm" className="bg-blue-50 text-blue-600 border-blue-100 text-[10px] uppercase font-bold">Transit</IOSBadge>
+                                <div className="flex items-center gap-1">
+                                  <IOSBadge size="sm" className="bg-blue-50 text-blue-600 border-blue-100 text-[10px] uppercase font-bold">Transit</IOSBadge>
+                                  <button
+                                    onClick={() => handleOpenDispatch(dispatch)}
+                                    className="p-1.5 h-7 w-7 flex items-center justify-center rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-900 transition-all"
+                                    title="Edit Logistics"
+                                  >
+                                    <Edit className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
                               )}
                               {dispatch.status === 'DELIVERED' && (
                                 <IOSBadge size="sm" className="bg-stone-900 text-white text-[10px] uppercase font-bold flex items-center gap-1">
                                   <CheckCircle className="h-3 w-3" /> Delivered
                                 </IOSBadge>
                               )}
+                              <div className="flex items-center gap-1 ml-2">
+                                <button
+                                  onClick={async () => {
+                                    setIsPrinting(dispatch.id);
+                                    try {
+                                      await printDispatchPDF(dispatch);
+                                      toast.success('Delivery Note ready for print');
+                                    } catch (e: any) {
+                                      toast.error(e.message || 'Error printing PDF');
+                                    } finally {
+                                      setIsPrinting(null);
+                                    }
+                                  }}
+                                  disabled={isPrinting === dispatch.id}
+                                  className="p-1.5 h-8 w-8 flex items-center justify-center rounded-lg bg-stone-100 text-stone-600 hover:bg-stone-900 hover:text-white transition-all shadow-sm disabled:opacity-50"
+                                  title="Print Delivery Note"
+                                >
+                                  {isPrinting === dispatch.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    setIsPrinting(dispatch.id + '_dl');
+                                    try {
+                                      await downloadDispatchPDF(dispatch);
+                                      toast.success('PDF saved to downloads');
+                                    } catch (e: any) {
+                                      toast.error(e.message || 'Error downloading PDF');
+                                    } finally {
+                                      setIsPrinting(null);
+                                    }
+                                  }}
+                                  disabled={isPrinting === dispatch.id + '_dl'}
+                                  className="p-1.5 h-8 w-8 flex items-center justify-center rounded-lg bg-stone-100 text-stone-600 hover:bg-stone-900 hover:text-white transition-all shadow-sm disabled:opacity-50"
+                                  title="Download PDF"
+                                >
+                                  {isPrinting === dispatch.id + '_dl' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                                </button>
+                              </div>
                             </div>
                           </td>
                         </tr>
@@ -1842,6 +1953,110 @@ export default function CentralWarehousePage() {
               >
                 {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 <span>{isSaving ? 'Processing...' : 'Execute Transfer'}</span>
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dispatch Confirmation Modal */}
+        <Dialog open={isDispatchModalOpen} onOpenChange={setIsDispatchModalOpen}>
+          <DialogContent className="max-w-xl p-0 overflow-hidden border-none rounded-2xl sm:rounded-3xl shadow-2xl">
+            <div className="bg-stone-900 p-6 text-white relative">
+              <div className="h-12 w-12 bg-white/10 rounded-2xl flex items-center justify-center mb-4">
+                <Truck className="h-6 w-6 text-white" />
+              </div>
+              <DialogTitle className="text-xl font-bold">Confirm Dispatch</DialogTitle>
+              <p className="text-white/60 text-sm mt-1">Assign logistics and send items to transit</p>
+              <button
+                onClick={() => setIsDispatchModalOpen(false)}
+                className="absolute top-6 right-6 h-8 w-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6 space-y-4">
+              <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Dispatch #</p>
+                    <p className="text-[13px] font-bold text-stone-900">{selectedDispatch?.dispatch_number}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Destination</p>
+                    <p className="text-[13px] font-bold text-stone-900">{selectedDispatch?.to_branch?.name}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Driver Name</p>
+                  <input
+                    value={dispatchForm.driver_name}
+                    onChange={(e) => setDispatchForm({ ...dispatchForm, driver_name: e.target.value })}
+                    placeholder="e.g. John Doe"
+                    className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-medium"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Driver Phone</p>
+                  <input
+                    value={dispatchForm.driver_phone}
+                    onChange={(e) => setDispatchForm({ ...dispatchForm, driver_phone: e.target.value })}
+                    placeholder="e.g. 07..."
+                    className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Vehicle Reg.</p>
+                  <input
+                    value={dispatchForm.vehicle_number}
+                    onChange={(e) => setDispatchForm({ ...dispatchForm, vehicle_number: e.target.value })}
+                    placeholder="e.g. KAA 123B"
+                    className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-medium"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Est. Delivery</p>
+                  <input
+                    type="date"
+                    value={dispatchForm.estimated_delivery}
+                    onChange={(e) => setDispatchForm({ ...dispatchForm, estimated_delivery: e.target.value })}
+                    className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Notes</p>
+                <textarea
+                  value={dispatchForm.notes}
+                  onChange={(e) => setDispatchForm({ ...dispatchForm, notes: e.target.value })}
+                  placeholder="Additional instructions..."
+                  className="w-full h-20 p-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-medium resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="p-6 bg-stone-50 border-t border-stone-100 flex gap-3">
+              <button
+                onClick={() => setIsDispatchModalOpen(false)}
+                className="flex-1 h-12 text-sm font-bold text-stone-400 hover:text-stone-600 transition-colors"
+                disabled={selectedDispatch && dispatchLoading[selectedDispatch.id]}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDispatch}
+                disabled={selectedDispatch && dispatchLoading[selectedDispatch.id]}
+                className="flex-[2] h-12 bg-stone-900 text-white rounded-xl text-sm font-bold shadow-xl shadow-stone-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 transition-all"
+              >
+                {selectedDispatch && dispatchLoading[selectedDispatch.id] ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                <span>{selectedDispatch && dispatchLoading[selectedDispatch.id] ? 'Dispatching...' : 'Confirm Dispatch'}</span>
               </button>
             </div>
           </DialogContent>

@@ -54,10 +54,14 @@ async function fetchAPI<T>(endpoint: string, options?: FetchOptions): Promise<T>
       // Make the API request
       const response = await fetch(`${API_URL}/api${endpoint}`, {
         ...options,
+        cache: 'no-store', // Disable caching
         headers: {
           ...getHeaders(),
           ...branchHeaders,
-          ...options?.headers
+          ...options?.headers,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
         }
       });
 
@@ -333,10 +337,27 @@ export const storeAPI = {
     const query = status ? `?status=${status}` : '';
     return fetchAPI<any>(`/store/dispatch-notes${query}`);
   },
-  dispatchItems: (id: string, data?: { vehicle_id?: string; driver_id?: string }) =>
+  dispatchItems: (id: string, data?: {
+    vehicle_number?: string;
+    driver_name?: string;
+    driver_phone?: string;
+    estimated_delivery?: string;
+    notes?: string;
+  }) =>
     fetchAPI<any>(`/store/dispatch-notes/${id}/dispatch`, {
       method: 'PUT',
       ...(data ? { body: JSON.stringify(data) } : {}),
+    }),
+  updateDispatchLogistics: (id: string, data: {
+    vehicle_number?: string;
+    driver_name?: string;
+    driver_phone?: string;
+    estimated_delivery?: string;
+    notes?: string;
+  }) =>
+    fetchAPI<any>(`/store/dispatch-notes/${id}/logistics`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
     }),
   getIncomingDispatches: () => fetchAPI<any>('/store/incoming-dispatches'),
   confirmDelivery: (id: string, data: {
@@ -467,27 +488,13 @@ export const storeAPI = {
 
   generateDispatchPDF: async (dispatch: any) => {
     try {
-      const response = await fetch(`${PYTHON_API_URL}/api/reports/generate/dispatch-note`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify(dispatch)
-      });
-
-      if (!response.ok) throw new Error('Failed to generate PDF');
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Dispatch_${dispatch.dispatch_number.split('/').join('_')}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      // Use the frontend PDF generator instead of the backend
+      const { downloadDispatchPDF } = await import('./dispatch-pdf');
+      await downloadDispatchPDF(dispatch);
       return { success: true };
     } catch (error) {
-      console.error('Error downloading PDF:', error);
-      return { success: false, message: error instanceof Error ? error.message : 'Download failed' };
+      console.error('Error in frontend PDF generation:', error);
+      return { success: false, message: error instanceof Error ? error.message : 'Generation failed' };
     }
   },
 };
@@ -544,6 +551,10 @@ export const procurementAPI = {
     const qs = query.toString();
     return fetchAPI<any>(`/procurement/invoices${qs ? `?${qs}` : ''}`);
   },
+  getInvoice: (id: string) => fetchAPI<any>(`/procurement/invoices/${id}`),
+  createInvoice: (data: any) => fetchAPI<any>('/procurement/invoices', { method: 'POST', body: JSON.stringify(data) }),
+  approveInvoice: (id: string) => fetchAPI<any>(`/procurement/invoices/${id}/approve`, { method: 'PUT' }),
+  rejectInvoice: (id: string, reason: string) => fetchAPI<any>(`/procurement/invoices/${id}/reject`, { method: 'PUT', body: JSON.stringify({ reason }) }),
 
   // Payments
   getPayments: (params?: { supplier_id?: string; status?: string }) => {
@@ -826,6 +837,20 @@ export const staffAPI = {
     },
     updateCreditBillStatus: (id: string, status: string) =>
       fetchAPI<any>(`/payroll/credit-bills/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+    triggerPendingBillsMigration: () =>
+      fetchAPI<any>('/payroll/credit-bills/migrate-pending', { method: 'POST' }),
+
+    // Void Bills (Auditor)
+    auditor: {
+      getVoidBills: (params?: { branch_id?: number; status?: string }) => {
+        const query = new URLSearchParams();
+        if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+        if (params?.status) query.append('status', params.status);
+        return fetchAPI<any>(`/auditor/void-bills?${query}`);
+      },
+      reviewVoidBill: (id: string, data: { status: 'reviewed' | 'disputed'; notes?: string }) =>
+        fetchAPI<any>(`/auditor/void-bills/${id}/review`, { method: 'POST', body: JSON.stringify(data) }),
+    },
 
     // Advances
     createAdvance: (data: any) => fetchAPI<any>('/payroll/advances', { method: 'POST', body: JSON.stringify(data) }),
@@ -845,6 +870,7 @@ export const staffAPI = {
       if (params?.status) query.append('status', params.status);
       return fetchAPI<any>(`/payroll/loans?${query}`);
     },
+    approveLoan: (id: string) => fetchAPI<any>(`/payroll/loans/${id}/approve`, { method: 'PATCH' }),
 
     // Payroll Generation & History
     generatePayroll: (data: { month: number; year: number; staff_id?: string }) =>
@@ -2172,6 +2198,21 @@ export const restaurantAPI = {
     description?: string;
   }) => fetchAPI<any>(`/restaurant/wastage/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteWastageRecord: (id: string) => fetchAPI<any>(`/restaurant/wastage/${id}`, { method: 'DELETE' }),
+
+  // Reservations
+  getRestaurantReservations: (params?: { branch_id?: number; status?: string; date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.status) query.append('status', params.status);
+    if (params?.date) query.append('date', params.date);
+    const qs = query.toString();
+    return fetchAPI<any>(`/restaurant/reservations${qs ? `?${qs}` : ''}`);
+  },
+  getRestaurantReservation: (id: string) => fetchAPI<any>(`/restaurant/reservations/${id}`),
+  createRestaurantReservation: (data: any) => fetchAPI<any>('/restaurant/reservations', { method: 'POST', body: JSON.stringify(data) }),
+  updateRestaurantReservation: (id: string, data: any) => fetchAPI<any>(`/restaurant/reservations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  confirmRestaurantReservation: (id: string) => fetchAPI<any>(`/restaurant/reservations/${id}/confirm`, { method: 'PUT' }),
+  cancelRestaurantReservation: (id: string, reason?: string) => fetchAPI<any>(`/restaurant/reservations/${id}/cancel`, { method: 'PUT', body: JSON.stringify({ reason }) }),
 };
 
 export const wastageAPI = {
@@ -2463,6 +2504,7 @@ export const financeAPI = {
     if (params?.status) query.append('status', params.status.toLowerCase());
     return fetchAPI<any>(`/finance/invoices?${query}`);
   },
+  getSupplierInvoiceById: (id: string) => fetchAPI<any>(`/procurement/invoices/${id}`),
   createInvoice: (data: any) => fetchAPI<any>('/finance/invoices', { method: 'POST', body: JSON.stringify(data) }),
 
   // Advanced Financial Tools
@@ -3846,6 +3888,10 @@ export const kitchenAPI = {
   getUsageEntries: (branchId?: number) => fetchAPI<any>(`/kitchen/usage${branchId ? `?branch_id=${branchId}` : ''}`),
   recordWastage: (data: any) => fetchAPI<any>('/kitchen/wastage', { method: 'POST', body: JSON.stringify(data) }),
   getWastageRecords: (branchId?: number) => fetchAPI<any>(`/kitchen/wastage${branchId ? `?branch_id=${branchId}` : ''}`),
+  reviewWastage: (id: string | number, notes?: string) => fetchAPI<any>(`/kitchen/wastage/${id}/review`, { method: 'PUT', body: JSON.stringify({ notes }) }),
+  auditWastage: (id: string | number, status: 'approved' | 'rejected', notes?: string) => fetchAPI<any>(`/kitchen/wastage/${id}/audit`, { method: 'PUT', body: JSON.stringify({ status, notes }) }),
+  reviewUsage: (id: string | number, notes?: string) => fetchAPI<any>(`/kitchen/usage/${id}/review`, { method: 'PUT', body: JSON.stringify({ notes }) }),
+  auditUsage: (id: string | number, status: 'approved' | 'rejected', notes?: string) => fetchAPI<any>(`/kitchen/usage/${id}/audit`, { method: 'PUT', body: JSON.stringify({ status, notes }) }),
 
   // Food Controls (Yield)
   getFoodControls: (branchId?: number) => fetchAPI<any>(`/kitchen/food-controls${branchId ? `?branch_id=${branchId}` : ''}`),
@@ -3977,6 +4023,7 @@ export const employeePortalAPI = {
 
 export const api = {
   auth: authAPI,
+  bookings: bookingsAPI,
   user: userAPI,
   staff: staffAPI,
   system: systemAPI,

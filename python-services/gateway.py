@@ -27,6 +27,7 @@ app.add_middleware(
 ROOM_SERVICE_URL = "http://localhost:8003"
 REPORTING_SERVICE_URL = "http://localhost:8002"
 ANALYTICS_SERVICE_URL = "http://localhost:8001"
+BARCODE_SERVICE_URL = "http://localhost:5003"
 
 client = httpx.AsyncClient()
 
@@ -67,6 +68,11 @@ async def gateway(path: str, request: Request):
     # Room Service
     if path.startswith("api/rooms") or path.startswith("api/room-types"):
         target_url = f"{ROOM_SERVICE_URL}/{path}"
+        return await proxy_request(target_url, request)
+    
+    # Barcode Service
+    if path.startswith("api/barcode"):
+        target_url = f"{BARCODE_SERVICE_URL}/{path}"
         return await proxy_request(target_url, request)
     
     # Reporting Service (Flask)

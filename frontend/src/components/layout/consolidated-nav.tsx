@@ -2,13 +2,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { cn } from '@/lib/utils';
 import { financeAPI } from '@/lib/api';
 import {
-  Building2, Package, Users, Bed, ChevronDown, Warehouse, BarChart3,
+  Building2, Package, Users, Bed, Hotel, ChevronDown, Warehouse, BarChart3,
   DollarSign,
   ScanLine,
   Settings, ClipboardList, Truck, CalendarClock,
@@ -82,6 +82,7 @@ export function ConsolidatedNav() {
   const { user } = useAuth();
   const { activeBranchId, activeBranch } = useBranch();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
 
 
@@ -308,6 +309,12 @@ export function ConsolidatedNav() {
         label="Cashier Station"
         active={pathname === '/dashboard/cashier'}
       />
+      <NavItem
+        href="/dashboard/branch-accounting/bookings"
+        icon={Calendar}
+        label="Bookings"
+        active={pathname.includes('/dashboard/branch-accounting/bookings')}
+      />
     </>
   );
 
@@ -354,6 +361,13 @@ export function ConsolidatedNav() {
         icon={Brush}
         label="Housekeeping"
         active={pathname === '/dashboard/reception/housekeeping'}
+      />
+
+      <NavItem
+        href="/dashboard/branch-accounting/bookings"
+        icon={Calendar}
+        label="Bookings"
+        active={pathname.includes('/dashboard/branch-accounting/bookings')}
       />
 
       <NavItem
@@ -722,9 +736,30 @@ export function ConsolidatedNav() {
       />
 
       <NavItem
+        href="/dashboard/branch-accounting/purchases?tab=invoices"
+        icon={Receipt}
+        label="Supplier Invoices"
+        active={pathname === '/dashboard/branch-accounting/purchases' && searchParams.get('tab') === 'invoices'}
+      />
+
+      <NavItem
+        href="/dashboard/branch-accounting/food-control"
+        icon={Utensils}
+        label="Food Control"
+        active={pathname.includes('/dashboard/branch-accounting/food-control')}
+      />
+
+      <NavItem
+        href="/dashboard/branch-accounting/bookings"
+        icon={Calendar}
+        label="Bookings"
+        active={pathname.includes('/dashboard/branch-accounting/bookings')}
+      />
+
+      <NavItem
         href="/dashboard/branch-accounting/invoices"
         icon={FileText}
-        label="Invoices"
+        label="Guest Invoices"
         active={pathname.includes('/dashboard/branch-accounting/invoices')}
       />
     </>
@@ -1169,49 +1204,6 @@ export function ConsolidatedNav() {
     </>
   );
 
-  // Branch Accountant Navigation
-  const branchAccountantNav = (
-    <>
-      <NavItem
-        href="/dashboard/branch-accounting"
-        icon={Building2}
-        label="Overview"
-        active={pathname === '/dashboard/branch-accounting'}
-      />
-
-      <NavGroup label="Financials" icon={DollarSign} defaultOpen>
-        <NavItem
-          href="/dashboard/branch-accounting/invoices"
-          icon={FileText}
-          label="Invoices"
-          active={pathname === '/dashboard/branch-accounting/invoices'}
-        />
-        <NavItem
-          href="/dashboard/branch-accounting/payments"
-          icon={CreditCard}
-          label="Payments"
-          active={pathname === '/dashboard/branch-accounting/payments'}
-        />
-        <NavItem
-          href="/dashboard/branch-accounting/expenses"
-          icon={Receipt}
-          label="Expenses"
-          active={pathname === '/dashboard/branch-accounting/expenses'}
-        />
-      </NavGroup>
-
-      <NavGroup label="Inventory" icon={Package} defaultOpen>
-        <NavItem
-          href="/dashboard/branch-accounting/stock-take"
-          icon={ClipboardList}
-          label="Stock Takes"
-          active={pathname === '/dashboard/branch-accounting/stock-take'}
-        />
-      </NavGroup>
-
-
-    </>
-  );
 
   // HR Manager Navigation
   const hrNav = (

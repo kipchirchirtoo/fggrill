@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { formatNumber } from '@/lib/utils';
+import { printDispatchPDF } from '@/lib/dispatch-pdf';
 
 interface DispatchItem { id: string; item_sku: string; item_name: string; quantity: number; unit: string; }
 interface Vehicle { id: string; registration_number: string; model: string; }
@@ -87,14 +88,10 @@ export default function DispatchPage() {
     const printDeliveryNote = async (dispatch: DispatchNote) => {
         setIsPrinting(dispatch.id);
         try {
-            const response = await storeAPI.generateDispatchPDF(dispatch);
-            if (response.success) {
-                toast.success('Professional PDF generated successfully');
-            } else {
-                toast.error(response.message || 'Failed to generate PDF');
-            }
+            await printDispatchPDF(dispatch as any);
+            toast.success('Professional PDF generated successfully');
         } catch (error: any) {
-            toast.error(error.message || 'Error occurred');
+            toast.error(error.message || 'Error occurred during PDF generation');
         } finally {
             setIsPrinting(null);
         }

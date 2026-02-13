@@ -44,6 +44,8 @@ export const getAdvances = async (req: Request, res: Response, next: NextFunctio
                 staff:staff_profiles(
                     id, 
                     role,
+                    first_name,
+                    last_name,
                     user:users!user_id(id, first_name, last_name)
                 )
             `)
@@ -62,8 +64,8 @@ export const getAdvances = async (req: Request, res: Response, next: NextFunctio
             staff: advance.staff ? {
                 id: advance.staff.id,
                 role: advance.staff.role,
-                first_name: advance.staff.user?.first_name || '',
-                last_name: advance.staff.user?.last_name || ''
+                first_name: advance.staff.first_name || advance.staff.user?.first_name || '',
+                last_name: advance.staff.last_name || advance.staff.user?.last_name || ''
             } : null
         }));
 
