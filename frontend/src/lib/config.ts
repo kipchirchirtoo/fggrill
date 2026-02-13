@@ -26,8 +26,15 @@ const normalizeUrl = (url: string | undefined, defaultUrl: string): string => {
     return normalized;
 };
 
-// Always use production APIs for the terminal app
-export const API_URL = normalizeUrl(process.env.NEXT_PUBLIC_API_URL, 'https://api.hirall.com');
+// Detect if running in Electron
+const isElectron = typeof window !== 'undefined' && (window as any).electronAPI?.isElectron;
+const isDev = process.env.NODE_ENV === 'development';
+
+// Always use production APIs for the terminal app, unless in local Electron dev
+export const API_URL = isElectron && isDev
+    ? 'http://localhost:5000'
+    : normalizeUrl(process.env.NEXT_PUBLIC_API_URL, 'https://api.hirall.com');
+
 export const PYTHON_API_URL = normalizeUrl(process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL, 'https://services.hirall.com');
 export const PYTHON_SERVICE_URL = PYTHON_API_URL; // Alias for consistency
 export const ROOM_SERVICE_URL = PYTHON_API_URL; // Alias for consistency

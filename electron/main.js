@@ -9,9 +9,22 @@ const isDev = !app.isPackaged;
 // Configuration
 // ──────────────────────────────────────────
 const DOMAIN_URL = isDev ? 'http://localhost:3001' : 'https://fggrill.vercel.app';
+const API_BASE_URL = isDev ? 'http://localhost:5000' : 'https://api.hirall.com';
 const TERMINAL_PATH = '/terminal';
 const CACHE_DIR = path.join(app.getPath('userData'), 'page-cache');
 const DB_PATH = path.join(app.getPath('userData'), 'pos.db');
+const LOG_PATH = path.join(app.getPath('userData'), 'app.log');
+
+// ──────────────────────────────────────────
+// Logger
+// ──────────────────────────────────────────
+function log(msg, type = 'INFO') {
+    const timestamp = new Date().toISOString();
+    const line = `[${timestamp}] [${type}] ${msg}\n`;
+    console.log(line.trim());
+    try { fs.appendFileSync(LOG_PATH, line); } catch (e) { }
+}
+
 
 let mainWindow;
 let backendProcess;
@@ -143,11 +156,20 @@ function getCachedResponse(url) {
 // ──────────────────────────────────────────
 function checkOnlineStatus() {
     return new Promise((resolve) => {
-        const testUrl = DOMAIN_URL + '/api/health';
+        const testUrl = API_BASE_URL + '/api/health';
         const request = net.request(testUrl);
-        request.on('response', () => resolve(true));
-        request.on('error', () => resolve(false));
-        setTimeout(() => resolve(false), 5000);
+        request.on('response', (res) => {
+            log(`Network check: ${res.statusCode} from ${testUrl}`);
+            resolve(res.statusCode === 200);
+        });
+        request.on('error', (err) => {
+            log(`Network check failed: ${err.message}`, 'WARN');
+            resolve(false);
+        });
+        setTimeout(() => {
+            log('Network check timeout', 'WARN');
+            resolve(false);
+        }, 5000);
         request.end();
     });
 }
@@ -189,7 +211,7 @@ async function processSyncQueue() {
                 headers['Authorization'] = `Bearer ${item.token}`;
             }
 
-            const response = await fetch(DOMAIN_URL + item.endpoint, {
+            const response = await fetch(API_BASE_URL + item.endpoint, {
                 method: item.method,
                 headers: headers,
                 body: item.body
@@ -353,7 +375,8 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false,
-            partition: 'persist:pos-cache'
+            partition: 'persist:pos-cache',
+            webSecurity: !isDev // Disable in dev for CORS flexibility
         }
     });
 
