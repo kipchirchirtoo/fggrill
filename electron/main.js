@@ -68,6 +68,7 @@ function initDatabase() {
                 action TEXT NOT NULL,
                 endpoint TEXT NOT NULL,
                 method TEXT DEFAULT 'POST',
+                token TEXT,
                 body TEXT,
                 branch_id INTEGER,
                 status TEXT DEFAULT 'pending',
@@ -183,9 +184,14 @@ async function processSyncQueue() {
 
     for (const item of pending) {
         try {
+            const headers = { 'Content-Type': 'application/json' };
+            if (item.token) {
+                headers['Authorization'] = `Bearer ${item.token}`;
+            }
+
             const response = await fetch(DOMAIN_URL + item.endpoint, {
                 method: item.method,
-                headers: { 'Content-Type': 'application/json' },
+                headers: headers,
                 body: item.body
             });
 
@@ -248,13 +254,17 @@ function setupIPC() {
     });
 
     // --- Sync Queue ---
-    ipcMain.handle('sync:queue', (_, action, endpoint, method, body, branchId) => {
+    ipcMain.handle('sync:queue', (_, action, endpoint, method, body, branchId, token) => {
         if (!db) return false;
         try {
             db.prepare(
-                `INSERT INTO sync_queue (action, endpoint, method, body, branch_id, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?)`
-            ).run(action, endpoint, method || 'POST', JSON.stringify(body), branchId, new Date().toISOString());
+                `INSERT INTO sync_queue (action, endpoint, method, body, branch_id, token, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`
+            ).run(action, endpoint, method || 'POST', JSON.stringify(body), branchId, token, new Date().toISOString());
+
+            // If online, try to sync immediately
+            if (isOnline) processSyncQueue();
+
             return true;
         } catch (err) { console.error('[Sync] Queue error:', err); return false; }
     });

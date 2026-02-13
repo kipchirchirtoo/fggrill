@@ -35,7 +35,8 @@ interface ElectronAPI {
         getMenuItems: (branchId: number) => Promise<any[]>;
     };
     sync: {
-        queue: (action: string, endpoint: string, method: string, body: any, branchId: number) => Promise<boolean>;
+        /** Add an action to the sync queue (will sync when online) */
+        queue: (action: string, endpoint: string, method: string, body: any, branchId: number, token: string) => Promise<boolean>;
         status: () => Promise<SyncStatus>;
         trigger: () => Promise<boolean>;
     };
@@ -106,10 +107,11 @@ export function useElectron() {
         endpoint: string,
         method: string = 'POST',
         body: any = null,
-        branchId: number = 0
+        branchId: number = 0,
+        token: string = ''
     ) => {
         if (!window.electronAPI) return false;
-        return window.electronAPI.sync.queue(action, endpoint, method, body, branchId);
+        return window.electronAPI.sync.queue(action, endpoint, method, body, branchId, token);
     }, []);
 
     const triggerSync = useCallback(async () => {

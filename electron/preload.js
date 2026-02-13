@@ -41,8 +41,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // --- Sync Queue ---
     sync: {
         /** Add an action to the sync queue (will sync when online) */
-        queue: (action, endpoint, method, body, branchId) =>
-            ipcRenderer.invoke('sync:queue', action, endpoint, method, body, branchId),
+        queue: (action, endpoint, method, body, branchId, token) =>
+            ipcRenderer.invoke('sync:queue', action, endpoint, method, body, branchId, token),
+
 
         /** Get sync queue status (pending/synced/failed counts) */
         status: () => ipcRenderer.invoke('sync:status'),
