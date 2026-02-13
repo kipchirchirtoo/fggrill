@@ -27,12 +27,15 @@ const normalizeUrl = (url: string | undefined, defaultUrl: string): string => {
 };
 
 // Detect if running in Electron
-const isElectron = typeof window !== 'undefined' && (window as any).electronAPI?.isElectron;
+const isElectron = typeof window !== 'undefined' && (
+    (window as any).electronAPI?.isElectron === true ||
+    navigator.userAgent.toLowerCase().includes('electron')
+);
 const isDev = process.env.NODE_ENV === 'development';
 
-// Always use production APIs for the terminal app, unless in local Electron dev
+// Force 127.0.0.1 for local dev to avoid localhost resolution issues
 export const API_URL = isElectron && isDev
-    ? 'http://localhost:5000'
+    ? 'http://127.0.0.1:5000'
     : normalizeUrl(process.env.NEXT_PUBLIC_API_URL, 'https://api.hirall.com');
 
 export const PYTHON_API_URL = normalizeUrl(process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL, 'https://services.hirall.com');

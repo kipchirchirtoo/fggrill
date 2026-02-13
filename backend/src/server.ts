@@ -106,8 +106,17 @@ initializeApp().then(({ app, httpServer }) => {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Branch-ID', 'Cache-Control', 'Pragma', 'Expires']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Branch-ID', 'Cache-Control', 'Pragma', 'Expires', 'Access-Control-Allow-Private-Network'],
+    exposedHeaders: ['Access-Control-Allow-Private-Network']
   }));
+
+  // Handle Private Network Access preflight
+  app.use((req, res, next) => {
+    if (req.headers['access-control-request-private-network']) {
+      res.setHeader('Access-Control-Allow-Private-Network', 'true');
+    }
+    next();
+  });
 
   // Relaxed Helmet for development
   app.use(helmet({

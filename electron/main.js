@@ -5,11 +5,16 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const isDev = !app.isPackaged;
 
+if (isDev) {
+    app.commandLine.appendSwitch('ignore-certificate-errors');
+    app.commandLine.appendSwitch('allow-insecure-localhost');
+}
+
 // ──────────────────────────────────────────
 // Configuration
 // ──────────────────────────────────────────
-const DOMAIN_URL = isDev ? 'http://localhost:3001' : 'https://fggrill.vercel.app';
-const API_BASE_URL = isDev ? 'http://localhost:5000' : 'https://api.hirall.com';
+const DOMAIN_URL = isDev ? 'http://127.0.0.1:3001' : 'https://fggrill.vercel.app';
+const API_BASE_URL = isDev ? 'http://127.0.0.1:5000' : 'https://api.hirall.com';
 const TERMINAL_PATH = '/terminal';
 const CACHE_DIR = path.join(app.getPath('userData'), 'page-cache');
 const DB_PATH = path.join(app.getPath('userData'), 'pos.db');
@@ -388,6 +393,16 @@ function createWindow() {
     });
 
     // --- Page Caching: intercept responses and cache them ---
+    mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
+        { urls: ['*://*/*'] },
+        (details, callback) => {
+            if (isDev) {
+                details.requestHeaders['Access-Control-Allow-Private-Network'] = 'true';
+            }
+            callback({ requestHeaders: details.requestHeaders });
+        }
+    );
+
     mainWindow.webContents.session.webRequest.onCompleted(
         { urls: ['*://*/*'] },
         (details) => {
