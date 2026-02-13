@@ -5,15 +5,17 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
 import {
-    Loader2, ShieldCheck, ArrowRight, Delete
+    Loader2, ShieldCheck, ArrowRight, Delete, Wifi, WifiOff, CloudOff, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
+import { useElectron } from '@/hooks/use-electron';
 
 export default function MasterTerminalPage() {
     const router = useRouter();
     const { posLogin } = useAuth();
+    const { isElectron, isOnline, cachePin, verifyPinOffline, syncStatus } = useElectron();
     const [pin, setPin] = useState('');
     const [isAuthenticating, setIsAuthenticating] = useState(false);
     const [mounted, setMounted] = useState(false);
@@ -61,8 +63,39 @@ export default function MasterTerminalPage() {
         if (pin.length !== 5) return;
         setIsAuthenticating(true);
         try {
-            // No redirectTo — posLogin will auto-route based on user role
-            await posLogin(pin);
+            // If in Electron and offline, try local PIN verification
+            if (isElectron && !isOnline) {
+                const cachedUser = await verifyPinOffline(pin);
+                if (cachedUser) {
+                    toast.success(`Offline login: ${cachedUser.firstName || cachedUser.first_name}`, {
+                        description: 'Orders will sync when back online'
+                    });
+                    // Store user in localStorage for the app to work
+                    localStorage.setItem('user', JSON.stringify(cachedUser));
+                    // Route based on cached role
+                    const role = cachedUser.role;
+                    if (role === 'cashier') router.push('/dashboard/cashier');
+                    else if (role === 'pos_kitchen' || role === 'restaurant') router.push('/dashboard/pos/orders');
+                    else if (role === 'bartender') router.push('/dashboard/pos/bar');
+                    else router.push('/dashboard/pos/orders');
+                } else {
+                    toast.error('PIN not recognized offline');
+                    setPin('');
+                }
+            } else {
+                // Online: normal API login (posLogin handles routing internally)
+                await posLogin(pin);
+                // Cache PIN + user data for offline use when in Electron
+                if (isElectron) {
+                    try {
+                        const storedUser = localStorage.getItem('user');
+                        if (storedUser) {
+                            const userData = JSON.parse(storedUser) as any;
+                            await cachePin(pin, userData.id, userData, userData.branch_id || 0);
+                        }
+                    } catch (e) { /* caching is best-effort */ }
+                }
+            }
         } catch (error: any) {
             setPin('');
         } finally {
@@ -123,14 +156,45 @@ export default function MasterTerminalPage() {
                 transition={{ duration: 0.8 }}
                 className="z-10 flex flex-col items-center gap-10"
             >
-                {/* Time display */}
-                <div className="text-center space-y-1">
-                    <h1 className="text-7xl sm:text-8xl font-extralight text-white tracking-tight tabular-nums">
-                        {formattedTime}
-                    </h1>
-                    <p className="text-white/50 text-sm font-medium tracking-wide">
-                        {formattedDate}
-                    </p>
+                {/* Header Information */}
+                <div className="flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-4">
+                        <div className="flex flex-col items-end">
+                            <h1 className="text-4xl font-bold tracking-tight text-white/90">
+                                {terminalTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </h1>
+                            <p className="text-[10px] text-white/40 uppercase tracking-widest font-medium">
+                                {terminalTime.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+                            </p>
+                        </div>
+
+                        {isElectron && (
+                            <div className="h-10 w-[1px] bg-white/10" />
+                        )}
+
+                        {isElectron && (
+                            <div className="flex flex-col gap-1.5">
+                                <div className={cn(
+                                    "flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors",
+                                    isOnline
+                                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                                        : "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                                )}>
+                                    {isOnline ? (
+                                        <><Wifi className="h-3 w-3" /> Connected</>
+                                    ) : (
+                                        <><WifiOff className="h-3 w-3" /> Offline Mode</>
+                                    )}
+                                </div>
+                                {syncStatus.pending > 0 && (
+                                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] font-bold uppercase tracking-wider">
+                                        <RefreshCw className="h-3 w-3 animate-spin-slow" />
+                                        {syncStatus.pending} Pending Sync
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* PIN Area */}

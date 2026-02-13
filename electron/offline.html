@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FG POS — Offline Mode</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', -apple-system, system-ui, sans-serif;
+            background: #0a0a0a;
+            color: #ffffff;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 480px;
+            padding: 2rem;
+        }
+
+        .icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 20px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 2rem;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .icon svg {
+            width: 40px;
+            height: 40px;
+            color: #6366f1;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            color: rgba(255,255,255,0.4);
+            font-size: 0.9rem;
+            line-height: 1.6;
+            margin-bottom: 2rem;
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+        }
+
+        .pulse {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #f59e0b;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+
+        .status-text {
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.5);
+            font-weight: 500;
+        }
+
+        .retry-btn {
+            padding: 0.75rem 2rem;
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .retry-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
+        }
+
+        .retry-btn:active {
+            transform: translateY(0);
+        }
+
+        .info {
+            margin-top: 2rem;
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.2);
+            line-height: 1.6;
+        }
+
+        .sync-info {
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background: rgba(34, 197, 94, 0.05);
+            border: 1px solid rgba(34, 197, 94, 0.1);
+            border-radius: 8px;
+            font-size: 0.8rem;
+            color: rgba(34, 197, 94, 0.6);
+            display: none;
+        }
+
+        .sync-info.visible { display: block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 0 1 7.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 0 1 1.06 0Z" />
+            </svg>
+        </div>
+
+        <h1>No Internet Connection</h1>
+        <p class="subtitle">
+            The POS terminal needs internet for the first load.<br>
+            Please connect to Wi-Fi or Ethernet and try again.
+        </p>
+
+        <div class="status-bar">
+            <div class="pulse"></div>
+            <span class="status-text" id="statusText">Waiting for connection...</span>
+        </div>
+
+        <button class="retry-btn" onclick="retryConnection()">
+            Retry Connection
+        </button>
+
+        <div class="sync-info" id="syncInfo">
+            ✓ Cached data available — offline orders will sync when connected.
+        </div>
+
+        <p class="info">
+            FG POS Terminal v1.0<br>
+            The app will automatically reconnect when internet is available.
+        </p>
+    </div>
+
+    <script>
+        let checkInterval;
+
+        function retryConnection() {
+            const btn = document.querySelector('.retry-btn');
+            const statusText = document.getElementById('statusText');
+
+            btn.textContent = 'Checking...';
+            btn.disabled = true;
+            statusText.textContent = 'Attempting to connect...';
+
+            // Try to reload the main page
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        }
+
+        // Auto-check every 10 seconds
+        checkInterval = setInterval(() => {
+            const statusText = document.getElementById('statusText');
+            
+            // Simple online check
+            fetch('https://www.google.com/favicon.ico', { mode: 'no-cors', cache: 'no-store' })
+                .then(() => {
+                    statusText.textContent = 'Connection detected — reloading...';
+                    clearInterval(checkInterval);
+                    setTimeout(() => window.location.reload(), 1500);
+                })
+                .catch(() => {
+                    statusText.textContent = 'Still waiting for connection...';
+                });
+        }, 10000);
+
+        // Check if electronAPI is available for sync info
+        if (window.electronAPI) {
+            window.electronAPI.sync.status().then(status => {
+                if (status.pending > 0) {
+                    const syncInfo = document.getElementById('syncInfo');
+                    syncInfo.classList.add('visible');
+                    syncInfo.textContent = `📦 ${status.pending} offline order(s) queued — will sync when connected.`;
+                }
+            });
+        }
+    </script>
+</body>
+</html>
