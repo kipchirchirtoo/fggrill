@@ -55,28 +55,43 @@ export function useElectron() {
     const [syncStatus, setSyncStatus] = useState<SyncStatus>({ pending: 0, synced: 0, failed: 0 });
 
     useEffect(() => {
-        const electron = window.electronAPI?.isElectron === true;
-        setIsElectron(electron);
+        // Check for Electron OR C# WebView2 (which also injects electronAPI)
+        const checkApi = () => {
+            if (window.electronAPI) {
+                setIsElectron(true);
 
-        if (electron && window.electronAPI) {
-            // Get initial online status
-            window.electronAPI.isOnline().then(setIsOnline);
+                // Get initial online status
+                window.electronAPI.isOnline().then(setIsOnline);
 
-            // Listen for status changes
-            window.electronAPI.onOnlineStatus((status) => {
-                setIsOnline(status);
-            });
+                // Listen for status changes
+                window.electronAPI.onOnlineStatus((status) => {
+                    setIsOnline(status);
+                });
 
-            // Poll sync status every 30s
-            const interval = setInterval(() => {
-                window.electronAPI?.sync.status().then(setSyncStatus);
-            }, 30000);
+                // Poll sync status every 30s
+                const interval = setInterval(() => {
+                    window.electronAPI?.sync.status().then(setSyncStatus);
+                }, 30000);
 
-            // Initial sync status
-            window.electronAPI.sync.status().then(setSyncStatus);
+                // Initial sync status
+                window.electronAPI.sync.status().then(setSyncStatus);
 
-            return () => clearInterval(interval);
-        }
+                return () => clearInterval(interval);
+            }
+        };
+
+        // Retry a few times in case C# injection is slightly delayed
+        const timer = setInterval(() => {
+            if (window.electronAPI) {
+                clearInterval(timer);
+                checkApi();
+            }
+        }, 100);
+
+        // Stop checking after 5 seconds
+        setTimeout(() => clearInterval(timer), 5000);
+
+        return () => clearInterval(timer);
     }, []);
 
     // --- PIN Auth ---

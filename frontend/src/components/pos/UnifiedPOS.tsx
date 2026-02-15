@@ -269,6 +269,31 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
     const tax = total - subtotal;
 
     const handlePrintReceipt = async (orderData: any) => {
+        // Desktop App Native Printing Intercept
+        if (typeof window !== 'undefined' && (window as any).electronAPI) {
+            try {
+                const printType = (orderData.status === 'pending' || orderData.status === 'kitchen_ready')
+                    ? 'pos:printProforma'
+                    : 'pos:printReceipt';
+
+                const res = await (window as any).electronAPI.invoke(printType, {
+                    ...orderData,
+                    branch: activeBranch,
+                    user: {
+                        firstName: user?.firstName,
+                        lastName: user?.lastName
+                    }
+                });
+
+                if (res.success) {
+                    toast.success('Sent to printer');
+                    return;
+                }
+            } catch (e) {
+                console.warn('Native printing failed, falling back to window.print', e);
+            }
+        }
+
         setIsPrinting(orderData.id);
 
         try {
@@ -324,6 +349,15 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                             #barcode { margin-bottom: 5px; max-width: 100%; }
                         </style>
                         <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+                        <script>
+                            // Fallback for offline if script fails to load
+                            window.addEventListener('error', function(e) {
+                                if (e.target.src && e.target.src.includes('jsbarcode')) {
+                                    console.warn('JsBarcode failed to load - likely offline');
+                                    window.jsBarcodeError = true;
+                                }
+                            }, true);
+                        </script>
                     </head>
                     <body>
                         <div class="center">
@@ -407,17 +441,23 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                         <script>
                             window.onload = function() {
                                 try {
-                                    // Use full ID for barcode if order number is missing/short to ensure unique lookup
-                                    const barcodeValue = "${orderData.order_number || orderData.id}";
-                                    JsBarcode("#barcode", barcodeValue, {
-                                        format: "CODE128",
-                                        width: 1.5,
-                                        height: 35,
-                                        displayValue: true,
-                                        fontSize: 10,
-                                        margin: 5
-                                    });
-                                } catch(e) { console.error("Barcode error:", e); }
+                                    if (window.JsBarcode) {
+                                        const barcodeValue = "${orderData.order_number || orderData.id}";
+                                        JsBarcode("#barcode", barcodeValue, {
+                                            format: "CODE128",
+                                            width: 1.5,
+                                            height: 35,
+                                            displayValue: true,
+                                            fontSize: 10,
+                                            margin: 5
+                                        });
+                                    } else {
+                                        document.getElementById('barcode').style.display = 'none';
+                                    }
+                                } catch(e) { 
+                                    console.error("Barcode error:", e);
+                                    document.getElementById('barcode').style.display = 'none';
+                                }
 
                                 window.focus();
                                 setTimeout(() => { 

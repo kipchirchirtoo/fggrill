@@ -26,19 +26,24 @@ const normalizeUrl = (url: string | undefined, defaultUrl: string): string => {
     return normalized;
 };
 
-// Detect if running in Electron
-const isElectron = typeof window !== 'undefined' && (
-    (window as any).electronAPI?.isElectron === true ||
-    navigator.userAgent.toLowerCase().includes('electron')
-);
-const isDev = process.env.NODE_ENV === 'development';
+// Detect if we're running in the C# Desktop App / Electron
+const isDesktop = typeof window !== 'undefined' && (window as any).electronAPI !== undefined;
 
-// Force 127.0.0.1 for local dev to avoid localhost resolution issues
-export const API_URL = isElectron && isDev
-    ? 'http://127.0.0.1:5000'
-    : normalizeUrl(process.env.NEXT_PUBLIC_API_URL, 'https://api.hirall.com');
+// Always use production APIs for the terminal app, unless overridden
+const DEFAULT_API_URL = 'https://api.hirall.com';
+const DEFAULT_PYTHON_URL = 'https://services.hirall.com';
 
-export const PYTHON_API_URL = normalizeUrl(process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL, 'https://services.hirall.com');
+export const API_URL = isDesktop
+    ? (process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes('localhost')
+        ? process.env.NEXT_PUBLIC_API_URL
+        : DEFAULT_API_URL)
+    : normalizeUrl(process.env.NEXT_PUBLIC_API_URL, DEFAULT_API_URL);
+
+export const PYTHON_API_URL = isDesktop
+    ? (process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL && !process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL.includes('localhost')
+        ? process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL
+        : DEFAULT_PYTHON_URL)
+    : normalizeUrl(process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL, DEFAULT_PYTHON_URL);
 export const PYTHON_SERVICE_URL = PYTHON_API_URL; // Alias for consistency
 export const ROOM_SERVICE_URL = PYTHON_API_URL; // Alias for consistency
 export const REPORTS_SERVICE_URL = normalizeUrl(process.env.NEXT_PUBLIC_REPORTS_SERVICE_URL, 'https://services.hirall.com');

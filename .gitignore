@@ -53,3 +53,9 @@ release/
 *.exe
 *.zip
 *.blockmap
+
+# Desktop App Build Artifacts
+desktop-app/FgGrillPos/bin/
+desktop-app/FgGrillPos/obj/
+desktop-app/FgGrillPos/wwwroot/
+dist/

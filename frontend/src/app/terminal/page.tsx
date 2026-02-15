@@ -75,9 +75,8 @@ export default function MasterTerminalPage() {
                     // Route based on cached role
                     const role = cachedUser.role;
                     if (role === 'cashier') router.push('/dashboard/cashier');
-                    else if (role === 'pos_kitchen' || role === 'restaurant') router.push('/dashboard/pos/orders');
-                    else if (role === 'bartender') router.push('/dashboard/pos/bar');
-                    else router.push('/dashboard/pos/orders');
+                    else if (role === 'bartender') router.push('/dashboard/pos-kitchen?tab=bar');
+                    else router.push('/dashboard/pos-kitchen?tab=restaurant');
                 } else {
                     toast.error('PIN not recognized offline');
                     setPin('');

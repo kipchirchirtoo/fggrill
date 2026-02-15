@@ -90,8 +90,8 @@ export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManag
             <button
               onClick={() => setActiveTab('details')}
               className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${activeTab === 'details'
-                  ? 'border-indigo-600 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
             >
               Item Details
@@ -99,8 +99,8 @@ export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManag
             <button
               onClick={() => setActiveTab('history')}
               className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${activeTab === 'history'
-                  ? 'border-indigo-600 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
             >
               Stock History
@@ -200,8 +200,8 @@ export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManag
                   {stockHistory.slice(0, 20).map((record, idx) => (
                     <div key={idx} className="flex items-center gap-4 p-3 bg-gray-50 rounded-ios-lg">
                       <div className={`p-2 rounded-full ${record.change_type === 'IN' ? 'bg-green-100 text-green-600' :
-                          record.change_type === 'OUT' ? 'bg-red-100 text-red-600' :
-                            'bg-blue-100 text-blue-600'
+                        record.change_type === 'OUT' ? 'bg-red-100 text-red-600' :
+                          'bg-blue-100 text-blue-600'
                         }`}>
                         {record.change_type === 'IN' ? '+' : record.change_type === 'OUT' ? '-' : '~'}
                       </div>
@@ -212,7 +212,7 @@ export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManag
                               record.change_type === 'OUT' ? 'Stock Out' : 'Adjustment'}
                           </p>
                           <p className={`font-bold ${record.change_type === 'IN' ? 'text-green-600' :
-                              record.change_type === 'OUT' ? 'text-red-600' : 'text-blue-600'
+                            record.change_type === 'OUT' ? 'text-red-600' : 'text-blue-600'
                             }`}>
                             {record.change_type === 'IN' ? '+' : ''}{record.quantity_change}
                           </p>

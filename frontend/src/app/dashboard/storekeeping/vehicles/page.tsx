@@ -76,7 +76,7 @@ export default function VehiclesPage() {
   const handleSave = async () => {
     try {
       const token = localStorage.getItem('token');
-      const url = selectedVehicle 
+      const url = selectedVehicle
         ? `${API_URL}/api/store/vehicles/${selectedVehicle.id}`
         : `${API_URL}/api/store/vehicles`;
       const res = await fetch(url, {
@@ -226,19 +226,19 @@ export default function VehiclesPage() {
             <DialogHeader><DialogTitle>{selectedVehicle ? 'Edit Vehicle' : 'Add Vehicle'}</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm font-medium">Registration *</label><Input value={form.registration_number} onChange={e => setForm({...form, registration_number: e.target.value})} placeholder="KCN 123A" /></div>
-                <div><label className="text-sm font-medium">Type</label><select value={form.type} onChange={e => setForm({...form, type: e.target.value})} className="w-full px-3 py-2 border rounded-ios-lg">{VEHICLE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                <div><label className="text-sm font-medium">Registration *</label><Input value={form.registration_number} onChange={e => setForm({ ...form, registration_number: e.target.value })} placeholder="KCN 123A" /></div>
+                <div><label className="text-sm font-medium">Type</label><select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className="w-full px-3 py-2 border rounded-ios-lg">{VEHICLE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm font-medium">Make</label><Input value={form.make} onChange={e => setForm({...form, make: e.target.value})} placeholder="Toyota" /></div>
-                <div><label className="text-sm font-medium">Model</label><Input value={form.model} onChange={e => setForm({...form, model: e.target.value})} placeholder="Hiace" /></div>
+                <div><label className="text-sm font-medium">Make</label><Input value={form.make} onChange={e => setForm({ ...form, make: e.target.value })} placeholder="Toyota" /></div>
+                <div><label className="text-sm font-medium">Model</label><Input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder="Hiace" /></div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm font-medium">Capacity (kg)</label><Input type="number" value={form.capacity_kg} onChange={e => setForm({...form, capacity_kg: parseFloat(e.target.value) || 0})} /></div>
-                <div><label className="text-sm font-medium">Status</label><select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full px-3 py-2 border rounded-ios-lg">{STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                <div><label className="text-sm font-medium">Capacity (kg)</label><Input type="number" value={form.capacity_kg} onChange={e => setForm({ ...form, capacity_kg: parseFloat(e.target.value) || 0 })} /></div>
+                <div><label className="text-sm font-medium">Status</label><select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} className="w-full px-3 py-2 border rounded-ios-lg">{STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
               </div>
-              <div><label className="text-sm font-medium">Insurance Expiry</label><Input type="date" value={form.insurance_expiry} onChange={e => setForm({...form, insurance_expiry: e.target.value})} /></div>
-              <div><label className="text-sm font-medium">Notes</label><textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} className="w-full px-3 py-2 border rounded-ios-lg" rows={2} /></div>
+              <div><label className="text-sm font-medium">Insurance Expiry</label><Input type="date" value={form.insurance_expiry} onChange={e => setForm({ ...form, insurance_expiry: e.target.value })} /></div>
+              <div><label className="text-sm font-medium">Notes</label><textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="w-full px-3 py-2 border rounded-ios-lg" rows={2} /></div>
               <div className="flex justify-end gap-3 pt-4"><IOSButton variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</IOSButton><IOSButton onClick={handleSave} leftIcon={<Save />}>Save</IOSButton></div>
             </div>
           </DialogContent>

@@ -51,7 +51,33 @@ async function fetchAPI<T>(endpoint: string, options?: FetchOptions): Promise<T>
         }
       }
 
-      // Make the API request
+      // Make the API request - Intercept for C# Desktop App Proxy
+      if (typeof window !== 'undefined' && (window as any).electronAPI?.invoke) {
+        try {
+          const branchId = localStorage.getItem('activeBranchId');
+          const result = await (window as any).electronAPI.invoke('http:proxy', {
+            url: `${API_URL}/api${endpoint}`,
+            method: options?.method || 'GET',
+            headers: {
+              ...getHeaders(),
+              ...branchHeaders,
+              ...options?.headers
+            },
+            body: options?.body
+          });
+
+          // If the proxy returns an error object, handle it
+          if (result && typeof result === 'object' && (result as any).success === false && (result as any).message) {
+            throw new Error((result as any).message);
+          }
+
+          return result as T;
+        } catch (proxyError) {
+          console.warn('C# Proxy request failed, falling back to direct fetch:', proxyError);
+          // Fall through to traditional fetch if proxy fails
+        }
+      }
+
       const response = await fetch(`${API_URL}/api${endpoint}`, {
         ...options,
         cache: 'no-store', // Disable caching
@@ -142,6 +168,30 @@ async function fetchPythonAPI<T>(endpoint: string, options?: FetchOptions): Prom
         const branchId = localStorage.getItem('activeBranchId');
         if (branchId) {
           branchHeaders['x-branch-id'] = branchId;
+        }
+      }
+
+      // Make the API request - Intercept for C# Desktop App Proxy
+      if (typeof window !== 'undefined' && (window as any).electronAPI?.invoke) {
+        try {
+          const result = await (window as any).electronAPI.invoke('http:proxy', {
+            url: `${PYTHON_API_URL}/api${endpoint}`,
+            method: options?.method || 'GET',
+            headers: {
+              ...getHeaders(),
+              ...branchHeaders,
+              ...options?.headers
+            },
+            body: options?.body
+          });
+
+          if (result && typeof result === 'object' && (result as any).success === false && (result as any).message) {
+            throw new Error((result as any).message);
+          }
+
+          return result as T;
+        } catch (proxyError) {
+          console.warn('C# Proxy request failed for Python API:', proxyError);
         }
       }
 
@@ -632,7 +682,21 @@ export const procurementAPI = {
 // =====================================================
 
 export const systemAPI = {
-  getBranches: () => fetchAPI<any>('/system/branches'),
+  getBranches: async () => {
+    // Intercept for C# Desktop App
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      try {
+        const branches = await (window as any).electronAPI.db.get('branches');
+        if (branches && branches.length > 0) {
+          console.log('Branches: Loaded from local SQLite');
+          return { success: true, data: branches };
+        }
+      } catch (e) {
+        console.warn('Failed to load branches from local DB, falling back to API', e);
+      }
+    }
+    return fetchAPI<any>('/system/branches');
+  },
   createBranch: (data: any) => fetchAPI<any>('/system/branches', { method: 'POST', body: JSON.stringify(data) }),
   updateBranch: (id: number, data: any) => fetchAPI<any>(`/system/branches/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteBranch: (id: number) => fetchAPI<any>(`/system/branches/${id}`, { method: 'DELETE' }),
@@ -2061,9 +2125,35 @@ export const restaurantAPI = {
     return fetchAPI<any>(`/restaurant/orders?${query}`);
   },
   getOrder: (id: string) => fetchAPI<any>(`/restaurant/orders/${id}`),
-  createOrder: (data: any) => fetchAPI<any>('/restaurant/orders', { method: 'POST', body: JSON.stringify(data) }),
+  createOrder: (data: any) => {
+    // Intercept for C# Desktop App
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      return (window as any).electronAPI.sync.queue(
+        'pos:createRestaurantOrder',
+        '/restaurant/orders',
+        'POST',
+        data,
+        data.branch_id || 0,
+        localStorage.getItem('token') || ''
+      );
+    }
+    return fetchAPI<any>('/restaurant/orders', { method: 'POST', body: JSON.stringify(data) });
+  },
   updateOrder: (id: string, data: any) => fetchAPI<any>(`/restaurant/orders/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  updateOrderStatus: (id: string, status: string) => fetchAPI<any>(`/restaurant/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+  updateOrderStatus: async (id: string, status: string) => {
+    // Intercept for C# Desktop App
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      return (window as any).electronAPI.sync.queue(
+        'pos:updateOrderStatus',
+        `/restaurant/orders/${id}/status`,
+        'PUT',
+        { status },
+        0, // Branch ID handled by middleware/token
+        localStorage.getItem('token') || ''
+      );
+    }
+    return fetchAPI<any>(`/restaurant/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+  },
   getTodayOrders: (branchId?: number) => {
     const today = new Date().toISOString().split('T')[0];
     const query = new URLSearchParams();
@@ -2072,7 +2162,25 @@ export const restaurantAPI = {
     if (branchId) query.append('branch_id', String(branchId));
     return fetchAPI<any>(`/restaurant/orders?${query}`);
   },
-  getMyOrders: (userId: string, branchId?: number) => {
+  getMyOrders: async (userId: string, branchId?: number) => {
+    // Intercept for C# Desktop App - OFFLINE FIRST
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      try {
+        const query: any = {};
+        if (branchId) query.branch_id = branchId;
+        const orders = await (window as any).electronAPI.db.get('offline_orders', query);
+        if (orders && orders.length > 0) {
+          console.log('Restaurant Orders: Loaded from local SQLite mirror');
+          return {
+            success: true,
+            data: orders.map((o: any) => typeof o.order_data === 'string' ? JSON.parse(o.order_data) : o.order_data)
+          };
+        }
+      } catch (e) {
+        console.warn('Native Bridge getMyOrders failed', e);
+      }
+    }
+
     const today = new Date().toISOString().split('T')[0];
     const query = new URLSearchParams();
     query.append('from_date', today);
@@ -2083,13 +2191,44 @@ export const restaurantAPI = {
   },
 
   // Menu Categories
-  getCategories: () => fetchAPI<any>('/restaurant/menu/categories'),
+  getCategories: async () => {
+    // Intercept for C# Desktop App - OFFLINE FIRST
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      try {
+        const categories = await (window as any).electronAPI.db.get('categories');
+        if (categories && categories.length > 0) {
+          console.log('Restaurant Categories: Loaded via local SQLite');
+          return { success: true, data: categories };
+        }
+      } catch (e) {
+        console.warn('Native Bridge getCategories failed', e);
+      }
+    }
+    return fetchAPI<any>('/restaurant/menu/categories');
+  },
   createCategory: (data: any) => fetchAPI<any>('/restaurant/menu/categories', { method: 'POST', body: JSON.stringify(data) }),
   updateCategory: (id: string, data: any) => fetchAPI<any>(`/restaurant/menu/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteCategory: (id: string) => fetchAPI<any>(`/restaurant/menu/categories/${id}`, { method: 'DELETE' }),
 
   // Menu Items
-  getMenuItems: (categoryId?: string, branchId?: number, onlyAvailable: boolean = false) => {
+  getMenuItems: async (categoryId?: string, branchId?: number, onlyAvailable: boolean = false) => {
+    // Intercept for C# Desktop App - OFFLINE FIRST
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      try {
+        const query: any = {};
+        if (branchId) query.branch_id = branchId;
+        if (categoryId) query.category_id = categoryId;
+
+        const items = await (window as any).electronAPI.db.get('menu_items', query);
+        if (items && items.length > 0) {
+          console.log(`Restaurant Menu Items: Loaded ${items.length} items via local SQLite`);
+          return { success: true, data: items };
+        }
+      } catch (e) {
+        console.warn('Native Bridge getMenuItems failed', e);
+      }
+    }
+
     const query = new URLSearchParams();
     if (categoryId) query.append('category', categoryId);
     if (branchId) query.append('branch_id', String(branchId));
@@ -2115,7 +2254,21 @@ export const restaurantAPI = {
     fetchAPI<any>(`/restaurant/menu/items/${id}/image`, { method: 'DELETE' }),
 
   // Tables
-  getTables: (branchId?: number) => {
+  getTables: async (branchId?: number) => {
+    // Intercept for C# Desktop App - OFFLINE FIRST
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      try {
+        const query: any = {};
+        if (branchId) query.branch_id = branchId;
+        const tables = await (window as any).electronAPI.db.get('restaurant_tables', query);
+        if (tables && tables.length > 0) {
+          console.log('Restaurant Tables: Loaded via local SQLite');
+          return { success: true, data: tables };
+        }
+      } catch (e) {
+        console.warn('Native Bridge getTables failed', e);
+      }
+    }
     const query = branchId ? `?branch_id=${branchId}` : '';
     return fetchAPI<any>(`/restaurant/tables${query}`);
   },
@@ -2353,7 +2506,25 @@ export const receiptsAPI = {
 
 export const barAPI = {
   // Orders
-  getOrders: (params?: { branchId?: number; status?: string; from_date?: string; to_date?: string }) => {
+  getOrders: async (params?: { branchId?: number; status?: string; from_date?: string; to_date?: string }) => {
+    // Intercept for C# Desktop App - OFFLINE FIRST
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      try {
+        const query: any = {};
+        if (params?.branchId) query.branch_id = params.branchId;
+        const orders = await (window as any).electronAPI.db.get('offline_orders', query);
+        if (orders && orders.length > 0) {
+          console.log('Bar Orders: Loaded from local SQLite mirror');
+          return {
+            success: true,
+            data: orders.map((o: any) => typeof o.order_data === 'string' ? JSON.parse(o.order_data) : o.order_data)
+          };
+        }
+      } catch (e) {
+        console.warn('Native Bridge getOrders (bar) failed', e);
+      }
+    }
+
     const query = new URLSearchParams();
     if (params?.branchId) query.append('branch_id', String(params.branchId));
     if (params?.status) query.append('status', params.status);
@@ -2362,18 +2533,72 @@ export const barAPI = {
     return fetchAPI<any>(`/bar/orders?${query}`);
   },
   getOrder: (id: string) => fetchAPI<any>(`/bar/orders/${id}`),
-  createOrder: (data: any) => fetchAPI<any>('/bar/orders', { method: 'POST', body: JSON.stringify(data) }),
+  createOrder: (data: any) => {
+    // Intercept for C# Desktop App
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      return (window as any).electronAPI.sync.queue(
+        'pos:createBarOrder',
+        '/bar/orders',
+        'POST',
+        data,
+        data.branch_id || 0,
+        localStorage.getItem('token') || ''
+      );
+    }
+    return fetchAPI<any>('/bar/orders', { method: 'POST', body: JSON.stringify(data) });
+  },
   updateOrder: (id: string, data: any) => fetchAPI<any>(`/bar/orders/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  updateOrderStatus: (id: string, status: string) => fetchAPI<any>(`/bar/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+  updateOrderStatus: async (id: string, status: string) => {
+    // Intercept for C# Desktop App
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      return (window as any).electronAPI.sync.queue(
+        'pos:updateBarOrderStatus',
+        `/bar/orders/${id}/status`,
+        'PUT',
+        { status },
+        0,
+        localStorage.getItem('token') || ''
+      );
+    }
+    return fetchAPI<any>(`/bar/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+  },
 
   // Drink Categories
-  getCategories: () => fetchAPI<any>('/bar/categories'),
+  getCategories: async () => {
+    // Intercept for C# Desktop App - OFFLINE FIRST
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      try {
+        const categories = await (window as any).electronAPI.db.get('categories');
+        if (categories && categories.length > 0) {
+          console.log('Bar Categories: Loaded via local SQLite');
+          return { success: true, data: categories };
+        }
+      } catch (e) {
+        console.warn('Native Bridge getCategories (bar) failed', e);
+      }
+    }
+    return fetchAPI<any>('/bar/categories');
+  },
   createCategory: (data: any) => fetchAPI<any>('/bar/categories', { method: 'POST', body: JSON.stringify(data) }),
   updateCategory: (id: string, data: any) => fetchAPI<any>(`/bar/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteCategory: (id: string) => fetchAPI<any>(`/bar/categories/${id}`, { method: 'DELETE' }),
 
   // Drinks Menu
-  getDrinks: (categoryId?: string) => {
+  getDrinks: async (categoryId?: string) => {
+    // Intercept for C# Desktop App - OFFLINE FIRST
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      try {
+        const query: any = {};
+        if (categoryId) query.category_id = categoryId;
+        const items = await (window as any).electronAPI.db.get('menu_items', query);
+        if (items && items.length > 0) {
+          console.log(`Bar Drinks: Loaded ${items.length} items via local SQLite`);
+          return { success: true, data: items };
+        }
+      } catch (e) {
+        console.warn('Native Bridge getDrinks failed', e);
+      }
+    }
     const query = categoryId ? `?category_id=${categoryId}` : '';
     return fetchAPI<any>(`/bar/drinks${query}`);
   },
@@ -3291,12 +3516,60 @@ export const authAPI = {
   // Authentication
   register: (data: any) => fetchAPI<any>('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
   login: (data: any) => fetchAPI<any>('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
-  posLogin: (pin: string) => fetchAPI<any>('/auth/pos-login', { method: 'POST', body: JSON.stringify({ pin }) }),
+  posLogin: async (pin: string) => {
+    // Intercept for C# Desktop App
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      try {
+        // 1. Try local offline verification first
+        const userData = await (window as any).electronAPI.cache.verifyPin(pin);
+        if (userData) {
+          console.log('POS Login: Successful via local SQLite');
+          return {
+            success: true,
+            data: {
+              user: userData,
+              session: { access_token: 'offline-token' }
+            }
+          };
+        }
+
+        // 2. If not found locally, proxy the online request through C# to avoid CORS
+        console.log('POS Login: PIN not found locally, proxying to production via Native Bridge...');
+        const proxyResponse = await (window as any).electronAPI.invoke('auth:posLogin', { pin });
+        if (proxyResponse && proxyResponse.success) {
+          console.log('POS Login: Successful via Native Bridge Proxy');
+          return proxyResponse;
+        } else if (proxyResponse) {
+          return proxyResponse; // Return the error from the server
+        }
+      } catch (e) {
+        console.warn('Native Bridge posLogin proxy failed, falling back to direct fetch (may hit CORS)', e);
+      }
+    }
+    return fetchAPI<any>('/auth/pos-login', { method: 'POST', body: JSON.stringify({ pin }) });
+  },
   logout: () => fetchAPI<any>('/auth/logout', { method: 'POST' }),
   refreshToken: (data: any) => fetchAPI<any>('/auth/refresh-token', { method: 'POST', body: JSON.stringify(data) }),
 
   // User account management
-  getMe: () => fetchAPI<any>('/auth/me'),
+  getMe: async () => {
+    // Intercept for C# Desktop App (Offline Session Maintenance)
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      try {
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+          console.log('getMe: Returning cached user for Desktop App');
+          return {
+            success: true,
+            data: JSON.parse(storedUser)
+          };
+        }
+      } catch (e) {
+        console.warn('Native Bridge getMe fallback failed', e);
+      }
+    }
+    return fetchAPI<any>('/auth/me');
+  },
   updateDetails: (data: any) => fetchAPI<any>('/auth/updatedetails', { method: 'PUT', body: JSON.stringify(data) }),
   updatePassword: (data: any) => fetchAPI<any>('/auth/updatepassword', { method: 'PUT', body: JSON.stringify(data) }),
   forgotPassword: (data: any) => fetchAPI<any>('/auth/forgotpassword', { method: 'POST', body: JSON.stringify(data) }),

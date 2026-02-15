@@ -9,9 +9,9 @@ import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { 
+import {
   Trash2, Plus, RefreshCw, Search, Package, AlertTriangle,
-  Calendar, FileText, TrendingDown, DollarSign, Clock, XCircle, 
+  Calendar, FileText, TrendingDown, DollarSign, Clock, XCircle,
   Building2, User, Camera, Eye, CheckCircle, X, Download,
   BarChart3, PieChart, ArrowUpRight, ArrowDownRight, Filter
 } from 'lucide-react';
@@ -64,7 +64,7 @@ export default function WastagePage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [reasonFilter, setReasonFilter] = useState('');
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
-  
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     branch_id: '',
@@ -87,12 +87,12 @@ export default function WastagePage() {
     avgLossPerRecord: 0,
     pendingApproval: 0
   });
-  
+
   // Enhanced state
   const [selectedRecord, setSelectedRecord] = useState<WastageRecord | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [reasonBreakdown, setReasonBreakdown] = useState<{reason: string; count: number; loss: number}[]>([]);
-  const [branchBreakdown, setBranchBreakdown] = useState<{branch: string; count: number; loss: number}[]>([]);
+  const [reasonBreakdown, setReasonBreakdown] = useState<{ reason: string; count: number; loss: number }[]>([]);
+  const [branchBreakdown, setBranchBreakdown] = useState<{ branch: string; count: number; loss: number }[]>([]);
   const [statusFilter, setStatusFilter] = useState('');
 
   useEffect(() => {
@@ -104,18 +104,18 @@ export default function WastagePage() {
     try {
       const token = localStorage.getItem('token');
       const headers = { 'Authorization': `Bearer ${token}` };
-      
+
       const [wastageRes, itemsRes, branchesRes] = await Promise.all([
         fetch(`${API_URL}/api/store/wastage${reasonFilter ? `?reason=${reasonFilter}` : ''}`, { headers }),
         fetch(`${API_URL}/api/store/items`, { headers }),
         fetch(`${API_URL}/api/store/branches`, { headers })
       ]);
-      
+
       if (wastageRes.ok) {
         const data = await wastageRes.json();
         const wastageData = data.data || [];
         setRecords(wastageData);
-        
+
         // Calculate enhanced stats
         const totalLoss = wastageData.reduce((sum: number, r: WastageRecord) => sum + (r.total_loss || 0), 0);
         const now = new Date();
@@ -129,13 +129,13 @@ export default function WastagePage() {
           const lastMonthYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
           return date.getMonth() === lastMonth && date.getFullYear() === lastMonthYear;
         });
-        
+
         const thisMonthLoss = thisMonthRecords.reduce((sum: number, r: WastageRecord) => sum + (r.total_loss || 0), 0);
         const lastMonthLoss = lastMonthRecords.reduce((sum: number, r: WastageRecord) => sum + (r.total_loss || 0), 0);
         const pendingApproval = wastageData.filter((r: WastageRecord) => r.status === 'PENDING').length;
-        
+
         // Reason breakdown
-        const reasonStats: Record<string, {count: number; loss: number}> = {};
+        const reasonStats: Record<string, { count: number; loss: number }> = {};
         wastageData.forEach((r: WastageRecord) => {
           if (!reasonStats[r.reason]) reasonStats[r.reason] = { count: 0, loss: 0 };
           reasonStats[r.reason].count += 1;
@@ -145,9 +145,9 @@ export default function WastagePage() {
           .map(([reason, data]) => ({ reason, ...data }))
           .sort((a, b) => b.loss - a.loss);
         setReasonBreakdown(reasonBreakdownData);
-        
+
         // Branch breakdown
-        const branchStats: Record<string, {count: number; loss: number}> = {};
+        const branchStats: Record<string, { count: number; loss: number }> = {};
         wastageData.forEach((r: WastageRecord) => {
           const branchName = r.branch?.name || 'Unknown';
           if (!branchStats[branchName]) branchStats[branchName] = { count: 0, loss: 0 };
@@ -158,9 +158,9 @@ export default function WastagePage() {
           .map(([branch, data]) => ({ branch, ...data }))
           .sort((a, b) => b.loss - a.loss);
         setBranchBreakdown(branchBreakdownData);
-        
+
         const topReason = reasonBreakdownData[0]?.reason || '-';
-        
+
         setStats({
           totalWastage: wastageData.length,
           totalLoss,
@@ -194,7 +194,7 @@ export default function WastagePage() {
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_URL}/api/store/wastage`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
@@ -206,7 +206,7 @@ export default function WastagePage() {
           total_loss: formData.quantity * (selectedItem?.cost_price || 0)
         })
       });
-      
+
       if (response.ok) {
         toast.success('Wastage recorded - stock adjusted');
         setIsCreateModalOpen(false);
@@ -251,7 +251,7 @@ export default function WastagePage() {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      
+
       if (response.ok) {
         toast.success(`Wastage record ${action}d successfully`);
         fetchData();
@@ -280,7 +280,7 @@ export default function WastagePage() {
       formatDate(r.created_at),
       r.reason_details || ''
     ]);
-    
+
     const csvContent = [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -312,17 +312,17 @@ export default function WastagePage() {
       r.branch?.name?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === '' || r.status === statusFilter;
     const matchesDate = (!dateFilter.from || new Date(r.created_at) >= new Date(dateFilter.from)) &&
-                        (!dateFilter.to || new Date(r.created_at) <= new Date(dateFilter.to));
+      (!dateFilter.to || new Date(r.created_at) <= new Date(dateFilter.to));
     return matchesSearch && matchesStatus && matchesDate;
   });
-  
+
   const canApprove = user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER;
 
   const selectedItem = items.find(i => i.id === parseInt(formData.item_id));
   const estimatedLoss = formData.quantity * (selectedItem?.cost_price || 0);
 
-  const canManage = user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER || 
-                    user?.role === UserRole.CENTRAL_STOREKEEPER || user?.role === UserRole.BRANCH_STOREKEEPER;
+  const canManage = user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER ||
+    user?.role === UserRole.CENTRAL_STOREKEEPER || user?.role === UserRole.BRANCH_STOREKEEPER;
 
   const reasons = [
     { value: 'EXPIRED', label: 'Expired' },
@@ -382,7 +382,7 @@ export default function WastagePage() {
                 </div>
               </div>
             </IOSCard>
-            
+
             <IOSCard className="p-5 bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]">
               <div className="flex items-center justify-between">
                 <div>
@@ -404,7 +404,7 @@ export default function WastagePage() {
                 </div>
               </div>
             </IOSCard>
-            
+
             <IOSCard className="p-5 bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]">
               <div className="flex items-center justify-between">
                 <div>
@@ -417,7 +417,7 @@ export default function WastagePage() {
                 </div>
               </div>
             </IOSCard>
-            
+
             <IOSCard className="p-5 bg-[#F2F2F7] border-[rgba(60,60,67,0.12)]">
               <div className="flex items-center justify-between">
                 <div>
@@ -449,13 +449,12 @@ export default function WastagePage() {
                         <span className="text-sm text-gray-500">{item.count} records</span>
                       </div>
                       <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full rounded-full ${
-                            idx === 0 ? 'bg-[#F2F2F7]0' : 
-                            idx === 1 ? 'bg-[#F2F2F7]' : 
-                            idx === 2 ? 'bg-[#F2F2F7]' : 
-                            idx === 3 ? 'bg-[#F2F2F7]0' : 'bg-gray-400'
-                          }`}
+                        <div
+                          className={`h-full rounded-full ${idx === 0 ? 'bg-[#F2F2F7]0' :
+                              idx === 1 ? 'bg-[#F2F2F7]' :
+                                idx === 2 ? 'bg-[#F2F2F7]' :
+                                  idx === 3 ? 'bg-[#F2F2F7]0' : 'bg-gray-400'
+                            }`}
                           style={{ width: `${stats.totalLoss > 0 ? (item.loss / stats.totalLoss) * 100 : 0}%` }}
                         />
                       </div>
@@ -486,13 +485,12 @@ export default function WastagePage() {
                         <span className="text-sm text-gray-500">{item.count} records</span>
                       </div>
                       <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full rounded-full ${
-                            idx === 0 ? 'bg-[#F2F2F7]0' : 
-                            idx === 1 ? 'bg-[#F2F2F7]0' : 
-                            idx === 2 ? 'bg-[#F2F2F7]' : 
-                            idx === 3 ? 'bg-[#F2F2F7]' : 'bg-gray-400'
-                          }`}
+                        <div
+                          className={`h-full rounded-full ${idx === 0 ? 'bg-[#F2F2F7]0' :
+                              idx === 1 ? 'bg-[#F2F2F7]0' :
+                                idx === 2 ? 'bg-[#F2F2F7]' :
+                                  idx === 3 ? 'bg-[#F2F2F7]' : 'bg-gray-400'
+                            }`}
                           style={{ width: `${stats.totalLoss > 0 ? (item.loss / stats.totalLoss) * 100 : 0}%` }}
                         />
                       </div>
@@ -614,17 +612,17 @@ export default function WastagePage() {
                             </IOSButton>
                             {canApprove && record.status === 'PENDING' && (
                               <>
-                                <IOSButton 
-                                  size="sm" 
-                                  variant="outline" 
+                                <IOSButton
+                                  size="sm"
+                                  variant="outline"
                                   className="text-[#3C3C43] hover:bg-[#F2F2F7]"
                                   onClick={() => handleApproval(record.id, 'approve')}
                                 >
                                   <CheckCircle className="h-4 w-4" />
                                 </IOSButton>
-                                <IOSButton 
-                                  size="sm" 
-                                  variant="outline" 
+                                <IOSButton
+                                  size="sm"
+                                  variant="outline"
                                   className="text-[#3C3C43] hover:bg-[#F2F2F7]"
                                   onClick={() => handleApproval(record.id, 'reject')}
                                 >
@@ -763,11 +761,11 @@ export default function WastagePage() {
                 <IOSButton variant="outline" onClick={() => setIsCreateModalOpen(false)}>
                   Cancel
                 </IOSButton>
-                <IOSButton 
-                  onClick={handleCreateWastage} 
+                <IOSButton
+                  onClick={handleCreateWastage}
                   disabled={!formData.item_id || !formData.reason}
                   className="bg-[#3C3C43] hover:bg-[#3C3C43]"
-                 leftIcon={<Trash2 />}>Record Wastage
+                  leftIcon={<Trash2 />}>Record Wastage
                 </IOSButton>
               </div>
             </div>
@@ -786,11 +784,10 @@ export default function WastagePage() {
             {selectedRecord && (
               <div className="space-y-6 mt-4">
                 {/* Status Banner */}
-                <div className={`p-4 rounded-ios-lg flex items-center justify-between ${
-                  selectedRecord.status === 'APPROVED' ? 'bg-[#F2F2F7] border border-[rgba(60,60,67,0.12)]' :
-                  selectedRecord.status === 'REJECTED' ? 'bg-[#F2F2F7] border border-[rgba(60,60,67,0.12)]' :
-                  'bg-[#F2F2F7] border border-[rgba(60,60,67,0.12)]'
-                }`}>
+                <div className={`p-4 rounded-ios-lg flex items-center justify-between ${selectedRecord.status === 'APPROVED' ? 'bg-[#F2F2F7] border border-[rgba(60,60,67,0.12)]' :
+                    selectedRecord.status === 'REJECTED' ? 'bg-[#F2F2F7] border border-[rgba(60,60,67,0.12)]' :
+                      'bg-[#F2F2F7] border border-[rgba(60,60,67,0.12)]'
+                  }`}>
                   <div className="flex items-center gap-3">
                     {selectedRecord.status === 'APPROVED' ? (
                       <CheckCircle className="h-6 w-6 text-[#3C3C43]" />
@@ -802,8 +799,8 @@ export default function WastagePage() {
                     <div>
                       <p className="font-semibold font-sf-pro-display">{selectedRecord.status}</p>
                       <p className="text-sm text-gray-600">
-                        {selectedRecord.status === 'PENDING' ? 'Awaiting approval' : 
-                         `${selectedRecord.status === 'APPROVED' ? 'Approved' : 'Rejected'} by ${selectedRecord.approved_by || 'Manager'}`}
+                        {selectedRecord.status === 'PENDING' ? 'Awaiting approval' :
+                          `${selectedRecord.status === 'APPROVED' ? 'Approved' : 'Rejected'} by ${selectedRecord.approved_by || 'Manager'}`}
                       </p>
                     </div>
                   </div>
@@ -871,15 +868,15 @@ export default function WastagePage() {
                   </IOSButton>
                   {canApprove && selectedRecord.status === 'PENDING' && (
                     <>
-                      <IOSButton 
-                        variant="outline" 
+                      <IOSButton
+                        variant="outline"
                         className="text-[#3C3C43] border-[rgba(60,60,67,0.12)] hover:bg-[#F2F2F7]"
                         onClick={() => handleApproval(selectedRecord.id, 'reject')}
                         leftIcon={<X />}
                       >
                         Reject
                       </IOSButton>
-                      <IOSButton 
+                      <IOSButton
                         className="bg-[#3C3C43] hover:bg-[#3C3C43]"
                         onClick={() => handleApproval(selectedRecord.id, 'approve')}
                         leftIcon={<CheckCircle />}

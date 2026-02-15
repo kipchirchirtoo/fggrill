@@ -1,14 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FG POS — Offline Mode</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        
+
         body {
             font-family: 'Inter', -apple-system, system-ui, sans-serif;
             background: #0a0a0a;
@@ -35,7 +40,7 @@
             align-items: center;
             justify-content: center;
             margin: 0 auto 2rem;
-            border: 1px solid rgba(255,255,255,0.05);
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         .icon svg {
@@ -52,7 +57,7 @@
         }
 
         .subtitle {
-            color: rgba(255,255,255,0.4);
+            color: rgba(255, 255, 255, 0.4);
             font-size: 0.9rem;
             line-height: 1.6;
             margin-bottom: 2rem;
@@ -64,8 +69,8 @@
             justify-content: center;
             gap: 0.5rem;
             padding: 0.75rem 1.5rem;
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.06);
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
             border-radius: 12px;
             margin-bottom: 1.5rem;
         }
@@ -79,13 +84,22 @@
         }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(0.8); }
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.5;
+                transform: scale(0.8);
+            }
         }
 
         .status-text {
             font-size: 0.8rem;
-            color: rgba(255,255,255,0.5);
+            color: rgba(255, 255, 255, 0.5);
             font-weight: 500;
         }
 
@@ -114,7 +128,7 @@
         .info {
             margin-top: 2rem;
             font-size: 0.75rem;
-            color: rgba(255,255,255,0.2);
+            color: rgba(255, 255, 255, 0.2);
             line-height: 1.6;
         }
 
@@ -129,14 +143,19 @@
             display: none;
         }
 
-        .sync-info.visible { display: block; }
+        .sync-info.visible {
+            display: block;
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="icon">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 0 1 7.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 0 1 1.06 0Z" />
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M8.288 15.038a5.25 5.25 0 0 1 7.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 0 1 1.06 0Z" />
             </svg>
         </div>
 
@@ -185,7 +204,7 @@
         // Auto-check every 10 seconds
         checkInterval = setInterval(() => {
             const statusText = document.getElementById('statusText');
-            
+
             // Simple online check
             fetch('https://www.google.com/favicon.ico', { mode: 'no-cors', cache: 'no-store' })
                 .then(() => {
@@ -210,4 +229,5 @@
         }
     </script>
 </body>
+
 </html>

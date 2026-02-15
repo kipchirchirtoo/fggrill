@@ -1,0 +1,510 @@
+using System.Runtime.InteropServices;
+using Microsoft.Web.WebView2.Core;
+using Newtonsoft.Json;
+using FgGrillPos.Services;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System.Drawing;
+using System.Drawing.Printing;
+using System.Linq;
+
+namespace FgGrillPos.Bridge
+{
+    // This class handles messages coming FROM the WebView
+    public class NativeBridge
+    {
+        private readonly DatabaseService _db;
+        private readonly SyncService _sync;
+        private readonly MigrationService _migration;
+        private readonly CoreWebView2 _webView;
+
+        public NativeBridge(DatabaseService db, SyncService sync, MigrationService migration, CoreWebView2 webView)
+        {
+            _db = db;
+            _sync = sync;
+            _migration = migration;
+            _webView = webView;
+        }
+
+        public async Task HandleMessageAsync(string jsonMessage)
+        {
+            if (string.IsNullOrEmpty(jsonMessage)) return;
+
+            try
+            {
+                Console.WriteLine($"NativeBridge: Processing message: {jsonMessage}");
+                var message = JsonConvert.DeserializeObject<BridgeMessage>(jsonMessage);
+                if (message == null || message.Type == null) {
+                    Console.WriteLine("NativeBridge: Message or Type is null.");
+                    return;
+                }
+
+                Console.WriteLine($"NativeBridge: Message Type: {message.Type}");
+                object result = null;
+
+                switch (message.Type)
+                {
+                    case "net:isOnline":
+                        result = _sync?.IsOnline ?? false;
+                        break;
+                    case "db:get":
+                        if (message.Payload != null) {
+                            var p = JsonConvert.DeserializeObject<DbGetPayload>(message.Payload.ToString());
+                            if (p != null) {
+                                result = await _db.GetAsync(p.Table, p.Query);
+                            }
+                        }
+                        break;
+                    case "cache:pin":
+                        if (message.Payload != null) {
+                            var data = JsonConvert.DeserializeObject<PinCachePayload>(message.Payload.ToString());
+                            if (data != null) {
+                                _db.CachePin(data.Pin, data.UserId, data.UserData, data.BranchId);
+                                result = true;
+                            }
+                        }
+                        break;
+                    case "cache:verifyPin":
+                        if (message.Payload != null) {
+                            string pin = message.Payload.ToString();
+                            result = _db.VerifyPin(pin);
+                        }
+                        break;
+                    case "sync:queue":
+                         if (message.Payload != null) {
+                             var q = JsonConvert.DeserializeObject<SyncQueuePayload>(message.Payload.ToString());
+                             if (q != null) {
+                                 _db.QueueSync(q.Action, q.Endpoint, q.Method, q.Body, q.BranchId, q.Token);
+                                 _ = _sync.TriggerSync();
+                                 result = true;
+                             }
+                         }
+                        break;
+                    case "sync:status":
+                        result = _db.GetSyncStatusCounts();
+                        break;
+                    case "auth:posLogin":
+                        if (message.Payload != null)
+                        {
+                            var payload = JsonConvert.DeserializeObject<Dictionary<string, string>>(message.Payload.ToString());
+                            if (payload != null && payload.ContainsKey("pin"))
+                            {
+                                var pin = payload["pin"].Trim();
+                                Console.WriteLine($"NativeBridge: auth:posLogin for PIN: {pin}");
+                                
+                                try
+                                {
+                                    // 1. Try local database first (offline mode)
+                                    var localUser = await _db.GetAsync("cached_pins", $"pin = '{pin}'");
+                                    if (localUser != null && localUser.Count > 0)
+                                    {
+                                        var userData = localUser[0];
+                                        Console.WriteLine($"NativeBridge: Found user locally for PIN {pin}");
+                                        result = new
+                                        {
+                                            success = true,
+                                            data = new
+                                            {
+                                                user = userData,
+                                                session = new { access_token = "offline-token" }
+                                            }
+                                        };
+                                    }
+                                    else
+                                    {
+                                        // 2. If not found locally, try production API
+                                        Console.WriteLine($"NativeBridge: PIN {pin} not found locally, trying production API...");
+                                        using (var client = new System.Net.Http.HttpClient())
+                                        {
+                                            client.Timeout = TimeSpan.FromSeconds(10);
+                                            var content = new System.Net.Http.StringContent(
+                                                JsonConvert.SerializeObject(new { pin = pin }),
+                                                System.Text.Encoding.UTF8,
+                                                "application/json"
+                                            );
+                                            var response = await client.PostAsync("https://api.hirall.com/api/auth/pos-login", content);
+                                            var responseString = await response.Content.ReadAsStringAsync();
+                                            result = JsonConvert.DeserializeObject(responseString);
+                                        }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine($"NativeBridge: auth:posLogin error: {ex.Message}");
+                                    result = new { success = false, message = ex.Message };
+                                }
+                            }
+                        }
+                        break;
+                    case "cache:verifyPin":
+                        if (message.Payload != null)
+                        {
+                            var pin = message.Payload.ToString().Trim().Trim('"');
+                            Console.WriteLine($"NativeBridge: cache:verifyPin for PIN: {pin}");
+                            
+                            try
+                            {
+                                var users = await _db.GetAsync("cached_pins", $"pin = '{pin}'");
+                                if (users != null && users.Count > 0)
+                                {
+                                    Console.WriteLine($"NativeBridge: PIN {pin} verified locally");
+                                    result = users[0];
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"NativeBridge: PIN {pin} not found in local database");
+                                    result = null;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"NativeBridge: cache:verifyPin error: {ex.Message}");
+                                result = null;
+                            }
+                        }
+                        break;
+                    case "sync:runMigration":
+                        _ = Task.Run(async () => {
+                            try {
+                                await _migration.RunFullMigrationAsync();
+                            } catch (Exception ex) {
+                                Console.WriteLine($"Migration Error: {ex.Message}");
+                            }
+                        });
+                        result = true;
+                        break;
+                    case "pos:getRestaurantCategories":
+                        if (message.Payload != null) {
+                            var p = JsonConvert.DeserializeObject<DbGetPayload>(message.Payload.ToString());
+                            result = await _db.GetAsync("categories", p?.Query);
+                        }
+                        break;
+                    case "pos:getRestaurantMenuItems":
+                        if (message.Payload != null) {
+                            var p = JsonConvert.DeserializeObject<DbGetPayload>(message.Payload.ToString());
+                            result = await _db.GetAsync("menu_items", p?.Query);
+                        }
+                        break;
+                    case "debug:getUsers":
+                        result = await _db.GetAsync("cached_pins");
+                        break;
+                    case "pos:getRestaurantTables":
+                        if (message.Payload != null) {
+                            var p = JsonConvert.DeserializeObject<DbGetPayload>(message.Payload.ToString());
+                            result = await _db.GetAsync("restaurant_tables", p?.Query);
+                        }
+                        break;
+                    case "pos:getBarCategories":
+                        if (message.Payload != null) {
+                            var p = JsonConvert.DeserializeObject<DbGetPayload>(message.Payload.ToString());
+                            result = await _db.GetAsync("categories", p?.Query);
+                        }
+                        break;
+                    case "pos:getBarMenuItems":
+                        if (message.Payload != null) {
+                            var p = JsonConvert.DeserializeObject<DbGetPayload>(message.Payload.ToString());
+                            result = await _db.GetAsync("menu_items", p?.Query);
+                        }
+                        break;
+                    case "pos:createOrder":
+                    case "pos:createRestaurantOrder":
+                    case "pos:createBarOrder":
+                         if (message.Payload != null) {
+                             var q = JsonConvert.DeserializeObject<SyncQueuePayload>(message.Payload.ToString());
+                             if (q != null) {
+                                 // 1. Queue for sync
+                                 _db.QueueSync(q.Action ?? "pos:createOrder", q.Endpoint, q.Method ?? "POST", q.Body, q.BranchId, q.Token);
+                                 
+                                 // 2. Trigger sync background task
+                                 _ = _sync.TriggerSync();
+                                 
+                                 // 3. Return a mock success so frontend can continue
+                                 result = new { success = true, offline = true, message = "Order queued for sync" };
+                             }
+                         }
+                        break;
+                    case "pos:printReceipt":
+                    case "pos:printProforma":
+                        if (message.Payload != null) {
+                            try {
+                                var payload = JsonConvert.DeserializeObject<PrintPayload>(message.Payload.ToString());
+                                if (payload != null) {
+                                    bool isProforma = message.Type == "pos:printProforma";
+                                    _ = Task.Run(() => PrintReceipt(payload, isProforma));
+                                    result = new { success = true, message = "Sent to printer" };
+                                }
+                            } catch (Exception ex) {
+                                result = new { success = false, message = "Print error: " + ex.Message };
+                            }
+                        }
+                        break;
+                    case "http:proxy":
+                        if (message.Payload != null)
+                        {
+                            var p = JsonConvert.DeserializeObject<HttpProxyPayload>(message.Payload.ToString());
+                            if (p != null)
+                            {
+                                try
+                                {
+                                    Console.WriteLine($"NativeBridge: Proxying {p.Method} request to {p.Url}");
+                                    
+                                    using (var client = new System.Net.Http.HttpClient())
+                                    {
+                                        client.Timeout = TimeSpan.FromSeconds(30);
+                                        
+                                        if (p.Headers != null)
+                                        {
+                                            foreach (var header in p.Headers)
+                                            {
+                                                // Skip Content-Type as it's set by StringContent
+                                                if (header.Key.ToLower() != "content-type")
+                                                {
+                                                    client.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
+                                                }
+                                            }
+                                        }
+
+                                        System.Net.Http.HttpResponseMessage response;
+                                        var method = (p.Method ?? "GET").ToUpper();
+                                        
+                                        if (method == "POST" || method == "PUT" || method == "PATCH")
+                                        {
+                                            var bodyStr = p.Body is string ? (string)p.Body : JsonConvert.SerializeObject(p.Body);
+                                            var content = new System.Net.Http.StringContent(
+                                                bodyStr,
+                                                System.Text.Encoding.UTF8,
+                                                "application/json"
+                                            );
+                                            
+                                            if (method == "POST")
+                                                response = await client.PostAsync(p.Url, content);
+                                            else if (method == "PUT")
+                                                response = await client.PutAsync(p.Url, content);
+                                            else // PATCH
+                                            {
+                                                var request = new System.Net.Http.HttpRequestMessage(new System.Net.Http.HttpMethod("PATCH"), p.Url)
+                                                {
+                                                    Content = content
+                                                };
+                                                response = await client.SendAsync(request);
+                                            }
+                                        }
+                                        else if (method == "DELETE")
+                                        {
+                                            response = await client.DeleteAsync(p.Url);
+                                        }
+                                        else // GET or HEAD
+                                        {
+                                            response = await client.GetAsync(p.Url);
+                                        }
+
+                                        var responseString = await response.Content.ReadAsStringAsync();
+                                        
+                                        if (!response.IsSuccessStatusCode)
+                                        {
+                                            Console.WriteLine($"NativeBridge: Proxy request failed with status {response.StatusCode}");
+                                            Console.WriteLine($"NativeBridge: Response: {responseString.Substring(0, Math.Min(200, responseString.Length))}");
+                                        }
+                                        
+                                        try
+                                        {
+                                            result = JsonConvert.DeserializeObject(responseString);
+                                        }
+                                        catch
+                                        {
+                                            result = responseString;
+                                        }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine($"NativeBridge: Proxy error: {ex.Message}");
+                                    result = new { success = false, message = ex.Message, error = ex.ToString() };
+                                }
+                            }
+                            else
+                            {
+                                Console.WriteLine("NativeBridge: http:proxy payload deserialization failed");
+                                result = new { success = false, message = "Invalid proxy payload" };
+                            }
+                        }
+                        break;
+                }
+
+                // Send response back if a RequestId was provided
+                if (!string.IsNullOrEmpty(message.RequestId))
+                {
+                    var response = new
+                    {
+                        requestId = message.RequestId,
+                        result = result
+                    };
+                    string responseJson = JsonConvert.SerializeObject(response);
+                    _webView.PostWebMessageAsJson(responseJson);
+                }
+            }
+            catch
+            {
+                // Log error
+            }
+        }
+        
+        private void PrintReceipt(PrintPayload p, bool isProforma)
+        {
+            try
+            {
+                PrintDocument pd = new PrintDocument();
+                pd.PrintPage += (sender, ev) =>
+                {
+                    Graphics g = ev.Graphics;
+                    Font titleFont = new Font("Arial", 12, FontStyle.Bold);
+                    Font font = new Font("Arial", 8);
+                    Font boldFont = new Font("Arial", 8, FontStyle.Bold);
+                    int y = 10;
+                    int width = 280; // Standard 80mm thermal width approx
+
+                    // Center alignment helper
+                    StringFormat centerFormat = new StringFormat() { Alignment = StringAlignment.Center };
+
+                    // Header
+                    string companyName = p.Branch?.Name?.ToUpper() ?? "FAMOUS GATE HOTEL";
+                    g.DrawString(companyName, titleFont, Brushes.Black, new RectangleF(0, y, width, 20), centerFormat);
+                    y += 25;
+
+                    string typeLabel = isProforma ? "PROFORMA BILL" : "CASH RECEIPT";
+                    g.DrawString(typeLabel, boldFont, Brushes.Black, new RectangleF(0, y, width, 15), centerFormat);
+                    y += 20;
+
+                    // Info
+                    g.DrawString($"Receipt #: {p.Order_number ?? p.Id?.Substring(0, 8)}", font, Brushes.Black, 10, y);
+                    y += 15;
+                    g.DrawString($"Date: {DateTime.Now:dd/MM/yyyy HH:mm}", font, Brushes.Black, 10, y);
+                    y += 15;
+                    if (!string.IsNullOrEmpty(p.Table_number)) {
+                        g.DrawString($"Table: {p.Table_number}", font, Brushes.Black, 10, y);
+                        y += 15;
+                    }
+                    g.DrawString($"Served by: {p.User?.FirstName} {p.User?.LastName}", font, Brushes.Black, 10, y);
+                    y += 20;
+
+                    // Divider
+                    g.DrawLine(Pens.Black, 10, y, width - 10, y);
+                    y += 5;
+
+                    // Items Header
+                    g.DrawString("Description", boldFont, Brushes.Black, 10, y);
+                    g.DrawString("Total", boldFont, Brushes.Black, width - 60, y);
+                    y += 15;
+
+                    // Items
+                    var items = p.Items ?? new List<PrintItem>();
+                    foreach (var item in items)
+                    {
+                        string desc = $"{item.Quantity}x {item.Name}";
+                        float itemTotal = (item.Unit_price > 0 ? item.Unit_price : (item.Price > 0 ? item.Price : 0)) * item.Quantity;
+                        
+                        // Handle long descriptions
+                        if (desc.Length > 25) desc = desc.Substring(0, 22) + "...";
+                        
+                        g.DrawString(desc, font, Brushes.Black, 10, y);
+                        g.DrawString(itemTotal.ToString("N0"), font, Brushes.Black, width - 60, y);
+                        y += 15;
+                    }
+
+                    // Divider
+                    y += 5;
+                    g.DrawLine(Pens.Black, 10, y, width - 10, y);
+                    y += 5;
+
+                    // Totals
+                    float total = p.Total > 0 ? p.Total : (p.Total_amount > 0 ? p.Total_amount : 0);
+                    g.DrawString("TOTAL", boldFont, Brushes.Black, 10, y);
+                    g.DrawString($"KES {total:N0}", boldFont, Brushes.Black, width - 80, y);
+                    y += 25;
+
+                    // Footer
+                    g.DrawString("Thank you for your visit!", font, Brushes.Black, new RectangleF(0, y, width, 15), centerFormat);
+                    y += 15;
+                    g.DrawString("System by Hirall", new Font("Arial", 7), Brushes.Black, new RectangleF(0, y, width, 15), centerFormat);
+                };
+
+                // pd.PrinterSettings.PrinterName = "Your Thermal Printer Name"; // Optional: Use default if not set
+                pd.Print();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Printing Error: " + ex.Message);
+            }
+        }
+    }
+
+    public class BridgeMessage
+    {
+        public string? RequestId { get; set; }
+        public string? Type { get; set; }
+        public object? Payload { get; set; }
+    }
+
+    public class PinCachePayload
+    {
+        public string? Pin { get; set; }
+        public string? UserId { get; set; }
+        public object? UserData { get; set; }
+        public int BranchId { get; set; }
+    }
+
+    public class DbGetPayload
+    {
+        public string? Table { get; set; }
+        public object? Query { get; set; }
+    }
+
+    public class SyncQueuePayload
+    {
+        public string? Action { get; set; }
+        public string? Endpoint { get; set; }
+        public string? Method { get; set; }
+        public object? Body { get; set; }
+        public int BranchId { get; set; }
+        public string? Token { get; set; }
+    }
+
+    public class HttpProxyPayload
+    {
+        public string? Url { get; set; }
+        public string? Method { get; set; }
+        public Dictionary<string, string>? Headers { get; set; }
+        public object? Body { get; set; }
+    }
+    public class PrintPayload
+    {
+        public string? Id { get; set; }
+        public string? Order_number { get; set; }
+        public string? Table_number { get; set; }
+        public List<PrintItem>? Items { get; set; }
+        public float Total { get; set; }
+        public float Total_amount { get; set; }
+        public PrintBranch? Branch { get; set; }
+        public PrintUser? User { get; set; }
+    }
+
+    public class PrintItem
+    {
+        public string? Name { get; set; }
+        public int Quantity { get; set; }
+        public float Unit_price { get; set; }
+        public float Price { get; set; }
+    }
+
+    public class PrintBranch
+    {
+        public string? Name { get; set; }
+        public string? Location { get; set; }
+    }
+
+    public class PrintUser
+    {
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+    }
+}

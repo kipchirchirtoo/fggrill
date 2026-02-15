@@ -1,0 +1,2 @@
+﻿     2>C:\Users\user\Desktop\fggrill\desktop-app\FgGrillPos\Services\SyncService.cs(137,31): error CS0103: The name 'Path' does not exist in the current context [C:\Users\user\Desktop\fggrill\desktop-app\FgGrillPos\FgGrillPos_2utc0n51_wpftmp.csproj]
+         C:\Users\user\Desktop\fggrill\desktop-app\FgGrillPos\Services\SyncService.cs(137,31): error CS0103: The name 'Path' does not exist in the current context [C:\Users\user\Desktop\fggrill\desktop-app\FgGrillPos\FgGrillPos_2utc0n51_wpftmp.csproj]

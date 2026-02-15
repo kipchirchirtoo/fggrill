@@ -3,7 +3,30 @@ const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
-const isDev = !app.isPackaged;
+
+console.log('[Main] Script loaded, checking lock...');
+
+// ──────────────────────────────────────────
+// Single Instance Lock
+// ──────────────────────────────────────────
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+    console.log('[Main] Failed to get lock, quitting...');
+    app.quit();
+    process.exit(0);
+}
+console.log('[Main] Lock acquired.');
+
+app.on('second-instance', () => {
+    if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+    }
+});
+// ──────────────────────────────────────────
+// Configuration
+// ──────────────────────────────────────────
+const isDev = process.env.ELECTRON_IS_DEV === '1' || process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 if (isDev) {
     app.commandLine.appendSwitch('ignore-certificate-errors');
@@ -13,12 +36,21 @@ if (isDev) {
 // ──────────────────────────────────────────
 // Configuration
 // ──────────────────────────────────────────
-const DOMAIN_URL = isDev ? 'http://127.0.0.1:3001' : 'https://fggrill.vercel.app';
+const DOMAIN_URL = isDev ? 'http://127.0.0.1:3001' : 'https://famousgate.hirall.com';
 const API_BASE_URL = isDev ? 'http://127.0.0.1:5000' : 'https://api.hirall.com';
 const TERMINAL_PATH = '/terminal';
 const CACHE_DIR = path.join(app.getPath('userData'), 'page-cache');
 const DB_PATH = path.join(app.getPath('userData'), 'pos.db');
 const LOG_PATH = path.join(app.getPath('userData'), 'app.log');
+
+console.log('--- App Startup ---');
+console.log('isDev:', isDev);
+console.log('app.isPackaged:', app.isPackaged);
+console.log('process.env.NODE_ENV:', process.env.NODE_ENV);
+console.log('process.env.ELECTRON_IS_DEV:', process.env.ELECTRON_IS_DEV);
+console.log('DOMAIN_URL:', DOMAIN_URL);
+console.log('API_BASE_URL:', API_BASE_URL);
+console.log('-------------------');
 
 // ──────────────────────────────────────────
 // Logger
@@ -159,24 +191,36 @@ function getCachedResponse(url) {
 // ──────────────────────────────────────────
 // Online/Offline Detection
 // ──────────────────────────────────────────
-function checkOnlineStatus() {
-    return new Promise((resolve) => {
+/**
+ * Check if the backend API is reachable
+ */
+async function checkOnlineStatus() {
+    try {
         const testUrl = API_BASE_URL + '/api/health';
-        const request = net.request(testUrl);
-        request.on('response', (res) => {
-            log(`Network check: ${res.statusCode} from ${testUrl}`);
-            resolve(res.statusCode === 200);
+
+        // Use global fetch (Node 18+) instead of net.request for simplicity in health check
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+        const response = await fetch(testUrl, {
+            method: 'GET',
+            signal: controller.signal,
+            headers: { 'Cache-Control': 'no-cache' }
         });
-        request.on('error', (err) => {
-            log(`Network check failed: ${err.message}`, 'WARN');
-            resolve(false);
-        });
-        setTimeout(() => {
-            log('Network check timeout', 'WARN');
-            resolve(false);
-        }, 5000);
-        request.end();
-    });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+            if (!isOnline) log('Backend is reachable, back ONLINE');
+            return true;
+        } else {
+            log(`Backend health check failed: ${response.status}`, 'WARN');
+            return false;
+        }
+    } catch (err) {
+        log(`Network check failed: ${err.message}`, 'WARN');
+        return false;
+    }
 }
 
 async function updateOnlineStatus() {
@@ -392,14 +436,28 @@ function createWindow() {
         }
     });
 
-    // --- Page Caching: intercept responses and cache them ---
+    // --- CORS & Security Fixes for Development ---
     mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
-        { urls: ['*://*/*'] },
+        { urls: ['*://127.0.0.1/*', '*://localhost/*'] },
         (details, callback) => {
             if (isDev) {
-                details.requestHeaders['Access-Control-Allow-Private-Network'] = 'true';
+                // For Private Network Access (PNA) preflights
+                details.requestHeaders['Access-Control-Request-Private-Network'] = 'true';
             }
             callback({ requestHeaders: details.requestHeaders });
+        }
+    );
+
+    mainWindow.webContents.session.webRequest.onHeadersReceived(
+        { urls: ['*://127.0.0.1/*', '*://localhost/*'] },
+        (details, callback) => {
+            if (isDev && details.responseHeaders) {
+                details.responseHeaders['Access-Control-Allow-Private-Network'] = ['true'];
+                details.responseHeaders['Access-Control-Allow-Origin'] = ['*'];
+                details.responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, OPTIONS, PUT, PATCH, DELETE'];
+                details.responseHeaders['Access-Control-Allow-Headers'] = ['*'];
+            }
+            callback({ responseHeaders: details.responseHeaders });
         }
     );
 
@@ -443,12 +501,25 @@ function createWindow() {
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
+
+    // Handle load failures gracefully
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+        console.warn(`[App] Failed to load URL: ${validatedURL} (${errorCode}: ${errorDescription})`);
+        // Only trigger offline page for main domain failures
+        if (validatedURL.startsWith(DOMAIN_URL)) {
+            loadOfflinePage();
+        }
+    });
 }
 
 function loadOfflinePage() {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+
     const offlinePath = path.join(__dirname, 'offline.html');
     if (fs.existsSync(offlinePath)) {
-        mainWindow.loadFile(offlinePath);
+        mainWindow.loadFile(offlinePath).catch(err => {
+            console.error('[App] Failed to load offline file:', err.message);
+        });
     } else {
         mainWindow.loadURL(`data:text/html,
             <html><body style="background:#111;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui">
@@ -457,7 +528,7 @@ function loadOfflinePage() {
                 <p style="opacity:0.6">Waiting for internet to load POS terminal...</p>
                 <p style="opacity:0.4;font-size:0.8em">The app will auto-reload when connected.</p>
             </div></body></html>
-        `);
+        `).catch(() => { });
     }
 }
 
@@ -517,15 +588,5 @@ app.on('activate', () => {
     if (mainWindow === null) createWindow();
 });
 
-// Prevent multiple instances
-const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
-    app.quit();
-} else {
-    app.on('second-instance', () => {
-        if (mainWindow) {
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.focus();
-        }
-    });
-}
+
+// End of file
