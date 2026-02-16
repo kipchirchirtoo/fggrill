@@ -8,10 +8,7 @@ on:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        os: [windows-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     permissions:
       contents: write  # Required to create releases
 
@@ -42,18 +39,9 @@ jobs:
           npm run build
           cd ..
 
-      - name: Build and Publish Electron (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Build and Publish Electron
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ELECTRON_BUILDER_HTTP_REQUEST_RETRIES: 5
           ELECTRON_BUILDER_HTTP_REQUEST_RETRY_MILLISECONDS: 60000
         run: npx electron-builder build --win --publish always
-
-      - name: Build and Publish Electron (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ELECTRON_BUILDER_HTTP_REQUEST_RETRIES: 5
-          ELECTRON_BUILDER_HTTP_REQUEST_RETRY_MILLISECONDS: 60000
-        run: npx electron-builder build --linux --publish always
