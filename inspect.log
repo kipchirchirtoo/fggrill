@@ -1,0 +1,14 @@
+﻿
+--- Inspecting PowerSync Database (via Electron) ---
+Path: C:\Users\user\AppData\Roaming\Electron\powersync.db
+
+[Table: offline_orders]
+ Error reading offline_orders: no such table: offline_orders
+
+[Table: sync_queue]
+ Error reading sync_queue: no such table: sync_queue
+
+[Table: cached_pins]
+ Error reading cached_pins: no such table: cached_pins
+
+--- Inspection Complete ---

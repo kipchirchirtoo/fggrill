@@ -72,11 +72,22 @@ export default function MasterTerminalPage() {
                     });
                     // Store user in localStorage for the app to work
                     localStorage.setItem('user', JSON.stringify(cachedUser));
+
                     // Route based on cached role
                     const role = cachedUser.role;
-                    if (role === 'cashier') router.push('/dashboard/cashier');
-                    else if (role === 'bartender') router.push('/dashboard/pos-kitchen?tab=bar');
-                    else router.push('/dashboard/pos-kitchen?tab=restaurant');
+                    let targetPath = '/dashboard/pos-kitchen?tab=restaurant';
+
+                    if (role === 'cashier') {
+                        targetPath = '/dashboard/cashier';
+                    } else if (role === 'bartender') {
+                        targetPath = '/dashboard/pos-kitchen?tab=bar';
+                    }
+
+                    // In Electron, force full page reload to bypass Next.js router
+                    console.log('[Terminal] Redirecting to:', targetPath);
+                    setTimeout(() => {
+                        window.location.replace(`pos://terminal.html${targetPath}`);
+                    }, 100);
                 } else {
                     toast.error('PIN not recognized offline');
                     setPin('');

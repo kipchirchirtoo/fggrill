@@ -36,6 +36,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         /** Get cached menu items for a branch */
         getMenuItems: (branchId) =>
             ipcRenderer.invoke('cache:getMenuItems', branchId),
+
+        /** Import all users from Supabase to PowerSync */
+        importUsers: () =>
+            ipcRenderer.invoke('import:users'),
     },
 
     // --- Sync Queue ---

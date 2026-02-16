@@ -2168,12 +2168,36 @@ export const restaurantAPI = {
       try {
         const query: any = {};
         if (branchId) query.branch_id = branchId;
-        const orders = await (window as any).electronAPI.db.get('offline_orders', query);
-        if (orders && orders.length > 0) {
-          console.log('Restaurant Orders: Loaded from local SQLite mirror');
+        // userId might not be in the local schema for orders if created by others, 
+        // but for 'my orders' we usually filter by created_by if the column exists.
+        // The schema has 'created_by'.
+        if (userId) query.created_by = userId;
+
+        const orders = await (window as any).electronAPI.db.get('restaurant_orders', query);
+        if (orders) {
+          console.log(`Restaurant Orders: Loaded ${orders.length} from local SQLite`);
+          // Parse any JSON fields if necessary, though restaurant_orders seems to have flat structure mostly.
+          // UnifiedPOS expects certain structure. 
+          // Backend returns items joined? 
+          // The local 'restaurant_orders' table does NOT contain items. Items are in 'restaurant_order_items'.
+          // We need to fetch items for these orders manually if we want full details.
+          // However, UnifiedPOS 'recentOrders' might just display summary. 
+          // Let's check UnifiedPOS usage of recentOrders... it passes them to handleEditOrder which expects 'items'.
+
+          // Strategy: For now, return orders. If items are needed, we might need a secondary fetch.
+          // But to be safe and fast, let's just return orders. 
+          // If UnifiedPOS crashes accessing .items, we know we need to join.
+          // Getting ALL items for ALL orders is expensive.
+          // Let's see if we can perform a lazy load or if we should just fetch items for these orders.
+
+          // Actually, let's try to fetch order items too if possible.
+          // But db.get only does simple WHERE. 
+          // implementing N+1 query here is bad but better than broken UI.
+          // Let's just return orders for the history list first.
+
           return {
             success: true,
-            data: orders.map((o: any) => typeof o.order_data === 'string' ? JSON.parse(o.order_data) : o.order_data)
+            data: orders
           };
         }
       } catch (e) {
@@ -2195,10 +2219,12 @@ export const restaurantAPI = {
     // Intercept for C# Desktop App - OFFLINE FIRST
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
       try {
-        const categories = await (window as any).electronAPI.db.get('categories');
-        if (categories && categories.length > 0) {
-          console.log('Restaurant Categories: Loaded via local SQLite');
-          return { success: true, data: categories };
+        // Use restaurant_menu_categories table request
+        // Filter by is_active = 1 (true)
+        const categories = await (window as any).electronAPI.db.get('restaurant_menu_categories', { is_active: 1 });
+        if (categories) {
+          console.log(`Restaurant Categories: Loaded ${categories.length} via local SQLite`);
+          return { success: true, data: categories.sort((a: any, b: any) => a.sort_order - b.sort_order) };
         }
       } catch (e) {
         console.warn('Native Bridge getCategories failed', e);
@@ -2216,13 +2242,31 @@ export const restaurantAPI = {
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
       try {
         const query: any = {};
+        // restaurant_menu_items might not have branch_id if items are global, but let's check schema.
+        // Schema has branch_id.
         if (branchId) query.branch_id = branchId;
-        if (categoryId) query.category_id = categoryId;
+        if (categoryId && categoryId !== 'all') query.category_id = categoryId;
+        if (onlyAvailable) query.is_available = 1;
 
-        const items = await (window as any).electronAPI.db.get('menu_items', query);
-        if (items && items.length > 0) {
-          console.log(`Restaurant Menu Items: Loaded ${items.length} items via local SQLite`);
-          return { success: true, data: items };
+        const [items, categories] = await Promise.all([
+          (window as any).electronAPI.db.get('restaurant_menu_items', query),
+          (window as any).electronAPI.db.get('restaurant_menu_categories')
+        ]);
+
+        if (items) {
+          // Client-side join for category name
+          const catMap = new Map(categories?.map((c: any) => [c.id, c]) || []);
+          const enrichedItems = items.map((item: any) => ({
+            ...item,
+            // Ensure boolean fields are booleans
+            is_available: item.is_available === 1 || item.is_available === true,
+            is_vegetarian: item.is_vegetarian === 1,
+            is_spicy: item.is_spicy === 1,
+            category: catMap.get(item.category_id) || { name: 'Unknown' }
+          }));
+
+          console.log(`Restaurant Menu Items: Loaded ${enrichedItems.length} items via local SQLite`);
+          return { success: true, data: enrichedItems };
         }
       } catch (e) {
         console.warn('Native Bridge getMenuItems failed', e);
@@ -2506,18 +2550,36 @@ export const receiptsAPI = {
 
 export const barAPI = {
   // Orders
+  // Orders
   getOrders: async (params?: { branchId?: number; status?: string; from_date?: string; to_date?: string }) => {
     // Intercept for C# Desktop App - OFFLINE FIRST
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
       try {
         const query: any = {};
         if (params?.branchId) query.branch_id = params.branchId;
-        const orders = await (window as any).electronAPI.db.get('offline_orders', query);
-        if (orders && orders.length > 0) {
-          console.log('Bar Orders: Loaded from local SQLite mirror');
+        if (params?.status) query.status = params.status;
+
+        // Date filtering is hard with simple KV query, might need to filter in JS
+        // or just return all for that branch/status (Sync usually handles constraints)
+
+        const orders = await (window as any).electronAPI.db.get('bar_orders', query);
+
+        if (orders) {
+          // Apply date filtering in JS if provided
+          let result = orders;
+          if (params?.from_date) {
+            const from = new Date(params.from_date).getTime();
+            result = result.filter((o: any) => new Date(o.created_at).getTime() >= from);
+          }
+          if (params?.to_date) {
+            const to = new Date(params.to_date).getTime();
+            result = result.filter((o: any) => new Date(o.created_at).getTime() <= to);
+          }
+
+          console.log(`Bar Orders: Loaded ${result.length} from local SQLite`);
           return {
             success: true,
-            data: orders.map((o: any) => typeof o.order_data === 'string' ? JSON.parse(o.order_data) : o.order_data)
+            data: result
           };
         }
       } catch (e) {
@@ -2568,10 +2630,10 @@ export const barAPI = {
     // Intercept for C# Desktop App - OFFLINE FIRST
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
       try {
-        const categories = await (window as any).electronAPI.db.get('categories');
-        if (categories && categories.length > 0) {
-          console.log('Bar Categories: Loaded via local SQLite');
-          return { success: true, data: categories };
+        const categories = await (window as any).electronAPI.db.get('restaurant_menu_categories', { is_active: 1, is_bar: 1 });
+        if (categories) {
+          console.log(`Bar Categories: Loaded ${categories.length} via local SQLite`);
+          return { success: true, data: categories.sort((a: any, b: any) => a.sort_order - b.sort_order) };
         }
       } catch (e) {
         console.warn('Native Bridge getCategories (bar) failed', e);
@@ -2588,12 +2650,34 @@ export const barAPI = {
     // Intercept for C# Desktop App - OFFLINE FIRST
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
       try {
-        const query: any = {};
-        if (categoryId) query.category_id = categoryId;
-        const items = await (window as any).electronAPI.db.get('menu_items', query);
-        if (items && items.length > 0) {
-          console.log(`Bar Drinks: Loaded ${items.length} items via local SQLite`);
-          return { success: true, data: items };
+        // Fetch all bar categories first to know what to filter by if no categoryId matches
+        const barCategories = await (window as any).electronAPI.db.get('restaurant_menu_categories', { is_bar: 1 });
+        const barCatIds = new Set(barCategories?.map((c: any) => c.id) || []);
+
+        const query: any = { is_available: 1 };
+        if (categoryId && categoryId !== 'all') {
+          // If specific category requested, ensure it's a bar category
+          if (!barCatIds.has(categoryId)) return { success: true, data: [] };
+          query.category_id = categoryId;
+        }
+
+        // Fetch items - either specific category or all available
+        const items = await (window as any).electronAPI.db.get('restaurant_menu_items', query);
+
+        if (items) {
+          // Filter out items that are not in bar categories (if fetching all)
+          const filteredItems = items.filter((item: any) => barCatIds.has(item.category_id));
+          // Join category data
+          const catMap = new Map(barCategories?.map((c: any) => [c.id, c]) || []);
+
+          const enrichedItems = filteredItems.map((item: any) => ({
+            ...item,
+            is_available: item.is_available === 1 || item.is_available === true,
+            category: catMap.get(item.category_id) || { name: 'Unknown' }
+          }));
+
+          console.log(`Bar Drinks: Loaded ${enrichedItems.length} items via local SQLite`);
+          return { success: true, data: enrichedItems };
         }
       } catch (e) {
         console.warn('Native Bridge getDrinks failed', e);

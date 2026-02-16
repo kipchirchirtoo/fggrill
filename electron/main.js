@@ -3,11 +3,14 @@ const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const { initPowerSync, getPowerSync } = require('./powersync');
+const { pathToFileURL } = require('url');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 console.log('[Main] Script loaded, checking lock...');
 
 // ──────────────────────────────────────────
-// Single Instance Lock
+// 1. Single Instance Lock
 // ──────────────────────────────────────────
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -17,14 +20,15 @@ if (!gotTheLock) {
 }
 console.log('[Main] Lock acquired.');
 
-app.on('second-instance', () => {
-    if (mainWindow) {
-        if (mainWindow.isMinimized()) mainWindow.restore();
-        mainWindow.focus();
-    }
-});
 // ──────────────────────────────────────────
-// Configuration
+// 2. Schemes Registration (Must be before app ready)
+// ──────────────────────────────────────────
+protocol.registerSchemesAsPrivileged([
+    { scheme: 'pos', privileges: { standard: true, secure: true, supportFetchAPI: true } }
+]);
+
+// ──────────────────────────────────────────
+// 3. Configuration
 // ──────────────────────────────────────────
 const isDev = process.env.ELECTRON_IS_DEV === '1' || process.env.NODE_ENV === 'development' || !app.isPackaged;
 
@@ -33,15 +37,24 @@ if (isDev) {
     app.commandLine.appendSwitch('allow-insecure-localhost');
 }
 
-// ──────────────────────────────────────────
-// Configuration
-// ──────────────────────────────────────────
 const DOMAIN_URL = isDev ? 'http://127.0.0.1:3001' : 'https://famousgate.hirall.com';
 const API_BASE_URL = isDev ? 'http://127.0.0.1:5000' : 'https://api.hirall.com';
 const TERMINAL_PATH = '/terminal';
 const CACHE_DIR = path.join(app.getPath('userData'), 'page-cache');
 const DB_PATH = path.join(app.getPath('userData'), 'pos.db');
 const LOG_PATH = path.join(app.getPath('userData'), 'app.log');
+const FRONTEND_OUT_PATH = path.join(__dirname, '../frontend/out');
+console.log('[Main] FRONTEND_OUT_PATH:', FRONTEND_OUT_PATH);
+
+// ──────────────────────────────────────────
+// 5. Shared Events
+// ──────────────────────────────────────────
+app.on('second-instance', () => {
+    if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+    }
+});
 
 console.log('--- App Startup ---');
 console.log('isDev:', isDev);
@@ -67,82 +80,10 @@ let mainWindow;
 let backendProcess;
 let isOnline = true;
 let db = null;
+let powersync = null;
 
-// ──────────────────────────────────────────
-// SQLite Database
-// ──────────────────────────────────────────
-function initDatabase() {
-    try {
-        const Database = require('better-sqlite3');
-        db = new Database(DB_PATH);
-        db.pragma('journal_mode = WAL'); // Better concurrent read performance
-
-        db.exec(`
-            CREATE TABLE IF NOT EXISTS cached_pins (
-                pin TEXT PRIMARY KEY,
-                user_id TEXT NOT NULL,
-                user_data TEXT NOT NULL,
-                branch_id INTEGER,
-                cached_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS menu_items (
-                id TEXT PRIMARY KEY,
-                branch_id INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                category TEXT,
-                price REAL NOT NULL,
-                data TEXT NOT NULL,
-                cached_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS categories (
-                id TEXT PRIMARY KEY,
-                branch_id INTEGER,
-                name TEXT NOT NULL,
-                data TEXT NOT NULL,
-                cached_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS offline_orders (
-                id TEXT PRIMARY KEY,
-                branch_id INTEGER NOT NULL,
-                order_data TEXT NOT NULL,
-                status TEXT DEFAULT 'pending',
-                created_at TEXT NOT NULL,
-                synced_at TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS sync_queue (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                action TEXT NOT NULL,
-                endpoint TEXT NOT NULL,
-                method TEXT DEFAULT 'POST',
-                token TEXT,
-                body TEXT,
-                branch_id INTEGER,
-                status TEXT DEFAULT 'pending',
-                attempts INTEGER DEFAULT 0,
-                max_attempts INTEGER DEFAULT 10,
-                created_at TEXT NOT NULL,
-                last_attempt TEXT,
-                error TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS cache_meta (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-        `);
-
-        console.log('[DB] SQLite database initialized at:', DB_PATH);
-        return db;
-    } catch (err) {
-        console.error('[DB] Failed to initialize SQLite:', err);
-        return null;
-    }
-}
+// PowerSync handles all database operations now.
+// Legacy SQLite (pos.db) is removed.
 
 // ──────────────────────────────────────────
 // Page Cache (offline page serving)
@@ -244,11 +185,12 @@ async function updateOnlineStatus() {
 // Sync Engine
 // ──────────────────────────────────────────
 async function processSyncQueue() {
-    if (!db || !isOnline) return;
+    const ps = getPowerSync();
+    if (!ps || !isOnline) return;
 
-    const pending = db.prepare(
+    const pending = await ps.getAll(
         `SELECT * FROM sync_queue WHERE status = 'pending' AND attempts < max_attempts ORDER BY created_at ASC LIMIT 20`
-    ).all();
+    );
 
     if (pending.length === 0) return;
     console.log(`[Sync] Processing ${pending.length} queued items...`);
@@ -267,16 +209,14 @@ async function processSyncQueue() {
             });
 
             if (response.ok) {
-                db.prepare(`UPDATE sync_queue SET status = 'synced', last_attempt = ? WHERE id = ?`)
-                    .run(new Date().toISOString(), item.id);
+                await ps.execute(`UPDATE sync_queue SET status = 'synced', last_attempt = ? WHERE id = ?`, [new Date().toISOString(), item.id]);
                 console.log(`[Sync] ✓ Synced: ${item.action} (${item.id})`);
             } else {
                 throw new Error(`HTTP ${response.status}`);
             }
         } catch (err) {
             const backoff = Math.min(60000, 1000 * Math.pow(2, item.attempts));
-            db.prepare(`UPDATE sync_queue SET attempts = attempts + 1, last_attempt = ?, error = ? WHERE id = ?`)
-                .run(new Date().toISOString(), err.message, item.id);
+            await ps.execute(`UPDATE sync_queue SET attempts = attempts + 1, last_attempt = ?, error = ? WHERE id = ?`, [new Date().toISOString(), err.message, item.id]);
             console.log(`[Sync] ✗ Failed: ${item.action} (${item.id}) — retry in ${backoff / 1000}s`);
         }
     }
@@ -287,51 +227,56 @@ async function processSyncQueue() {
 // ──────────────────────────────────────────
 function setupIPC() {
     // --- Database Operations ---
-    ipcMain.handle('db:get', (_, table, query) => {
-        if (!db) return null;
+    ipcMain.handle('db:get', async (_, table, query) => {
+        const ps = getPowerSync();
+        if (!ps) return null;
         try {
             if (query) {
                 const keys = Object.keys(query);
                 const where = keys.map(k => `${k} = ?`).join(' AND ');
-                return db.prepare(`SELECT * FROM ${table} WHERE ${where}`).all(...Object.values(query));
+                return await ps.getAll(`SELECT * FROM ${table} WHERE ${where}`, Object.values(query));
             }
-            return db.prepare(`SELECT * FROM ${table}`).all();
+            return await ps.getAll(`SELECT * FROM ${table}`);
         } catch (err) { return []; }
     });
 
-    ipcMain.handle('db:upsert', (_, table, data) => {
-        if (!db) return false;
+    ipcMain.handle('db:upsert', async (_, table, data) => {
+        const ps = getPowerSync();
+        if (!ps) return false;
         try {
             const keys = Object.keys(data);
             const placeholders = keys.map(() => '?').join(', ');
-            const updates = keys.map(k => `${k} = excluded.${k}`).join(', ');
-            const stmt = db.prepare(
-                `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${placeholders})
-                 ON CONFLICT(${keys[0]}) DO UPDATE SET ${updates}`
-            );
-            stmt.run(...Object.values(data));
+            // Note: PowerSync uses a slightly different syntax for upserts or you can use execute
+            // For simplicity, we'll try an INSERT OR REPLACE if the table permits, 
+            // but PowerSync handles a lot of this via sync rules.
+            // Here we just execute a raw SQL for now to maintain compatibility with the old API.
+            const query = `INSERT OR REPLACE INTO ${table} (${keys.join(', ')}) VALUES (${placeholders})`;
+            await ps.execute(query, Object.values(data));
             return true;
         } catch (err) { console.error('[DB] Upsert error:', err); return false; }
     });
 
-    ipcMain.handle('db:delete', (_, table, query) => {
-        if (!db) return false;
+    ipcMain.handle('db:delete', async (_, table, query) => {
+        const ps = getPowerSync();
+        if (!ps) return false;
         try {
             const keys = Object.keys(query);
             const where = keys.map(k => `${k} = ?`).join(' AND ');
-            db.prepare(`DELETE FROM ${table} WHERE ${where}`).run(...Object.values(query));
+            await ps.execute(`DELETE FROM ${table} WHERE ${where}`, Object.values(query));
             return true;
         } catch (err) { return false; }
     });
 
     // --- Sync Queue ---
-    ipcMain.handle('sync:queue', (_, action, endpoint, method, body, branchId, token) => {
-        if (!db) return false;
+    ipcMain.handle('sync:queue', async (_, action, endpoint, method, body, branchId, token) => {
+        const ps = getPowerSync();
+        if (!ps) return false;
         try {
-            db.prepare(
-                `INSERT INTO sync_queue (action, endpoint, method, body, branch_id, token, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`
-            ).run(action, endpoint, method || 'POST', JSON.stringify(body), branchId, token, new Date().toISOString());
+            await ps.execute(
+                `INSERT INTO sync_queue (action, endpoint, method, body, branch_id, token, status, attempts, max_attempts, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [action, endpoint, method || 'POST', JSON.stringify(body), branchId, token, 'pending', 0, 10, new Date().toISOString()]
+            );
 
             // If online, try to sync immediately
             if (isOnline) processSyncQueue();
@@ -340,11 +285,12 @@ function setupIPC() {
         } catch (err) { console.error('[Sync] Queue error:', err); return false; }
     });
 
-    ipcMain.handle('sync:status', () => {
-        if (!db) return { pending: 0, synced: 0, failed: 0 };
-        const pending = db.prepare(`SELECT COUNT(*) as count FROM sync_queue WHERE status = 'pending'`).get();
-        const synced = db.prepare(`SELECT COUNT(*) as count FROM sync_queue WHERE status = 'synced'`).get();
-        const failed = db.prepare(`SELECT COUNT(*) as count FROM sync_queue WHERE status = 'failed' OR attempts >= max_attempts`).get();
+    ipcMain.handle('sync:status', async () => {
+        const ps = getPowerSync();
+        if (!ps) return { pending: 0, synced: 0, failed: 0 };
+        const pending = await ps.get(`SELECT COUNT(*) as count FROM sync_queue WHERE status = 'pending'`);
+        const synced = await ps.get(`SELECT COUNT(*) as count FROM sync_queue WHERE status = 'synced'`);
+        const failed = await ps.get(`SELECT COUNT(*) as count FROM sync_queue WHERE status = 'failed' OR attempts >= max_attempts`);
         return { pending: pending.count, synced: synced.count, failed: failed.count };
     });
 
@@ -354,48 +300,164 @@ function setupIPC() {
     });
 
     // --- Cache PIN for offline auth ---
-    ipcMain.handle('cache:pin', (_, pin, userId, userData, branchId) => {
-        if (!db) return false;
+    ipcMain.handle('cache:pin', async (_, pin, userId, userData, branchId) => {
+        const ps = getPowerSync();
+        if (!ps) return false;
         try {
-            db.prepare(
-                `INSERT OR REPLACE INTO cached_pins (pin, user_id, user_data, branch_id, cached_at)
-                 VALUES (?, ?, ?, ?, ?)`
-            ).run(pin, userId, JSON.stringify(userData), branchId, new Date().toISOString());
+            console.log(`[Cache] Caching PIN for user ${userId} at branch ${branchId}`);
+            // PIN is used as ID to ensure INSERT OR REPLACE works (one cache entry per PIN)
+            await ps.execute(
+                `INSERT OR REPLACE INTO cached_pins (id, user_id, user_data, branch_id, cached_at)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [pin, userId, JSON.stringify(userData), branchId, new Date().toISOString()]
+            );
+            console.log(`[Cache] PIN cached successfully for ${pin}`);
             return true;
-        } catch (err) { return false; }
+        } catch (err) {
+            console.error('[Cache] PIN caching failed:', err);
+            return false;
+        }
     });
 
-    ipcMain.handle('cache:verifyPin', (_, pin) => {
-        if (!db) return null;
+    ipcMain.handle('cache:verifyPin', async (_, pin) => {
+        const ps = getPowerSync();
+        if (!ps) return null;
         try {
-            const row = db.prepare(`SELECT * FROM cached_pins WHERE pin = ?`).get(pin);
-            if (row) return JSON.parse(row.user_data);
+            console.log(`[Cache] Verifying PIN offline...`);
+            // We use 'id' because PIN was stored in the ID column for unique constraint
+            const row = await ps.get(`SELECT * FROM cached_pins WHERE id = ?`, [pin]);
+            if (row) {
+                console.log(`[Cache] PIN verified successfully for user_id: ${row.user_id}`);
+                return JSON.parse(row.user_data);
+            }
+            console.warn(`[Cache] PIN not found in offline cache`);
             return null;
-        } catch (err) { return null; }
+        } catch (err) {
+            console.error('[Cache] Offline PIN verification error:', err);
+            return null;
+        }
     });
+
+    // --- Import Users from Supabase ---
+    ipcMain.handle('import:users', async () => {
+        const ps = getPowerSync();
+        if (!ps) {
+            console.error('[Import] PowerSync not initialized');
+            return { success: false, error: 'PowerSync not initialized' };
+        }
+
+        try {
+            console.log('[Import] Starting user import from Supabase...');
+
+            // Initialize Supabase client
+            const { createClient } = require('@supabase/supabase-js');
+            const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+            // Use service role key to bypass RLS policies
+            const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+            console.log('[Import] Using service role key:', supabaseKey ? 'YES (length: ' + supabaseKey.length + ')' : 'NO');
+            console.log('[Import] Service role key starts with:', supabaseKey ? supabaseKey.substring(0, 20) + '...' : 'N/A');
+
+            if (!supabaseUrl || !supabaseKey) {
+                throw new Error('Supabase credentials not found');
+            }
+
+            const supabase = createClient(supabaseUrl, supabaseKey);
+
+            // Fetch all users with PINs
+            const { data: users, error } = await supabase
+                .from('users')
+                .select('id, email, first_name, last_name, role, branch_id, pos_pin, status')
+                .not('pos_pin', 'is', null);
+
+            if (error) throw error;
+
+            if (!users || users.length === 0) {
+                console.log('[Import] No users with PINs found');
+                return { success: true, imported: 0, message: 'No users with PINs found' };
+            }
+
+            console.log(`[Import] Found ${users.length} users with PINs`);
+
+            // Clear existing cached PINs
+            await ps.execute('DELETE FROM cached_pins');
+            console.log('[Import] Cleared existing cached PINs');
+
+            // Import each user
+            let successCount = 0;
+            let errorCount = 0;
+
+            for (const user of users) {
+                try {
+                    const userData = {
+                        id: user.id,
+                        email: user.email,
+                        first_name: user.first_name,
+                        last_name: user.last_name,
+                        role: user.role,
+                        branch_id: user.branch_id,
+                        status: user.status
+                    };
+
+                    await ps.execute(
+                        `INSERT OR REPLACE INTO cached_pins (id, user_id, user_data, branch_id, cached_at)
+                         VALUES (?, ?, ?, ?, ?)`,
+                        [
+                            user.pos_pin,
+                            user.id,
+                            JSON.stringify(userData),
+                            user.branch_id || null,
+                            new Date().toISOString()
+                        ]
+                    );
+
+                    console.log(`[Import] ✓ Cached: ${user.pos_pin} - ${user.first_name} ${user.last_name}`);
+                    successCount++;
+                } catch (err) {
+                    console.error(`[Import] ✗ Failed to cache ${user.pos_pin}:`, err.message);
+                    errorCount++;
+                }
+            }
+
+            console.log(`[Import] Complete - Success: ${successCount}, Errors: ${errorCount}`);
+
+            return {
+                success: true,
+                imported: successCount,
+                errors: errorCount,
+                total: users.length
+            };
+
+        } catch (err) {
+            console.error('[Import] User import failed:', err);
+            return { success: false, error: err.message };
+        }
+    });
+
 
     // --- Menu/Category Cache ---
-    ipcMain.handle('cache:menuItems', (_, branchId, items) => {
-        if (!db) return false;
+    ipcMain.handle('cache:menuItems', async (_, branchId, items) => {
+        const ps = getPowerSync();
+        if (!ps) return false;
         try {
-            const stmt = db.prepare(
-                `INSERT OR REPLACE INTO menu_items (id, branch_id, name, category, price, data, cached_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`
-            );
-            const transaction = db.transaction((items) => {
+            await ps.writeTransaction(async (tx) => {
                 for (const item of items) {
-                    stmt.run(item.id, branchId, item.name, item.category || '', item.price || 0, JSON.stringify(item), new Date().toISOString());
+                    await tx.execute(
+                        `INSERT OR REPLACE INTO menu_items (id, branch_id, name, category, price, data, cached_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                        [item.id, branchId, item.name, item.category || '', item.price || 0, JSON.stringify(item), new Date().toISOString()]
+                    );
                 }
             });
-            transaction(items);
             return true;
         } catch (err) { console.error('[Cache] Menu cache error:', err); return false; }
     });
 
-    ipcMain.handle('cache:getMenuItems', (_, branchId) => {
-        if (!db) return [];
+    ipcMain.handle('cache:getMenuItems', async (_, branchId) => {
+        const ps = getPowerSync();
+        if (!ps) return [];
         try {
-            const rows = db.prepare(`SELECT data FROM menu_items WHERE branch_id = ?`).all(branchId);
+            const rows = await ps.getAll(`SELECT data FROM menu_items WHERE branch_id = ?`, [branchId]);
             return rows.map(r => JSON.parse(r.data));
         } catch (err) { return []; }
     });
@@ -469,9 +531,8 @@ function createWindow() {
                 const ct = (details.responseHeaders?.['content-type'] || [''])[0];
                 if (ct.includes('text/html') || ct.includes('javascript') || ct.includes('text/css') || ct.includes('application/json')) {
                     // Mark this URL as cacheable (the actual content is cached by Electron session)
-                    if (db) {
-                        db.prepare(`INSERT OR REPLACE INTO cache_meta (key, value, updated_at) VALUES (?, ?, ?)`)
-                            .run(`cached:${details.url}`, 'true', new Date().toISOString());
+                    if (powersync) {
+                        powersync.execute(`INSERT OR REPLACE INTO cache_meta (key, value, updated_at) VALUES (?, ?, ?)`, [`cached:${details.url}`, 'true', new Date().toISOString()]);
                     }
                 }
             }
@@ -510,26 +571,32 @@ function createWindow() {
             loadOfflinePage();
         }
     });
+
+    // Handle protocol navigation failures (e.g. missing file in local build)
+    mainWindow.webContents.on('did-fail-provisional-load', (event, errorCode, errorDescription, validatedURL) => {
+        if (validatedURL.startsWith('pos://')) {
+            console.error(`[App] Local UI load failed: ${validatedURL} (${errorCode}: ${errorDescription})`);
+            // Fallback to minimal data URL if even the local file fails
+            mainWindow.loadURL(`data:text/html,<h1>Local UI Missing</h1><p>Please check frontend/out directory.</p>`).catch(() => { });
+        }
+    });
 }
 
 function loadOfflinePage() {
     if (!mainWindow || mainWindow.isDestroyed()) return;
 
-    const offlinePath = path.join(__dirname, 'offline.html');
-    if (fs.existsSync(offlinePath)) {
-        mainWindow.loadFile(offlinePath).catch(err => {
-            console.error('[App] Failed to load offline file:', err.message);
-        });
-    } else {
-        mainWindow.loadURL(`data:text/html,
-            <html><body style="background:#111;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui">
-            <div style="text-align:center">
-                <h1 style="font-size:2em">📡 No Connection</h1>
-                <p style="opacity:0.6">Waiting for internet to load POS terminal...</p>
-                <p style="opacity:0.4;font-size:0.8em">The app will auto-reload when connected.</p>
-            </div></body></html>
-        `).catch(() => { });
-    }
+    const url = 'pos://terminal.html';
+    console.log(`[App] Switching to local offline UI: ${url}`);
+    mainWindow.loadURL(url).catch(err => {
+        console.error(`[App] Failed to load ${url}: ${err.message} (code: ${err.code})`);
+
+        // Final fallback to static offline.html if protocol fails
+        const offlinePath = path.join(__dirname, 'offline.html');
+        if (fs.existsSync(offlinePath)) {
+            console.log('[App] Falling back to static offline.html');
+            mainWindow.loadFile(offlinePath).catch(() => { });
+        }
+    });
 }
 
 // ──────────────────────────────────────────
@@ -557,11 +624,103 @@ autoUpdater.on('update-downloaded', () => {
 // App Lifecycle
 // ──────────────────────────────────────────
 app.on('ready', () => {
-    // Initialize database
-    initDatabase();
+    // Register custom protocol on the specific session used by the window
+    const ses = session.fromPartition('persist:pos-cache');
+    ses.protocol.registerFileProtocol('pos', (request, callback) => {
+        try {
+            console.log(`[Protocol] Request: ${request.url}`);
+            const url = new URL(request.url);
+            let pathname = url.pathname;
+
+            // If pos://terminal.html, host is terminal.html and pathname is /
+            if (pathname === '/' || !pathname) {
+                pathname = url.hostname || 'terminal.html';
+            }
+            if (pathname.startsWith('/')) pathname = pathname.substring(1);
+
+            const filePath = path.join(FRONTEND_OUT_PATH, pathname.replace(/\//g, path.sep));
+
+            let finalPath = filePath;
+            if (!fs.existsSync(finalPath) && fs.existsSync(finalPath + '.html')) {
+                finalPath += '.html';
+            }
+
+            console.log(`[Protocol] Serving: ${finalPath}`);
+            callback({ path: finalPath });
+        } catch (err) {
+            console.error(`[Protocol] Error:`, err);
+            callback({ error: -2 }); // ERR_FAILED
+        }
+    });
+
+    // Initialize PowerSync
+    powersync = initPowerSync();
 
     // Set up IPC handlers
     setupIPC();
+
+    // Auto-import users on startup if cache is empty
+    setTimeout(async () => {
+        try {
+            const ps = getPowerSync();
+            if (!ps) return;
+
+            const count = await ps.get('SELECT COUNT(*) as count FROM cached_pins');
+            if (count && count.count === 0) {
+                console.log('[Auto-Import] No cached PINs found, importing users from Supabase...');
+
+                const { createClient } = require('@supabase/supabase-js');
+                const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+                // Use service role key to bypass RLS policies
+                const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+                console.log('[Auto-Import] Service role key available:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+                console.log('[Auto-Import] Using key type:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SERVICE_ROLE' : 'ANON');
+                console.log('[Auto-Import] Key length:', supabaseKey ? supabaseKey.length : 0);
+
+                if (supabaseUrl && supabaseKey) {
+                    const supabase = createClient(supabaseUrl, supabaseKey);
+                    const { data: users, error } = await supabase
+                        .from('users')
+                        .select('id, email, first_name, last_name, role, branch_id, pos_pin, status')
+                        .not('pos_pin', 'is', null);
+
+                    if (!error && users && users.length > 0) {
+                        console.log(`[Auto-Import] Found ${users.length} users, caching...`);
+
+                        for (const user of users) {
+                            try {
+                                const userData = JSON.stringify({
+                                    id: user.id,
+                                    email: user.email,
+                                    first_name: user.first_name,
+                                    last_name: user.last_name,
+                                    role: user.role,
+                                    branch_id: user.branch_id,
+                                    status: user.status
+                                });
+
+                                await ps.execute(
+                                    `INSERT OR REPLACE INTO cached_pins (id, user_id, user_data, branch_id, cached_at)
+                                     VALUES (?, ?, ?, ?, ?)`,
+                                    [user.pos_pin, user.id, userData, user.branch_id || null, new Date().toISOString()]
+                                );
+                            } catch (err) {
+                                console.error(`[Auto-Import] Failed to cache ${user.pos_pin}:`, err.message);
+                            }
+                        }
+
+                        const newCount = await ps.get('SELECT COUNT(*) as count FROM cached_pins');
+                        console.log(`[Auto-Import] ✓ Imported ${newCount.count} users successfully`);
+                    }
+                }
+            } else {
+                console.log(`[Auto-Import] Found ${count.count} cached PINs, skipping import`);
+            }
+        } catch (err) {
+            console.error('[Auto-Import] Error:', err.message);
+        }
+    }, 2000); // Wait 2 seconds after app starts
 
     // Create window
     createWindow();
@@ -580,7 +739,6 @@ app.on('ready', () => {
 });
 
 app.on('window-all-closed', () => {
-    if (db) db.close();
     if (process.platform !== 'darwin') app.quit();
 });
 

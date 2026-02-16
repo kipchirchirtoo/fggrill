@@ -1,6 +1,6 @@
 {
   "name": "fggrill-central",
-  "version": "1.0.28",
+  "version": "1.0.29",
   "author": {
     "name": "HIRALL",
     "email": "info@famousgate.com"
@@ -13,6 +13,9 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",
+    "@powersync/electron": "^1.0.0",
+    "@powersync/common": "^1.0.0",
+    "@powersync/better-sqlite3-adapter": "^1.0.0",
     "better-sqlite3": "^11.10.0",
     "dotenv": "^17.2.4",
     "electron-is-dev": "^2.0.0",
