@@ -5,7 +5,18 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const { initPowerSync, getPowerSync } = require('./powersync');
 const { pathToFileURL } = require('url');
-require('dotenv').config({ path: path.join(__dirname, '../.env') });
+// Load environment variables
+const envPath = app.isPackaged
+    ? path.join(process.resourcesPath, '.env')
+    : path.join(__dirname, '../.env');
+
+if (fs.existsSync(envPath)) {
+    console.log('[Main] Loading env from:', envPath);
+    require('dotenv').config({ path: envPath });
+} else {
+    // Fallback to ASAR internal path if not in resources
+    require('dotenv').config({ path: path.join(__dirname, '../.env') });
+}
 
 console.log('[Main] Script loaded, checking lock...');
 

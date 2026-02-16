@@ -1,7 +1,17 @@
 const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
 const { app } = require('electron');
-require('dotenv').config({ path: path.join(__dirname, '../.env') });
+// Load environment variables
+const envPath = app.isPackaged
+  ? path.join(process.resourcesPath, '.env')
+  : path.join(__dirname, '../.env');
+
+require('dotenv').config({ path: envPath });
+
+// Fallback if not found in resources
+if (!process.env.VITE_SUPABASE_URL && !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  require('dotenv').config({ path: path.join(__dirname, '../.env') });
+}
 
 let PowerSyncDatabase, Schema, Table, Column, ColumnType, BetterSQLite3DatabaseAdapter;
 
