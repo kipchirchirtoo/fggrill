@@ -118,7 +118,7 @@ export default function StaffAttendanceDetailPage() {
 
     if (isLoading && !staff) {
         return (
-            <ProtectedRoute allowedRoles={[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN]}>
+            <ProtectedRoute allowedRoles={[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]}>
                 <DashboardLayout>
                     <div className="flex items-center justify-center h-[60vh]">
                         <RefreshCw className="h-8 w-8 animate-spin text-stone-200" />
@@ -131,7 +131,7 @@ export default function StaffAttendanceDetailPage() {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN]}>
+        <ProtectedRoute allowedRoles={[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]}>
             <DashboardLayout>
                 <div className="space-y-8 animate-ios-fade-in pb-20">
                     {/* Header */}

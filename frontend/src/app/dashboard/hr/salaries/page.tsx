@@ -100,7 +100,7 @@ export default function HRSalariesPage() {
     };
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN]}>
+        <ProtectedRoute allowedRoles={[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]}>
             <DashboardLayout>
                 <div className="space-y-8 animate-ios-fade-in">
                     {/* Header */}

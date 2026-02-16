@@ -434,6 +434,124 @@ function setupIPC() {
         }
     });
 
+    // Auto-sync: Periodically check for new users and sync them
+    let autoSyncInterval = null;
+
+    const performUserSync = async () => {
+        try {
+            console.log('[Auto-Sync] Checking for new users...');
+
+            const { createClient } = require('@supabase/supabase-js');
+            const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+            if (!supabaseUrl || !supabaseKey) {
+                console.error('[Auto-Sync] Supabase credentials not found');
+                return { success: false, error: 'Missing credentials' };
+            }
+
+            const supabase = createClient(supabaseUrl, supabaseKey);
+            const ps = getPowerSync();
+            if (!ps) {
+                console.error('[Auto-Sync] PowerSync not initialized');
+                return { success: false, error: 'PowerSync not initialized' };
+            }
+
+            // Get existing user IDs from cache
+            const existingUsers = await ps.getAll('SELECT user_id FROM cached_pins');
+            const existingUserIds = new Set(existingUsers.map(u => u.user_id));
+
+            // Fetch all users from Supabase
+            const { data: users, error } = await supabase
+                .from('users')
+                .select('id, first_name, last_name, email, role, pos_pin, branch_id')
+                .not('pos_pin', 'is', null);
+
+            if (error) {
+                console.error('[Auto-Sync] Error fetching users:', error);
+                return { success: false, error: error.message };
+            }
+
+            // Filter for new users only
+            const newUsers = users.filter(u => !existingUserIds.has(u.id));
+
+            if (newUsers.length === 0) {
+                console.log('[Auto-Sync] No new users found');
+                return { success: true, newCount: 0, totalCount: users.length };
+            }
+
+            console.log(`[Auto-Sync] Found ${newUsers.length} new user(s), syncing...`);
+
+            // Insert new users
+            for (const user of newUsers) {
+                await ps.execute(
+                    `INSERT OR REPLACE INTO cached_pins (id, user_id, user_data, branch_id, cached_at)
+                     VALUES (?, ?, ?, ?, ?)`,
+                    [
+                        user.pos_pin,
+                        user.id,
+                        JSON.stringify({
+                            id: user.id,
+                            firstName: user.first_name,
+                            first_name: user.first_name,
+                            lastName: user.last_name,
+                            last_name: user.last_name,
+                            email: user.email,
+                            role: user.role,
+                            pos_pin: user.pos_pin,
+                            branch_id: user.branch_id
+                        }),
+                        user.branch_id || 0,
+                        new Date().toISOString()
+                    ]
+                );
+            }
+
+            console.log(`[Auto-Sync] ✓ Synced ${newUsers.length} new user(s) successfully`);
+            return { success: true, newCount: newUsers.length, totalCount: users.length };
+        } catch (err) {
+            console.error('[Auto-Sync] Sync failed:', err);
+            return { success: false, error: err.message };
+        }
+    };
+
+    ipcMain.handle('autosync:start', async (_, intervalMinutes = 30) => {
+        try {
+            console.log(`[Auto-Sync] Starting auto-sync with ${intervalMinutes} minute interval`);
+
+            // Clear existing interval if any
+            if (autoSyncInterval) {
+                clearInterval(autoSyncInterval);
+            }
+
+            // Perform initial sync
+            await performUserSync();
+
+            // Set up interval for periodic sync
+            autoSyncInterval = setInterval(performUserSync, intervalMinutes * 60 * 1000);
+
+            return { success: true, interval: intervalMinutes };
+        } catch (error) {
+            console.error('[Auto-Sync] Failed to start:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('autosync:stop', () => {
+        if (autoSyncInterval) {
+            clearInterval(autoSyncInterval);
+            autoSyncInterval = null;
+            console.log('[Auto-Sync] Stopped');
+            return { success: true };
+        }
+        return { success: false, error: 'No active sync' };
+    });
+
+    ipcMain.handle('autosync:syncNow', async () => {
+        console.log('[Auto-Sync] Manual sync triggered');
+        return await performUserSync();
+    });
+
 
     // --- Menu/Category Cache ---
     ipcMain.handle('cache:menuItems', async (_, branchId, items) => {
@@ -721,6 +839,21 @@ app.on('ready', () => {
             console.error('[Auto-Import] Error:', err.message);
         }
     }, 2000); // Wait 2 seconds after app starts
+
+    // Start background auto-sync for user data (runs every 30 mins)
+    setTimeout(async () => {
+        try {
+            console.log('[Main] Registering background users auto-sync...');
+            // Start the interval (we can call the performUserSync helper directly)
+            // Initial sync (in case new users were added since app last ran)
+            await performUserSync();
+
+            // Set up interval
+            autoSyncInterval = setInterval(performUserSync, 30 * 60 * 1000);
+        } catch (err) {
+            console.error('[Main] Failed to start background auto-sync:', err);
+        }
+    }, 5000); // Start background sync 5 seconds after startup
 
     // Create window
     createWindow();

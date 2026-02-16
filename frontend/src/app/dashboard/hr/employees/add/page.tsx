@@ -20,7 +20,7 @@ export default function AddEmployeePage() {
     }, [router]);
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.HR_MANAGER]}>
+        <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.HR_MANAGER, UserRole.AUDITOR]}>
             <DashboardLayout>
                 <div className="flex items-center justify-center min-h-[60vh] font-sf-pro-display">
                     <div className="text-center space-y-4">

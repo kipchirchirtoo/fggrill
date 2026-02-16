@@ -40,6 +40,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
         /** Import all users from Supabase to PowerSync */
         importUsers: () =>
             ipcRenderer.invoke('import:users'),
+
+        /** Start auto-sync for new users */
+        startAutoSync: (intervalMinutes) =>
+            ipcRenderer.invoke('autosync:start', intervalMinutes),
+
+        /** Stop auto-sync */
+        stopAutoSync: () =>
+            ipcRenderer.invoke('autosync:stop'),
+
+        /** Manually trigger sync now */
+        syncNow: () =>
+            ipcRenderer.invoke('autosync:syncNow'),
     },
 
     // --- Sync Queue ---

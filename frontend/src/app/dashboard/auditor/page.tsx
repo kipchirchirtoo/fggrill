@@ -8,7 +8,7 @@ import {
     ShieldCheck, DollarSign, PieChart, TrendingUp,
     FileCheck, Activity, Search, Filter,
     CreditCard, ShoppingCart, FileText, Scale, Trash2,
-    Building2, ArrowRight
+    Building2, ArrowRight, Users, UserCheck
 } from 'lucide-react';
 import { auditAPI, storeAPI, restaurantAPI } from '@/lib/api';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -224,6 +224,42 @@ export default function AuditorDashboard() {
                                         </div>
                                     </Link>
                                 ))}
+                            </div>
+
+                            <div className="section-header pt-6">
+                                <div>
+                                    <h2 className="section-title">Personnel & HR Oversight</h2>
+                                    <p className="section-subtitle">Staff management and payroll auditing</p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                <Link href="/dashboard/hr">
+                                    <div className="action-card group border-l-4 border-l-stone-900">
+                                        <div className="action-card-icon group-hover:bg-stone-900 group-hover:text-white transition-colors">
+                                            <Users className="h-5 w-5" />
+                                        </div>
+                                        <p className="action-card-label">HR Command</p>
+                                        <p className="text-[11px] text-stone-400 mt-0.5">Personnel Dashboard</p>
+                                    </div>
+                                </Link>
+                                <Link href="/dashboard/hr/employees">
+                                    <div className="action-card group">
+                                        <div className="action-card-icon group-hover:bg-stone-900 group-hover:text-white transition-colors">
+                                            <UserCheck className="h-5 w-5" />
+                                        </div>
+                                        <p className="action-card-label">Employee Repo</p>
+                                        <p className="text-[11px] text-stone-400 mt-0.5">Staff directory & records</p>
+                                    </div>
+                                </Link>
+                                <Link href="/dashboard/hr/payroll">
+                                    <div className="action-card group">
+                                        <div className="action-card-icon group-hover:bg-stone-900 group-hover:text-white transition-colors">
+                                            <DollarSign className="h-5 w-5" />
+                                        </div>
+                                        <p className="action-card-label">Payroll Audit</p>
+                                        <p className="text-[11px] text-stone-400 mt-0.5">Verify salary processing</p>
+                                    </div>
+                                </Link>
                             </div>
                         </div>
 

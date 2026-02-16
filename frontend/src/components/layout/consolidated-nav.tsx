@@ -1449,7 +1449,14 @@ export function ConsolidatedNav() {
 
     // Support & Oversight
     if (user.role === UserRole.AUDITOR) {
-      return auditorNav;
+      return (
+        <>
+          {auditorNav}
+          <hr className="my-4 border-stone-100" />
+          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Personnel Oversight</p>
+          {hrNav}
+        </>
+      );
     }
     if (user.role === UserRole.RECEPTIONIST) {
       return receptionNav;

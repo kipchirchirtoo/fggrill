@@ -118,7 +118,7 @@ export default function HRPayrollPage() {
     });
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN]}>
+        <ProtectedRoute allowedRoles={[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]}>
             <DashboardLayout>
                 <div className="space-y-6 animate-ios-fade-in p-2">
                     {/* Header */}

@@ -17,10 +17,15 @@ try {
   // Minimal shim to allow app to run and save data locally if native modules are missing
   PowerSyncDatabase = class {
     constructor(options) {
-      const Database = require('better-sqlite3');
-      this.db = new Database(options.database.filename);
-      this.schema = options.schema;
-      this.initShim();
+      try {
+        const Database = require('better-sqlite3');
+        this.db = new Database(options.database.filename);
+        this.schema = options.schema;
+        this.initShim();
+      } catch (err) {
+        console.error('[PowerSync Shim] CRITICAL: better-sqlite3 module not found. Offline database will not work.', err.message);
+        throw new Error('Database Initialization Failed: better-sqlite3 missing.');
+      }
     }
     initShim() {
       console.log('[PowerSync Shim] Initializing tables...');
