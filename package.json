@@ -43,19 +43,11 @@
         ]
       },
       {
-        "from": "frontend/.next/standalone",
+        "from": "frontend/out",
         "to": "frontend",
         "filter": [
           "**/*"
         ]
-      },
-      {
-        "from": "frontend/public",
-        "to": "frontend/public"
-      },
-      {
-        "from": "frontend/.next/static",
-        "to": "frontend/.next/static"
       }
     ],
     "publish": [
@@ -80,21 +72,14 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "FG Grill Terminal"
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Office",
-      "icon": "frontend/public/fg_grill_official_icon.png"
     }
   },
   "scripts": {
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
     "dist:linux": "electron-builder --linux",
-    "release": "electron-builder --win --linux -p always",
+    "release": "electron-builder -p always",
+    "release:all": "electron-builder --win --linux -p always",
     "release:win": "electron-builder --win -p always",
     "electron:dev": "set ELECTRON_IS_DEV=1 && set NODE_ENV=development && electron .",
     "electron:start": "set NODE_ENV=production && electron .",
