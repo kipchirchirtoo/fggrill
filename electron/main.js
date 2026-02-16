@@ -5,18 +5,18 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const { initPowerSync, getPowerSync } = require('./powersync');
 const { pathToFileURL } = require('url');
-// Load environment variables
-const envPath = app.isPackaged
-    ? path.join(process.resourcesPath, '.env')
-    : path.join(__dirname, '../.env');
+// ──────────────────────────────────────────
+// Hardcoded Fallbacks (Permanent Fix for Packaged App)
+// ──────────────────────────────────────────
+const FALLBACK_URL = 'https://utsvlihpudfraxzcmtle.supabase.co';
+const FALLBACK_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0c3ZsaWhwdWRmcmF4emNtdGxlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5MTYzMzIsImV4cCI6MjA3OTQ5MjMzMn0.wPONqSZvgQQyrssA4wTbBfaUJO5HrV_XtA2AD7PaweA';
 
-if (fs.existsSync(envPath)) {
-    console.log('[Main] Loading env from:', envPath);
-    require('dotenv').config({ path: envPath });
-} else {
-    // Fallback to ASAR internal path if not in resources
-    require('dotenv').config({ path: path.join(__dirname, '../.env') });
-}
+const testUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || FALLBACK_URL;
+const testKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || FALLBACK_KEY;
+
+// Export for other modules
+process.env.VITE_SUPABASE_URL = process.env.VITE_SUPABASE_URL || testUrl;
+process.env.VITE_SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || testKey;
 
 console.log('[Main] Script loaded, checking lock...');
 

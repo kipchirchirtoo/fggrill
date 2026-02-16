@@ -8,10 +8,11 @@ const envPath = app.isPackaged
 
 require('dotenv').config({ path: envPath });
 
-// Fallback if not found in resources
-if (!process.env.VITE_SUPABASE_URL && !process.env.NEXT_PUBLIC_SUPABASE_URL) {
-  require('dotenv').config({ path: path.join(__dirname, '../.env') });
-}
+const FALLBACK_URL = 'https://utsvlihpudfraxzcmtle.supabase.co';
+const FALLBACK_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0c3ZsaWhwdWRmcmF4emNtdGxlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5MTYzMzIsImV4cCI6MjA3OTQ5MjMzMn0.wPONqSZvgQQyrssA4wTbBfaUJO5HrV_XtA2AD7PaweA';
+
+process.env.VITE_SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || FALLBACK_URL;
+process.env.VITE_SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || FALLBACK_KEY;
 
 let PowerSyncDatabase, Schema, Table, Column, ColumnType, BetterSQLite3DatabaseAdapter;
 
@@ -294,10 +295,14 @@ const schema = new Schema([
 
 class SupabaseConnector {
   constructor() {
-    this.client = createClient(
-      process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
+    const url = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!url || !key) {
+      console.error('[PowerSync] ERROR: Supabase URL or Key missing in process.env');
+    }
+
+    this.client = createClient(url || '', key || '');
   }
 
   async fetchCredentials() {

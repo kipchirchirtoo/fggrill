@@ -30,8 +30,7 @@
       "output": "dist-electron"
     },
     "files": [
-      "electron/**/*",
-      ".env"
+      "electron/**/*"
     ],
     "extraResources": [
       {
@@ -49,6 +48,10 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": ".env",
+        "to": "."
       }
     ],
     "publish": [
