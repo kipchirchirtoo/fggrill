@@ -54,7 +54,9 @@ const TERMINAL_PATH = '/terminal';
 const CACHE_DIR = path.join(app.getPath('userData'), 'page-cache');
 const DB_PATH = path.join(app.getPath('userData'), 'pos.db');
 const LOG_PATH = path.join(app.getPath('userData'), 'app.log');
-const FRONTEND_OUT_PATH = path.join(__dirname, '../frontend/out');
+const FRONTEND_OUT_PATH = app.isPackaged
+    ? path.join(process.resourcesPath, 'frontend')
+    : path.join(__dirname, '../frontend/out');
 console.log('[Main] FRONTEND_OUT_PATH:', FRONTEND_OUT_PATH);
 
 // ──────────────────────────────────────────
@@ -672,18 +674,12 @@ function createWindow() {
     const startUrl = DOMAIN_URL + TERMINAL_PATH;
 
     const loadApp = async () => {
-        const online = await updateOnlineStatus();
+        // ALWAYS try to load local UI first for true offline experience
+        console.log('[App] Loading local offline UI...');
+        loadOfflinePage();
 
-        if (online) {
-            console.log('[App] Online — loading from domain:', startUrl);
-            mainWindow.loadURL(startUrl).catch(err => {
-                console.error('[App] Failed to load domain, showing offline page:', err.message);
-                loadOfflinePage();
-            });
-        } else {
-            console.log('[App] Offline — loading cached/offline page');
-            loadOfflinePage();
-        }
+        // Update online status in background
+        updateOnlineStatus();
     };
 
     loadApp();
