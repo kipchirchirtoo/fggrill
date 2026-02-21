@@ -9,7 +9,7 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { storeAPI, auditAPI, auditorReportsAPI } from '@/lib/api';
-import { Utensils, RefreshCw, Plus, Package, Calendar, FileDown, Activity, AlertTriangle, Users, Check } from 'lucide-react';
+import { Utensils, RefreshCw, Plus, Package, Calendar, FileDown, Activity, AlertTriangle, Users, Check, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface KitchenUsage { id: string; item_sku: string; item_name: string; quantity: number; usage_date: string; recorded_by: string; recorded_by_name: string; status: string; audited_at?: string; auditor_id?: string; audit_notes?: string; }

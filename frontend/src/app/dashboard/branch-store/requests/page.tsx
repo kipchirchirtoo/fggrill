@@ -6,8 +6,8 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { storeAPI, auditorReportsAPI } from '@/lib/api';
-import { ClipboardList, RefreshCw, Plus, Package, Search, AlertCircle, Clock, FileDown, Activity, AlertTriangle } from 'lucide-react';
+import { storeAPI, auditorReportsAPI, auditAPI } from '@/lib/api';
+import { ClipboardList, RefreshCw, Plus, Package, Search, AlertCircle, Clock, FileDown, Activity, AlertTriangle, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -496,13 +496,13 @@ export default function BranchRequestsPage() {
                                 )}
                             </div>
 
-                            {user?.role === UserRole.AUDITOR && !(selectedRequest as any).audited_at && (
+                            {user?.role === UserRole.AUDITOR && selectedRequest && !(selectedRequest as any).audited_at && (
                                 <IOSButton variant="destructive" onClick={() => handleFlagAnomaly(selectedRequest!)} leftIcon={<AlertTriangle />} className="w-full">
                                     Flag Anomaly
                                 </IOSButton>
                             )}
 
-                            {user?.role === UserRole.AUDITOR && (selectedRequest as any).audited_at && (
+                            {user?.role === UserRole.AUDITOR && selectedRequest && (selectedRequest as any).audited_at && (
                                 <div className="pt-2 italic text-[10px] text-stone-500">
                                     Verified on {new Date((selectedRequest as any).audited_at).toLocaleDateString()} {new Date((selectedRequest as any).audited_at).toLocaleTimeString()}.
                                 </div>
