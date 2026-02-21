@@ -17,7 +17,7 @@ import {
   UserCheck, Utensils, Wine, Receipt, CreditCard, PieChart, FileText,
   BookOpen, ChefHat, ShoppingCart, Wallet, Scale, AlertCircle, UtensilsCrossed, Trash2, Clock, Shield, Menu, X,
   Apple, Beer, Pencil, Database, User, ArrowDownLeft, ArrowUpRight, RefreshCw, ArrowRight, Calculator, Search,
-  LayoutDashboard
+  SlidersHorizontal, LayoutDashboard
 } from 'lucide-react';
 
 interface NavItemProps {
@@ -284,6 +284,12 @@ export function ConsolidatedNav() {
         icon={Beer}
         label="Bar Menu"
         active={pathname === '/dashboard/admin/bar/menu'}
+      />
+      <NavItem
+        href="/dashboard/admin/kyogong/services"
+        icon={SlidersHorizontal}
+        label="Kyogong Services"
+        active={pathname === '/dashboard/admin/kyogong/services'}
       />
       <NavItem
         href="/dashboard/admin/wastage"
@@ -1310,6 +1316,24 @@ export function ConsolidatedNav() {
     </>
   );
 
+  // Kyogong POS Navigation
+  const kyogongNav = (posLabel: string, posPath: string) => (
+    <>
+      <NavItem
+        href={posPath}
+        icon={ShoppingCart}
+        label={posLabel}
+        active={pathname === posPath}
+      />
+      <NavItem
+        href="/dashboard/cashier"
+        icon={CreditCard}
+        label="Cashier Station"
+        active={pathname === '/dashboard/cashier'}
+      />
+    </>
+  );
+
   // Determine which navigation to render based on user role
   const renderNavigation = () => {
     if (user.role === UserRole.SUPER_ADMIN) {
@@ -1473,6 +1497,20 @@ export function ConsolidatedNav() {
     }
     if (user.role === UserRole.HR_MANAGER) {
       return hrNav;
+    }
+
+    // Kyogong Cashier Roles
+    if (user.role === UserRole.KYOGONG_SPA_CASHIER) {
+      return kyogongNav('Spa POS', '/dashboard/kyogong/spa');
+    }
+    if (user.role === UserRole.KYOGONG_SPORTS_BAR_CASHIER) {
+      return kyogongNav('Sports Bar POS', '/dashboard/kyogong/sports-bar');
+    }
+    if (user.role === UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER) {
+      return kyogongNav('Exec Bar POS', '/dashboard/kyogong/executive-bar');
+    }
+    if (user.role === UserRole.KYOGONG_RECEPTION_CASHIER) {
+      return kyogongNav('Reception POS', '/dashboard/kyogong/reception');
     }
 
     return null;

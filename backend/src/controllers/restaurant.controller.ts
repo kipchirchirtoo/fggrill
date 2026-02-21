@@ -141,7 +141,7 @@ export const createMenuItem = async (
         description,
         price,
         image_url: imageUrl,
-        preparation_time: preparationTime,
+        preparation_time: preparationTime || 15, // Default to 15 minutes if not provided
         is_vegetarian: isVegetarian ?? false,
         is_spicy: isSpicy ?? false,
         allergens,
@@ -562,6 +562,114 @@ export const updateOrderStatus = async (
       success: true,
       data: updatedOrder
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Add items to existing order
+// @route   POST /api/restaurant/orders/:id/items
+// @access  Private (Restaurant Staff)
+export const addItemsToOrder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { items } = req.body;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: 'No items provided'
+      });
+      return;
+    }
+
+    // Get current order
+    const { data: order, error: getError } = await supabase
+      .from('restaurant_orders')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (getError || !order) {
+      res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+      return;
+    }
+
+    if (order.status === 'completed' || order.status === 'cancelled' || order.status === 'paid') {
+      res.status(400).json({
+        success: false,
+        message: 'Cannot add items to a completed, cancelled, or paid order'
+      });
+      return;
+    }
+
+    // Create new order items
+    const newItems = items.map((item: any) => ({
+      order_id: id,
+      menu_item_id: item.menu_item_id || item.id, // Support both formats
+      quantity: item.quantity,
+      unit_price: item.unit_price || item.price,
+      total_price: (item.quantity) * (item.unit_price || item.price),
+      special_instructions: item.notes || item.special_instructions
+    }));
+
+    const { error: insertError } = await supabase
+      .from('restaurant_order_items')
+      .insert(newItems);
+
+    if (insertError) {
+      throw insertError;
+    }
+
+    // Recalculate total amount for the order
+    // We could sum existing + new, but safest is to re-query all items
+    const { data: allItems, error: itemsError } = await supabase
+      .from('restaurant_order_items')
+      .select('total_price')
+      .eq('order_id', id);
+
+    if (itemsError) throw itemsError;
+
+    const newTotal = allItems.reduce((sum, item) => sum + item.total_price, 0);
+
+    // Update order total and updated_at
+    const { data: updatedOrder, error: updateError } = await supabase
+      .from('restaurant_orders')
+      .update({
+        total_amount: newTotal,
+        updated_at: new Date().toISOString(),
+        // Check if we need to revert status if it was ready?
+        // Usually adding items puts it back to preparing or pending if they need kitchen work.
+        // For now, let's set to 'preparing' if it was 'ready' or 'served', or keep 'pending'.
+        status: (order.status === 'ready' || order.status === 'served') ? 'preparing' : order.status
+      })
+      .eq('id', id)
+      .select(`
+        *,
+        items:restaurant_order_items(
+          *,
+          menu_item:restaurant_menu_items(*)
+        )
+      `)
+      .single();
+
+    if (updateError) throw updateError;
+
+    res.status(200).json({
+      success: true,
+      data: updatedOrder,
+      message: 'Items added to order successfully'
+    });
+
+    logger.info(`Items added to order ${order.order_number}`);
+
   } catch (error) {
     next(error);
   }

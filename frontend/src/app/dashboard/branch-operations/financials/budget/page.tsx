@@ -12,9 +12,9 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Button } from "@/components/ui/minimal/button";
-import { 
+import {
   Search, RefreshCw, CreditCard, PlusCircle, ChevronRight,
-  Filter, Calendar, Download, FileText, BarChart2, 
+  Filter, Calendar, Download, FileText, BarChart2,
   Wallet, TrendingUp, TrendingDown, ArrowUpDown, PieChart
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -48,19 +48,19 @@ function BranchBudgetPageContent() {
   const categoryOptions = Array.from(new Set(budgets.map(budget => budget.category)));
   const periodOptions = Array.from(new Set(budgets.map(budget => budget.period)));
   const fiscalYearOptions = Array.from(new Set(budgets.map(budget => budget.fiscal_year)));
-  
+
   // Fetch budgets from API
   const fetchBudgets = useCallback(async () => {
     if (!activeBranchId) return;
-    
+
     setIsLoading(true);
     try {
       const filters = {
         fiscal_year: fiscalYearFilter !== 'all' ? fiscalYearFilter : undefined
       };
-      
+
       const response = await budgetAPI.getBudgets(filters, activeBranchId);
-      
+
       if (response.success && Array.isArray(response.data)) {
         setBudgets(response.data);
       } else {
@@ -68,13 +68,13 @@ function BranchBudgetPageContent() {
         // Set empty array to avoid mapping errors
         setBudgets([]);
       }
-      
+
       // Fetch budget summary
       const summaryResponse = await budgetAPI.getBudgetSummary(
-        fiscalYearFilter !== 'all' ? fiscalYearFilter : undefined, 
+        fiscalYearFilter !== 'all' ? fiscalYearFilter : undefined,
         activeBranchId
       );
-      
+
       if (summaryResponse.success && summaryResponse.data) {
         setSummary(summaryResponse.data);
       }
@@ -91,52 +91,52 @@ function BranchBudgetPageContent() {
   // Apply filters to budgets
   useEffect(() => {
     let filtered = [...budgets];
-    
+
     // Apply search filter
     if (searchTerm) {
       const lowercaseSearch = searchTerm.toLowerCase();
-      filtered = filtered.filter(budget => 
-        budget.name.toLowerCase().includes(lowercaseSearch) || 
+      filtered = filtered.filter(budget =>
+        budget.name.toLowerCase().includes(lowercaseSearch) ||
         budget.category.toLowerCase().includes(lowercaseSearch)
       );
     }
-    
+
     // Apply category filter
     if (categoryFilter !== 'all') {
       filtered = filtered.filter(budget => budget.category === categoryFilter);
     }
-    
+
     // Apply period filter
     if (periodFilter !== 'all') {
       filtered = filtered.filter(budget => budget.period === periodFilter);
     }
-    
+
     // Apply sorting
     filtered.sort((a, b) => {
       if (sortField === 'name') {
-        return sortDirection === 'asc' 
+        return sortDirection === 'asc'
           ? a.name.localeCompare(b.name)
           : b.name.localeCompare(a.name);
       } else if (sortField === 'allocated_amount') {
-        return sortDirection === 'asc' 
+        return sortDirection === 'asc'
           ? a.allocated_amount - b.allocated_amount
           : b.allocated_amount - a.allocated_amount;
       } else if (sortField === 'spent_amount') {
-        return sortDirection === 'asc' 
+        return sortDirection === 'asc'
           ? (a.spent_amount || 0) - (b.spent_amount || 0)
           : (b.spent_amount || 0) - (a.spent_amount || 0);
       } else if (sortField === 'percentage_used') {
-        return sortDirection === 'asc' 
+        return sortDirection === 'asc'
           ? (a.percentage_used || 0) - (b.percentage_used || 0)
           : (b.percentage_used || 0) - (a.percentage_used || 0);
       } else if (sortField === 'created_at') {
-        return sortDirection === 'asc' 
+        return sortDirection === 'asc'
           ? new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
           : new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       }
       return 0;
     });
-    
+
     setFilteredBudgets(filtered);
   }, [budgets, searchTerm, categoryFilter, periodFilter, sortField, sortDirection]);
 
@@ -169,7 +169,7 @@ function BranchBudgetPageContent() {
   // Get status badge for budget
   const getBudgetStatusBadge = (budget: Budget) => {
     const percentage = budget.percentage_used || 0;
-    
+
     if (percentage > 100) {
       return <IOSBadge className="bg-red-100 text-red-700">Over Budget</IOSBadge>;
     } else if (percentage > 90) {
@@ -216,14 +216,15 @@ function BranchBudgetPageContent() {
       UserRole.FINANCE,
       UserRole.ACCOUNTANT,
       UserRole.SUPER_ADMIN,
-      UserRole.GENERAL_MANAGER
+      UserRole.GENERAL_MANAGER,
+      UserRole.AUDITOR
     ]}>
       <BranchAwareDashboardLayout
         title="Budget Management"
         subtitle={`Manage and track budgets for ${activeBranch?.name || 'your branch'}`}
         actionButton={
-          <IOSButton 
-            onClick={() => setShowAddBudgetDialog(true)} 
+          <IOSButton
+            onClick={() => setShowAddBudgetDialog(true)}
             leftIcon={<PlusCircle />}
           >
             New Budget
@@ -242,7 +243,7 @@ function BranchBudgetPageContent() {
                 <Wallet className="h-5 w-5 text-[#007AFF]" />
               </div>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <div className="flex justify-between items-start">
                 <div>
@@ -259,18 +260,17 @@ function BranchBudgetPageContent() {
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-1.5">
-                  <div 
-                    className={`h-1.5 rounded-full ${
-                      usagePercentage > 100 ? 'bg-[#FF3B30]' : 
-                      usagePercentage > 90 ? 'bg-[#FF9500]' : 
-                      'bg-[#34C759]'
-                    }`}
+                  <div
+                    className={`h-1.5 rounded-full ${usagePercentage > 100 ? 'bg-[#FF3B30]' :
+                      usagePercentage > 90 ? 'bg-[#FF9500]' :
+                        'bg-[#34C759]'
+                      }`}
                     style={{ width: `${Math.min(usagePercentage, 100)}%` }}
                   ></div>
                 </div>
               </div>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <div className="flex justify-between items-start">
                 <div>
@@ -282,7 +282,7 @@ function BranchBudgetPageContent() {
                 <TrendingUp className={`h-5 w-5 ${totalRemaining < 0 ? 'text-[#FF3B30]' : 'text-[#34C759]'}`} />
               </div>
             </IOSCard>
-            
+
             <IOSCard className="p-4">
               <div className="flex justify-between">
                 <div>
@@ -296,7 +296,7 @@ function BranchBudgetPageContent() {
               </div>
             </IOSCard>
           </div>
-          
+
           {/* Category Breakdown */}
           {summary?.category_breakdown && summary.category_breakdown.length > 0 && (
             <IOSCard className="p-4">
@@ -311,13 +311,12 @@ function BranchBudgetPageContent() {
                       </span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2.5">
-                      <div 
-                        className={`h-2.5 rounded-full ${
-                          category.percentage > 100 ? 'bg-red-600' : 
-                          category.percentage > 90 ? 'bg-yellow-600' : 
-                          category.percentage > 70 ? 'bg-blue-600' :
-                          'bg-green-600'
-                        }`}
+                      <div
+                        className={`h-2.5 rounded-full ${category.percentage > 100 ? 'bg-red-600' :
+                          category.percentage > 90 ? 'bg-yellow-600' :
+                            category.percentage > 70 ? 'bg-blue-600' :
+                              'bg-green-600'
+                          }`}
                         style={{ width: `${Math.min(100, category.percentage)}%` }}
                       ></div>
                     </div>
@@ -338,7 +337,7 @@ function BranchBudgetPageContent() {
               <TabsTrigger value="analytics">Analytics</TabsTrigger>
               <TabsTrigger value="forecast">Forecasts</TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="budgets">
               {/* Search and Filter */}
               <IOSCard className="p-4 mb-4">
@@ -352,7 +351,7 @@ function BranchBudgetPageContent() {
                       className="pl-9"
                     />
                   </div>
-                  
+
                   <div>
                     <select
                       value={categoryFilter}
@@ -367,7 +366,7 @@ function BranchBudgetPageContent() {
                       ))}
                     </select>
                   </div>
-                  
+
                   <div>
                     <select
                       value={periodFilter}
@@ -382,18 +381,18 @@ function BranchBudgetPageContent() {
                       ))}
                     </select>
                   </div>
-                  
+
                   <div className="flex gap-2">
-                    <IOSButton 
-                      onClick={fetchBudgets} 
+                    <IOSButton
+                      onClick={fetchBudgets}
                       leftIcon={<RefreshCw />}
                       variant="secondary"
                       className="flex-1"
                     >
                       Refresh
                     </IOSButton>
-                    
-                    <IOSButton 
+
+                    <IOSButton
                       variant="outline"
                       leftIcon={<Download />}
                       className="flex-1"
@@ -410,7 +409,7 @@ function BranchBudgetPageContent() {
                   <table className="w-full">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th 
+                        <th
                           className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('name')}
                         >
@@ -427,7 +426,7 @@ function BranchBudgetPageContent() {
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Period
                         </th>
-                        <th 
+                        <th
                           className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('allocated_amount')}
                         >
@@ -438,7 +437,7 @@ function BranchBudgetPageContent() {
                             )}
                           </div>
                         </th>
-                        <th 
+                        <th
                           className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('spent_amount')}
                         >
@@ -449,7 +448,7 @@ function BranchBudgetPageContent() {
                             )}
                           </div>
                         </th>
-                        <th 
+                        <th
                           className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('percentage_used')}
                         >
@@ -482,9 +481,9 @@ function BranchBudgetPageContent() {
                             <div className="flex flex-col items-center">
                               <CreditCard className="h-12 w-12 text-gray-300 mb-2" />
                               <p className="text-gray-500">No budget records found</p>
-                              <IOSButton 
-                                variant="outline" 
-                                className="mt-4" 
+                              <IOSButton
+                                variant="outline"
+                                className="mt-4"
                                 onClick={() => setShowAddBudgetDialog(true)}
                                 leftIcon={<PlusCircle className="h-4 w-4" />}
                               >
@@ -498,7 +497,7 @@ function BranchBudgetPageContent() {
                           // Calculate percentage safely
                           const percentage = budget.percentage_used || 0;
                           const remaining = (budget.allocated_amount || 0) - (budget.spent_amount || 0);
-                          
+
                           return (
                             <tr key={budget.id} className="hover:bg-gray-50">
                               <td className="px-4 py-4">
@@ -527,13 +526,12 @@ function BranchBudgetPageContent() {
                                     {percentage.toFixed(1)}%
                                   </span>
                                   <div className="w-16 bg-gray-200 rounded-full h-1.5 mt-1">
-                                    <div 
-                                      className={`h-1.5 rounded-full ${
-                                        percentage > 100 ? 'bg-red-600' : 
-                                        percentage > 90 ? 'bg-yellow-600' : 
-                                        percentage > 70 ? 'bg-blue-600' :
-                                        'bg-green-600'
-                                      }`}
+                                    <div
+                                      className={`h-1.5 rounded-full ${percentage > 100 ? 'bg-red-600' :
+                                        percentage > 90 ? 'bg-yellow-600' :
+                                          percentage > 70 ? 'bg-blue-600' :
+                                            'bg-green-600'
+                                        }`}
                                       style={{ width: `${Math.min(100, percentage)}%` }}
                                     ></div>
                                   </div>
@@ -543,8 +541,8 @@ function BranchBudgetPageContent() {
                                 {getBudgetStatusBadge(budget)}
                               </td>
                               <td className="px-4 py-4 text-right whitespace-nowrap">
-                                <IOSButton 
-                                  size="sm" 
+                                <IOSButton
+                                  size="sm"
                                   variant="ghost"
                                   className="text-gray-500 hover:text-gray-700"
                                   onClick={() => handleViewBudget(budget)}
@@ -562,14 +560,14 @@ function BranchBudgetPageContent() {
                 </div>
               </IOSCard>
             </TabsContent>
-            
+
             <TabsContent value="analytics">
-              <BudgetAnalyticsTab 
+              <BudgetAnalyticsTab
                 branchId={activeBranchId}
                 fiscalYear={fiscalYearFilter}
               />
             </TabsContent>
-            
+
             <TabsContent value="forecast">
               <BudgetForecastTab
                 branchId={activeBranchId}
@@ -578,7 +576,7 @@ function BranchBudgetPageContent() {
           </Tabs>
         </div>
       </BranchAwareDashboardLayout>
-      
+
       {/* Budget Form Dialog */}
       <BudgetFormDialog
         open={showAddBudgetDialog}
@@ -586,7 +584,7 @@ function BranchBudgetPageContent() {
         branchId={activeBranchId}
         onSuccess={handleBudgetCreated}
       />
-      
+
       {/* Budget Detail Dialog */}
       {selectedBudget && (
         <BudgetDetailDialog

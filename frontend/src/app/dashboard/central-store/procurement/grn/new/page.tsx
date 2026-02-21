@@ -129,7 +129,7 @@ export default function NewGRNPage() {
     );
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN]}>
+        <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]}>
             <DashboardLayout>
                 <div className="max-w-5xl mx-auto space-y-6">
                     <div className="flex items-center gap-4">

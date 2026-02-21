@@ -5,6 +5,12 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { AttendanceService } from '../services/attendance.service';
 
+// Helper to sanitize UUID fields that might come as "null" string from frontend
+const sanitizeUUID = (val: any) => {
+  if (val === 'null' || val === '' || val === 'undefined' || val === null) return null;
+  return val;
+};
+
 // Staff ID generation utility
 const generateStaffId = async (branchId: number | string | null, role: string): Promise<string> => {
   try {
@@ -166,7 +172,9 @@ export const getStaff = async (
       email: s.email || s.user?.email || '',
       phone_number: s.phone || s.user?.phone_number || '',
       avatar: s.user?.avatar || '',
-      profile_photo: s.user?.avatar || s.profile_photo
+      profile_photo: s.user?.avatar || s.profile_photo,
+      employee_id: s.id_number || s.employee_id || s.id.substring(0, 8).toUpperCase(),
+      id_number: s.id_number || s.employee_id || s.id.substring(0, 8).toUpperCase()
     }));
 
     res.status(200).json({
@@ -265,7 +273,9 @@ export const getStaffMember = async (
         email: staff.email || staff.user?.email || '',
         phone_number: staff.phone || staff.user?.phone_number || '',
         avatar: staff.user?.avatar || '',
-        profile_photo: staff.user?.avatar || staff.profile_photo
+        profile_photo: staff.user?.avatar || staff.profile_photo,
+        employee_id: staff.id_number || staff.employee_id || staff.id.substring(0, 8).toUpperCase(),
+        id_number: staff.id_number || staff.employee_id || staff.id.substring(0, 8).toUpperCase()
       }
     });
   } catch (error: any) {
@@ -395,7 +405,7 @@ export const createStaffMember = async (
       next_of_kin_name: next_of_kin_name || null,
       next_of_kin_phone: next_of_kin_phone || null,
       next_of_kin_relationship: next_of_kin_relationship || null,
-      supervisor_id: supervisor_id || null,
+      supervisor_id: sanitizeUUID(supervisor_id),
       updated_at: new Date().toISOString()
     };
 
@@ -472,6 +482,7 @@ export const updateStaffMember = async (
     } = req.body;
 
     logger.debug('Update staff request:', { id: req.params.id, body: req.body });
+    console.log('DEBUG: Update staff request body:', JSON.stringify(req.body, null, 2));
 
     // Get staff profile
     const { data: staff, error: getError } = await supabase
@@ -501,26 +512,29 @@ export const updateStaffMember = async (
       currentEmail = userData?.email;
     }
 
-    // Update user profile in users table
-    const userUpdateData: any = {
-      first_name,
-      last_name,
-      phone_number,
-      updated_at: new Date().toISOString()
-    };
+    // Update user profile in users table ONLY if user_id is a valid UUID
+    const sanitizedUserId = sanitizeUUID(staff.user_id);
+    if (sanitizedUserId) {
+      const userUpdateData: any = {
+        updated_at: new Date().toISOString()
+      };
 
-    if (role) userUpdateData.role = role;
-    if (department) userUpdateData.department = department;
-    if (email) userUpdateData.email = email;
+      if (first_name !== undefined) userUpdateData.first_name = first_name;
+      if (last_name !== undefined) userUpdateData.last_name = last_name;
+      if (phone_number !== undefined) userUpdateData.phone_number = phone_number;
+      if (role !== undefined) userUpdateData.role = role;
+      if (department !== undefined) userUpdateData.department = department;
+      if (email !== undefined) userUpdateData.email = email;
 
-    const { error: userError } = await supabase
-      .from('users')
-      .update(userUpdateData)
-      .eq('id', staff.user_id);
+      const { error: userError } = await supabase
+        .from('users')
+        .update(userUpdateData)
+        .eq('id', sanitizedUserId);
 
-    if (userError) {
-      logger.error('Error updating user profile:', userError);
-      throw userError;
+      if (userError) {
+        logger.error('Error updating user profile:', userError);
+        throw userError;
+      }
     }
 
     // Update email in Supabase Auth if changed and user exists
@@ -575,7 +589,7 @@ export const updateStaffMember = async (
     if (next_of_kin_name !== undefined) staffUpdateData.next_of_kin_name = next_of_kin_name;
     if (next_of_kin_phone !== undefined) staffUpdateData.next_of_kin_phone = next_of_kin_phone;
     if (next_of_kin_relationship !== undefined) staffUpdateData.next_of_kin_relationship = next_of_kin_relationship;
-    if (supervisor_id !== undefined) staffUpdateData.supervisor_id = supervisor_id;
+    if (supervisor_id !== undefined) staffUpdateData.supervisor_id = sanitizeUUID(supervisor_id);
     if (archive_notes !== undefined) staffUpdateData.archive_notes = archive_notes;
 
     // Sync contact fields to staff_profiles (decoupled architecture support)
@@ -602,9 +616,9 @@ export const updateStaffMember = async (
       historyEntries.push({
         staff_id: req.params.id,
         change_type: 'salary_adjustment',
-        old_value: staff.basic_salary.toString(),
+        old_value: staff.basic_salary?.toString() || '0',
         new_value: basic_salary.toString(),
-        created_by: req.user?.id,
+        created_by: sanitizeUUID(req.user?.id),
         notes: 'Manual adjustment'
       });
     }
@@ -614,7 +628,7 @@ export const updateStaffMember = async (
         change_type: 'role_change',
         old_value: staff.role,
         new_value: role,
-        created_by: req.user?.id
+        created_by: sanitizeUUID(req.user?.id)
       });
     }
     if (department !== undefined && staff.department !== department) {
@@ -623,7 +637,7 @@ export const updateStaffMember = async (
         change_type: 'department_transfer',
         old_value: staff.department,
         new_value: department,
-        created_by: req.user?.id
+        created_by: sanitizeUUID(req.user?.id)
       });
     }
     if (status !== undefined && staff.status !== status) {
@@ -632,7 +646,7 @@ export const updateStaffMember = async (
         change_type: 'status_change',
         old_value: staff.status,
         new_value: status,
-        created_by: req.user?.id,
+        created_by: sanitizeUUID(req.user?.id),
         notes: archive_notes
       });
     }
@@ -700,7 +714,7 @@ export const archiveStaff = async (
       old_value: staff.status,
       new_value: 'terminated',
       notes,
-      created_by: req.user?.id
+      created_by: sanitizeUUID(req.user?.id)
     }]);
 
     res.status(200).json({
@@ -864,7 +878,7 @@ export const submitPerformanceReview = async (
       .insert([
         {
           staff_id: staffId,
-          reviewer_id: req.user?.id,
+          reviewer_id: sanitizeUUID(req.user?.id),
           review_period_month: month,
           review_period_year: year,
           rating,

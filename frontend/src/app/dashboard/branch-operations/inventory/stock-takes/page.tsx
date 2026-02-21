@@ -205,6 +205,7 @@ export default function BranchStockTakesPage() {
         UserRole.BRANCH_MANAGER,
         UserRole.BRANCH_OPERATIONS_MANAGER,
         UserRole.BRANCH_STOREKEEPER,
+        UserRole.AUDITOR,
       ]}
     >
       <BranchPageWrapper>

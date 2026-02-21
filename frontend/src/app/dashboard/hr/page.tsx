@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { BranchSelector } from '@/components/dashboard/BranchSelector';
 import { staffAPI, payrollAPI } from '@/lib/api';
 import {
     Users,
@@ -16,7 +18,8 @@ import {
     Clock,
     ChevronRight,
     TrendingUp,
-    AlertCircle
+    AlertCircle,
+    Building2
 } from 'lucide-react';
 import Link from 'next/link';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -24,6 +27,7 @@ import { IOSCard } from '@/components/ui/ios-card';
 
 export default function HRDashboard() {
     const { user } = useAuth();
+    const { activeBranchId, activeBranch, userBranches } = useBranch();
     const [stats, setStats] = useState({
         totalStaff: 0,
         totalPayroll: 0,
@@ -36,11 +40,15 @@ export default function HRDashboard() {
         setIsLoading(true);
         try {
             const today = new Date().toISOString().split('T')[0];
+            
+            // Build params with branch filter if a specific branch is selected
+            const branchParam = activeBranchId ? { branch_id: activeBranchId } : {};
+            
             const [staffRes, payrollRes, leaveRes, attendanceRes] = await Promise.allSettled([
-                staffAPI.getStaff(),
-                payrollAPI.getSummary(),
-                staffAPI.getLeaveRequests({ status: 'pending' }),
-                staffAPI.getAttendance({ date: today })
+                staffAPI.getStaff(branchParam),
+                payrollAPI.getSummary(branchParam),
+                staffAPI.getLeaveRequests({ status: 'pending', ...branchParam }),
+                staffAPI.getAttendance({ date: today, ...branchParam })
             ]);
 
             setStats({
@@ -54,7 +62,7 @@ export default function HRDashboard() {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [activeBranchId]);
 
     useEffect(() => {
         fetchData();
@@ -120,15 +128,29 @@ export default function HRDashboard() {
                         <div>
                             <h1 className="text-[28px] font-bold text-stone-900 tracking-tight font-sf-pro-display">HR Command</h1>
                             <p className="text-stone-500">Personnel management and payroll oversight</p>
+                            {activeBranch && (
+                                <div className="flex items-center gap-2 mt-2 text-sm text-stone-600">
+                                    <Building2 className="h-4 w-4" />
+                                    <span className="font-medium">{activeBranch.name}</span>
+                                </div>
+                            )}
                         </div>
-                        <button
-                            onClick={fetchData}
-                            disabled={isLoading}
-                            className="px-4 py-2 rounded-full bg-white border border-stone-200 text-stone-600 text-sm font-medium hover:bg-stone-50 transition-all flex items-center gap-2 shadow-sm active:scale-95"
-                        >
-                            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                            <span>Refresh Personnel Data</span>
-                        </button>
+                        <div className="flex items-center gap-3">
+                            {userBranches.length > 1 && (
+                                <BranchSelector 
+                                    showLabel={false}
+                                    className="min-w-[200px]"
+                                />
+                            )}
+                            <button
+                                onClick={fetchData}
+                                disabled={isLoading}
+                                className="px-4 py-2 rounded-full bg-white border border-stone-200 text-stone-600 text-sm font-medium hover:bg-stone-50 transition-all flex items-center gap-2 shadow-sm active:scale-95"
+                            >
+                                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                                <span>Refresh</span>
+                            </button>
+                        </div>
                     </div>
 
                     {/* Stats Grid */}

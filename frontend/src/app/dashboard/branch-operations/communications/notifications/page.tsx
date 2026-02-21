@@ -12,7 +12,7 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
-import { 
+import {
   Search, RefreshCw, Bell, CheckCircle2, Filter, Trash2,
   ArrowRightCircle, ArrowDownUp, Info, ShieldAlert, CheckCheck
 } from 'lucide-react';
@@ -59,7 +59,7 @@ function BranchNotificationsContent() {
     try {
       // Call the real API
       const response = await branchOperationsAPI.getNotifications(activeBranchId);
-      
+
       if (response.success && Array.isArray(response.data)) {
         setNotifications(response.data);
       }
@@ -74,7 +74,7 @@ function BranchNotificationsContent() {
   const applyFilters = () => {
     let filtered = [...notifications];
     if (searchTerm) {
-      filtered = filtered.filter(n => 
+      filtered = filtered.filter(n =>
         n.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         n.content.toLowerCase().includes(searchTerm.toLowerCase())
       );
@@ -100,7 +100,7 @@ function BranchNotificationsContent() {
   };
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
+    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]}>
       <BranchAwareDashboardLayout
         title="Notifications"
         subtitle={`System notifications for ${activeBranch?.name || 'your branch'}`}

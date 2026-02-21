@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute as RouteGuard } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Button } from "@/components/ui/minimal/button";
@@ -73,6 +74,7 @@ interface IncomingDispatch {
 
 export default function BranchStorekeeperPage() {
   const { user, isLoading: authLoading } = useAuth();
+  const { activeBranchId } = useBranch();
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -152,18 +154,18 @@ export default function BranchStorekeeperPage() {
     if (!authLoading && user) {
       fetchDashboardData();
     }
-  }, [authLoading, user]);
+  }, [authLoading, user, activeBranchId]);
 
   const fetchDashboardData = async () => {
     setIsLoading(true);
     try {
       // Use storeAPI instead of raw fetch
       const [stockData, requestsData, incomingData, catalogData, movementsData] = await Promise.all([
-        storeAPI.getBranchStock(),
-        storeAPI.getBranchRequests(),
-        storeAPI.getIncomingDispatches(),
+        storeAPI.getBranchStock(activeBranchId || undefined),
+        storeAPI.getBranchRequests(undefined, activeBranchId || undefined),
+        storeAPI.getIncomingDispatches(activeBranchId || undefined),
         storeAPI.getMasterCatalog(),
-        storeAPI.getStockMovements().catch(() => ({ data: [] }))
+        storeAPI.getStockMovements({ branch_id: activeBranchId || undefined }).catch(() => ({ data: [] }))
       ]);
 
       setBranchStock(stockData.data || []);
@@ -398,7 +400,7 @@ export default function BranchStorekeeperPage() {
 
   if (isLoading) {
     return (
-      <RouteGuard allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.RESTAURANT, UserRole.HOUSEKEEPING]}>
+      <RouteGuard allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.RESTAURANT, UserRole.HOUSEKEEPING, UserRole.AUDITOR]}>
         <DashboardLayout>
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
@@ -419,7 +421,8 @@ export default function BranchStorekeeperPage() {
         UserRole.CENTRAL_STOREKEEPER,
         UserRole.BRANCH_STOREKEEPER,
         UserRole.RESTAURANT,
-        UserRole.HOUSEKEEPING
+        UserRole.HOUSEKEEPING,
+        UserRole.AUDITOR
       ]}
     >
       <DashboardLayout>

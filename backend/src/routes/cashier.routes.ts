@@ -56,11 +56,18 @@ router.use((req: any, res, next) => {
         'waiter',
         'restaurant_manager',
         'auditor',
-        'general_manager'
+        'general_manager',
+        'kyogong_spa_cashier',
+        'kyogong_executive_bar_cashier',
+        'kyogong_sports_bar_cashier',
+        'kyogong_reception_cashier'
     ];
-    if (allowedRoles.includes(req.user.role)) {
+    const userRole = req.user?.role?.toString().toLowerCase();
+    if (userRole && allowedRoles.includes(userRole)) {
         return next();
     }
+
+    logger.warn(`Forbidden: Cashier access denied for user ${req.user?.id} with role ${req.user?.role}`);
     res.status(403).json({ message: 'Forbidden: Cashier access required' });
 });
 

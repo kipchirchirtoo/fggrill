@@ -299,7 +299,7 @@ function CashierPageContent() {
 
         setIsProcessing(true);
         try {
-            const identifier = (billData.type === 'restaurant' || billData.type === 'bar') ? billData.order.order_number : (billData.type === 'invoice' ? billData.invoice.invoice_number : billData.booking.id);
+            const identifier = (billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'kyogong') ? billData.order.order_number : (billData.type === 'invoice' ? billData.invoice.invoice_number : billData.booking.id);
             const methodKey = paymentMethod === 'mpesa' ? 'mpesa_manual' : (paymentMethod === 'card' ? 'card_manual' : 'cash');
 
             const response = await fetchAPI('/cashier/pay', {
@@ -332,7 +332,7 @@ function CashierPageContent() {
                 // Add to local history
                 const newTxn = {
                     id: response.data.id,
-                    customerName: billData.type === 'invoice' ? billData.invoice.customer_name : ((billData.type === 'restaurant' || billData.type === 'bar') ? billData.order.guest_name : billData.booking.guest_name),
+                    customerName: billData.type === 'invoice' ? billData.invoice.customer_name : ((billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'kyogong') ? billData.order.guest_name : billData.booking.guest_name),
                     billNo: identifier,
                     amount: amount,
                     paymentMethod: paymentMethod,
@@ -441,7 +441,7 @@ function CashierPageContent() {
         }
         setIsProcessing(true);
         try {
-            const identifier = (billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos') ? billData.order.order_number : (billData.type === 'invoice' ? billData.invoice.invoice_number : billData.booking.id);
+            const identifier = (billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos' || billData.type === 'kyogong') ? billData.order.order_number : (billData.type === 'invoice' ? billData.invoice.invoice_number : billData.booking.id);
             // Correct path: /payments/mpesa/...
             const response = await fetchAPI('/payments/mpesa/initiate', {
                 method: 'POST',
@@ -531,10 +531,10 @@ function CashierPageContent() {
                             total_amount: total,
                             mpesa_code: mpesaCode,
                             businessInfo: {
-                                name: 'FAMOUS GATE HOTEL',
-                                address: 'Kericho, Kenya',
-                                phone: '+254 700 000 000',
-                                email: 'info@famousgate.co.ke'
+                                name: 'Famous Gates Hotels',
+                                address: 'Bomet, Kenya',
+                                phone: '0706782828',
+                                email: 'famousgatesbmt@gmail.com'
                             }
                         });
                         setShowReceipt(true);
@@ -812,7 +812,11 @@ function CashierPageContent() {
             UserRole.SUPER_ADMIN,
             UserRole.ACCOUNTANT,
             UserRole.BRANCH_ACCOUNTANT,
-            UserRole.RECEPTIONIST
+            UserRole.RECEPTIONIST,
+            UserRole.KYOGONG_SPA_CASHIER,
+            UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
+            UserRole.KYOGONG_SPORTS_BAR_CASHIER,
+            UserRole.KYOGONG_RECEPTION_CASHIER
         ]}>
             <DashboardLayout>
                 {showReceipt && selectedTransaction && (
@@ -1139,7 +1143,7 @@ function CashierPageContent() {
                                                     <div>
                                                         <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">Bill Number</p>
                                                         <p className="font-bold text-stone-900">
-                                                            {(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos')
+                                                            {(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos' || billData.type === 'kyogong')
                                                                 ? billData.order.order_number
                                                                 : (billData.type === 'invoice' ? billData.invoice.invoice_number : billData.booking.id.slice(0, 8))}
                                                         </p>
@@ -1147,7 +1151,7 @@ function CashierPageContent() {
                                                     <div>
                                                         <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">Customer</p>
                                                         <p className="font-bold text-stone-900">
-                                                            {(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos')
+                                                            {(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos' || billData.type === 'kyogong')
                                                                 ? billData.order.guest_name
                                                                 : (billData.type === 'invoice' ? billData.invoice.customer_name : billData.booking.guest_name)}
                                                         </p>
@@ -1158,10 +1162,10 @@ function CashierPageContent() {
                                                     </div>
                                                     <div>
                                                         <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">
-                                                            {billData.type === 'hotel' ? 'Room' : (billData.type === 'pos' ? 'Source' : (billData.type === 'invoice' ? 'Reference' : 'Table'))}
+                                                            {billData.type === 'hotel' ? 'Room' : (billData.type === 'pos' ? 'Source' : (billData.type === 'invoice' ? 'Reference' : (billData.type === 'kyogong' ? 'Service' : 'Table')))}
                                                         </p>
                                                         <p className="font-bold text-stone-900">
-                                                            {billData.type === 'hotel' ? billData.booking.room_number : (billData.type === 'pos' ? 'POS Terminal' : (billData.type === 'invoice' ? 'AR Invoice' : (billData.order.table_number || 'N/A')))}
+                                                            {billData.type === 'hotel' ? billData.booking.room_number : (billData.type === 'pos' ? 'POS Terminal' : (billData.type === 'invoice' ? 'AR Invoice' : (billData.type === 'kyogong' ? (billData.order.service_category || 'Kyogong') : (billData.order.table_number || 'N/A'))))}
                                                         </p>
                                                     </div>
                                                     {billData.type === 'invoice' && (
@@ -1183,13 +1187,13 @@ function CashierPageContent() {
                                                         </>
                                                     )}
                                                 </div>
-                                                {(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos' || billData.type === 'invoice') && (
+                                                {(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos' || billData.type === 'invoice' || billData.type === 'kyogong') && (
                                                     <div className="mb-8">
                                                         <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight mb-3">
                                                             {billData.type === 'invoice' ? 'Invoice Items' : 'Order Items'}
                                                         </p>
                                                         <div className="bg-stone-50 rounded-xl p-4 space-y-2 border border-stone-100">
-                                                            {(billData.type === 'invoice' ? billData.invoice.items : billData.order.items).map((item: any, idx: number) => (
+                                                            {(billData.type === 'invoice' ? billData.invoice.items : (billData.order.items || [])).map((item: any, idx: number) => (
                                                                 <div key={idx} className="flex justify-between text-sm">
                                                                     <span className="text-stone-600">{item.name} <span className="text-stone-400 text-xs">x{item.quantity}</span></span>
                                                                     <span className="font-bold text-stone-900">KES {(item.total || (item.price * item.quantity)).toLocaleString()}</span>

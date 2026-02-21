@@ -7,7 +7,7 @@ import { ReportsPageComponent } from '@/components/reports/ReportsPageComponent'
 
 export default function CentralReportsPage() {
   return (
-    <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
+    <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]}>
       <DashboardLayout>
         <ReportsPageComponent
           userRole="central_store"

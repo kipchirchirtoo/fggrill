@@ -38,28 +38,65 @@ export const getStockTake = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
 
+        // Fetch stock take without join first
         const { data: stockTake, error: takeError } = await supabase
             .from('stock_takes')
-            .select(`
-                *,
-                branch:branches(name)
-            `)
+            .select('*')
             .eq('id', id)
             .single();
 
-        if (takeError) throw takeError;
+        if (takeError) {
+            if (takeError.code === 'PGRST116') {
+                return res.status(404).json({ success: false, message: 'Stock take not found' });
+            }
+            throw takeError;
+        }
+
+        // Fetch branch name separately if branch_id exists
+        if (stockTake.branch_id) {
+            const { data: branch } = await supabase
+                .from('branches')
+                .select('name')
+                .eq('id', stockTake.branch_id)
+                .single();
+            
+            if (branch) {
+                stockTake.branch = branch;
+            }
+        }
 
         const { data: items, error: itemsError } = await supabase
             .from('stock_take_items')
-            .select('*, item:inventory_items(name, unit)')
+            .select('*')
             .eq('stock_take_id', id)
             .order('item_sku');
 
         if (itemsError) throw itemsError;
 
-        // Flatten item names for frontend compatibility if needed, 
-        // or keep as nested objects and update frontend.
-        // Let's keep nested and update frontend for cleaner data structure.
+        // Fetch item names separately
+        if (items && items.length > 0) {
+            const skus = items.map(i => i.item_sku);
+            const { data: inventoryItems } = await supabase
+                .from('inventory_items')
+                .select('item_code, name, unit')
+                .in('item_code', skus);
+
+            const itemsMap = (inventoryItems || []).reduce((acc, item) => {
+                acc[item.item_code] = item;
+                return acc;
+            }, {} as Record<string, any>);
+
+            // Enrich items with inventory data
+            items.forEach(item => {
+                const invItem = itemsMap[item.item_sku];
+                if (invItem) {
+                    item.item = {
+                        name: invItem.name,
+                        unit: invItem.unit
+                    };
+                }
+            });
+        }
 
         res.json({
             success: true,

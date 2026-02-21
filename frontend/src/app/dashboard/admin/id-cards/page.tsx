@@ -63,7 +63,7 @@ export default function IDCardsManagementPage() {
         setEditData({
             first_name: emp.first_name || '',
             last_name: emp.last_name || '',
-            employee_id: emp.employee_id || '',
+            employee_id: emp.id_number || emp.employee_id || '',
             start_date: emp.start_date || '',
             role: emp.role || '',
             email: emp.email || '',
@@ -99,14 +99,16 @@ export default function IDCardsManagementPage() {
                 // Flatten the staff objects for easier consumption in the UI
                 const flattenedStaff = (res.data || []).map((s: any) => ({
                     ...s,
-                    first_name: s.user?.first_name || '',
-                    last_name: s.user?.last_name || '',
-                    email: s.user?.email || '',
+                    first_name: s.user?.first_name || s.first_name || '',
+                    last_name: s.user?.last_name || s.last_name || '',
+                    email: s.user?.email || s.email || '',
                     phone_number: s.user?.phone_number || s.phone || '',
                     role: s.user?.role || s.role || 'Staff',
                     employee_id: s.id_number || s.employee_id || s.id.substring(0, 8).toUpperCase(),
+                    id_number: s.id_number || s.employee_id || s.id.substring(0, 8).toUpperCase(),
                     start_date: s.start_date,
-                    profile_photo: s.user?.avatar || null
+                    national_id: s.national_id || '',
+                    profile_photo: s.user?.avatar || s.profile_photo || null
                 }));
                 setEmployees(flattenedStaff);
             }

@@ -107,7 +107,7 @@ export default function BranchManagerDashboard() {
   ];
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
+    <ProtectedRoute allowedRoles={[UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN, UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_MANAGER, UserRole.AUDITOR]}>
       <DashboardLayout>
         <div className="space-y-6">
           {/* Header */}

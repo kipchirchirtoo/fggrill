@@ -242,7 +242,8 @@ function BranchInventoryPageContent() {
       UserRole.BRANCH_MANAGER,
       UserRole.BRANCH_STOREKEEPER,
       UserRole.SUPER_ADMIN,
-      UserRole.GENERAL_MANAGER
+      UserRole.GENERAL_MANAGER,
+      UserRole.AUDITOR
     ]}>
       <BranchAwareDashboardLayout
         title="Branch Inventory"

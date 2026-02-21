@@ -278,6 +278,50 @@ export const verifyAnomaly = async (req: Request, res: Response, next: NextFunct
         error = payError;
         break;
 
+      case 'stock_movement':
+        const { data: moveData, error: moveError } = await supabase
+          .from('branch_stock_movements')
+          .update({ auditor_id: auditorId, audited_at: timestamp, audit_notes: notes })
+          .eq('id', id)
+          .select()
+          .single();
+        result = moveData;
+        error = moveError;
+        break;
+
+      case 'kitchen_usage':
+        const { data: kitchenData, error: kitchenError } = await supabase
+          .from('kitchen_usage_entries')
+          .update({ auditor_id: auditorId, audited_at: timestamp, audit_notes: notes })
+          .eq('id', id)
+          .select()
+          .single();
+        result = kitchenData;
+        error = kitchenError;
+        break;
+
+      case 'stock_request':
+        const { data: reqData, error: reqError } = await supabase
+          .from('stock_requests')
+          .update({ auditor_id: auditorId, audited_at: timestamp, audit_notes: notes })
+          .eq('id', id)
+          .select()
+          .single();
+        result = reqData;
+        error = reqError;
+        break;
+
+      case 'dispatch_note':
+        const { data: dispatchData, error: dispatchError } = await supabase
+          .from('dispatch_notes')
+          .update({ auditor_id: auditorId, audited_at: timestamp, audit_notes: notes })
+          .eq('id', id)
+          .select()
+          .single();
+        result = dispatchData;
+        error = dispatchError;
+        break;
+
       default:
         res.status(400).json({ success: false, message: 'Invalid entity type for verification' });
         return;
@@ -1837,12 +1881,10 @@ export const getAnomalyDetail = async (req: Request, res: Response, next: NextFu
         break;
 
       case 'bill':
-        // Fetch bill details
-        // Unpaid bills might not have direct items, but we can try to find linked orders if the schema supports it.
-        // For now, just return bill info.
+        // Fetch bill details with items if possible, and branch/user info
         const { data: bill, error: billError } = await supabase
           .from('unpaid_bills')
-          .select('*, branch:branches(name)')
+          .select('*, branch:branches(name), waiter:users!created_by(first_name, last_name), auditor:users!auditor_id(first_name, last_name)')
           .eq('id', id)
           .single();
         data = bill;
@@ -1852,7 +1894,7 @@ export const getAnomalyDetail = async (req: Request, res: Response, next: NextFu
       case 'exception':
         const { data: exception, error: excError } = await supabase
           .from('audit_exceptions')
-          .select('*')
+          .select('*, auditor:users!resolved_by(first_name, last_name)')
           .eq('id', id)
           .single();
         data = exception;

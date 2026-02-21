@@ -88,7 +88,8 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
 
     // History State
     const [historyDate, setHistoryDate] = useState<Date>(new Date());
-    const [historyStatus, setHistoryStatus] = useState<'pending' | 'cleared' | 'voided'>('pending');
+    const [historyStatus, setHistoryStatus] = useState<string>('all'); // 'all', 'pending', 'completed', 'cancelled'
+    const [waiterFilter, setWaiterFilter] = useState<string>('my-orders'); // 'my-orders' or 'all-orders'
     const [isVoiding, setIsVoiding] = useState<string | null>(null);
     const [voidReason, setVoidReason] = useState('');
     const [voidConfirmOpen, setVoidConfirmOpen] = useState(false);
@@ -114,13 +115,27 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
 
             // 2. Filter by Status
             let matchesStatus = false;
-            if (historyStatus === 'pending') matchesStatus = order.status === 'pending' || order.status === 'kitchen_ready';
-            if (historyStatus === 'cleared') matchesStatus = order.status === 'completed' || order.status === 'paid' || order.status === 'delivered';
-            if (historyStatus === 'voided') matchesStatus = order.status === 'cancelled' || order.status === 'voided';
+            if (historyStatus === 'all') {
+                matchesStatus = true;
+            } else if (historyStatus === 'pending') {
+                matchesStatus = order.status === 'pending' || order.status === 'kitchen_ready';
+            } else if (historyStatus === 'completed') {
+                matchesStatus = order.status === 'completed' || order.status === 'paid' || order.status === 'delivered' || order.status === 'served' || order.status === 'ready';
+            } else if (historyStatus === 'cancelled') {
+                matchesStatus = order.status === 'cancelled' || order.status === 'voided';
+            }
 
-            return isSameDate && matchesStatus;
+            // 3. Filter by Waiter (My Orders vs All Orders)
+            let matchesWaiter = true;
+            if (waiterFilter === 'my-orders') {
+                // Show only orders created by this user
+                matchesWaiter = order.created_by === user?.id || order.waiter_id === user?.id;
+            }
+            // If 'all-orders', show all orders (matchesWaiter stays true)
+
+            return isSameDate && matchesStatus && matchesWaiter;
         });
-    }, [recentOrders, historyDate, historyStatus]);
+    }, [recentOrders, historyDate, historyStatus, waiterFilter, user?.id]);
 
     const handleVoidOrder = async () => {
         if (!isVoiding || !voidReason.trim()) return;
@@ -204,16 +219,23 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
 
             // Fetch recent orders for history with date filter - only current user's orders
             if (user?.id) {
+                console.log('[UnifiedPOS] Fetching orders for user:', user.id, 'branch:', currentBranchId, 'date:', startOfDay.toISOString().split('T')[0]);
                 const ordersRes = isRestaurant
-                    ? await restaurantAPI.getMyOrders(user.id, Number(currentBranchId) || undefined)
+                    ? await restaurantAPI.getMyOrders(user.id, Number(currentBranchId) || undefined, {
+                        from_date: startOfDay.toISOString().split('T')[0],
+                        to_date: endOfDay.toISOString().split('T')[0]
+                    })
                     : await barAPI.getOrders({
                         branchId: Number(currentBranchId) || undefined,
                         ...dateParams
                     });
 
+                console.log('[UnifiedPOS] Orders fetch result:', ordersRes.success, 'count:', ordersRes.data?.length || 0);
                 if (ordersRes.success) {
                     setRecentOrders(ordersRes.data || []);
                 }
+            } else {
+                console.warn('[UnifiedPOS] No user ID available for fetching orders');
             }
         } catch (error) {
             console.error(`Error fetching ${mode} data:`, error);
@@ -269,6 +291,11 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
     const tax = total - subtotal;
 
     const handlePrintReceipt = async (orderData: any) => {
+        // Debug user object
+        console.log('[Bill] User object:', user);
+        console.log('[Bill] firstName:', user?.firstName, 'first_name:', user?.first_name);
+        console.log('[Bill] lastName:', user?.lastName, 'last_name:', user?.last_name);
+        
         // Desktop App Native Printing Intercept
         if (typeof window !== 'undefined' && (window as any).electronAPI) {
             try {
@@ -280,8 +307,8 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                     ...orderData,
                     branch: activeBranch,
                     user: {
-                        firstName: user?.firstName,
-                        lastName: user?.lastName
+                        firstName: user?.firstName || user?.first_name || '',
+                        lastName: user?.lastName || user?.last_name || ''
                     }
                 });
 
@@ -306,11 +333,11 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                 total: (item.unit_price || item.price) * item.quantity
             }));
             const totalAmount = orderData.total || orderData.total_amount;
-            const b = activeBranch || { name: 'FAMOUS GATE HOTEL', location: 'Kericho, Kenya', settings: { phone: '+254 700 000 000', pin: '', email: 'info@famousgate.co.ke' } };
+            const b = activeBranch || { name: 'Famous Gates Hotels', location: 'Bomet, Kenya', settings: { phone: '0706782828', pin: '', email: 'famousgatesbmt@gmail.com' } };
             const companyName = b.name.toUpperCase();
             const companyAddress = b.location;
-            const companyPhone = b.settings?.phone || '+254 700 000 000';
-            const companyEmail = b.settings?.email || 'info@famousgate.co.ke';
+            const companyPhone = b.settings?.phone || '0706782828';
+            const companyEmail = b.settings?.email || 'famousgatesbmt@gmail.com';
 
             const receiptHtml = `
                 <html>
@@ -379,7 +406,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                             ${orderData.table_number ? `<div class="flex"><span>Table: ${orderData.table_number}</span></div>` : ''}
                             ${orderData.room_number ? `<div class="flex"><span>Room: ${orderData.room_number}</span></div>` : ''}
                             ${orderData.customer_name ? `<div class="flex"><span>Customer: ${orderData.customer_name}</span></div>` : ''}
-                            <div class="flex"><span>Served by: ${user?.firstName} ${user?.lastName}</span></div>
+                            <div class="flex"><span>Served by: ${user?.firstName || user?.first_name || ''} ${user?.lastName || user?.last_name || ''}</span></div>
                         </div>
 
                         <div class="dashed-line"></div>
@@ -742,7 +769,21 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
 
                         <div className="flex items-center gap-1">
                             <button
-                                onClick={() => setShowHistory(true)}
+                                onClick={async () => {
+                                    setShowHistory(true);
+                                    // Trigger orders sync when opening history
+                                    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+                                        try {
+                                            console.log('[POS] Triggering orders sync...');
+                                            await (window as any).electronAPI.invoke('autosync:syncOrdersNow', currentBranchId, 1);
+                                            console.log('[POS] Orders sync complete');
+                                            // Refresh orders after sync
+                                            fetchData();
+                                        } catch (e) {
+                                            console.warn('[POS] Orders sync failed:', e);
+                                        }
+                                    }
+                                }}
                                 className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm border border-transparent hover:border-stone-100 transition-all text-stone-400 hover:text-blue-600"
                                 title="Order History"
                             >
@@ -776,9 +817,21 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                         <p className="text-[9px] font-bold text-stone-400 uppercase tracking-widest truncate">{user?.email}</p>
                                     </div>
                                     <button
-                                        onClick={() => {
+                                        onClick={async () => {
                                             setShowHistory(true);
                                             setUserMenuOpen(false);
+                                            // Trigger orders sync when opening history
+                                            if (typeof window !== 'undefined' && (window as any).electronAPI) {
+                                                try {
+                                                    console.log('[POS] Triggering orders sync...');
+                                                    await (window as any).electronAPI.invoke('autosync:syncOrdersNow', currentBranchId, 1);
+                                                    console.log('[POS] Orders sync complete');
+                                                    // Refresh orders after sync
+                                                    fetchData();
+                                                } catch (e) {
+                                                    console.warn('[POS] Orders sync failed:', e);
+                                                }
+                                            }
                                         }}
                                         className="flex items-center gap-2 w-full p-2 text-xs font-bold text-stone-600 hover:bg-stone-50 rounded-lg transition-all"
                                     >
@@ -999,34 +1052,73 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                 </div>
                             </div>
 
-                            {/* Tabs */}
-                            <div className="flex border-b border-stone-200">
-                                {(['pending', 'cleared', 'voided'] as const).map(status => (
-                                    <button
-                                        key={status}
-                                        onClick={() => setHistoryStatus(status)}
-                                        className={cn(
-                                            "flex-1 py-4 text-sm font-bold uppercase tracking-wider transition-all border-b-2",
-                                            historyStatus === status
-                                                ? "border-blue-600 text-blue-600 bg-blue-50/50"
-                                                : "border-transparent text-stone-500 hover:text-stone-700 hover:bg-stone-50"
-                                        )}
-                                    >
-                                        {status}
-                                        <span className="ml-2 text-xs opacity-60 bg-stone-200 px-1.5 py-0.5 rounded-full">
-                                            {recentOrders.filter(o => {
-                                                const orderDate = new Date(o.created_at);
-                                                const isSameDate = orderDate.toDateString() === historyDate.toDateString();
-                                                if (!isSameDate) return false;
+                            {/* Filter Controls */}
+                            <div className="p-4 border-b border-stone-200 bg-white">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Status Filter */}
+                                    <div>
+                                        <label className="text-xs text-stone-500 mb-2 block font-medium">Order Status</label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {[
+                                                { value: 'all', label: 'All' },
+                                                { value: 'pending', label: 'Pending' },
+                                                { value: 'completed', label: 'Verified' },
+                                                { value: 'cancelled', label: 'Void' },
+                                            ].map((status) => {
+                                                const count = recentOrders.filter(o => {
+                                                    const orderDate = new Date(o.created_at);
+                                                    const isSameDate = orderDate.toDateString() === historyDate.toDateString();
+                                                    if (!isSameDate) return false;
+                                                    
+                                                    if (status.value === 'all') return true;
+                                                    if (status.value === 'pending') return o.status === 'pending' || o.status === 'kitchen_ready';
+                                                    if (status.value === 'completed') return o.status === 'completed' || o.status === 'paid' || o.status === 'delivered' || o.status === 'served' || o.status === 'ready';
+                                                    if (status.value === 'cancelled') return o.status === 'cancelled' || o.status === 'voided';
+                                                    return false;
+                                                }).length;
+                                                
+                                                return (
+                                                    <button
+                                                        key={status.value}
+                                                        onClick={() => setHistoryStatus(status.value)}
+                                                        className={cn(
+                                                            "px-3 py-1.5 text-xs font-medium rounded-lg transition-all",
+                                                            historyStatus === status.value
+                                                                ? "bg-stone-900 text-white"
+                                                                : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                                                        )}
+                                                    >
+                                                        {status.label} ({count})
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
 
-                                                if (status === 'pending') return o.status === 'pending' || o.status === 'kitchen_ready';
-                                                if (status === 'cleared') return o.status === 'completed' || o.status === 'paid' || o.status === 'delivered';
-                                                if (status === 'voided') return o.status === 'cancelled' || o.status === 'voided';
-                                                return false;
-                                            }).length}
-                                        </span>
-                                    </button>
-                                ))}
+                                    {/* Waiter Filter */}
+                                    <div>
+                                        <label className="text-xs text-stone-500 mb-2 block font-medium">View Orders</label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {[
+                                                { value: 'my-orders', label: 'My Orders' },
+                                                { value: 'all-orders', label: 'All Orders' },
+                                            ].map((filter) => (
+                                                <button
+                                                    key={filter.value}
+                                                    onClick={() => setWaiterFilter(filter.value)}
+                                                    className={cn(
+                                                        "px-3 py-1.5 text-xs font-medium rounded-lg transition-all",
+                                                        waiterFilter === filter.value
+                                                            ? "bg-stone-900 text-white"
+                                                            : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                                                    )}
+                                                >
+                                                    {filter.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Order List */}
@@ -1034,7 +1126,8 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                 {filteredOrders.length === 0 ? (
                                     <div className="h-64 flex flex-col items-center justify-center text-stone-400">
                                         <History className="w-12 h-12 mb-3 opacity-20" />
-                                        <p className="font-medium">No {historyStatus} orders found for this date.</p>
+                                        <p className="font-medium">No orders found matching your filters.</p>
+                                        <p className="text-xs mt-1">Try changing the status or waiter filter.</p>
                                     </div>
                                 ) : (
                                     filteredOrders.map(order => {

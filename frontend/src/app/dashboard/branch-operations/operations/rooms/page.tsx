@@ -406,7 +406,8 @@ function BranchRoomsManagementContent() {
       UserRole.RECEPTIONIST,
       UserRole.HOUSEKEEPING,
       UserRole.SUPER_ADMIN,
-      UserRole.GENERAL_MANAGER
+      UserRole.GENERAL_MANAGER,
+      UserRole.AUDITOR
     ]}>
       <BranchAwareDashboardLayout
         title="Room Management"

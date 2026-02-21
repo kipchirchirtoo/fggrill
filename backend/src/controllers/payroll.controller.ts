@@ -18,13 +18,13 @@ export const getPayrollSummary = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { startDate, endDate, department, branch } = req.query;
+    const { startDate, endDate, department, branch_id } = req.query;
 
     let query = supabase
       .from('payroll_records')
       .select(`
         *,
-        employee:staff_profiles!staff_id(
+        employee:staff_profiles!inner(
           *,
           user:users!user_id(
             first_name,
@@ -35,6 +35,16 @@ export const getPayrollSummary = async (
         )
       `)
       .order('month', { ascending: false });
+
+    // Apply filters
+    if (branch_id) {
+      // Use the inner joined employee table to filter by branch
+      query = query.eq('employee.branch_id', branch_id);
+    }
+
+    if (department) {
+      query = query.eq('employee.department', department);
+    }
 
     if (startDate) {
       // Logic for filtration based on date

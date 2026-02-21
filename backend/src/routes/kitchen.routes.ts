@@ -64,6 +64,14 @@ import {
     getAccountabilityReport
 } from '../controllers/kitchen/reports.controller';
 
+import {
+    getExpectedPortions,
+    getExpectedPortion,
+    verifyActualPortions,
+    getVarianceSummary,
+    getPendingVerifications
+} from '../controllers/kitchen/expected-portions.controller';
+
 const router = express.Router();
 
 // Apply authentication to all routes
@@ -173,5 +181,14 @@ router.post('/variance/:id/approve', authorize(kitchenManagers), approveVariance
 router.get('/reports/yield', authorize(kitchenManagers), getYieldReport);
 router.get('/reports/loss', authorize(kitchenManagers), getLossReport);
 router.get('/reports/accountability', authorize(kitchenManagers), getAccountabilityReport);
+
+// =====================================================
+// EXPECTED PORTIONS (FOOD CONTROL INTEGRATION)
+// =====================================================
+router.get('/expected-portions', authorize(kitchenStaff), getExpectedPortions);
+router.get('/expected-portions/pending', authorize(kitchenStaff), getPendingVerifications);
+router.get('/expected-portions/variance/summary', authorize([...kitchenManagers, UserRole.AUDITOR]), getVarianceSummary);
+router.get('/expected-portions/:id', authorize(kitchenStaff), getExpectedPortion);
+router.put('/expected-portions/:id/verify', authorize(kitchenStaff), verifyActualPortions);
 
 export default router;

@@ -1,0 +1,5 @@
+2026/02/16-22:13:50.649 30d0 Creating DB C:\Users\user\Desktop\fggrill\temp-electron-data-final-verify-5\Partitions\pos-cache\IndexedDB\pos_terminal.html_0.indexeddb.leveldb since it was missing.
+2026/02/16-22:13:50.663 30d0 Reusing MANIFEST C:\Users\user\Desktop\fggrill\temp-electron-data-final-verify-5\Partitions\pos-cache\IndexedDB\pos_terminal.html_0.indexeddb.leveldb/MANIFEST-000001
+2026/02/16-22:14:02.679 4904 Level-0 table #5: started
+2026/02/16-22:14:02.699 4904 Level-0 table #5: 919366 bytes OK
+2026/02/16-22:14:02.702 4904 Delete type=0 #3

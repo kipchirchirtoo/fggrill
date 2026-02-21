@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { storeAPI } from '@/lib/api';
-import { Truck, RefreshCw, Check, AlertTriangle, ArrowDownToLine, Package, Search } from 'lucide-react';
+import { storeAPI, auditorReportsAPI } from '@/lib/api';
+import { Truck, RefreshCw, Check, AlertTriangle, ArrowDownToLine, Package, Search, FileDown, Activity, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -25,6 +25,9 @@ interface IncomingDispatch {
   vehicle_registration?: string;
   driver?: { name: string; phone: string; };
   driver_name?: string;
+  auditor_id?: string;
+  audited_at?: string;
+  audit_notes?: string;
 }
 
 export default function BranchReceivePage() {
@@ -40,6 +43,7 @@ export default function BranchReceivePage() {
     note: string
   }>>({});
   const [deliveryNotes, setDeliveryNotes] = useState('');
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   const fetchDispatches = useCallback(async () => {
     setIsLoading(true);
@@ -49,6 +53,28 @@ export default function BranchReceivePage() {
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
   }, []);
+
+  const handleExport = async () => {
+    try {
+      toast.loading("Generating delivery oversight report...");
+      await auditorReportsAPI.exportBrandedPdf('dispatches', {
+        branch_id: user?.branch_id
+      });
+      toast.dismiss();
+      toast.success("Report generated successfully");
+    } catch (error) {
+      console.error(error);
+      toast.dismiss();
+      toast.error("Failed to generate report");
+    }
+  };
+
+  const stats = useMemo(() => {
+    const total = dispatches.length;
+    const inTransit = dispatches.filter(d => d.status === 'IN_TRANSIT').length;
+    const totalItems = dispatches.reduce((acc, d) => acc + (d.items?.length || 0), 0);
+    return { total, inTransit, totalItems };
+  }, [dispatches]);
 
   useEffect(() => { fetchDispatches(); }, [fetchDispatches]);
 
@@ -76,32 +102,122 @@ export default function BranchReceivePage() {
           const verification = receivedItems[item.id] || { quantity: item.dispatched_quantity, damaged: 0, missing: 0, note: '' };
           return {
             item_id: item.id,
-            received_quantity: verification.quantity,
-            damaged_quantity: verification.damaged,
-            missing_quantity: verification.missing,
-            discrepancy_reason: verification.note
+            quantity: verification.quantity,
+            damaged: verification.damaged,
+            missing: verification.missing,
+            note: verification.note
           };
         }),
-        discrepancy_notes: deliveryNotes
+        notes: deliveryNotes
       };
 
-      await storeAPI.confirmDelivery(selectedDispatch.id, payload);
-      toast.success('Delivery confirmed and stock updated');
+      await storeAPI.receiveDispatch(selectedDispatch.id, payload);
+      toast.success('Dispatch received successfully');
       setIsReceiveModalOpen(false);
       fetchDispatches();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to receive dispatch');
+    }
+  };
+
+  const handleFlagAnomaly = async (dispatch: IncomingDispatch) => {
+    try {
+      toast.loading("Flagging anomaly...");
+      await auditAPI.createException({
+        audit_session_id: 'MANUAL_RECEIVE_' + new Date().getTime(),
+        exception_type: 'RECEIVE_ANOMALY',
+        severity: 'medium',
+        description: `Potential anomaly in receipt of dispatch ${dispatch.dispatch_number} from ${dispatch.from_branch?.name}`,
+        amount: dispatch.items?.length || 0,
+        reference_type: 'dispatch_note',
+        reference_id: dispatch.id,
+      });
+      toast.dismiss();
+      toast.success("Anomaly flagged for review");
     } catch (error) {
-      toast.error('Failed to confirm delivery');
+      console.error(error);
+      toast.dismiss();
+      toast.error("Failed to flag anomaly");
+    }
+  };
+
+  const handleVerify = async (dispatch: IncomingDispatch) => {
+    try {
+      toast.loading("Verifying dispatch...");
+      await auditAPI.verifyAnomaly({
+        id: dispatch.id,
+        type: 'dispatch_note',
+        notes: 'Verified by auditor'
+      });
+      toast.dismiss();
+      toast.success("Dispatch verified successfully");
+      fetchDispatches(); // Refresh data
+      setIsDetailModalOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.dismiss();
+      toast.error("Failed to verify dispatch");
     }
   };
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_MANAGER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
+    <ProtectedRoute allowedRoles={[UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_MANAGER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]}>
       <DashboardLayout>
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div><h1 className="text-2xl font-bold text-gray-900">Receive Goods</h1><p className="text-gray-500">Confirm incoming deliveries</p></div>
-            <IOSButton variant="secondary" onClick={fetchDispatches} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                {user?.role === UserRole.AUDITOR ? 'Delivery Oversight' : 'Receive Goods'}
+              </h1>
+              <p className="text-gray-500">
+                {user?.role === UserRole.AUDITOR ? 'Review incoming delivery records' : 'Confirm incoming deliveries'}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <IOSButton variant="secondary" onClick={fetchDispatches} leftIcon={<RefreshCw className={isLoading ? 'animate-spin' : ''} />}>Refresh</IOSButton>
+              {user?.role === UserRole.AUDITOR && (
+                <IOSButton variant="secondary" onClick={handleExport} leftIcon={<FileDown />}>Oversight Log</IOSButton>
+              )}
+            </div>
           </div>
+
+          {user?.role === UserRole.AUDITOR && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <IOSCard className="p-4 bg-white">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center text-stone-600">
+                    <Package className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Incoming Dispatches</p>
+                    <p className="text-xl font-black text-stone-900">{stats.total}</p>
+                  </div>
+                </div>
+              </IOSCard>
+              <IOSCard className="p-4 bg-white">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-[#007AFF]">
+                    <Clock className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest text-[#007AFF]">In Transit</p>
+                    <p className="text-xl font-black text-[#007AFF]">{stats.inTransit}</p>
+                  </div>
+                </div>
+              </IOSCard>
+              <IOSCard className="p-4 bg-white">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
+                    <Activity className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Total Item Load</p>
+                    <p className="text-xl font-black text-emerald-600">{stats.totalItems}</p>
+                  </div>
+                </div>
+              </IOSCard>
+            </div>
+          )}
 
           {isLoading ? (
             <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
@@ -121,7 +237,17 @@ export default function BranchReceivePage() {
                       </div>
                     </div>
                     {dispatch.status === 'IN_TRANSIT' ? (
-                      <IOSButton size="sm" onClick={() => handleOpenReceive(dispatch)}>Receive</IOSButton>
+                      <>
+                        {user?.role === UserRole.AUDITOR && (
+                          <IOSBadge variant="light" color="warning">In Transit</IOSBadge>
+                        )}
+                        {user?.role !== UserRole.AUDITOR && (
+                          <IOSButton size="sm" onClick={() => handleOpenReceive(dispatch)} leftIcon={<ArrowDownToLine />}>Receive</IOSButton>
+                        )}
+                        {user?.role === UserRole.AUDITOR && (
+                          <IOSButton size="sm" variant="secondary" onClick={() => { setSelectedDispatch(dispatch); setIsDetailModalOpen(true); }} leftIcon={<Search />}>Audit</IOSButton>
+                        )}
+                      </>
                     ) : (
                       <IOSBadge variant="light" color="success">Received</IOSBadge>
                     )}
@@ -265,6 +391,69 @@ export default function BranchReceivePage() {
                     Confirm Delivery & Update Stock
                   </button>
                 </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Dispatch Audit: {selectedDispatch?.dispatch_number}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 mt-4 text-sm text-stone-600">
+              <div className="grid grid-cols-2 gap-4 bg-stone-50 p-3 rounded-ios-lg">
+                <div><p className="text-[10px] uppercase tracking-widest text-stone-400 font-bold">From</p><p className="font-bold text-stone-900">{selectedDispatch?.from_branch?.name}</p></div>
+                <div><p className="text-[10px] uppercase tracking-widest text-stone-400 font-bold">Status</p><p className="font-bold text-stone-900">{selectedDispatch?.status}</p></div>
+                <div className="col-span-2"><p className="text-[10px] uppercase tracking-widest text-stone-400 font-bold">Dispatched At</p><p className="font-bold text-stone-900">{selectedDispatch && new Date(selectedDispatch.dispatched_at).toLocaleString()}</p></div>
+              </div>
+
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-stone-400 font-bold mb-2">Items Included</p>
+                <div className="space-y-1">
+                  {selectedDispatch?.items?.map((item: any) => (
+                    <div key={item.id} className="flex justify-between items-center py-1 border-b border-stone-100 last:border-0">
+                      <span>{item.item?.item_name || 'Item'}</span>
+                      <span className="font-bold">{item.dispatched_quantity}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-stone-100">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Audit Status</p>
+                  {selectedDispatch?.audited_at ? (
+                    <div className="flex items-center gap-1 text-emerald-600">
+                      <Check className="h-3 w-3" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest">Verified</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-amber-600">
+                      <Clock className="h-3 w-3" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest">Unverified</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <IOSButton onClick={() => setIsDetailModalOpen(false)} variant="secondary" className="w-full">Close</IOSButton>
+                  {!selectedDispatch?.audited_at && (
+                    <IOSButton variant="secondary" onClick={() => handleVerify(selectedDispatch!)} leftIcon={<Check />} className="w-full">
+                      Verify
+                    </IOSButton>
+                  )}
+                </div>
+
+                {!selectedDispatch?.audited_at && (
+                  <IOSButton variant="destructive" onClick={() => handleFlagAnomaly(selectedDispatch!)} leftIcon={<AlertTriangle />} className="w-full">
+                    Flag Anomaly
+                  </IOSButton>
+                )}
+                {selectedDispatch?.audited_at && (
+                  <div className="pt-2 italic text-[10px] text-stone-500">
+                    Verified on {selectedDispatch.audited_at ? new Date(selectedDispatch.audited_at).toLocaleDateString() : 'N/A'}.
+                  </div>
+                )}
               </div>
             </div>
           </DialogContent>

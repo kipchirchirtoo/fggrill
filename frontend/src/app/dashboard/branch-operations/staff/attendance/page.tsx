@@ -48,7 +48,8 @@ export default function BranchStaffAttendancePage() {
       UserRole.BRANCH_OPERATIONS_MANAGER,
       UserRole.BRANCH_MANAGER,
       UserRole.SUPER_ADMIN,
-      UserRole.GENERAL_MANAGER
+      UserRole.GENERAL_MANAGER,
+      UserRole.AUDITOR
     ]}>
       <BranchAwareDashboardLayout>
         <BranchStaffAttendanceContent />

@@ -49,7 +49,8 @@ export default function BranchExpensesPage() {
       UserRole.BRANCH_MANAGER,
       UserRole.SUPER_ADMIN,
       UserRole.GENERAL_MANAGER,
-      UserRole.ACCOUNTANT
+      UserRole.ACCOUNTANT,
+      UserRole.AUDITOR
     ]}>
       <BranchAwareDashboardLayout>
         <BranchExpensesContent />

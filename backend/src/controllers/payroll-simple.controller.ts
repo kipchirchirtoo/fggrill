@@ -13,7 +13,7 @@ import { generatePayslipPDF } from '../utils/pdfGenerator';
  */
 export const generatePayroll = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { month, year, staff_id } = req.body;
+        const { month, year, staff_id, branch_id } = req.body;
         const processedBy = req.user?.id;
 
         if (!month || !year) {
@@ -28,6 +28,10 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
 
         if (staff_id) {
             staffQuery = staffQuery.eq('id', staff_id);
+        }
+
+        if (branch_id) {
+            staffQuery = staffQuery.eq('branch_id', branch_id);
         }
 
         const { data: staffList, error: staffError } = await staffQuery;
@@ -201,13 +205,13 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
 
 export const getPayrollRecords = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { month, year, staff_id } = req.query;
+        const { month, year, staff_id, branch_id } = req.query;
 
         let query = supabase
             .from('staff_payroll')
             .select(`
                 *,
-                staff:staff_profiles(
+                staff:staff_profiles!inner(
                     *,
                     user:users!user_id(*),
                     branch:branches(id, name)
@@ -218,6 +222,7 @@ export const getPayrollRecords = async (req: Request, res: Response, next: NextF
         if (month) query = query.eq('month', String(month));
         if (year) query = query.eq('year', Number(year));
         if (staff_id) query = query.eq('staff_id', staff_id);
+        if (branch_id) query = query.eq('staff.branch_id', branch_id);
 
         const { data, error } = await query;
         if (error) throw error;
@@ -252,14 +257,15 @@ export const getPayrollRecords = async (req: Request, res: Response, next: NextF
  */
 export const getPayrollSummary = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { month, year } = req.query;
+        const { month, year, branch_id } = req.query;
 
         let query = supabase
             .from('staff_payroll')
-            .select('*');
+            .select('*, staff:staff_profiles!inner(branch_id)');
 
         if (month) query = query.eq('month', String(month));
         if (year) query = query.eq('year', Number(year));
+        if (branch_id) query = query.eq('staff.branch_id', branch_id);
 
         const { data: records, error } = await query;
         if (error) throw error;
@@ -308,14 +314,14 @@ const callPythonWithRetry = async (url: string, data: any, config: any = {}, max
  */
 export const emailPayslips = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { month, year } = req.body;
+        const { month, year, branch_id } = req.body;
 
         // Fetch payroll records with staff details
-        const { data: records, error } = await supabase
+        let query = supabase
             .from('staff_payroll')
             .select(`
                 *,
-                staff:staff_profiles(
+                staff:staff_profiles!inner(
                     *,
                     user:users!user_id(*),
                     branch:branches(id, name)
@@ -323,6 +329,12 @@ export const emailPayslips = async (req: Request, res: Response, next: NextFunct
             `)
             .eq('month', String(month))
             .eq('year', Number(year));
+
+        if (branch_id) {
+            query = query.eq('staff.branch_id', branch_id);
+        }
+
+        const { data: records, error } = await query;
 
         if (error) throw error;
         if (!records || records.length === 0) throw new AppError('No payroll records found to email', 404);
@@ -390,14 +402,14 @@ export const emailPayslips = async (req: Request, res: Response, next: NextFunct
  */
 export const downloadPayslipsZip = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { month, year } = req.body; // or query params
+        const { month, year, branch_id } = req.body; // or query params
 
         // Fetch records
-        const { data: records, error } = await supabase
+        let query = supabase
             .from('staff_payroll')
             .select(`
                 *,
-                staff:staff_profiles(
+                staff:staff_profiles!inner(
                     *,
                     user:users!user_id(*),
                     branch:branches(id, name)
@@ -405,6 +417,12 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
             `)
             .eq('month', String(month))
             .eq('year', Number(year));
+
+        if (branch_id) {
+            query = query.eq('staff.branch_id', branch_id);
+        }
+
+        const { data: records, error } = await query;
 
         if (error) throw error;
         if (!records || records.length === 0) throw new AppError('No payroll records found', 404);

@@ -1,5 +1,5 @@
 // Service Worker for Famous Gate Housekeeping PWA
-const CACHE_NAME = 'fg-housekeeping-v2';
+const CACHE_NAME = 'fg-housekeeping-v3';
 const OFFLINE_URL = '/offline.html';
 
 // Resources to cache immediately

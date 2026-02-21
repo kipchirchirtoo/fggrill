@@ -14,7 +14,7 @@ export default function BranchReportsPage() {
   const currentBranchId = activeBranchId || user?.branch_id;
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
+    <ProtectedRoute allowedRoles={[UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]}>
       <DashboardLayout>
         <ReportsPageComponent
           userRole="branch_manager"

@@ -10,7 +10,7 @@ export default function BranchManagerSoldItemsPage() {
     const { branch } = useAuth();
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.SUPER_ADMIN]}>
+        <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]}>
             <BranchAwareDashboardLayout
                 title="Sold Items Analytics"
                 subtitle={`Performance analysis for ${branch?.name || 'Current Branch'}`}

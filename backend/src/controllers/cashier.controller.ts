@@ -187,6 +187,56 @@ export const getBillDetails = async (
             return;
         }
 
+        // Check if it's a Kyogong Shift Transaction (SPA, EXEC, SPORTS, REC, etc.)
+        // Pattern: PREFIX-DATE-RANDOM
+        const kyogongPattern = /^[A-Z]+-\d{8}-\d{4}$/;
+        if (kyogongPattern.test(searchId) || searchId.includes('-202')) {
+            let kyogongQuery = supabase
+                .from('shift_transactions')
+                .select(`
+                    *,
+                    items:shift_transaction_items(*),
+                    branch:branches(name)
+                `)
+                .eq('transaction_number', searchId);
+
+            if (req.user?.branch_id) {
+                kyogongQuery = kyogongQuery.eq('branch_id', req.user.branch_id);
+            }
+
+            const { data: tx, error: txError } = await kyogongQuery.single();
+
+            if (!txError && tx) {
+                res.json({
+                    success: true,
+                    data: {
+                        type: 'kyogong',
+                        order: {
+                            id: tx.id,
+                            order_number: tx.transaction_number,
+                            guest_name: tx.customer_name || 'Walk-in',
+                            status: tx.status,
+                            service_category: tx.service_category,
+                            items: tx.items?.map((item: any) => ({
+                                name: item.item_name,
+                                quantity: item.quantity,
+                                price: item.unit_price,
+                                total: item.total_price
+                            }))
+                        },
+                        financials: {
+                            total_amount: tx.total_amount,
+                            amount_paid: tx.payment_method === 'BILL' ? 0 : tx.total_amount,
+                            balance: tx.payment_method === 'BILL' ? tx.total_amount : 0,
+                            currency: 'KES'
+                        },
+                        payment_status: tx.payment_method === 'BILL' ? 'unpaid' : 'paid'
+                    }
+                });
+                return;
+            }
+        }
+
         // Check if it's a POS transaction (starts with CS)
         if (searchId.startsWith('CS')) {
             const cleanId = searchId.startsWith('CS-') ? searchId : `CS-${searchId.slice(2)}`;
@@ -781,6 +831,81 @@ export const processCashierPayment = async (
             return;
         }
 
+        // Check if it's a Kyogong Shift Transaction
+        const kyogongPattern = /^[A-Z]+-\d{8}-\d{4}$/;
+        if (kyogongPattern.test(bookingId.toString()) || bookingId.toString().includes('-202')) {
+            const { data: transaction, error: txError } = await supabase
+                .from('shift_transactions')
+                .select('*')
+                .eq('transaction_number', bookingId)
+                .single();
+
+            if (!txError && transaction) {
+                const isVerifiedMethod = method === 'cash';
+                const initialStatus = isVerifiedMethod ? 'completed' : 'pending';
+
+                // 2. Record Payment
+                const { data: payment, error: paymentError } = await supabase
+                    .from('payments')
+                    .insert({
+                        kyogong_transaction_id: transaction.id, // We need to ensure this column exists or use metadata
+                        amount: amount,
+                        currency: 'KES',
+                        payment_method: method,
+                        status: initialStatus,
+                        reference: paymentRef,
+                        metadata: {
+                            processed_by: 'cashier',
+                            processed_at: new Date().toISOString(),
+                            transaction_number: bookingId,
+                            source: 'kyogong'
+                        }
+                    })
+                    .select()
+                    .single();
+
+                if (paymentError) {
+                    throw new AppError(`Payment recording failed: ${paymentError.message}`, 500);
+                }
+
+                if (initialStatus === 'completed') {
+                    // Update Kyogong transaction status
+                    await supabase
+                        .from('shift_transactions')
+                        .update({
+                            payment_method: method.toUpperCase(),
+                            cash_amount: method === 'cash' ? amount : 0,
+                            mpesa_amount: method === 'mpesa' ? amount : 0,
+                            card_amount: method === 'card' ? amount : 0,
+                            status: 'COMPLETED',
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('id', transaction.id);
+
+                    // Record cashier transaction
+                    await supabase.from('cashier_transactions').insert({
+                        transaction_number: `KYG-${transaction.transaction_number}`,
+                        branch_id: transaction.branch_id,
+                        cashier_id: req.user?.id,
+                        transaction_type: 'payment',
+                        revenue_type: 'KYOGONG_SALE',
+                        reference_type: 'kyogong_transaction',
+                        reference_id: transaction.id,
+                        payment_method: method,
+                        amount: amount,
+                        customer_name: transaction.customer_name || 'Walk-in'
+                    });
+                }
+
+                res.json({
+                    success: true,
+                    message: 'Kyogong payment processed successfully',
+                    data: payment
+                });
+                return;
+            }
+        }
+
         // Otherwise assume it's a hotel booking (UUID)
         // 1. Record Payment in Database
         const isVerifiedMethod = method === 'cash';
@@ -1037,14 +1162,47 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
             query = query.eq('bill_type', bill_type as string);
         }
 
-        const { data, error } = await query;
+        const { data: unpaidBills, error: billsError } = await query;
+        if (billsError) throw billsError;
 
-        if (error) throw error;
+        // Also fetch Kyogong bills (shift_transactions with payment_method = 'BILL')
+        let kyogongQuery = supabase
+            .from('shift_transactions')
+            .select(`
+                *,
+                branch:branches(name)
+            `)
+            .eq('payment_method', 'BILL')
+            .neq('status', 'VOID')
+            .order('created_at', { ascending: false });
+
+        if (branch_id) {
+            kyogongQuery = kyogongQuery.eq('branch_id', branch_id);
+        }
+
+        const { data: kyogongBills, error: kyogongError } = await kyogongQuery;
+
+        // Map Kyogong bills to unpaid_bills format
+        const mappedKyogong = (kyogongBills || []).map(tx => ({
+            id: tx.id,
+            bill_number: tx.transaction_number,
+            branch_id: tx.branch_id,
+            bill_type: tx.service_category || 'kyogong',
+            customer_name: tx.customer_name || 'Walk-in',
+            total_amount: tx.total_amount,
+            paid_amount: 0,
+            balance_amount: tx.total_amount,
+            bill_date: tx.created_at,
+            status: 'unpaid',
+            is_kyogong: true // Flag for frontend
+        }));
+
+        const combinedData = [...(unpaidBills || []), ...mappedKyogong];
 
         res.json({
             success: true,
             message: 'Unpaid bills retrieved successfully',
-            data
+            data: combinedData
         });
     } catch (error) {
         next(error);
@@ -2079,7 +2237,7 @@ export const submitLogbookForAudit = async (req: Request, res: Response, next: N
             type: 'warning' as const,
             category: 'audit',
             priority: 'medium' as const,
-            actionUrl: `/dashboard/auditor/cashier-logs/${id}`,
+            actionUrl: `/dashboard/auditor/financial-verification`,
             metadata: { logbook_id: id, type: 'cashier_logbook', cashier_id }
         };
 

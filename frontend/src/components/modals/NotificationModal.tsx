@@ -194,7 +194,40 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
     markAsRead(notification.id);
     if (notification.action_url) {
       onClose();
-      window.location.href = notification.action_url;
+
+      let fixedUrl = notification.action_url;
+
+      // Audit redirection for cashier-logs (not a real frontend route, maps to financial-verification)
+      if (fixedUrl.includes('/dashboard/auditor/cashier-logs/')) {
+        fixedUrl = '/dashboard/auditor/financial-verification';
+      }
+
+      // Stock and Kitchen redirection: pivot between branch and central views
+      if (fixedUrl.includes('/dashboard/store/requests/') ||
+        fixedUrl.includes('/dashboard/branch-store/requests/') ||
+        fixedUrl.includes('/dashboard/branch-store/stock-takes/') ||
+        fixedUrl.includes('/dashboard/branch-store/kitchen-usage/')) {
+
+        // Determine if user is a central role
+        const isCentralRole = user?.role === 'central_storekeeper' ||
+          user?.role === 'super_admin' ||
+          user?.role === 'general_manager' ||
+          user?.role === 'auditor';
+
+        if (isCentralRole) {
+          // Pivot branch URLs to the central equivalents
+          fixedUrl = fixedUrl
+            .replace('/dashboard/store/requests/', '/dashboard/central-store/requests/')
+            .replace('/dashboard/branch-store/requests/', '/dashboard/central-store/requests/')
+            .replace('/dashboard/branch-store/stock-takes/', '/dashboard/central-store/inventory/') // Map stock takes to inventory for central audit
+            .replace('/dashboard/branch-store/kitchen-usage/', '/dashboard/central-store/reports/'); // Map kitchen usage to reports
+        } else {
+          // Pivot old URLs to the modern branch view (if somehow still using them)
+          fixedUrl = fixedUrl.replace('/dashboard/store/requests/', '/dashboard/branch-store/requests/');
+        }
+      }
+
+      window.location.href = fixedUrl;
     }
   };
 

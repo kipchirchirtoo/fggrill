@@ -30,7 +30,7 @@ export const getReceivedItems = async (
       .select(`
         *,
         branches!inner(name),
-        users!kitchen_usage_records_recorded_by_fkey(first_name, last_name)
+        recorded_by_user:users(first_name, last_name)
       `)
       .eq('branch_id', branchId)
       .order('created_at', { ascending: false });
@@ -65,13 +65,41 @@ export const getReceivedItems = async (
       }, {} as Record<string, any>);
     }
 
-    // Enrich with item details
-    const enrichedData = (data || []).map(record => ({
-      ...record,
-      item_name: itemsMap[record.item_sku]?.item_name || record.item_sku,
-      category: itemsMap[record.item_sku]?.category,
-      retail_price: itemsMap[record.item_sku]?.retail_price
-    }));
+    // Enrich with item details and map names
+    const enrichedData = (data || []).map(record => {
+      // Robust staff name resolution
+      const user = (record as any).recorded_by_user;
+      let recorded_by_name = record.recorded_by || 'System';
+
+      if (user) {
+        const u = Array.isArray(user) ? user[0] : user;
+        const firstName = u.first_name || u.firstName;
+        const lastName = u.last_name || u.lastName || '';
+
+        if (firstName) {
+          recorded_by_name = `${firstName} ${lastName}`.trim();
+        }
+      }
+
+      return {
+        ...record,
+        // Map quantity for frontend compatibility
+        quantity: record.received_quantity,
+        item_name: itemsMap[record.item_sku]?.item_name || record.item_sku,
+        category: itemsMap[record.item_sku]?.category,
+        retail_price: itemsMap[record.item_sku]?.retail_price,
+        recorded_by_name
+      };
+    });
+
+    if (enrichedData.length > 0) {
+      logger.info(`[Kitchen Usage] Record enrichment:`, {
+        id: enrichedData[0].id,
+        item: enrichedData[0].item_name,
+        qty: enrichedData[0].quantity,
+        recorded_by_name: enrichedData[0].recorded_by_name
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -129,7 +157,7 @@ export const createUsageRecord = async (
         dispatch_id: dispatch_id || null,
         item_sku,
         received_quantity,
-        remaining_quantity: received_quantity, // Set remaining to initial received
+        // remaining_quantity is GENERATED ALWAYS - calculated automatically
         unit_cost: unit_cost || 0,
         expected_revenue: expected_revenue || 0,
         usage_date: usage_date || new Date().toISOString().split('T')[0],
@@ -298,22 +326,37 @@ export const recordUsageEntry = async (
     if (error) throw error;
 
     // Update status if all items accounted for
-    const { data: updatedRecord } = await supabase
+    // We re-fetch specifically to get the updated quantities from the trigger
+    const { data: updatedRecord, error: updateFetchError } = await supabase
       .from('kitchen_usage_records')
-      .select('remaining_quantity')
+      .select('received_quantity, consumed_quantity, spoilt_quantity, lost_quantity, damaged_quantity, expired_quantity, returned_quantity')
       .eq('id', usage_record_id)
       .single();
 
-    if (updatedRecord && updatedRecord.remaining_quantity === 0) {
-      await supabase
-        .from('kitchen_usage_records')
-        .update({ status: 'COMPLETED' })
-        .eq('id', usage_record_id);
-    } else if (updatedRecord && updatedRecord.remaining_quantity < record.received_quantity) {
-      await supabase
-        .from('kitchen_usage_records')
-        .update({ status: 'PARTIAL' })
-        .eq('id', usage_record_id);
+    if (!updateFetchError && updatedRecord) {
+      const totalAccounted =
+        (Number(updatedRecord.consumed_quantity) || 0) +
+        (Number(updatedRecord.spoilt_quantity) || 0) +
+        (Number(updatedRecord.lost_quantity) || 0) +
+        (Number(updatedRecord.damaged_quantity) || 0) +
+        (Number(updatedRecord.expired_quantity) || 0) +
+        (Number(updatedRecord.returned_quantity) || 0);
+
+      const received = Number(updatedRecord.received_quantity) || 0;
+      let newStatus = 'PENDING';
+
+      if (totalAccounted >= received) {
+        newStatus = 'COMPLETED';
+      } else if (totalAccounted > 0) {
+        newStatus = 'PARTIAL';
+      }
+
+      if (newStatus !== 'PENDING') {
+        await supabase
+          .from('kitchen_usage_records')
+          .update({ status: newStatus })
+          .eq('id', usage_record_id);
+      }
     }
 
     res.status(201).json({
@@ -343,7 +386,7 @@ export const getUsageEntries = async (
       .from('kitchen_usage_entries')
       .select(`
         *,
-        users!kitchen_usage_entries_recorded_by_fkey(first_name, last_name)
+        recorded_by_user:users(first_name, last_name)
       `)
       .eq('usage_record_id', usage_record_id)
       .order('created_at', { ascending: false });
@@ -368,10 +411,27 @@ export const getUsageEntries = async (
       }, {} as Record<string, any>);
     }
 
-    const enrichedData = (data || []).map(entry => ({
-      ...entry,
-      responsible_staff: entry.responsible_staff_id ? staffMap[entry.responsible_staff_id] : null
-    }));
+    const enrichedData = (data || []).map(entry => {
+      // Robust staff name resolution
+      const user = (entry as any).recorded_by_user;
+      let recorded_by_name = entry.recorded_by || 'System';
+
+      if (user) {
+        const u = Array.isArray(user) ? user[0] : user;
+        const firstName = u.first_name || u.firstName;
+        const lastName = u.last_name || u.lastName || '';
+
+        if (firstName) {
+          recorded_by_name = `${firstName} ${lastName}`.trim();
+        }
+      }
+
+      return {
+        ...entry,
+        recorded_by_name,
+        responsible_staff: entry.responsible_staff_id ? staffMap[entry.responsible_staff_id] : null
+      };
+    });
 
     res.status(200).json({
       success: true,
@@ -398,8 +458,13 @@ export const getBranchStaff = async (
 ): Promise<void> => {
   try {
     const branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
+    const isCentral = ['super_admin', 'general_manager', 'auditor', 'central_storekeeper'].includes(req.user?.role || '');
 
     if (!branchId) {
+      if (isCentral) {
+        res.status(200).json({ success: true, count: 0, data: [] });
+        return;
+      }
       res.status(400).json({ success: false, message: 'Branch ID required' });
       return;
     }
@@ -408,15 +473,20 @@ export const getBranchStaff = async (
       .from('users')
       .select('id, first_name, last_name, email, role')
       .eq('branch_id', branchId)
-      .eq('is_active', true)
+      .eq('status', 'active')
       .order('first_name');
 
     if (error) throw error;
 
+    const enrichedData = (data || []).map(user => ({
+      ...user,
+      full_name: `${user.first_name} ${user.last_name}`
+    }));
+
     res.status(200).json({
       success: true,
-      count: data?.length || 0,
-      data: data || []
+      count: enrichedData.length,
+      data: enrichedData
     });
   } catch (error) {
     logger.error('Error fetching branch staff:', error);
@@ -623,9 +693,14 @@ export const getTrackableItems = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const branchId = req.user?.branch_id;
+    const branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
+    const isCentral = ['super_admin', 'general_manager', 'auditor', 'central_storekeeper'].includes(req.user?.role || '');
 
     if (!branchId) {
+      if (isCentral) {
+        res.status(200).json({ success: true, count: 0, data: [] });
+        return;
+      }
       res.status(400).json({ success: false, message: 'Branch ID required' });
       return;
     }
@@ -656,12 +731,17 @@ export const getTrackableItems = async (
     }
 
     const enrichedData = (branchStock || []).map(stock => ({
-      ...stock,
+      item_sku: stock.item_sku,
       item_name: itemsMap[stock.item_sku]?.item_name || stock.item_sku,
-      category: itemsMap[stock.item_sku]?.category,
+      quantity: stock.quantity,
+      category: itemsMap[stock.item_sku]?.category || 'General',
+      unit: stock.unit || 'units',
       cost_price: itemsMap[stock.item_sku]?.cost_price,
       retail_price: itemsMap[stock.item_sku]?.retail_price
     }));
+
+    logger.info(`[Kitchen Usage] Returning ${enrichedData.length} trackable items for branch ${branchId}`);
+    logger.info(`[Kitchen Usage] Sample item:`, enrichedData[0]);
 
     res.status(200).json({
       success: true,

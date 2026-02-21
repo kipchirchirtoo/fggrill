@@ -12,7 +12,7 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
-import { 
+import {
   Search, RefreshCw, MessageSquare, ArrowRightCircle,
   Users, Filter, Send, User, ArrowUpDown, PenSquare
 } from 'lucide-react';
@@ -59,7 +59,7 @@ function BranchMessagesContent() {
   const [searchTerm, setSearchTerm] = useState('');
   const [staffFilter, setStaffFilter] = useState('all');
   const [showMessageDetails, setShowMessageDetails] = useState(false);
-  
+
   // New message state
   const [showNewMessage, setShowNewMessage] = useState(false);
   const [newMessageRecipient, setNewMessageRecipient] = useState('');
@@ -84,7 +84,7 @@ function BranchMessagesContent() {
     try {
       // Call the real API
       const response = await branchOperationsAPI.getMessages(activeBranchId);
-      
+
       if (response.success && Array.isArray(response.data)) {
         setMessages(response.data);
       }
@@ -110,7 +110,7 @@ function BranchMessagesContent() {
   const applyFilters = () => {
     let filtered = [...messages];
     if (searchTerm) {
-      filtered = filtered.filter(m => 
+      filtered = filtered.filter(m =>
         m.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
         m.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
         m.sender.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -123,7 +123,7 @@ function BranchMessagesContent() {
   };
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
+    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]}>
       <BranchAwareDashboardLayout
         title="Messages"
         subtitle={`Staff messages for ${activeBranch?.name || 'your branch'}`}

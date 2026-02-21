@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { useBranch } from '@/lib/branch-context';
 import { staffAPI } from '@/lib/api';
 import {
     DollarSign,
@@ -33,6 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 export default function HRPayrollPage() {
     const { user } = useAuth();
+    const { activeBranch } = useBranch();
     const [isLoading, setIsLoading] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
@@ -54,7 +56,8 @@ export default function HRPayrollPage() {
         try {
             const res = await staffAPI.simplePayroll.getPayrollRecords({
                 month: Number(selectedMonth),
-                year: Number(selectedYear)
+                year: Number(selectedYear),
+                branch_id: activeBranch?.id
             });
 
             if (res.success) {
@@ -79,7 +82,7 @@ export default function HRPayrollPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [selectedMonth, selectedYear]);
+    }, [selectedMonth, selectedYear, activeBranch]);
 
     useEffect(() => {
         fetchPayrollData();
@@ -94,7 +97,8 @@ export default function HRPayrollPage() {
         try {
             const res = await staffAPI.simplePayroll.generatePayroll({
                 month: Number(selectedMonth),
-                year: Number(selectedYear)
+                year: Number(selectedYear),
+                branch_id: activeBranch?.id
             });
 
             if (res.success) {
@@ -165,7 +169,11 @@ export default function HRPayrollPage() {
                                 onClick={async () => {
                                     if (!confirm(`Generate and download payslips ZIP for ${selectedMonth}/${selectedYear}?`)) return;
                                     toast.info('Generating ZIP...');
-                                    const res = await staffAPI.simplePayroll.downloadPayslipsZip({ month: Number(selectedMonth), year: Number(selectedYear) });
+                                    const res = await staffAPI.simplePayroll.downloadPayslipsZip({
+                                        month: Number(selectedMonth),
+                                        year: Number(selectedYear),
+                                        branch_id: activeBranch?.id
+                                    });
                                     if (res.success) toast.success('Download started');
                                     else toast.error(res.message || 'Download failed');
                                 }}
@@ -179,7 +187,11 @@ export default function HRPayrollPage() {
                                 onClick={async () => {
                                     if (!confirm(`Email payslips to ALL staff for ${selectedMonth}/${selectedYear}?`)) return;
                                     toast.info('Sending emails...');
-                                    const res = await staffAPI.simplePayroll.emailPayslips({ month: Number(selectedMonth), year: Number(selectedYear) });
+                                    const res = await staffAPI.simplePayroll.emailPayslips({
+                                        month: Number(selectedMonth),
+                                        year: Number(selectedYear),
+                                        branch_id: activeBranch?.id
+                                    });
                                     if (res.success) toast.success('Emails sent successfully');
                                     else toast.error(res.message || 'Email sending failed');
                                 }}

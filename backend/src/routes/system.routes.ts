@@ -30,7 +30,7 @@ router.route('/branches')
 // =====================================================
 
 router.route('/departments')
-  .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER]), getDepartments)
+  .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]), getDepartments)
   .post(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), createDepartment);
 
 // =====================================================
@@ -38,7 +38,7 @@ router.route('/departments')
 // =====================================================
 
 router.get('/roles',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
   getRoles
 );
 

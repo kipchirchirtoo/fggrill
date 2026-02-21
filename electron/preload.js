@@ -1,5 +1,15 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Polyfills for UI libraries that might crash without these in certain environments
+if (typeof window !== 'undefined') {
+    if (typeof window.DragEvent === 'undefined') {
+        window.DragEvent = class DragEvent extends UIEvent { };
+    }
+    if (typeof window.PointerEvent === 'undefined') {
+        window.PointerEvent = class PointerEvent extends UIEvent { };
+    }
+}
+
 // ──────────────────────────────────────────
 // Expose safe APIs to the renderer (Next.js)
 // via window.electronAPI
@@ -70,6 +80,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // --- App ---
     checkForUpdates: () => ipcRenderer.send('check-for-updates'),
+    
+    // --- Navigation (for reliable page transitions) ---
+    navigate: (url) => ipcRenderer.invoke('navigate', url),
+    
     isElectron: true,
 });
 

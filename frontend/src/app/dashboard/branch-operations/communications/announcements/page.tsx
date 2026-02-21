@@ -12,8 +12,8 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
-import { 
-  Search, RefreshCw, Megaphone, Pin, CheckCircle2, Filter, 
+import {
+  Search, RefreshCw, Megaphone, Pin, CheckCircle2, Filter,
   PlusCircle, Eye, Calendar, CalendarDays
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -44,7 +44,7 @@ function BranchAnnouncementsContent() {
   const [searchTerm, setSearchTerm] = useState('');
   const [importanceFilter, setImportanceFilter] = useState('all');
   const [showAnnouncementDetails, setShowAnnouncementDetails] = useState(false);
-  
+
   // New announcement state
   const [showNewAnnouncement, setShowNewAnnouncement] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -69,7 +69,7 @@ function BranchAnnouncementsContent() {
     try {
       // Try to get data from API
       const response = await branchOperationsAPI.getAnnouncements(activeBranchId);
-      
+
       if (response.success && Array.isArray(response.data)) {
         setAnnouncements(response.data);
       }
@@ -84,7 +84,7 @@ function BranchAnnouncementsContent() {
   const applyFilters = () => {
     let filtered = [...announcements];
     if (searchTerm) {
-      filtered = filtered.filter(a => 
+      filtered = filtered.filter(a =>
         a.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         a.content.toLowerCase().includes(searchTerm.toLowerCase())
       );
@@ -96,7 +96,7 @@ function BranchAnnouncementsContent() {
   };
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
+    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]}>
       <BranchAwareDashboardLayout
         title="Announcements"
         subtitle={`Branch announcements for ${activeBranch?.name || 'your branch'}`}

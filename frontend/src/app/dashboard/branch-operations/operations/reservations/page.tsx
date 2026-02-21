@@ -287,7 +287,8 @@ function BranchReservationsContent() {
       UserRole.BRANCH_MANAGER,
       UserRole.RECEPTIONIST,
       UserRole.SUPER_ADMIN,
-      UserRole.GENERAL_MANAGER
+      UserRole.GENERAL_MANAGER,
+      UserRole.AUDITOR
     ]}>
       <BranchAwareDashboardLayout
         title="Reservations"

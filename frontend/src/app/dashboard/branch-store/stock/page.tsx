@@ -8,8 +8,8 @@ import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription }
 import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
-import { storeAPI } from '@/lib/api';
-import { Package, RefreshCw, Search, AlertTriangle, ShoppingCart } from 'lucide-react';
+import { storeAPI, auditorReportsAPI } from '@/lib/api';
+import { Package, RefreshCw, Search, AlertTriangle, ShoppingCart, FileDown, TrendingDown } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -61,22 +61,73 @@ export default function BranchStockPage() {
     } catch (error: any) { toast.error(error.message || 'Failed'); }
   };
 
+  const handleExport = async () => {
+    try {
+      toast.loading("Generating stock ledger...");
+      await auditorReportsAPI.exportComprehensiveStockAudit({
+        branch_id: user?.branch_id || undefined
+      });
+      toast.dismiss();
+      toast.success("Stock ledger generated successfully");
+    } catch (error) {
+      console.error(error);
+      toast.dismiss();
+      toast.error("Failed to export ledger");
+    }
+  };
+
   return (
-    <ProtectedRoute allowedRoles={[UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_MANAGER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
+    <ProtectedRoute allowedRoles={[UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_MANAGER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]}>
       <DashboardLayout>
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div><h1 className="text-2xl font-bold text-gray-900">Stock</h1><p className="text-gray-500">Branch inventory</p></div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                {user?.role === UserRole.AUDITOR ? 'Inventory Oversight' : 'Stock'}
+              </h1>
+              <p className="text-gray-500">
+                {user?.role === UserRole.AUDITOR ? 'Review branch inventory levels' : 'Branch inventory'}
+              </p>
+            </div>
             <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchItems} leftIcon={<RefreshCw />}>Refresh</IOSButton>
-              <Link href="/dashboard/branch-store/requests"><IOSButton leftIcon={<ShoppingCart />}>Requests</IOSButton></Link>
+              <IOSButton variant="secondary" onClick={fetchItems} leftIcon={<RefreshCw className={isLoading ? 'animate-spin' : ''} />}>Refresh</IOSButton>
+              {user?.role === UserRole.AUDITOR && (
+                <IOSButton variant="secondary" onClick={handleExport} leftIcon={<FileDown />}>Export Ledger</IOSButton>
+              )}
+              {user?.role !== UserRole.AUDITOR && (
+                <Link href="/dashboard/branch-store/requests"><IOSButton leftIcon={<ShoppingCart />}>Requests</IOSButton></Link>
+              )}
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <IOSCard className="p-4"><Package className="h-6 w-6 text-[#007AFF] mb-2" /><p className="text-sm text-gray-500">Total Items</p><p className="text-xl font-bold">{items.length}</p></IOSCard>
-            <IOSCard className="p-4 border-l-4 border-yellow-500"><AlertTriangle className="h-6 w-6 text-yellow-600 mb-2" /><p className="text-sm text-gray-500">Low Stock</p><p className="text-xl font-bold text-yellow-600">{lowStockItems.length}</p></IOSCard>
-            <IOSCard className="p-4 border-l-4 border-red-500"><AlertTriangle className="h-6 w-6 text-[#FF3B30] mb-2" /><p className="text-sm text-gray-500">Out of Stock</p><p className="text-xl font-bold text-[#FF3B30]">{items.filter(i => i.quantity === 0).length}</p></IOSCard>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <IOSCard className="p-4 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center text-stone-600">
+                <Package className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Total Items</p>
+                <p className="text-xl font-black text-stone-900">{items.length}</p>
+              </div>
+            </IOSCard>
+            <IOSCard className="p-4 flex items-center gap-4 border-l-4 border-yellow-500">
+              <div className="w-12 h-12 rounded-full bg-yellow-50 flex items-center justify-center text-yellow-600">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest text-yellow-600">Low Stock</p>
+                <p className="text-xl font-black text-yellow-600">{lowStockItems.length}</p>
+              </div>
+            </IOSCard>
+            <IOSCard className="p-4 flex items-center gap-4 border-l-4 border-red-500">
+              <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center text-red-600">
+                <TrendingDown className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest text-red-600">Stock Out</p>
+                <p className="text-xl font-black text-red-600">{items.filter(i => i.quantity === 0).length}</p>
+              </div>
+            </IOSCard>
           </div>
 
           {lowStockItems.length > 0 && (
@@ -112,7 +163,9 @@ export default function BranchStockPage() {
                     </div>
                     <div className="flex items-end justify-between mt-4">
                       <div><p className="text-2xl font-bold">{item.quantity}</p><p className="text-xs text-gray-500">Min: {item.min_quantity} {item.unit}</p></div>
-                      {(isLow || isOut) && <IOSButton size="sm" onClick={() => handleRequestStock(item)}>Request</IOSButton>}
+                      {user?.role !== UserRole.AUDITOR && (isLow || isOut) && (
+                        <IOSButton size="sm" onClick={() => handleRequestStock(item)}>Request</IOSButton>
+                      )}
                     </div>
                   </IOSCard>
                 );

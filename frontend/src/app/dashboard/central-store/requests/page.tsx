@@ -150,7 +150,8 @@ export default function CentralRequestsPage() {
             UserRole.CENTRAL_STOREKEEPER,
             UserRole.CENTRAL_OPERATIONS_MANAGER,
             UserRole.SUPER_ADMIN,
-            UserRole.GENERAL_MANAGER
+            UserRole.GENERAL_MANAGER,
+            UserRole.AUDITOR
         ]}>
             <DashboardLayout>
                 <div className="space-y-6">

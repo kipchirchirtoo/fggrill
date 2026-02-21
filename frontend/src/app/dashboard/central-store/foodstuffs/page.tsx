@@ -34,7 +34,7 @@ export default function FoodstuffsPage() {
     const lowStockCount = items.filter(i => i.quantity <= i.reorder_level).length;
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
+        <ProtectedRoute allowedRoles={[UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]}>
             <DashboardLayout>
                 <div className="space-y-6">
                     {/* Header */}

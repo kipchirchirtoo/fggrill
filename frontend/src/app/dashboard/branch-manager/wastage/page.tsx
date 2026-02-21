@@ -113,7 +113,7 @@ export default function BranchManagerWastagePage() {
     .slice(0, 5);
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
+    <ProtectedRoute allowedRoles={[UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]}>
       <DashboardLayout>
         <div className="space-y-6">
           {/* Header */}

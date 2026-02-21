@@ -96,7 +96,7 @@ export default function KitchenDashboard() {
       fetchOrders(effectiveBranchId);
     }, 5000);
 
-    // Real-time subscription
+    // Real-time subscription - only for restaurant orders, not bar
     const channel = supabase
       .channel('kitchen-orders')
       .on(
@@ -105,7 +105,9 @@ export default function KitchenDashboard() {
           event: '*',
           schema: 'public',
           table: 'restaurant_orders',
-          filter: effectiveBranchId ? `branch_id=eq.${effectiveBranchId}` : undefined,
+          filter: effectiveBranchId 
+            ? `branch_id=eq.${effectiveBranchId},department=eq.restaurant` 
+            : 'department=eq.restaurant',
         },
         (payload) => {
           fetchOrders(effectiveBranchId);

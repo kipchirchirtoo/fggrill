@@ -11,6 +11,7 @@ import {
   updateOrderStatus,
   getOrder,
   getOrders,
+  addItemsToOrder,
   getInventoryItems,
   updateInventoryStock,
   createRoomServiceOrder,
@@ -59,6 +60,11 @@ router.post('/orders',
 router.get('/orders',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.RECEPTIONIST, UserRole.BRANCH_MANAGER, UserRole.POS_KITCHEN, UserRole.AUDITOR]),
   getOrders
+);
+
+router.post('/orders/:id/items',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.POS_KITCHEN]),
+  addItemsToOrder
 );
 
 // Restaurant staff routes
@@ -152,6 +158,7 @@ router.get('/kitchen/orders',
           )
         `)
         .in('status', ['pending', 'confirmed', 'preparing', 'ready'])
+        .eq('department', 'restaurant') // Only show restaurant orders, not bar orders
         .order('created_at', { ascending: true });
 
       if (branchId) {

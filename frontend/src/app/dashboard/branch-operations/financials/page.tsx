@@ -10,7 +10,7 @@ import { branchOperationsAPI } from '@/lib/branch-api';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
-import { 
+import {
   DollarSign, TrendingUp, TrendingDown, BarChart4, ArrowRightCircle,
   FileText, RefreshCw, PieChart, Receipt, Calendar, Users
 } from 'lucide-react';
@@ -70,7 +70,7 @@ function BranchFinancialsContent() {
     try {
       // Call the real API
       const response = await branchOperationsAPI.getFinancialSummary(selectedPeriod, activeBranchId);
-      
+
       if (response.success) {
         setSummary(response.data);
       } else {
@@ -123,7 +123,7 @@ function BranchFinancialsContent() {
   ];
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
+    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]}>
       <BranchAwareDashboardLayout
         title="Branch Financials"
         subtitle={`Financial overview for ${activeBranch?.name || 'your branch'}`}

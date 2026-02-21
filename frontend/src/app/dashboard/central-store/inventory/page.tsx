@@ -110,7 +110,8 @@ export default function InventoryPage() {
       UserRole.CENTRAL_STOREKEEPER,
       UserRole.SUPER_ADMIN,
       UserRole.GENERAL_MANAGER,
-      UserRole.CENTRAL_OPERATIONS_MANAGER
+      UserRole.CENTRAL_OPERATIONS_MANAGER,
+      UserRole.AUDITOR
     ]}>
       <DashboardLayout>
         <div className="space-y-6">

@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { BranchSelector } from '@/components/dashboard/BranchSelector';
 import { staffAPI, systemAPI } from '@/lib/api';
 import { toast } from 'sonner';
 import {
@@ -25,10 +27,12 @@ interface Staff {
     role: string;
     department?: string;
     status: 'active' | 'inactive';
+    branch_id?: number;
 }
 
 export default function StaffAttendanceLookupPage() {
     const { user } = useAuth();
+    const { activeBranchId, activeBranch, userBranches } = useBranch();
     const [staff, setStaff] = useState<Staff[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -38,8 +42,11 @@ export default function StaffAttendanceLookupPage() {
     const fetchStaffData = useCallback(async () => {
         setIsLoading(true);
         try {
+            // Build params with branch filter if a specific branch is selected
+            const branchParam = activeBranchId ? { branch_id: activeBranchId } : {};
+            
             const [staffRes, departmentsRes] = await Promise.all([
-                staffAPI.getStaff(),
+                staffAPI.getStaff(branchParam),
                 systemAPI.getDepartments()
             ]);
 
@@ -51,7 +58,7 @@ export default function StaffAttendanceLookupPage() {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [activeBranchId]);
 
     useEffect(() => {
         fetchStaffData();
@@ -85,8 +92,20 @@ export default function StaffAttendanceLookupPage() {
                             </Link>
                             <h1 className="text-[28px] font-bold text-stone-900 tracking-tight font-sf-pro-display">Staff Attendance</h1>
                             <p className="text-stone-500 font-medium">Select a team member to view their detailed attendance audit</p>
+                            {activeBranch && (
+                                <div className="flex items-center gap-2 mt-2 text-sm text-stone-600">
+                                    <Building2 className="h-4 w-4" />
+                                    <span className="font-medium">{activeBranch.name}</span>
+                                </div>
+                            )}
                         </div>
                         <div className="flex items-center gap-3">
+                            {userBranches.length > 1 && (
+                                <BranchSelector 
+                                    showLabel={false}
+                                    className="min-w-[200px]"
+                                />
+                            )}
                             <button
                                 onClick={fetchStaffData}
                                 disabled={isLoading}

@@ -98,6 +98,11 @@ export default function POSKitchenDashboard() {
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isGeneratingBill, setIsGeneratingBill] = useState<string | null>(null);
+  
+  // Filter states for history tab
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [waiterFilter, setWaiterFilter] = useState<string>('my-orders'); // 'my-orders' or 'all-orders' or specific waiter_id
+  
   const [stats, setStats] = useState<DashboardStats>({
     todayOrders: 0,
     todayRevenue: 0,
@@ -138,14 +143,43 @@ export default function POSKitchenDashboard() {
     try {
       const currentBranchId = activeBranchId || user?.branch_id;
 
-      if (!user?.id) {
+      // In offline mode, we don't need user ID - just fetch all orders for the branch
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const isOfflineMode = token === 'offline-bridge-token';
+
+      if (!isOfflineMode && !user?.id) {
         console.error('No user ID available for fetching orders');
         setIsLoading(false);
         return;
       }
 
+      // Build filters based on current tab and filter selections
+      const filters: any = {};
+      
+      // For history tab, apply status and waiter filters
+      if (activeTab === 'recent') {
+        if (statusFilter !== 'all') {
+          filters.status = statusFilter;
+        }
+        
+        if (waiterFilter === 'my-orders') {
+          // Show only orders created by this user (default behavior)
+          // No waiter_id filter needed, will use created_by
+        } else if (waiterFilter === 'all-orders') {
+          // Show all orders for this branch (don't filter by user)
+          // Pass empty userId to skip created_by filter
+        } else if (waiterFilter && waiterFilter !== 'my-orders' && waiterFilter !== 'all-orders') {
+          // Show orders for specific waiter
+          filters.waiter_id = waiterFilter;
+        }
+      }
+
       const [ordersResult, salesResult] = await Promise.allSettled([
-        restaurantAPI.getMyOrders(user.id, currentBranchId || undefined),
+        restaurantAPI.getMyOrders(
+          waiterFilter === 'all-orders' ? '' : (user?.id || 'offline-user'), 
+          currentBranchId || undefined,
+          activeTab === 'recent' ? filters : undefined
+        ),
         restaurantAPI.getDailySales(currentBranchId || undefined),
       ]);
 
@@ -171,7 +205,7 @@ export default function POSKitchenDashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeBranchId, user?.branch_id]);
+  }, [activeBranchId, user?.branch_id, user?.id, activeTab, statusFilter, waiterFilter]);
 
   useEffect(() => {
     fetchData();
@@ -375,7 +409,13 @@ export default function POSKitchenDashboard() {
     </div>
   );
 
-  const renderRecentOrders = () => (
+  const renderRecentOrders = () => {
+    // Calculate filtered stats
+    const pendingCount = recentOrders.filter(o => o.status === 'pending').length;
+    const verifiedCount = recentOrders.filter(o => ['completed', 'served', 'ready'].includes(o.status)).length;
+    const voidCount = recentOrders.filter(o => o.status === 'cancelled').length;
+    
+    return (
     <div className="space-y-6">
       {/* Order Details Modal - Minimal Design */}
       {selectedOrder && (
@@ -402,6 +442,7 @@ export default function POSKitchenDashboard() {
                 <span className={`px-2 py-1 text-xs rounded ${selectedOrder.status === 'ready' ? 'bg-green-100 text-green-700' :
                   selectedOrder.status === 'preparing' ? 'bg-blue-100 text-blue-700' :
                     selectedOrder.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                      selectedOrder.status === 'cancelled' ? 'bg-red-100 text-red-700' :
                       'bg-gray-100 text-gray-700'
                   }`}>
                   {selectedOrder.status}
@@ -457,10 +498,66 @@ export default function POSKitchenDashboard() {
         </div>
       )}
 
+      {/* Filter Controls */}
+      <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <h3 className="text-sm font-medium text-gray-900 mb-3">Filters</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Status Filter */}
+          <div>
+            <label className="text-xs text-gray-500 mb-2 block">Order Status</label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'all', label: 'All', count: recentOrders.length },
+                { value: 'pending', label: 'Pending', count: pendingCount },
+                { value: 'completed', label: 'Verified', count: verifiedCount },
+                { value: 'cancelled', label: 'Void', count: voidCount },
+              ].map((status) => (
+                <button
+                  key={status.value}
+                  onClick={() => setStatusFilter(status.value)}
+                  className={cn(
+                    "px-3 py-1.5 text-xs font-medium rounded-lg transition-all",
+                    statusFilter === status.value
+                      ? "bg-gray-900 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  )}
+                >
+                  {status.label} ({status.count})
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Waiter Filter */}
+          <div>
+            <label className="text-xs text-gray-500 mb-2 block">View Orders</label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'my-orders', label: 'My Orders' },
+                { value: 'all-orders', label: 'All Orders' },
+              ].map((filter) => (
+                <button
+                  key={filter.value}
+                  onClick={() => setWaiterFilter(filter.value)}
+                  className={cn(
+                    "px-3 py-1.5 text-xs font-medium rounded-lg transition-all",
+                    waiterFilter === filter.value
+                      ? "bg-gray-900 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  )}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Stats Summary - Minimal Design */}
-      <div className={`grid ${canSeeRevenue ? 'grid-cols-3' : 'grid-cols-2'} gap-3`}>
+      <div className={`grid ${canSeeRevenue ? 'grid-cols-4' : 'grid-cols-3'} gap-3`}>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <p className="text-xs text-gray-500 mb-1">Orders</p>
+          <p className="text-xs text-gray-500 mb-1">Total Orders</p>
           <p className="text-xl font-semibold text-gray-900">{recentOrders.length}</p>
         </div>
         {canSeeRevenue && (
@@ -470,15 +567,22 @@ export default function POSKitchenDashboard() {
           </div>
         )}
         <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <p className="text-xs text-gray-500 mb-1">Ready</p>
-          <p className="text-xl font-semibold text-gray-900">{recentOrders.filter(o => ['ready', 'completed', 'served'].includes(o.status)).length}</p>
+          <p className="text-xs text-gray-500 mb-1">Pending</p>
+          <p className="text-xl font-semibold text-yellow-600">{pendingCount}</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <p className="text-xs text-gray-500 mb-1">Verified</p>
+          <p className="text-xl font-semibold text-green-600">{verifiedCount}</p>
         </div>
       </div>
 
       {/* Orders List - Minimal Design */}
       <div className="bg-white border border-gray-200 rounded-lg">
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h2 className="text-base font-medium text-gray-900">My Orders</h2>
+          <h2 className="text-base font-medium text-gray-900">
+            {waiterFilter === 'my-orders' ? 'My Orders' : 'All Orders'}
+            {statusFilter !== 'all' && ` - ${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}`}
+          </h2>
           <button
             onClick={fetchData}
             className="text-sm text-gray-500 hover:text-gray-700 px-2 py-1 rounded"
@@ -493,7 +597,7 @@ export default function POSKitchenDashboard() {
           </div>
         ) : recentOrders.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
-            <p className="text-sm">You haven't created any orders today</p>
+            <p className="text-sm">No orders found matching your filters</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
@@ -507,12 +611,14 @@ export default function POSKitchenDashboard() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-medium text-gray-900">#{order.order_number}</span>
-                      <span className={`px-2 py-1 text-xs rounded ${order.status === 'ready' ? 'bg-green-100 text-green-700' :
+                      <span className={`px-2 py-1 text-xs rounded ${
+                        order.status === 'ready' || order.status === 'completed' || order.status === 'served' ? 'bg-green-100 text-green-700' :
                         order.status === 'preparing' ? 'bg-blue-100 text-blue-700' :
                           order.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                            order.status === 'cancelled' ? 'bg-red-100 text-red-700' :
                             'bg-gray-100 text-gray-700'
                         }`}>
-                        {order.status}
+                        {order.status === 'cancelled' ? 'VOID' : order.status}
                       </span>
                     </div>
                     <p className="text-sm text-gray-500">
@@ -532,6 +638,7 @@ export default function POSKitchenDashboard() {
       </div>
     </div>
   );
+  };
 
   return (
     <ProtectedRoute allowedRoles={[

@@ -60,6 +60,12 @@ import hrReportRoutes from './hr-reports.routes';
 import stockTakeRoutes from './stock-take.routes';
 import verifyRoutes from './verify.routes';
 import auditorVoidBillsRoutes from './auditor-void-bills.routes';
+import kyogongRoutes from './kyogong.routes';
+import bankingRoutes from './banking.routes';
+import suppliersRoutes from './suppliers.routes';
+import shiftsRoutes from './shifts.routes';
+import payrollEnhancedRoutes from './payroll-enhanced.routes';
+import cateringBookingsRoutes from './catering-bookings.routes';
 
 console.log('Index routes: importing staffRoutes', staffRoutes);
 
@@ -138,6 +144,12 @@ router.use('/kitchen', kitchenRoutes);
 router.use('/procurement', procurementRoutes);
 router.use('/hr-reports', hrReportRoutes);
 router.use('/stock-takes', stockTakeRoutes);
+router.use('/kyogong', kyogongRoutes);
+router.use('/banking', bankingRoutes);
+router.use('/suppliers', suppliersRoutes);
+router.use('/shifts', shiftsRoutes);
+router.use('/payroll-enhanced', payrollEnhancedRoutes);
+router.use('/catering-bookings', cateringBookingsRoutes);
 
 // Email booking endpoints (public - no auth required)
 router.post('/email/send-booking/:bookingId', sendBookingEmail);

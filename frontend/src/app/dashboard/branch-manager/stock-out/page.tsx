@@ -4,28 +4,89 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
-import { Button } from "@/components/ui/minimal/button";
-import { IOSBadge } from '@/components/ui/ios-badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { storeAPI } from '@/lib/api';
-import { TrendingDown, RefreshCw, Package, Calendar, User } from 'lucide-react';
+import { TrendingDown, RefreshCw, Package, Calendar, User, Clock, FileText, Tag, ChevronRight } from 'lucide-react';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
-interface StockOut { id: string; item_name: string; quantity: number; department: string; recorded_by: string; date: string; }
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+interface StockMovement {
+  id: string;
+  item_sku: string;
+  quantity: number;
+  movement_type: string;
+  reason?: string;
+  notes?: string;
+  performed_by?: string;
+  created_at?: string;
+  branch_id?: number;
+  item?: {
+    sku?: string;
+    item_name?: string;
+    category?: string;
+  };
+}
+
+function formatDate(dateStr?: string): string {
+  if (!dateStr) return 'N/A';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 'N/A';
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch {
+    return 'N/A';
+  }
+}
+
+function formatTime(dateStr?: string): string {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+}
 
 export default function BranchStockOutPage() {
   const { user } = useAuth();
-  const [records, setRecords] = useState<StockOut[]>([]);
+  const [records, setRecords] = useState<StockMovement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedRecord, setSelectedRecord] = useState<StockMovement | null>(null);
 
   const fetchRecords = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await storeAPI.getStockMovements();
       if (response.success) {
-        // Filter for stock out movements
-        const stockOuts = (response.data || []).filter((m: any) => m.movement_type === 'out');
+        const stockOuts = (response.data || []).filter(
+          (m: any) => m.movement_type === 'STOCK_OUT' || m.movement_type === 'out'
+        );
+
+        // Resolve performed_by UUIDs to names
+        const uuids = Array.from(new Set(
+          stockOuts.map((m: any) => m.performed_by).filter((v: string) => v && UUID_REGEX.test(v))
+        ));
+        if (uuids.length > 0) {
+          try {
+            const staffRes = await storeAPI.getBranchStaffForUsage();
+            if (staffRes.success && staffRes.data) {
+              const nameMap: Record<string, string> = {};
+              (staffRes.data as any[]).forEach((s: any) => {
+                nameMap[s.id] = s.full_name || [s.first_name, s.last_name].filter(Boolean).join(' ') || s.email || s.id;
+              });
+              stockOuts.forEach((m: any) => {
+                if (m.performed_by && nameMap[m.performed_by]) {
+                  m.performed_by = nameMap[m.performed_by];
+                }
+              });
+            }
+          } catch (e) { console.error('Failed to resolve user names:', e); }
+        }
+
         setRecords(stockOuts);
       }
     } catch (error) { console.error('Error:', error); }
@@ -34,8 +95,12 @@ export default function BranchStockOutPage() {
 
   useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
+  const getItemName = (record: StockMovement) => {
+    return record.item?.item_name || record.item_sku || 'Unknown Item';
+  };
+
   return (
-    <ProtectedRoute allowedRoles={[UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN, UserRole.BRANCH_STOREKEEPER]}>
+    <ProtectedRoute allowedRoles={[UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN, UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -50,23 +115,134 @@ export default function BranchStockOutPage() {
           ) : (
             <div className="space-y-3">
               {records.map((record) => (
-                <IOSCard key={record.id} className="p-4">
+                <IOSCard
+                  key={record.id}
+                  className="p-4 cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => setSelectedRecord(record)}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-ios-lg bg-red-100 flex items-center justify-center"><TrendingDown className="h-6 w-6 text-[#FF3B30]" /></div>
-                      <div>
-                        <p className="font-bold">{record.item_name}</p>
-                        <p className="text-sm text-gray-500">{record.department}</p>
-                        <p className="text-xs text-gray-400 flex items-center gap-2"><User className="h-3 w-3" /> {record.recorded_by} <Calendar className="h-3 w-3 ml-2" /> {new Date(record.date).toLocaleDateString()}</p>
+                      <div className="w-12 h-12 rounded-ios-lg bg-red-100 flex items-center justify-center">
+                        <TrendingDown className="h-6 w-6 text-[#FF3B30]" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-gray-900 truncate">{getItemName(record)}</p>
+                        {record.item?.category && (
+                          <p className="text-sm text-gray-500 flex items-center gap-1">
+                            <Tag className="h-3 w-3" /> {record.item.category}
+                          </p>
+                        )}
+                        <p className="text-xs text-gray-400 flex items-center gap-2 mt-0.5">
+                          {record.reason && <span className="bg-gray-100 px-2 py-0.5 rounded-full text-gray-600">{record.reason}</span>}
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" /> {formatDate(record.created_at)}
+                          </span>
+                          {record.performed_by && (
+                            <span className="flex items-center gap-1">
+                              <User className="h-3 w-3" /> {record.performed_by}
+                            </span>
+                          )}
+                        </p>
                       </div>
                     </div>
-                    <p className="font-bold text-lg text-[#FF3B30]">-{record.quantity}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-lg text-[#FF3B30]">-{Math.abs(record.quantity)}</p>
+                      <ChevronRight className="h-5 w-5 text-gray-300" />
+                    </div>
                   </div>
                 </IOSCard>
               ))}
             </div>
           )}
         </div>
+
+        {/* Detail Dialog */}
+        <Dialog open={!!selectedRecord} onOpenChange={(open) => { if (!open) setSelectedRecord(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <TrendingDown className="h-5 w-5 text-[#FF3B30]" />
+                Stock Out Detail
+              </DialogTitle>
+            </DialogHeader>
+            {selectedRecord && (
+              <div className="space-y-4 mt-2 max-h-[70vh] overflow-y-auto pr-1">
+                <div className="bg-red-50 rounded-xl p-4 text-center">
+                  <p className="text-sm text-gray-500 mb-1">Quantity Issued</p>
+                  <p className="text-3xl font-bold text-[#FF3B30]">-{Math.abs(selectedRecord.quantity)}</p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
+                    <Package className="h-5 w-5 text-gray-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs text-gray-500">Item</p>
+                      <p className="font-semibold text-gray-900">{getItemName(selectedRecord)}</p>
+                      {selectedRecord.item_sku && (
+                        <p className="text-xs text-gray-400 mt-0.5">SKU: {selectedRecord.item_sku}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {selectedRecord.item?.category && (
+                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
+                      <Tag className="h-5 w-5 text-gray-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs text-gray-500">Category</p>
+                        <p className="font-semibold text-gray-900">{selectedRecord.item.category}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedRecord.reason && (
+                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
+                      <FileText className="h-5 w-5 text-gray-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs text-gray-500">Reason / Department</p>
+                        <p className="font-semibold text-gray-900">{selectedRecord.reason}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedRecord.notes && (
+                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
+                      <FileText className="h-5 w-5 text-gray-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs text-gray-500">Notes</p>
+                        <p className="font-semibold text-gray-900">{selectedRecord.notes}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedRecord.performed_by && (
+                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
+                      <User className="h-5 w-5 text-gray-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs text-gray-500">Recorded By</p>
+                        <p className="font-semibold text-gray-900">{selectedRecord.performed_by}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
+                    <Clock className="h-5 w-5 text-gray-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs text-gray-500">Date & Time</p>
+                      <p className="font-semibold text-gray-900">
+                        {formatDate(selectedRecord.created_at)}
+                        {formatTime(selectedRecord.created_at) && ` at ${formatTime(selectedRecord.created_at)}`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <IOSButton variant="secondary" onClick={() => setSelectedRecord(null)} className="w-full">
+                  Close
+                </IOSButton>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </DashboardLayout>
     </ProtectedRoute>
   );

@@ -33,6 +33,20 @@ async function fetchAPI<T>(endpoint: string, options?: FetchOptions): Promise<T>
   let lastError: Error | null = null;
   const showToast = options?.showToast ?? false;
 
+  // Check if we're in offline mode (offline-bridge-token means offline Electron mode)
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('token');
+    if (token === 'offline-bridge-token') {
+      console.log('[API] Offline mode detected, skipping API call:', endpoint);
+      // Return empty success response for offline mode
+      return {
+        success: true,
+        data: null,
+        message: 'Offline mode - no API call made'
+      } as T;
+    }
+  }
+
   while (retries <= MAX_RETRIES) {
     try {
       // If this is a retry, wait with exponential backoff
@@ -155,6 +169,20 @@ async function fetchPythonAPI<T>(endpoint: string, options?: FetchOptions): Prom
   let retries = 0;
   let lastError: Error | null = null;
   const showToast = options?.showToast ?? false;
+
+  // Check if we're in offline mode (offline-bridge-token means offline Electron mode)
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('token');
+    if (token === 'offline-bridge-token') {
+      console.log('[Python API] Offline mode detected, skipping Python API call:', endpoint);
+      // Return empty success response for offline mode
+      return {
+        success: false,
+        data: null,
+        message: 'Offline mode - Python API not available'
+      } as T;
+    }
+  }
 
   while (retries <= MAX_RETRIES) {
     try {
@@ -293,7 +321,7 @@ export const storeAPI = {
     const query = branchId ? `?branch_id=${branchId}` : '';
     return fetchAPI<any>(`/store/branch-stock/low${query}`);
   },
-  recordStockOut: (data: { item_sku: string; quantity: number; reason: string; notes?: string }) =>
+  recordStockOut: (data: { item_sku: string; quantity: number; reason: string; notes?: string; branch_id?: number }) =>
     fetchAPI<any>('/store/branch-stock/out', { method: 'POST', body: JSON.stringify(data) }),
   getStockMovements: (params?: { branch_id?: number; item_sku?: string; from_date?: string; to_date?: string }) => {
     const query = new URLSearchParams();
@@ -473,6 +501,7 @@ export const storeAPI = {
 
   // Stock Takes
   getStockTakes: () => fetchAPI<any>('/store/stock-takes'),
+  getStockTake: (id: string) => fetchAPI<any>(`/store/stock-takes/${id}`),
   createStockTake: (data: { branch_id: number; take_type: string; notes?: string }) =>
     fetchAPI<any>('/store/stock-takes', { method: 'POST', body: JSON.stringify(data) }),
   getStockTakeItems: (id: string) => fetchAPI<any>(`/store/stock-takes/${id}/items`),
@@ -487,7 +516,10 @@ export const storeAPI = {
     fetchAPI<any>('/store/set_edit_lock_status', { method: 'POST', body: JSON.stringify({ locked }) }),
 
   // Kitchen Usage Tracking
-  getTrackableItems: () => fetchAPI<any>('/store/kitchen-usage/trackable-items'),
+  getTrackableItems: (branchId?: number) => {
+    const query = branchId ? `?branch_id=${branchId}` : '';
+    return fetchAPI<any>(`/store/kitchen-usage/trackable-items${query}`);
+  },
   getKitchenUsageRecords: (params?: { from_date?: string; to_date?: string; status?: string }) => {
     const query = new URLSearchParams();
     if (params?.from_date) query.append('from_date', params.from_date);
@@ -722,9 +754,42 @@ export const staffAPI = {
   },
 
   // Staff CRUD
-  getStaff: (params?: number | { branchId?: number; role?: string; search?: string; department?: string; status?: string; page?: number; limit?: number }) => {
-    const queryParams = new URLSearchParams();
+  getStaff: async (params?: number | { branchId?: number; role?: string; search?: string; department?: string; status?: string; page?: number; limit?: number }) => {
+    // Intercept for C# Desktop App - OFFLINE FIRST
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      try {
+        const query: any = {};
+        if (typeof params === 'number') {
+          query.branch_id = params;
+        } else if (params) {
+          if (params.branchId) query.branch_id = params.branchId;
+          if (params.role) query.role = params.role;
+          if (params.department) query.department = params.department;
+          if (params.status) query.status = params.status;
+        }
 
+        // Fetch from local 'cached_pins' table which contains staff data
+        const rows = await (window as any).electronAPI.db.get('cached_pins', query);
+        if (rows && Array.isArray(rows)) {
+          const staff = rows.map((r: any) => {
+            try {
+              return typeof r.user_data === 'string' ? JSON.parse(r.user_data) : r.user_data;
+            } catch (e) {
+              return r;
+            }
+          });
+          console.log(`Staff: Loaded ${staff.length} from local SQLite`);
+          return {
+            success: true,
+            data: staff
+          };
+        }
+      } catch (e) {
+        console.warn('Native Bridge getStaff failed', e);
+      }
+    }
+
+    const queryParams = new URLSearchParams();
     if (typeof params === 'number') {
       queryParams.append('branch_id', String(params));
     } else if (params) {
@@ -763,10 +828,8 @@ export const staffAPI = {
 
   // Waiters (includes waiter, waitress, head_waiter roles)
   getWaiters: async (branchId?: number) => {
-    const query = new URLSearchParams();
-    if (branchId) query.append('branch_id', String(branchId));
-    // Fetch all staff and filter for waiter roles on client side
-    const response = await fetchAPI<any>(`/staff?${query}`);
+    // Re-use getStaff which has offline interception
+    const response = await staffAPI.getStaff({ branchId });
     if (response.success && response.data) {
       const waiterRoles = ['waiter', 'waitress', 'head_waiter'];
       response.data = response.data.filter((s: any) => waiterRoles.includes(s.role));
@@ -937,18 +1000,19 @@ export const staffAPI = {
     approveLoan: (id: string) => fetchAPI<any>(`/payroll/loans/${id}/approve`, { method: 'PATCH' }),
 
     // Payroll Generation & History
-    generatePayroll: (data: { month: number; year: number; staff_id?: string }) =>
+    generatePayroll: (data: { month: number; year: number; staff_id?: string; branch_id?: number }) =>
       fetchAPI<any>('/payroll/generate', { method: 'POST', body: JSON.stringify(data) }),
-    getPayrollRecords: (params?: { month?: number; year?: number; staff_id?: string }) => {
+    getPayrollRecords: (params?: { month?: number; year?: number; staff_id?: string; branch_id?: number }) => {
       const query = new URLSearchParams();
       if (params?.month) query.append('month', String(params.month));
       if (params?.year) query.append('year', String(params.year));
       if (params?.staff_id) query.append('staff_id', params.staff_id);
+      if (params?.branch_id) query.append('branch_id', String(params.branch_id));
       return fetchAPI<any>(`/payroll/history?${query}`);
     },
-    emailPayslips: (data: { month: number; year: number }) =>
+    emailPayslips: (data: { month: number; year: number; branch_id?: number }) =>
       fetchAPI<any>('/payroll/email-all', { method: 'POST', body: JSON.stringify(data) }),
-    downloadPayslipsZip: async (data: { month: number; year: number }) => {
+    downloadPayslipsZip: async (data: { month: number; year: number; branch_id?: number }) => {
       try {
         const response = await fetch(`${API_URL}/api/payroll/download-zip`, {
           method: 'POST',
@@ -2125,17 +2189,82 @@ export const restaurantAPI = {
     return fetchAPI<any>(`/restaurant/orders?${query}`);
   },
   getOrder: (id: string) => fetchAPI<any>(`/restaurant/orders/${id}`),
-  createOrder: (data: any) => {
-    // Intercept for C# Desktop App
+  createOrder: async (data: any) => {
+    // Intercept for C# Desktop App - OFFLINE MODE
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
-      return (window as any).electronAPI.sync.queue(
-        'pos:createRestaurantOrder',
-        '/restaurant/orders',
-        'POST',
-        data,
-        data.branch_id || 0,
-        localStorage.getItem('token') || ''
-      );
+      try {
+        // Generate order number locally
+        const orderNumber = `ORD-${Date.now().toString().slice(-8)}`;
+        const orderId = `local-${Date.now()}`;
+
+        // Create order object with all required fields
+        const orderData = {
+          id: orderId,
+          order_number: orderNumber,
+          branch_id: data.branch_id || 0,
+          order_type: data.order_type,
+          table_number: data.table_number || null,
+          room_number: data.room_number || null,
+          guest_name: data.customer_name || null,  // Use guest_name to match DB schema
+          payment_method: data.payment_method,
+          waiter_id: data.waiter_id || null,
+          waiter_name: data.waiter_name || null,
+          total_amount: data.total,  // Use total_amount to match DB schema
+          payment_status: 'pending',
+          status: data.status || 'pending',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        // Save order to local database
+        await (window as any).electronAPI.db.upsert('restaurant_orders', orderData);
+
+        // Save order items
+        if (data.items && Array.isArray(data.items)) {
+          for (const item of data.items) {
+            await (window as any).electronAPI.db.upsert('restaurant_order_items', {
+              id: `item-${Date.now()}-${Math.random()}`,
+              order_id: orderId,
+              menu_item_id: item.menu_item_id,
+              quantity: item.quantity,
+              unit_price: item.unit_price,
+              total_price: item.total_amount,  // Use total_price to match DB schema
+              special_instructions: item.notes || null,  // Use special_instructions to match DB schema
+              created_at: new Date().toISOString()
+            });
+          }
+        }
+
+        // Queue for sync when online
+        await (window as any).electronAPI.sync.queue(
+          'pos:createRestaurantOrder',
+          '/restaurant/orders',
+          'POST',
+          data,
+          data.branch_id || 0,
+          localStorage.getItem('token') || ''
+        );
+
+        console.log(`[Order] Created offline order: ${orderNumber}`);
+
+        // Return success response matching API format
+        return {
+          success: true,
+          data: {
+            ...orderData,
+            order_number: orderNumber,
+            items: data.items
+          },
+          message: 'Order created successfully (offline mode)'
+        };
+      } catch (error) {
+        console.error('[Order] Failed to create offline order:', error);
+        return {
+          success: false,
+          message: error instanceof Error ? error.message : 'Failed to create order',
+          data: null
+        };
+      }
     }
     return fetchAPI<any>('/restaurant/orders', { method: 'POST', body: JSON.stringify(data) });
   },
@@ -2154,7 +2283,52 @@ export const restaurantAPI = {
     }
     return fetchAPI<any>(`/restaurant/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
   },
-  getTodayOrders: (branchId?: number) => {
+  getTodayOrders: async (branchId?: number) => {
+    // Intercept for C# Desktop App - OFFLINE FIRST
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const query: any = {};
+        if (branchId) query.branch_id = branchId;
+
+        const orders = await (window as any).electronAPI.db.get('restaurant_orders', query);
+        if (orders && Array.isArray(orders)) {
+          // Filter to today's orders
+          const todayOrders = orders.filter((order: any) => {
+            const orderDate = new Date(order.created_at).toISOString().split('T')[0];
+            return orderDate === today;
+          });
+
+          console.log(`[Restaurant Orders] Loaded ${todayOrders.length} today's orders from local SQLite`);
+
+          // Fetch items for each order
+          const ordersWithItems = await Promise.all(todayOrders.map(async (order: any) => {
+            try {
+              const items = await (window as any).electronAPI.db.get('restaurant_order_items', { order_id: order.id });
+              return {
+                ...order,
+                items: items || [],
+                total: order.total_amount || order.total // Handle both field names
+              };
+            } catch (e) {
+              return {
+                ...order,
+                items: [],
+                total: order.total_amount || order.total
+              };
+            }
+          }));
+
+          return {
+            success: true,
+            data: ordersWithItems
+          };
+        }
+      } catch (e) {
+        console.warn('[Restaurant Orders] Native Bridge getTodayOrders failed', e);
+      }
+    }
+
     const today = new Date().toISOString().split('T')[0];
     const query = new URLSearchParams();
     query.append('from_date', today);
@@ -2162,42 +2336,38 @@ export const restaurantAPI = {
     if (branchId) query.append('branch_id', String(branchId));
     return fetchAPI<any>(`/restaurant/orders?${query}`);
   },
-  getMyOrders: async (userId: string, branchId?: number) => {
+  getMyOrders: async (userId: string, branchId?: number, filters?: { waiter_id?: string; status?: string; from_date?: string; to_date?: string }) => {
     // Intercept for C# Desktop App - OFFLINE FIRST
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
       try {
-        const query: any = {};
-        if (branchId) query.branch_id = branchId;
-        // userId might not be in the local schema for orders if created by others, 
-        // but for 'my orders' we usually filter by created_by if the column exists.
-        // The schema has 'created_by'.
-        if (userId) query.created_by = userId;
+        // Use the new cache:getOrders handler for better performance
+        const today = new Date().toISOString().split('T')[0];
+        const fromDate = filters?.from_date || today;
+        const toDate = filters?.to_date || today;
 
-        const orders = await (window as any).electronAPI.db.get('restaurant_orders', query);
-        if (orders) {
-          console.log(`Restaurant Orders: Loaded ${orders.length} from local SQLite`);
-          // Parse any JSON fields if necessary, though restaurant_orders seems to have flat structure mostly.
-          // UnifiedPOS expects certain structure. 
-          // Backend returns items joined? 
-          // The local 'restaurant_orders' table does NOT contain items. Items are in 'restaurant_order_items'.
-          // We need to fetch items for these orders manually if we want full details.
-          // However, UnifiedPOS 'recentOrders' might just display summary. 
-          // Let's check UnifiedPOS usage of recentOrders... it passes them to handleEditOrder which expects 'items'.
+        console.log(`[Restaurant Orders] Fetching from cache: user=${userId}, branch=${branchId}, from=${fromDate}, to=${toDate}`);
 
-          // Strategy: For now, return orders. If items are needed, we might need a secondary fetch.
-          // But to be safe and fast, let's just return orders. 
-          // If UnifiedPOS crashes accessing .items, we know we need to join.
-          // Getting ALL items for ALL orders is expensive.
-          // Let's see if we can perform a lazy load or if we should just fetch items for these orders.
+        const orders = await (window as any).electronAPI.invoke('cache:getOrders', userId, branchId, fromDate, toDate);
 
-          // Actually, let's try to fetch order items too if possible.
-          // But db.get only does simple WHERE. 
-          // implementing N+1 query here is bad but better than broken UI.
-          // Let's just return orders for the history list first.
+        if (orders && Array.isArray(orders)) {
+          console.log(`[Restaurant Orders] Loaded ${orders.length} orders from cache`);
+
+          // Apply status filter if provided
+          let filteredOrders = orders;
+          if (filters?.status) {
+            filteredOrders = orders.filter((order: any) => order.status === filters.status);
+            console.log(`[Restaurant Orders] Filtered to ${filteredOrders.length} orders with status=${filters.status}`);
+          }
+
+          // Apply waiter filter if provided
+          if (filters?.waiter_id) {
+            filteredOrders = filteredOrders.filter((order: any) => order.waiter_id === filters.waiter_id);
+            console.log(`[Restaurant Orders] Filtered to ${filteredOrders.length} orders for waiter=${filters.waiter_id}`);
+          }
 
           return {
             success: true,
-            data: orders
+            data: filteredOrders
           };
         }
       } catch (e) {
@@ -2207,9 +2377,19 @@ export const restaurantAPI = {
 
     const today = new Date().toISOString().split('T')[0];
     const query = new URLSearchParams();
-    query.append('from_date', today);
-    query.append('to_date', today);
-    query.append('created_by', userId);
+    query.append('from_date', filters?.from_date || today);
+    query.append('to_date', filters?.to_date || today);
+
+    if (filters?.waiter_id) {
+      query.append('waiter_id', filters.waiter_id);
+    } else {
+      query.append('created_by', userId);
+    }
+
+    if (filters?.status) {
+      query.append('status', filters.status);
+    }
+
     if (branchId) query.append('branch_id', String(branchId));
     return fetchAPI<any>(`/restaurant/orders?${query}`);
   },
@@ -2241,22 +2421,37 @@ export const restaurantAPI = {
     // Intercept for C# Desktop App - OFFLINE FIRST
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
       try {
-        const query: any = {};
-        // restaurant_menu_items might not have branch_id if items are global, but let's check schema.
-        // Schema has branch_id.
-        if (branchId) query.branch_id = branchId;
-        if (categoryId && categoryId !== 'all') query.category_id = categoryId;
-        if (onlyAvailable) query.is_available = 1;
-
-        const [items, categories] = await Promise.all([
-          (window as any).electronAPI.db.get('restaurant_menu_items', query),
-          (window as any).electronAPI.db.get('restaurant_menu_categories')
+        // For menu items, we need to get items for the specific branch OR items with null branch_id (available to all)
+        // Since db.get doesn't support OR queries, we'll fetch all items and filter in JS
+        const [allItems, categories] = await Promise.all([
+          (window as any).electronAPI.db.get('restaurant_menu_items', {}),
+          (window as any).electronAPI.db.get('restaurant_menu_categories', {})
         ]);
 
-        if (items) {
+        console.log(`[Menu Debug] Total items in cache: ${allItems?.length || 0}`);
+        console.log(`[Menu Debug] Filter params - branchId: ${branchId}, categoryId: ${categoryId}, onlyAvailable: ${onlyAvailable}`);
+
+        if (allItems) {
+          // Filter items based on criteria
+          let filteredItems = allItems.filter((item: any) => {
+            // Branch filter: include items for this branch OR items with null branch_id (global items)
+            const matchesBranch = !branchId || item.branch_id === branchId || item.branch_id === null;
+
+            // Category filter
+            const matchesCategory = !categoryId || categoryId === 'all' || item.category_id === categoryId;
+
+            // Availability filter
+            const matchesAvailability = !onlyAvailable || item.is_available === 1 || item.is_available === true;
+
+            return matchesBranch && matchesCategory && matchesAvailability;
+          });
+
+          console.log(`[Menu Debug] After filtering: ${filteredItems.length} items`);
+          console.log(`[Menu Debug] Sample item:`, filteredItems[0]);
+
           // Client-side join for category name
           const catMap = new Map(categories?.map((c: any) => [c.id, c]) || []);
-          const enrichedItems = items.map((item: any) => ({
+          const enrichedItems = filteredItems.map((item: any) => ({
             ...item,
             // Ensure boolean fields are booleans
             is_available: item.is_available === 1 || item.is_available === true,
@@ -2265,8 +2460,10 @@ export const restaurantAPI = {
             category: catMap.get(item.category_id) || { name: 'Unknown' }
           }));
 
-          console.log(`Restaurant Menu Items: Loaded ${enrichedItems.length} items via local SQLite`);
+          console.log(`Restaurant Menu Items: Loaded ${enrichedItems.length} items from local cache (branch: ${branchId || 'all'})`);
           return { success: true, data: enrichedItems };
+        } else {
+          console.warn('[Menu Debug] allItems is null or undefined');
         }
       } catch (e) {
         console.warn('Native Bridge getMenuItems failed', e);
@@ -2328,7 +2525,25 @@ export const restaurantAPI = {
   // Receipts & Billing
   generateReceipt: (orderId: string) => fetchAPI<any>(`/restaurant/orders/${orderId}/receipt`),
   processPayment: (orderId: string, data: any) => fetchAPI<any>(`/restaurant/orders/${orderId}/payment`, { method: 'POST', body: JSON.stringify(data) }),
-  generateBill: (receiptData: any) => {
+  generateBill: async (receiptData: any) => {
+    // In offline mode (Electron), skip Python API and return success
+    // The frontend will handle printing/display locally
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      console.log('[Bill] Offline mode - skipping Python API for bill generation');
+
+      // Return a mock success response
+      // The frontend can handle the receipt data directly
+      return {
+        success: true,
+        data: {
+          receipt_number: receiptData.receipt_number,
+          message: 'Bill generated (offline mode)',
+          // No PDF in offline mode - frontend should handle display
+        },
+        message: 'Bill generated successfully (offline mode)'
+      };
+    }
+
     return fetchPythonAPI<any>('/receipts/generate/base64', {
       method: 'POST',
       body: JSON.stringify(receiptData)
@@ -3608,11 +3823,28 @@ export const authAPI = {
         const userData = await (window as any).electronAPI.cache.verifyPin(pin);
         if (userData) {
           console.log('POS Login: Successful via local SQLite');
+          console.log('POS Login: User data from cache:', userData);
+
+          // Normalize user data to match backend API format (ensure both snake_case and camelCase exist)
+          const normalizedUser = {
+            ...userData,
+            // Ensure both formats exist for compatibility
+            first_name: userData.first_name || userData.firstName,
+            last_name: userData.last_name || userData.lastName,
+            firstName: userData.firstName || userData.first_name,
+            lastName: userData.lastName || userData.last_name,
+            branch_id: userData.branch_id,
+            branch_name: userData.branch_name || null,
+            is_central: userData.is_central || false
+          };
+
+          console.log('POS Login: Normalized user data:', normalizedUser);
+
           return {
             success: true,
             data: {
-              user: userData,
-              session: { access_token: 'offline-token' }
+              user: normalizedUser,
+              session: { access_token: 'offline-bridge-token' }  // Use offline-bridge-token for consistency
             }
           };
         }
@@ -4239,6 +4471,30 @@ export const kitchenAPI = {
   updateRecipe: (id: string | number, data: any) => fetchAPI<any>(`/kitchen/recipes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteRecipe: (id: string | number) => fetchAPI<any>(`/kitchen/recipes/${id}`, { method: 'DELETE' }),
 
+  // Expected Portions (Food Control)
+  getExpectedPortions: (params?: { branch_id?: number; verified?: boolean; date_from?: string; date_to?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.verified !== undefined) query.append('verified', String(params.verified));
+    if (params?.date_from) query.append('date_from', params.date_from);
+    if (params?.date_to) query.append('date_to', params.date_to);
+    return fetchAPI<any>(`/kitchen/expected-portions?${query}`);
+  },
+  getExpectedPortion: (id: string) => fetchAPI<any>(`/kitchen/expected-portions/${id}`),
+  verifyActualPortions: (id: string, data: { actual_portions: number; variance_reason?: string }) =>
+    fetchAPI<any>(`/kitchen/expected-portions/${id}/verify`, { method: 'PUT', body: JSON.stringify(data) }),
+  getPendingVerifications: (branch_id?: number) => {
+    const query = branch_id ? `?branch_id=${branch_id}` : '';
+    return fetchAPI<any>(`/kitchen/expected-portions/pending${query}`);
+  },
+  getVarianceSummary: (params?: { branch_id?: number; date_from?: string; date_to?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.date_from) query.append('date_from', params.date_from);
+    if (params?.date_to) query.append('date_to', params.date_to);
+    return fetchAPI<any>(`/kitchen/expected-portions/variance/summary?${query}`);
+  },
+
   // Usage & Wastage
   getKitchenStock: (branchId?: number) => fetchAPI<any>(`/kitchen/stock${branchId ? `?branch_id=${branchId}` : ''}`),
   recordUsage: (data: any) => fetchAPI<any>('/kitchen/usage', { method: 'POST', body: JSON.stringify(data) }),
@@ -4412,3 +4668,739 @@ export const api = {
 };
 
 export default api;
+
+// =====================================================
+// KYOGONG SHIFT-BASED POS SYSTEM API
+// =====================================================
+
+export const kyogongAPI = {
+  // Sales Points
+  getSalesPoints: (params?: { is_active?: boolean }) => {
+    const query = new URLSearchParams();
+    if (params?.is_active !== undefined) query.append('is_active', String(params.is_active));
+    return fetchAPI<any>(`/kyogong/sales-points?${query}`);
+  },
+
+  getSalesPointDetails: (id: string) =>
+    fetchAPI<any>(`/kyogong/sales-points/${id}`),
+
+  // Shifts
+  openShift: (data: {
+    sales_point_id: number;
+    opening_cash_float: number;
+    opening_petty_cash?: number;
+    assigned_staff?: Array<{ staff_id: string; staff_role: string }>;
+  }) =>
+    fetchAPI<any>('/kyogong/shifts/open', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  getCurrentShift: () =>
+    fetchAPI<any>('/kyogong/shifts/current'),
+
+  getShifts: (params?: {
+    status?: string;
+    sales_point_id?: number;
+    start_date?: string;
+    end_date?: string;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.sales_point_id) query.append('sales_point_id', String(params.sales_point_id));
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/kyogong/shifts?${query}`);
+  },
+
+  getShiftDetails: (id: string) =>
+    fetchAPI<any>(`/kyogong/shifts/${id}`),
+
+  closeShift: (id: string, data: {
+    closing_cash_counted: number;
+    closing_petty_cash?: number;
+    variance_reason?: string;
+    pool_tokens_data?: {
+      opening_balance: number;
+      tokens_sold: number;
+      tokens_issued?: number;
+      closing_balance: number;
+      variance: number;
+      variance_reason?: string;
+    };
+  }) =>
+    fetchAPI<any>(`/kyogong/shifts/${id}/close`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+
+  approveShift: (id: string, review_notes?: string) =>
+    fetchAPI<any>(`/kyogong/shifts/${id}/approve`, {
+      method: 'PUT',
+      body: JSON.stringify({ review_notes })
+    }),
+
+  flagShift: (id: string, review_notes: string) =>
+    fetchAPI<any>(`/kyogong/shifts/${id}/flag`, {
+      method: 'PUT',
+      body: JSON.stringify({ review_notes })
+    }),
+
+  // Transactions
+  createTransaction: (shift_id: string, data: {
+    service_category: string;
+    items: Array<{
+      item_type: string;
+      item_id?: string;
+      item_name: string;
+      quantity: number;
+      unit_price: number;
+      service_staff_id?: string;
+      service_staff_name?: string;
+      notes?: string;
+    }>;
+    customer_name?: string;
+    customer_phone?: string;
+    customer_room_number?: string;
+    payment_method: string;
+    cash_amount?: number;
+    mpesa_amount?: number;
+    card_amount?: number;
+    mpesa_reference?: string;
+    discount_amount?: number;
+  }) =>
+    fetchAPI<any>(`/kyogong/shifts/${shift_id}/transactions`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  getShiftTransactions: (shift_id: string) =>
+    fetchAPI<any>(`/kyogong/shifts/${shift_id}/transactions`),
+
+  getTransactionDetails: (id: string) =>
+    fetchAPI<any>(`/kyogong/transactions/${id}`),
+
+  voidTransaction: (id: string, void_reason: string, authorization_code?: string) =>
+    fetchAPI<any>(`/kyogong/transactions/${id}/void`, {
+      method: 'PUT',
+      body: JSON.stringify({ void_reason, authorization_code })
+    }),
+
+  // SPA Services
+  getSpaCategories: () =>
+    fetchAPI<any>('/kyogong/spa-services/categories'),
+
+  getSpaServices: (params?: { category?: string; is_active?: boolean }) => {
+    const query = new URLSearchParams();
+    if (params?.category) query.append('category', params.category);
+    if (params?.is_active !== undefined) query.append('is_active', String(params.is_active));
+    return fetchAPI<any>(`/kyogong/spa-services?${query}`);
+  },
+
+  createSpaService: (data: {
+    category: string;
+    name: string;
+    description?: string;
+    base_price: number;
+    duration_minutes?: number;
+  }) =>
+    fetchAPI<any>('/kyogong/spa-services', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  updateSpaService: (id: string, data: any) =>
+    fetchAPI<any>(`/kyogong/spa-services/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+
+  // Petty Cash
+  getPettyCashCategories: () =>
+    fetchAPI<any>('/kyogong/petty-cash/categories'),
+
+  getPettyCashSummary: (params?: {
+    shift_id?: string;
+    start_date?: string;
+    end_date?: string;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.shift_id) query.append('shift_id', params.shift_id);
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/kyogong/petty-cash/summary?${query}`);
+  },
+
+  getPettyCashEntries: (params?: {
+    shift_id?: string;
+    start_date?: string;
+    end_date?: string;
+    purpose_category?: string;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.shift_id) query.append('shift_id', params.shift_id);
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    if (params?.purpose_category) query.append('purpose_category', params.purpose_category);
+    return fetchAPI<any>(`/kyogong/petty-cash?${query}`);
+  },
+
+  recordPettyCash: (data: {
+    shift_id?: string;
+    amount: number;
+    transaction_type: 'CASH_IN' | 'CASH_OUT';
+    purpose_category: string;
+    purpose_description: string;
+    paid_to_name?: string;
+    paid_to_id_number?: string;
+    authorized_by?: string;
+    authorizer_name?: string;
+    receipt_number?: string;
+    receipt_attachment_url?: string;
+  }) =>
+    fetchAPI<any>('/kyogong/petty-cash', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  // Dynamic Services
+  getDynamicServices: (params?: { service_type?: string; is_active?: boolean }) => {
+    const query = new URLSearchParams();
+    if (params?.service_type) query.append('service_type', params.service_type);
+    if (params?.is_active !== undefined) query.append('is_active', String(params.is_active));
+    return fetchAPI<any>(`/kyogong/dynamic-services?${query}`);
+  },
+
+  createDynamicService: (data: {
+    service_type: string;
+    name: string;
+    pricing_model: string;
+    base_price: number;
+    price_per_hour?: number;
+  }) =>
+    fetchAPI<any>('/kyogong/dynamic-services', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  updateDynamicService: (id: string, data: any) =>
+    fetchAPI<any>(`/kyogong/dynamic-services/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+
+  // Pool Tokens
+  getPoolTokensInventory: (params?: {
+    shift_id?: string;
+    start_date?: string;
+    end_date?: string;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.shift_id) query.append('shift_id', params.shift_id);
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/kyogong/pool-tokens?${query}`);
+  }
+};
+
+// =====================================================
+// CONFERENCE DAILY ATTENDANCE API
+// =====================================================
+
+export const conferenceAttendanceAPI = {
+  // Record daily attendance
+  recordDailyAttendance: (bookingId: string, data: {
+    attendance_date: string;
+    num_participants: number;
+    meal_plan_details?: Array<{
+      name: string;
+      price: number;
+      menu_item_id?: string;
+    }>;
+    notes?: string;
+  }) =>
+    fetchAPI<any>(`/conference/bookings/${bookingId}/attendance`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  // Get daily attendance
+  getDailyAttendance: (bookingId: string) =>
+    fetchAPI<any>(`/conference/bookings/${bookingId}/attendance`),
+
+  // Generate invoice with attendance
+  generateInvoiceWithAttendance: (bookingId: string) =>
+    fetchAPI<any>(`/conference/bookings/${bookingId}/invoice-with-attendance`),
+
+  // Delete daily attendance
+  deleteDailyAttendance: (bookingId: string, date: string) =>
+    fetchAPI<any>(`/conference/bookings/${bookingId}/attendance/${date}`, {
+      method: 'DELETE'
+    })
+};
+
+// =====================================================
+// BANKING MODULE API
+// =====================================================
+
+export const bankingAPI = {
+  // Bank Accounts
+  getBankAccounts: (params?: { branch_id?: number; is_active?: boolean }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.is_active !== undefined) query.append('is_active', String(params.is_active));
+    return fetchAPI<any>(`/banking/accounts?${query}`);
+  },
+
+  createBankAccount: (data: {
+    bank_name: string;
+    account_number: string;
+    account_name: string;
+    account_type?: 'CURRENT' | 'SAVINGS' | 'FIXED_DEPOSIT';
+    currency?: string;
+    opening_balance?: number;
+    branch_id?: number;
+    notes?: string;
+  }) =>
+    fetchAPI<any>('/banking/accounts', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  // Banking Transactions
+  getBankingTransactions: (params?: {
+    branch_id?: number;
+    transaction_type?: string;
+    status?: string;
+    start_date?: string;
+    end_date?: string;
+    bank_name?: string;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.transaction_type) query.append('transaction_type', params.transaction_type);
+    if (params?.status) query.append('status', params.status);
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    if (params?.bank_name) query.append('bank_name', params.bank_name);
+    return fetchAPI<any>(`/banking/transactions?${query}`);
+  },
+
+  recordBankingTransaction: (data: {
+    transaction_date: string;
+    transaction_type: 'DEPOSIT' | 'WITHDRAWAL' | 'TRANSFER' | 'BANK_CHARGE';
+    bank_name: string;
+    account_number: string;
+    amount: number;
+    currency?: string;
+    reference_number: string;
+    source?: string;
+    destination?: string;
+    payment_method?: 'CASH' | 'CHEQUE' | 'MPESA' | 'BANK_TRANSFER' | 'CARD';
+    receipt_number?: string;
+    slip_attachment_url?: string;
+    purpose_category?: 'DAILY_SALES' | 'CUSTOMER_PAYMENT' | 'SUPPLIER_PAYMENT' | 'EXPENSE' | 'TRANSFER' | 'OTHER';
+    purpose_description: string;
+    notes?: string;
+    branch_id?: number;
+  }) =>
+    fetchAPI<any>('/banking/transactions', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  approveBankingTransaction: (id: string, notes?: string) =>
+    fetchAPI<any>(`/banking/transactions/${id}/approve`, {
+      method: 'PUT',
+      body: JSON.stringify({ notes })
+    }),
+
+  // Banking Summary
+  getBankingSummary: (params?: {
+    branch_id?: number;
+    start_date?: string;
+    end_date?: string;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/banking/summary?${query}`);
+  },
+
+  // Bank Reconciliations
+  getBankReconciliations: (params?: {
+    bank_account_id?: number;
+    status?: string;
+    start_date?: string;
+    end_date?: string;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.bank_account_id) query.append('bank_account_id', String(params.bank_account_id));
+    if (params?.status) query.append('status', params.status);
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/banking/reconciliations?${query}`);
+  },
+
+  recordBankReconciliation: (data: {
+    bank_account_id: number;
+    reconciliation_date: string;
+    statement_balance: number;
+    book_balance: number;
+    variance_reason?: string;
+    notes?: string;
+  }) =>
+    fetchAPI<any>('/banking/reconciliations', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+};
+
+// =====================================================
+// SUPPLIERS API (Branch Storekeeper)
+// =====================================================
+
+export const suppliersAPI = {
+  // Suppliers
+  getSuppliers: (params?: { status?: string; category?: string; search?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.category) query.append('category', params.category);
+    if (params?.search) query.append('search', params.search);
+    return fetchAPI<any>(`/suppliers?${query}`);
+  },
+
+  getSupplierById: (id: string) =>
+    fetchAPI<any>(`/suppliers/${id}`),
+
+  createSupplier: (data: {
+    name: string;
+    supplier_code?: string;
+    contact_person?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    payment_terms?: string;
+    credit_limit?: number;
+    tax_id?: string;
+    bank_details?: any;
+    category?: string;
+    notes?: string;
+  }) =>
+    fetchAPI<any>('/suppliers', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  updateSupplier: (id: string, data: any) =>
+    fetchAPI<any>(`/suppliers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+
+  deleteSupplier: (id: string) =>
+    fetchAPI<any>(`/suppliers/${id}`, {
+      method: 'DELETE'
+    }),
+
+  // Supplier Products
+  getSupplierProducts: (supplierId: string) =>
+    fetchAPI<any>(`/suppliers/${supplierId}/products`),
+
+  addSupplierProduct: (supplierId: string, data: {
+    product_name: string;
+    product_code?: string;
+    unit_price?: number;
+    minimum_order_quantity?: number;
+    lead_time_days?: number;
+  }) =>
+    fetchAPI<any>(`/suppliers/${supplierId}/products`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  updateSupplierProduct: (productId: string, data: any) =>
+    fetchAPI<any>(`/suppliers/products/${productId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+
+  deleteSupplierProduct: (productId: string) =>
+    fetchAPI<any>(`/suppliers/products/${productId}`, {
+      method: 'DELETE'
+    }),
+
+  // Supplier Performance
+  getSupplierPerformance: (supplierId: string, params?: { startDate?: string; endDate?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    return fetchAPI<any>(`/suppliers/${supplierId}/performance?${query}`);
+  }
+};
+
+// =====================================================
+// SHIFTS API (Branch Manager)
+// =====================================================
+
+export const shiftsAPI = {
+  // Shift Templates
+  getShiftTemplates: () =>
+    fetchAPI<any>('/shifts/templates'),
+
+  createShiftTemplate: (data: {
+    name: string;
+    start_time: string;
+    end_time: string;
+    description?: string;
+  }) =>
+    fetchAPI<any>('/shifts/templates', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  updateShiftTemplate: (id: string, data: any) =>
+    fetchAPI<any>(`/shifts/templates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+
+  deleteShiftTemplate: (id: string) =>
+    fetchAPI<any>(`/shifts/templates/${id}`, {
+      method: 'DELETE'
+    }),
+
+  // Staff Shifts
+  getStaffShifts: (params?: {
+    startDate?: string;
+    endDate?: string;
+    staffId?: string;
+    status?: string;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    if (params?.staffId) query.append('staffId', params.staffId);
+    if (params?.status) query.append('status', params.status);
+    return fetchAPI<any>(`/shifts?${query}`);
+  },
+
+  createStaffShift: (data: {
+    staff_id: string;
+    shift_template_id?: number;
+    shift_date: string;
+    start_time: string;
+    end_time: string;
+    notes?: string;
+  }) =>
+    fetchAPI<any>('/shifts', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  bulkCreateStaffShifts: (shifts: Array<any>) =>
+    fetchAPI<any>('/shifts/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ shifts })
+    }),
+
+  updateStaffShift: (id: string, data: any) =>
+    fetchAPI<any>(`/shifts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+
+  checkInShift: (id: string) =>
+    fetchAPI<any>(`/shifts/${id}/check-in`, {
+      method: 'POST'
+    }),
+
+  checkOutShift: (id: string) =>
+    fetchAPI<any>(`/shifts/${id}/check-out`, {
+      method: 'POST'
+    }),
+
+  deleteStaffShift: (id: string) =>
+    fetchAPI<any>(`/shifts/${id}`, {
+      method: 'DELETE'
+    }),
+
+  // Shift Swaps
+  getShiftSwaps: (params?: { status?: string; staffId?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.staffId) query.append('staffId', params.staffId);
+    return fetchAPI<any>(`/shifts/swaps?${query}`);
+  },
+
+  createShiftSwap: (data: {
+    original_shift_id: number;
+    requesting_staff_id: string;
+    target_staff_id: string;
+    reason?: string;
+  }) =>
+    fetchAPI<any>('/shifts/swaps', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  updateShiftSwapStatus: (id: string, status: 'approved' | 'rejected' | 'cancelled') =>
+    fetchAPI<any>(`/shifts/swaps/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status })
+    }),
+
+  // Statistics
+  getShiftStatistics: (params?: { startDate?: string; endDate?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    return fetchAPI<any>(`/shifts/statistics?${query}`);
+  }
+};
+
+// =====================================================
+// ENHANCED PAYROLL API (HR Manager)
+// =====================================================
+
+export const payrollEnhancedAPI = {
+  // Deduction Rates
+  getDeductionRates: () =>
+    fetchAPI<any>('/payroll-enhanced/deduction-rates'),
+
+  updateDeductionRate: (id: string, data: any) =>
+    fetchAPI<any>(`/payroll-enhanced/deduction-rates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+
+  // Payroll Calculation
+  calculatePayroll: (data: {
+    staff_id: string;
+    basic_salary: number;
+    allowances?: number;
+    overtime_pay?: number;
+    uniform_deduction?: number;
+    contributions_deduction?: number;
+    absent_days?: number;
+    working_days?: number;
+    tax_deduction?: number;
+  }) =>
+    fetchAPI<any>('/payroll-enhanced/calculate', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  // Payroll Processing
+  getEnhancedPayroll: (params?: { month?: string; year?: string; staffId?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.month) query.append('month', params.month);
+    if (params?.year) query.append('year', params.year);
+    if (params?.staffId) query.append('staffId', params.staffId);
+    return fetchAPI<any>(`/payroll-enhanced?${query}`);
+  },
+
+  processEnhancedPayroll: (data: any) =>
+    fetchAPI<any>('/payroll-enhanced', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  bulkProcessPayroll: (payrollRecords: Array<any>) =>
+    fetchAPI<any>('/payroll-enhanced/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ payrollRecords })
+    }),
+
+  updateEnhancedPayroll: (id: string, data: any) =>
+    fetchAPI<any>(`/payroll-enhanced/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+
+  // Payslip Generation
+  generatePayslip: (id: string) =>
+    fetchAPI<any>(`/payroll-enhanced/${id}/payslip`)
+};
+
+// =====================================================
+// CATERING BOOKINGS API (Manager & Receptionist)
+// =====================================================
+
+export const cateringBookingsAPI = {
+  // Catering Bookings
+  getCateringBookings: (params?: {
+    startDate?: string;
+    endDate?: string;
+    status?: string;
+    search?: string;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    if (params?.status) query.append('status', params.status);
+    if (params?.search) query.append('search', params.search);
+    return fetchAPI<any>(`/catering-bookings?${query}`);
+  },
+
+  getCateringBookingById: (id: string) =>
+    fetchAPI<any>(`/catering-bookings/${id}`),
+
+  createCateringBooking: (data: {
+    customer_name: string;
+    customer_phone?: string;
+    customer_email?: string;
+    event_type?: string;
+    event_date: string;
+    event_time?: string;
+    venue_address: string;
+    num_guests: number;
+    menu_details?: any;
+    special_requirements?: string;
+    total_amount?: number;
+  }) =>
+    fetchAPI<any>('/catering-bookings', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  updateCateringBooking: (id: string, data: any) =>
+    fetchAPI<any>(`/catering-bookings/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+
+  cancelCateringBooking: (id: string) =>
+    fetchAPI<any>(`/catering-bookings/${id}/cancel`, {
+      method: 'POST'
+    }),
+
+  deleteCateringBooking: (id: string) =>
+    fetchAPI<any>(`/catering-bookings/${id}`, {
+      method: 'DELETE'
+    }),
+
+  // Payment
+  recordCateringPayment: (id: string, amount: number) =>
+    fetchAPI<any>(`/catering-bookings/${id}/payment`, {
+      method: 'POST',
+      body: JSON.stringify({ amount })
+    }),
+
+  // Calendar
+  getCateringCalendar: (params?: { month?: string; year?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.month) query.append('month', params.month);
+    if (params?.year) query.append('year', params.year);
+    return fetchAPI<any>(`/catering-bookings/calendar?${query}`);
+  },
+
+  // Statistics
+  getCateringStatistics: (params?: { startDate?: string; endDate?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    return fetchAPI<any>(`/catering-bookings/statistics?${query}`);
+  }
+};

@@ -22,8 +22,14 @@ export const getBranchStock = async (
 ): Promise<void> => {
   try {
     const branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
+    const isCentral = ['super_admin', 'general_manager', 'auditor', 'central_storekeeper'].includes(req.user?.role || '');
 
     if (!branchId) {
+      if (isCentral) {
+        // Central roles can see empty state if no branch selected
+        res.status(200).json({ success: true, count: 0, data: [] });
+        return;
+      }
       res.status(400).json({ success: false, message: 'Branch ID required' });
       return;
     }
@@ -50,8 +56,13 @@ export const getLowStockItems = async (
 ): Promise<void> => {
   try {
     const branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
+    const isCentral = ['super_admin', 'general_manager', 'auditor', 'central_storekeeper'].includes(req.user?.role || '');
 
     if (!branchId) {
+      if (isCentral) {
+        res.status(200).json({ success: true, count: 0, data: [] });
+        return;
+      }
       res.status(400).json({ success: false, message: 'Branch ID required' });
       return;
     }
@@ -825,8 +836,13 @@ export const getBranchDashboard = async (
 ): Promise<void> => {
   try {
     const branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
+    const isCentral = ['super_admin', 'general_manager', 'auditor', 'central_storekeeper'].includes(req.user?.role || '');
 
     if (!branchId) {
+      if (isCentral) {
+        res.status(200).json({ success: true, data: { stats: {}, branch: null, recentMovements: [] } });
+        return;
+      }
       res.status(400).json({ success: false, message: 'Branch ID required' });
       return;
     }
@@ -960,9 +976,14 @@ export const getStockMovements = async (
 ): Promise<void> => {
   try {
     const branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
+    const isCentral = ['super_admin', 'general_manager', 'auditor', 'central_storekeeper'].includes(req.user?.role || '');
     const limit = parseInt(req.query.limit as string) || 50;
 
     if (!branchId) {
+      if (isCentral) {
+        res.status(200).json({ success: true, count: 0, data: [] });
+        return;
+      }
       res.status(400).json({ success: false, message: 'Branch ID required' });
       return;
     }
@@ -999,9 +1020,26 @@ export const getStockMovements = async (
       return acc;
     }, {});
 
+    // Get unique performer IDs and resolve to names
+    const performerIds = Array.from(new Set(movements.map(m => m.performed_by).filter(Boolean)));
+    let userMap: Record<string, string> = {};
+    if (performerIds.length > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email')
+        .in('id', performerIds);
+      userMap = (users || []).reduce((acc: any, u: any) => {
+        // Safe concatenation of names
+        const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ');
+        acc[u.id] = fullName || u.email || u.id;
+        return acc;
+      }, {});
+    }
+
     // Join manually
     const data = movements.map(m => ({
       ...m,
+      performed_by: m.performed_by ? (userMap[m.performed_by] || m.performed_by) : null,
       item: itemMap[m.item_sku] || null
     }));
 

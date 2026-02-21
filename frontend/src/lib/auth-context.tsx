@@ -4,54 +4,12 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import { UserRole } from '@/lib/user-roles';
 
-// User roles for Famous Gate Hotel
-export enum UserRole {
-  // Admin roles
-  SUPER_ADMIN = 'super_admin',
+// Re-export UserRole so existing imports from '@/lib/auth-context' still work
+export { UserRole } from '@/lib/user-roles';
 
-  // Legacy roles - to be migrated
-  GENERAL_MANAGER = 'general_manager',
-  BRANCH_MANAGER = 'branch_manager',
-  CENTRAL_STOREKEEPER = 'central_storekeeper',
-  BRANCH_STOREKEEPER = 'branch_storekeeper',
-  HOUSEKEEPING = 'housekeeping',
-  HOUSEKEEPING_SUPERVISOR = 'housekeeping_supervisor',
-  MAINTENANCE = 'maintenance',
 
-  // New consolidated roles
-  BRANCH_OPERATIONS_MANAGER = 'branch_operations_manager',
-  CENTRAL_OPERATIONS_MANAGER = 'central_operations_manager',
-  FACILITIES_MANAGER = 'facilities_manager',
-
-  // Other roles
-  RECEPTIONIST = 'receptionist',
-  RESTAURANT = 'restaurant',
-  POS_KITCHEN = 'pos_kitchen',
-  KITCHEN = 'kitchen',
-  KITCHEN_OPERATIONS = 'kitchen_operations',
-  BARTENDER = 'bartender',
-  WAITER = 'waiter',
-  WAITRESS = 'waitress',
-  HEAD_WAITER = 'head_waiter',
-  BARMAN = 'barman',
-  BARMAID = 'barmaid',
-  BAR_MANAGER = 'bar_manager',
-  CHEF = 'chef',
-  HEAD_CHEF = 'head_chef',
-  COOK = 'cook',
-  ACCOUNTANT = 'accountant',
-  BRANCH_ACCOUNTANT = 'branch_accountant',
-  AUDITOR = 'auditor',
-  PROCUREMENT = 'procurement',
-  STOREKEEPER = 'storekeeper',
-  PURCHASING_MANAGER = 'purchasing_manager',
-  CASHIER = 'cashier',
-  HR_MANAGER = 'hr_manager',
-  EMPLOYEE = 'employee',
-  DRIVER = 'driver',
-  GUEST = 'guest'
-}
 
 // User interface
 export interface User {
@@ -117,15 +75,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const token = localStorage.getItem('token');
       const cachedUser = localStorage.getItem('user');
 
+      console.log('[Auth V3] checkAuth - token:', token ? 'EXISTS' : 'NONE');
+      console.log('[Auth V3] cachedUser:', cachedUser ? 'EXISTS' : 'NONE');
+
       if (token) {
-        // First, restore cached user immediately to prevent flash of logged-out state
         if (cachedUser) {
           try {
             const parsedUser = JSON.parse(cachedUser);
+            console.log('[Auth V3] Setting user from cache:', (parsedUser.firstName || parsedUser.first_name), parsedUser.role);
             setUser(parsedUser);
           } catch (e) {
-            // Invalid cached user, continue to API check
+            console.error('[Auth V3] Failed to parse cached user:', e);
           }
+        }
+
+        if (token === 'offline-bridge-token') {
+          console.log('[Auth V3] Offline bridge token detected');
+          setIsLoading(false);
+          return;
         }
 
         try {
@@ -150,32 +117,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               phoneNumber: apiUser.phone_number
             };
             setUser(userData);
-            // Update cached user with fresh data
             localStorage.setItem('user', JSON.stringify(userData));
           } else if (res.message?.includes('expired') || res.message?.includes('invalid')) {
-            // Only clear on explicit token expiry/invalid messages
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             setUser(null);
           }
-          // If res.success is false but not due to token issues, keep cached user
         } catch (error: any) {
-          // Only clear session on 401 Unauthorized errors
           const is401 = error.message?.includes('401') || error.message?.includes('Unauthorized') || error.message?.includes('expired');
           if (is401) {
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             setUser(null);
           }
-          // For network errors or server errors, keep the cached user
-          // This prevents logout on page reload when backend is slow to start
-          console.warn('Auth check failed, keeping cached session:', error.message);
+          console.warn('[Auth V3] Auth check failed, using cached session:', error.message);
         }
       } else {
         setUser(null);
       }
     } catch (error) {
-      console.error('Auth check failed:', error);
+      console.error('[Auth V3] Auth check failed:', error);
     } finally {
       setIsLoading(false);
     }
@@ -209,19 +170,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           phoneNumber: apiUser.phone_number
         };
 
-        // Store user and token
         localStorage.setItem('user', JSON.stringify(userData));
         localStorage.setItem('token', token);
 
-        // Set branch context
         if (userData.branch_id) {
           localStorage.setItem('activeBranchId', userData.branch_id.toString());
         }
 
         setUser(userData);
         toast.success(`Welcome back, ${userData.firstName}!`);
-
-        // Redirect to appropriate dashboard
         redirectToDashboard(userData.role, userData.is_central);
       } else {
         throw new Error(res.message || 'Login failed');
@@ -241,7 +198,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const res = await api.auth.posLogin(pin);
-
       if (res.success && res.data) {
         const { user: apiUser, session } = res.data;
         const token = session?.access_token || res.data.token;
@@ -260,19 +216,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           department: apiUser.department || 'Staff'
         };
 
-        // Store user and token
         localStorage.setItem('user', JSON.stringify(userData));
         localStorage.setItem('token', token);
 
-        // Set branch context
         if (userData.branch_id) {
           localStorage.setItem('activeBranchId', userData.branch_id.toString());
         }
 
         setUser(userData);
         toast.success(`Signed in as ${userData.firstName}`);
-
-        // Redirect to appropriate dashboard or specific module
         if (redirectTo) {
           router.push(redirectTo);
         } else {
@@ -305,12 +257,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const redirectToDashboard = (role: UserRole, isCentral?: boolean) => {
-    // Dynamic routing logic
     const roleRedirects: Record<UserRole, string> = {
-      // Admin roles
       [UserRole.SUPER_ADMIN]: '/dashboard/admin',
-
-      // Legacy roles - to be migrated
       [UserRole.GENERAL_MANAGER]: '/dashboard/gm',
       [UserRole.BRANCH_MANAGER]: '/dashboard/branch-manager',
       [UserRole.CENTRAL_STOREKEEPER]: '/dashboard/central-store',
@@ -318,13 +266,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       [UserRole.HOUSEKEEPING]: '/dashboard/housekeeping',
       [UserRole.HOUSEKEEPING_SUPERVISOR]: '/dashboard/housekeeping',
       [UserRole.MAINTENANCE]: '/dashboard/maintenance',
-
-      // New consolidated roles
       [UserRole.BRANCH_OPERATIONS_MANAGER]: '/dashboard/branch-operations',
       [UserRole.CENTRAL_OPERATIONS_MANAGER]: '/dashboard/central-store',
       [UserRole.FACILITIES_MANAGER]: '/dashboard/facilities',
-
-      // Other roles
       [UserRole.RECEPTIONIST]: '/dashboard/reception',
       [UserRole.RESTAURANT]: '/dashboard/pos-kitchen',
       [UserRole.POS_KITCHEN]: '/dashboard/pos-kitchen',
@@ -351,6 +295,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       [UserRole.EMPLOYEE]: '/dashboard/employee',
       [UserRole.DRIVER]: '/dashboard/employee',
       [UserRole.GUEST]: '/dashboard/guest',
+      [UserRole.KYOGONG_SPA_CASHIER]: '/dashboard/kyogong/spa',
+      [UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER]: '/dashboard/kyogong/executive-bar',
+      [UserRole.KYOGONG_SPORTS_BAR_CASHIER]: '/dashboard/kyogong/sports-bar',
+      [UserRole.KYOGONG_RECEPTION_CASHIER]: '/dashboard/kyogong/reception',
     };
 
     const path = roleRedirects[role] || '/dashboard';
@@ -373,7 +321,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// Custom hook to use auth context
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
@@ -382,19 +329,28 @@ export function useAuth() {
   return context;
 }
 
-// Permission checker utility
 export function hasPermission(user: User | null, permission: string): boolean {
   if (!user) return false;
-
-  // Super admin has all permissions
   if (user.role === UserRole.SUPER_ADMIN) return true;
-
-  // Check specific permissions
   return user.permissions?.includes(permission) || false;
 }
 
-// Role checker utility
 export function hasRole(user: User | null, roles: UserRole[]): boolean {
-  if (!user) return false;
-  return roles.includes(user.role);
+  if (!user) {
+    console.log('[hasRole V3] NO USER');
+    return false;
+  }
+
+  const userRole = (user.role as string).toLowerCase().trim();
+  const normalizedRoles = roles.map(r => (r as string).toLowerCase().trim());
+
+  const result = normalizedRoles.includes(userRole);
+
+  if (!result) {
+    console.error('[hasRole V3] FAILED - User Role:', `"${userRole}"`, 'Allowed Roles:', normalizedRoles);
+  } else {
+    console.log('[hasRole V3] SUCCESS - User Role:', `"${userRole}"`, 'matches one of:', normalizedRoles);
+  }
+
+  return result;
 }

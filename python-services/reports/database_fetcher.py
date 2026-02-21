@@ -99,7 +99,25 @@ class DatabaseFetcher:
             
             fetcher = fetchers.get(report_type)
             if fetcher:
+                logger.info(f"Fetching data for report type: {report_type} with filters: {filters}")
                 data = fetcher(filters)
+                
+                # CRITICAL FIX: Ensure data is never None and always has proper structure
+                if data is None:
+                    logger.warning(f"Fetcher returned None for {report_type}, using empty structure")
+                    data = self._get_empty_structure(report_type)
+                
+                # Log data summary for debugging
+                if isinstance(data, dict):
+                    logger.info(f"Data fetched for {report_type}: {len(data)} keys, has_error: {data.get('error') is not None}")
+                    # Log key data points
+                    for key in ['items', 'voided_orders', 'total_revenue', 'total_items']:
+                        if key in data:
+                            value = data[key]
+                            if isinstance(value, list):
+                                logger.info(f"  {key}: {len(value)} items")
+                            else:
+                                logger.info(f"  {key}: {value}")
                 
                 # Automatically fetch AI insights for the report
                 if data and not data.get('error'):
@@ -114,10 +132,81 @@ class DatabaseFetcher:
                 return data
             else:
                 logger.warning(f"Unknown report type: {report_type}")
-                return {'error': f'Unknown report type: {report_type}'}
+                return self._get_empty_structure(report_type, error=f'Unknown report type: {report_type}')
         except Exception as e:
-            logger.error(f"Error fetching {report_type} data: {e}")
-            return {'error': str(e)}
+            logger.error(f"Error fetching {report_type} data: {e}", exc_info=True)
+            return self._get_empty_structure(report_type, error=str(e))
+    
+    def _get_empty_structure(self, report_type: str, error: str = None) -> Dict[str, Any]:
+        """Return proper empty structure for each report type to prevent PDF generation errors"""
+        base = {
+            'report_type': report_type,
+            'generated_at': datetime.now().isoformat(),
+            'has_data': False
+        }
+        
+        if error:
+            base['error'] = error
+            base['error_message'] = f"No data available: {error}"
+        
+        # Report-specific empty structures
+        structures = {
+            'inventory_status': {
+                **base,
+                'total_items': 0,
+                'low_stock_count': 0,
+                'out_of_stock': 0,
+                'total_value': 0,
+                'items': []
+            },
+            'exception_logs': {
+                **base,
+                'voided_orders': [],
+                'cancelled_bookings': [],
+                'high_discounts': [],
+                'total_exception_value': 0
+            },
+            'reconciliation_audit': {
+                **base,
+                'reconciliation_items': [],
+                'total_leakage_value': 0,
+                'summary': {'total_dispatched': 0, 'total_sold': 0}
+            },
+            'branch_performance': {
+                **base,
+                'period': {'start': '', 'end': ''},
+                'sales': {'restaurant': 0, 'bar': 0, 'total': 0},
+                'expenses': {'total': 0, 'breakdown': {}},
+                'netProfit': 0,
+                'profitMargin': 0
+            },
+            'stock_usage': {
+                **base,
+                'items': []
+            },
+            'employee_credit': {
+                **base,
+                'summary': {
+                    'current': 0,
+                    'overdue_30': 0,
+                    'overdue_60': 0,
+                    'overdue_90': 0,
+                    'total_outstanding': 0
+                },
+                'bills': []
+            },
+            'sales_performance': {
+                **base,
+                'analysis': [],
+                'summary': {
+                    'total_items_sold': 0,
+                    'total_quantity_sold': 0,
+                    'total_revenue': 0
+                }
+            }
+        }
+        
+        return structures.get(report_type, base)
 
 
     def _parse_dates(self, filters: Dict) -> tuple:

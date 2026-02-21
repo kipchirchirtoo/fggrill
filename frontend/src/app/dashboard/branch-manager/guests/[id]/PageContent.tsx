@@ -33,7 +33,7 @@ export default function GuestDetailPage({ params }: GuestDetailPageProps) {
   useEffect(() => {
     async function fetchGuestDetails() {
       if (!id) return;
-      
+
       setIsLoading(true);
       try {
         // Fetch guest details
@@ -44,7 +44,7 @@ export default function GuestDetailPage({ params }: GuestDetailPageProps) {
           toast.error('Failed to load guest details');
           router.push('/dashboard/branch-manager/guests');
         }
-        
+
         // Fetch guest stay history
         const historyResponse = await fetchAPI(`/guests/${id}/history`);
         if (historyResponse.success) {
@@ -67,11 +67,11 @@ export default function GuestDetailPage({ params }: GuestDetailPageProps) {
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
     const headers = {
       'Content-Type': 'application/json',
-      ...(typeof window !== 'undefined' && localStorage.getItem('token') 
-        ? { Authorization: `Bearer ${localStorage.getItem('token')}` } 
+      ...(typeof window !== 'undefined' && localStorage.getItem('token')
+        ? { Authorization: `Bearer ${localStorage.getItem('token')}` }
         : {})
     };
-    
+
     const response = await fetch(`${API_URL}/api${endpoint}`, {
       ...options,
       headers: {
@@ -79,17 +79,17 @@ export default function GuestDetailPage({ params }: GuestDetailPageProps) {
         ...options?.headers
       }
     });
-    
+
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: 'Request failed' }));
       throw new Error(error.message || error.detail || 'Request failed');
     }
-    
+
     return response.json();
   }
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN, UserRole.RECEPTIONIST]}>
+    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN, UserRole.RECEPTIONIST, UserRole.AUDITOR]}>
       <DashboardLayout>
         <div className="space-y-6">
           <div className="flex items-center justify-between">
@@ -97,8 +97,8 @@ export default function GuestDetailPage({ params }: GuestDetailPageProps) {
               <h1 className="text-2xl font-bold text-gray-900">Guest Profile</h1>
               <p className="text-gray-500">View guest information and stay history</p>
             </div>
-            <IOSButton 
-              variant="secondary" 
+            <IOSButton
+              variant="secondary"
               onClick={() => router.push('/dashboard/branch-manager/guests')}
               leftIcon={<ArrowLeft />}
             >
@@ -153,7 +153,7 @@ export default function GuestDetailPage({ params }: GuestDetailPageProps) {
                         <p className="font-semibold">{guest.lastName}</p>
                       </div>
                     </div>
-                    
+
                     <div>
                       <p className="text-sm text-gray-500">Email</p>
                       <p className="font-semibold flex items-center gap-2">
@@ -161,7 +161,7 @@ export default function GuestDetailPage({ params }: GuestDetailPageProps) {
                         {guest.email || 'Not provided'}
                       </p>
                     </div>
-                    
+
                     <div>
                       <p className="text-sm text-gray-500">Phone</p>
                       <p className="font-semibold flex items-center gap-2">
@@ -169,7 +169,7 @@ export default function GuestDetailPage({ params }: GuestDetailPageProps) {
                         {guest.phone || 'Not provided'}
                       </p>
                     </div>
-                    
+
                     <div>
                       <p className="text-sm text-gray-500">Nationality</p>
                       <p className="font-semibold">{guest.nationality || 'Not specified'}</p>
@@ -186,7 +186,7 @@ export default function GuestDetailPage({ params }: GuestDetailPageProps) {
                       <p className="text-sm text-gray-500">Address</p>
                       <p className="font-semibold">{guest.address || 'Not provided'}</p>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm text-gray-500">ID Type</p>
@@ -267,7 +267,7 @@ export default function GuestDetailPage({ params }: GuestDetailPageProps) {
                           const checkIn = new Date(booking.check_in_date);
                           const checkOut = new Date(booking.check_out_date);
                           const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
-                          
+
                           return (
                             <tr key={booking.id} className="border-b hover:bg-gray-50">
                               <td className="py-2 px-4">
@@ -282,9 +282,9 @@ export default function GuestDetailPage({ params }: GuestDetailPageProps) {
                               <td className="py-2 px-4">
                                 <IOSBadge variant="light" color={
                                   booking.status === 'checked_out' ? 'success' :
-                                  booking.status === 'checked_in' ? 'primary' :
-                                  booking.status === 'confirmed' ? 'warning' :
-                                  booking.status === 'cancelled' ? 'danger' : 'default'
+                                    booking.status === 'checked_in' ? 'primary' :
+                                      booking.status === 'confirmed' ? 'warning' :
+                                        booking.status === 'cancelled' ? 'danger' : 'default'
                                 }>
                                   {booking.status.replace('_', ' ')}
                                 </IOSBadge>
@@ -305,13 +305,13 @@ export default function GuestDetailPage({ params }: GuestDetailPageProps) {
               <IOSCard className="p-6">
                 <h3 className="font-bold mb-4">Actions</h3>
                 <div className="flex flex-wrap gap-3">
-                  <IOSButton 
+                  <IOSButton
                     onClick={() => router.push(`/dashboard/branch-manager/reservations/new?guest=${guest.id}`)}
                     leftIcon={<Calendar />}
                   >
                     Create New Booking
                   </IOSButton>
-                  <IOSButton 
+                  <IOSButton
                     variant="secondary"
                     onClick={() => router.push(`/dashboard/branch-manager/guests/edit/${guest.id}`)}
                   >
@@ -323,7 +323,7 @@ export default function GuestDetailPage({ params }: GuestDetailPageProps) {
           ) : (
             <IOSCard className="p-12 text-center">
               <p className="text-gray-500">Guest not found</p>
-              <IOSButton 
+              <IOSButton
                 className="mt-4"
                 onClick={() => router.push('/dashboard/branch-manager/guests')}
               >

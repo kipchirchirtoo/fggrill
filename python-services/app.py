@@ -150,29 +150,48 @@ def generate_branded_pdf_report():
         use_real_data = data.get('useRealData', True)
         passed_data = data.get('data')  # Data passed directly from frontend
         
-        logger.info(f"Generating branded PDF report: {report_type} with filters: {filters}")
+        logger.info(f"=== PDF GENERATION REQUEST ===")
+        logger.info(f"Report Type: {report_type}")
+        logger.info(f"Filters: {filters}")
+        logger.info(f"Use Real Data: {use_real_data}")
+        logger.info(f"Has Passed Data: {passed_data is not None}")
         
         # Use passed data if available and useRealData is false
         if passed_data and not use_real_data:
             report_data = passed_data
+            logger.info("Using passed data from frontend")
         elif use_real_data:
+            logger.info("Fetching real data from database...")
             report_data = database_fetcher.fetch_report_data(report_type, filters)
+            logger.info(f"Data fetched: {type(report_data)}, keys: {list(report_data.keys()) if isinstance(report_data, dict) else 'N/A'}")
         else:
+            logger.info("Using mock data")
             report_data = data_fetcher.fetch_report_data(report_type, filters)
         
         # Ensure report_data is at least an empty dict
         if report_data is None:
-            report_data = {}
+            logger.error("Report data is None! Using empty structure")
+            report_data = database_fetcher._get_empty_structure(report_type, error="No data returned from fetcher")
 
-        logger.info(f"Report data generated: {report_data}")
-        
         # Check for error in report_data
-        if isinstance(report_data, dict) and report_data.get('error'):
-            logger.error(f"Error in fetched data: {report_data.get('error')}")
-            # We still proceed to generator, but it should handle empty data gracefully
+        if isinstance(report_data, dict):
+            if report_data.get('error'):
+                logger.warning(f"Data contains error: {report_data.get('error')}")
+                # Still proceed but log the issue
+            
+            # Log data summary
+            for key in ['items', 'voided_orders', 'bills', 'analysis', 'reconciliation_items']:
+                if key in report_data:
+                    value = report_data[key]
+                    if isinstance(value, list):
+                        logger.info(f"Data field '{key}': {len(value)} items")
+                        if len(value) > 0:
+                            logger.info(f"  First item keys: {list(value[0].keys()) if isinstance(value[0], dict) else 'N/A'}")
         
+        logger.info("Generating PDF...")
         # Generate branded PDF
         pdf_file = branded_pdf_generator.generate_report(report_type, report_data, filters)
+        logger.info(f"PDF generated successfully: {pdf_file}")
         
         return send_file(
             pdf_file,
@@ -181,8 +200,8 @@ def generate_branded_pdf_report():
             download_name=f'FG_{report_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
         )
     except Exception as e:
-        logger.error(f"Error generating branded PDF report: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error generating branded PDF report: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e), 'message': 'Failed to generate PDF report'}), 500
 
 # Initialize Anomaly Detector
 from finance.anomaly_detector import PaymentAnomalyDetector

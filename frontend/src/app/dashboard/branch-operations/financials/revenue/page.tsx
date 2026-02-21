@@ -12,7 +12,7 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
-import { 
+import {
   DollarSign, TrendingUp, TrendingDown, BarChart4, ArrowRightCircle,
   FileText, RefreshCw, PieChart, Calendar, ChevronLeft, ChevronRight, CalendarRange
 } from 'lucide-react';
@@ -48,14 +48,14 @@ function BranchRevenueContent() {
   const [endDate, setEndDate] = useState<Date>(() => {
     return endOfMonth(new Date());
   });
-  
+
   // Revenue data
   const [revenueSources, setRevenueSources] = useState<RevenueSource[]>([]);
   const [revenueByDay, setRevenueByDay] = useState<RevenueByDay[]>([]);
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [comparisonRevenue, setComparisonRevenue] = useState(0);
   const [revenueTrend, setRevenueTrend] = useState(0);
-  
+
   useEffect(() => {
     if (activeBranchId) {
       fetchRevenueData();
@@ -67,14 +67,14 @@ function BranchRevenueContent() {
     try {
       const formattedStartDate = format(startDate, 'yyyy-MM-dd');
       const formattedEndDate = format(endDate, 'yyyy-MM-dd');
-      
+
       // Try to fetch real data from API
       const response = await branchOperationsAPI.getRevenueDetails({
         startDate: formattedStartDate,
         endDate: formattedEndDate,
         period: selectedPeriod
       }, activeBranchId as number);
-      
+
       if (response.success) {
         processRevenueData(response.data);
       } else {
@@ -111,7 +111,7 @@ function BranchRevenueContent() {
   });
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
+    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]}>
       <BranchAwareDashboardLayout
         title="Revenue Details"
         subtitle={`Revenue breakdown for ${activeBranch?.name || 'your branch'}`}

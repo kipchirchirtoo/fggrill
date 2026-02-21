@@ -9,18 +9,19 @@ import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { restaurantAPI } from '@/lib/api';
-import { Utensils, RefreshCw, Plus, Search, Edit2, Trash2, DollarSign } from 'lucide-react';
+import { restaurantAPI, financeAPI } from '@/lib/api';
+import { Utensils, RefreshCw, Plus, Search, Edit2, Trash2, DollarSign, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
-interface MenuItem { id: string; name: string; description?: string; price: number; category: string | { name: string }; is_available: boolean; }
+interface MenuItem { id: string; name: string; description?: string; price: number; category: string | { name: string }; is_available: boolean; branch_id?: number | null; }
 
 export default function AdminMenuPage() {
   const { user } = useAuth();
   const [items, setItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+  const [branches, setBranches] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -28,29 +29,55 @@ export default function AdminMenuPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({ name: '', description: '', price: 0, category_id: '' });
+  const [formData, setFormData] = useState({ name: '', description: '', price: 0, category_id: '', branchId: '' });
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [itemsRes, catsRes] = await Promise.all([restaurantAPI.getMenuItems(), restaurantAPI.getCategories()]);
+      const promises = [
+        restaurantAPI.getMenuItems(),
+        restaurantAPI.getCategories()
+      ];
+      
+      // Fetch branches if user is super admin
+      if (user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER) {
+        promises.push(financeAPI.getBranches());
+      }
+
+      const results = await Promise.all(promises);
+      const itemsRes = results[0];
+      const catsRes = results[1];
+      const branchesRes = results[2]; // Might be undefined
+
       if (itemsRes.success) setItems(itemsRes.data || []);
       if (catsRes.success) setCategories(catsRes.data || []);
+      if (branchesRes && branchesRes.success) setBranches(branchesRes.data || []);
+      
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, []);
+  }, [user]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const filteredItems = items.filter((i) => i.name?.toLowerCase().includes(searchQuery.toLowerCase()));
 
-  const resetForm = () => setFormData({ name: '', description: '', price: 0, category_id: '' });
+  const resetForm = () => setFormData({ name: '', description: '', price: 0, category_id: '', branchId: '' });
 
   const handleAddItem = async () => {
-    if (!formData.name || !formData.price) { toast.error('Fill required fields'); return; }
+    if (!formData.name || !formData.price || !formData.category_id) { toast.error('Fill required fields'); return; }
     setIsSubmitting(true);
     try {
-      await restaurantAPI.createMenuItem(formData);
+      // payload expects camelCase match with backend or snake_case? 
+      // Backend expects: categoryId, name, description, price, branchId (optional)
+      const payload = {
+        categoryId: formData.category_id,
+        name: formData.name,
+        description: formData.description,
+        price: formData.price,
+        branchId: formData.branchId || null // Send null for global
+      };
+      
+      await restaurantAPI.createMenuItem(payload);
       toast.success('Menu item added');
       setAddModalOpen(false);
       resetForm();
@@ -61,7 +88,13 @@ export default function AdminMenuPage() {
 
   const openEditModal = (item: MenuItem) => {
     setSelectedItem(item);
-    setFormData({ name: item.name, description: item.description || '', price: item.price, category_id: (item as any).category_id || '' });
+    setFormData({ 
+      name: item.name, 
+      description: item.description || '', 
+      price: item.price, 
+      category_id: (item as any).category_id || '',
+      branchId: item.branch_id ? String(item.branch_id) : ''
+    });
     setEditModalOpen(true);
   };
 
@@ -69,7 +102,15 @@ export default function AdminMenuPage() {
     if (!selectedItem || !formData.name) { toast.error('Fill required fields'); return; }
     setIsSubmitting(true);
     try {
-      await restaurantAPI.updateMenuItem(selectedItem.id, formData);
+       const payload = {
+        categoryId: formData.category_id,
+        name: formData.name,
+        description: formData.description,
+        price: formData.price,
+        branchId: formData.branchId || null
+      };
+
+      await restaurantAPI.updateMenuItem(selectedItem.id, payload);
       toast.success('Menu item updated');
       setEditModalOpen(false);
       setSelectedItem(null);
@@ -100,6 +141,12 @@ export default function AdminMenuPage() {
     } catch (error: any) { toast.error(error.message || 'Failed'); }
   };
 
+  const getBranchName = (branchId?: number | null) => {
+    if (!branchId) return 'All Branches';
+    const branch = branches.find(b => b.id === branchId);
+    return branch ? branch.name : 'Unknown Branch';
+  };
+
   return (
     <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
       <DashboardLayout>
@@ -128,10 +175,22 @@ export default function AdminMenuPage() {
               {filteredItems.map((item) => (
                 <IOSCard key={item.id} className={`p-4 ${!item.is_available ? 'opacity-60' : ''}`}>
                   <div className="flex items-start justify-between mb-2">
-                    <div><p className="font-bold">{item.name}</p><p className="text-sm text-gray-500">{typeof item.category === 'object' ? item.category?.name : item.category}</p></div>
+                    <div>
+                      <p className="font-bold">{item.name}</p>
+                      <p className="text-sm text-gray-500">{typeof item.category === 'object' ? item.category?.name : item.category}</p>
+                    </div>
                     <IOSBadge className={item.is_available ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>{item.is_available ? 'Available' : 'Unavailable'}</IOSBadge>
                   </div>
                   {item.description && <p className="text-sm text-gray-500 mb-3">{item.description}</p>}
+                  
+                  {/* Branch Indicator */}
+                  {branches.length > 0 && (
+                    <div className="flex items-center gap-1 text-xs text-gray-400 mb-3">
+                      <MapPin className="h-3 w-3" />
+                      {getBranchName(item.branch_id)}
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between">
                     <p className="font-bold text-lg flex items-center gap-1"><DollarSign className="h-4 w-4" /> KES {item.price?.toLocaleString()}</p>
                     <div className="flex gap-2">
@@ -153,12 +212,25 @@ export default function AdminMenuPage() {
               <div><label className="text-sm font-medium">Name *</label><Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} /></div>
               <div><label className="text-sm font-medium">Description</label><Input value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} /></div>
               <div><label className="text-sm font-medium">Price *</label><Input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} /></div>
-              <div><label className="text-sm font-medium">Category</label>
+              
+              <div><label className="text-sm font-medium">Category *</label>
                 <select value={formData.category_id} onChange={(e) => setFormData({ ...formData, category_id: e.target.value })} className="w-full p-2 border rounded-ios-lg">
                   <option value="">Select category</option>
                   {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                 </select>
               </div>
+
+              {/* Branch Selection (Only if branches loaded) */}
+              {branches.length > 0 && (
+                 <div><label className="text-sm font-medium">Branch</label>
+                 <select value={formData.branchId} onChange={(e) => setFormData({ ...formData, branchId: e.target.value })} className="w-full p-2 border rounded-ios-lg">
+                   <option value="">All Branches (Global)</option>
+                   {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                 </select>
+                 <p className="text-xs text-gray-500 mt-1">Leave empty to make this item available to all branches.</p>
+               </div>
+              )}
+
               <div className="flex gap-3">
                 <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
                 <IOSButton onClick={handleAddItem} disabled={isSubmitting} className="flex-1">{isSubmitting ? 'Adding...' : 'Add'}</IOSButton>
@@ -175,12 +247,25 @@ export default function AdminMenuPage() {
               <div><label className="text-sm font-medium">Name *</label><Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} /></div>
               <div><label className="text-sm font-medium">Description</label><Input value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} /></div>
               <div><label className="text-sm font-medium">Price *</label><Input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} /></div>
+              
               <div><label className="text-sm font-medium">Category</label>
                 <select value={formData.category_id} onChange={(e) => setFormData({ ...formData, category_id: e.target.value })} className="w-full p-2 border rounded-ios-lg">
                   <option value="">Select category</option>
                   {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                 </select>
               </div>
+
+               {/* Branch Selection (Only if branches loaded) */}
+               {branches.length > 0 && (
+                 <div><label className="text-sm font-medium">Branch</label>
+                 <select value={formData.branchId} onChange={(e) => setFormData({ ...formData, branchId: e.target.value })} className="w-full p-2 border rounded-ios-lg">
+                   <option value="">All Branches (Global)</option>
+                   {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                 </select>
+                 <p className="text-xs text-gray-500 mt-1">Move item to a specific branch or make global.</p>
+               </div>
+              )}
+
               <div className="flex gap-3">
                 <IOSButton variant="secondary" onClick={() => setEditModalOpen(false)} className="flex-1">Cancel</IOSButton>
                 <IOSButton onClick={handleUpdateItem} disabled={isSubmitting} className="flex-1">{isSubmitting ? 'Updating...' : 'Update'}</IOSButton>

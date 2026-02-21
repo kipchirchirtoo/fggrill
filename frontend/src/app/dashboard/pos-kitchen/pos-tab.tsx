@@ -304,6 +304,17 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
   const handleGenerateBill = async (order: TodayOrder) => {
     setIsGeneratingBill(order.id);
     try {
+      console.log('[POS] ========== BILL GENERATION DEBUG ==========');
+      console.log('[POS] Full order object:', JSON.stringify(order, null, 2));
+      console.log('[POS] User object:', JSON.stringify(user, null, 2));
+      console.log('[POS] Order waiter_name:', order.waiter_name);
+      console.log('[POS] User firstName:', user?.firstName);
+      console.log('[POS] User lastName:', user?.lastName);
+      
+      const servedBy = order.waiter_name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}` : 'Staff');
+      console.log('[POS] Final served_by value:', servedBy);
+      console.log('[POS] ===============================================');
+      
       const receiptData = {
         receipt_type: 'sale' as const,
         receipt_number: order.order_number,
@@ -312,7 +323,7 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
         room_number: order.room_number,
         customer_name: order.table_number ? `Table ${order.table_number}` : 'Walk-in',
         cashier_name: user?.firstName ? `${user.firstName} ${user.lastName || ''}` : 'Staff',
-        served_by: order.waiter_name || undefined,
+        served_by: servedBy,
         items: order.items?.map(item => ({
           name: item.name,
           quantity: item.quantity,
@@ -341,25 +352,32 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
       // Fallback to PDF generation
       const response = await restaurantAPI.generateBill(receiptData);
 
-      if (response.success && response.data?.pdf_base64) {
-        // Convert base64 to blob
-        const byteCharacters = atob(response.data.pdf_base64);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'application/pdf' });
+      if (response.success) {
+        if (response.data?.pdf_base64) {
+          // Online mode: Download PDF
+          const byteCharacters = atob(response.data.pdf_base64);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'application/pdf' });
 
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = response.data.filename || `bill_${order.order_number}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        toast.success(`Bill generated for Order #${order.order_number}!`);
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = response.data.filename || `bill_${order.order_number}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+          toast.success(`Bill generated for Order #${order.order_number}!`);
+        } else {
+          // Offline mode: Show success message (receipt data is already in receiptData)
+          console.log('[POS] Offline mode - bill generated without PDF');
+          console.log('[POS] Receipt data:', receiptData);
+          toast.success(`Bill generated for Order #${order.order_number} (Offline Mode)`);
+        }
       } else {
         throw new Error(response.message || 'Failed to generate bill');
       }
@@ -650,33 +668,24 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
                     const subtotal = Math.round(total / 1.16);
                     const tax = total - subtotal;
                     const selectedWaiter = waiters.find(w => w.id === selectedWaiterId);
-                    const receiptData = {
-                      receipt_type: 'sale' as const,
-                      receipt_number: `ORD-${Date.now().toString().slice(-6)}`,
-                      date: new Date().toLocaleString(),
-                      table_number: orderType === 'dine_in' ? tableNumber : undefined,
-                      room_number: orderType === 'room_service' ? roomNumber : undefined,
-                      customer_name: customerName || (orderType === 'dine_in' ? `Table ${tableNumber}` : 'Walk-in'),
-                      cashier_name: user?.firstName ? `${user.firstName} ${user.lastName || ''}` : 'Staff',
-                      served_by: selectedWaiter ? `${selectedWaiter.first_name} ${selectedWaiter.last_name}` : undefined,
-                      items: cart.map(item => ({
-                        name: item.name,
-                        quantity: item.quantity,
-                        unit_price: item.price,
-                        total: item.price * item.quantity
-                      })),
-                      total_amount: total,
-                      subtotal: subtotal,
-                      tax_amount: tax,
-                      payment_method: paymentMethod || 'Cash',
-                      amount_paid: total,
-                      change_amount: 0
-                    };
+                    const waiterName = selectedWaiter ? `${selectedWaiter.first_name} ${selectedWaiter.last_name}` : undefined;
+                    
+                    console.log('[POS Bill Button] Selected waiter:', selectedWaiter);
+                    console.log('[POS Bill Button] Waiter name:', waiterName);
+                    console.log('[POS Bill Button] User:', user);
+                    
                     handleGenerateBill({
                       id: 'current-cart',
-                      order_number: receiptData.receipt_number,
+                      order_number: `ORD-${Date.now().toString().slice(-6)}`,
+                      order_type: orderType,
+                      table_number: orderType === 'dine_in' ? tableNumber : undefined,
+                      room_number: orderType === 'room_service' ? roomNumber : undefined,
+                      status: 'pending',
                       total: total,
-                      waiter_name: selectedWaiter ? `${selectedWaiter.first_name} ${selectedWaiter.last_name}` : undefined,
+                      created_at: new Date().toISOString(),
+                      payment_method: paymentMethod,
+                      waiter_id: selectedWaiterId || undefined,
+                      waiter_name: waiterName,
                       items: cart.map(item => ({ name: item.name, quantity: item.quantity, unit_price: item.price }))
                     } as TodayOrder);
                   }}

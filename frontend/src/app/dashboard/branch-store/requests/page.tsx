@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { storeAPI } from '@/lib/api';
-import { ClipboardList, RefreshCw, Plus, Package, Search, AlertCircle, Clock } from 'lucide-react';
+import { storeAPI, auditorReportsAPI } from '@/lib/api';
+import { ClipboardList, RefreshCw, Plus, Package, Search, AlertCircle, Clock, FileDown, Activity, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -21,6 +21,9 @@ interface StockRequest {
     status: string;
     created_at: string;
     items: any[];
+    auditor_id?: string;
+    audited_at?: string;
+    audit_notes?: string;
 }
 
 export default function BranchRequestsPage() {
@@ -42,6 +45,28 @@ export default function BranchRequestsPage() {
         } catch (error) { console.error('Error:', error); }
         finally { setIsLoading(false); }
     }, []);
+
+    const handleExport = async () => {
+        try {
+            toast.loading("Generating requisition ledger...");
+            await auditorReportsAPI.exportBrandedPdf('stock_requests', {
+                branch_id: user?.branch_id
+            });
+            toast.dismiss();
+            toast.success("Ledger generated successfully");
+        } catch (error) {
+            console.error(error);
+            toast.dismiss();
+            toast.error("Failed to export ledger");
+        }
+    };
+
+    const stats = useMemo(() => {
+        const pending = requests.filter(r => r.status === 'PENDING').length;
+        const totalItems = requests.reduce((acc, r) => acc + (r.items?.length || 0), 0);
+        const hasRejections = requests.filter(r => r.items?.some((i: any) => i.status === 'REJECTED')).length;
+        return { pending, totalItems, hasRejections };
+    }, [requests]);
 
     const fetchItems = useCallback(async () => {
         try {
@@ -78,10 +103,53 @@ export default function BranchRequestsPage() {
     const getStatusColor = (status: string) => {
         switch (status) {
             case 'PENDING': return 'warning';
+            case 'REVIEWED': return 'blue';
             case 'APPROVED': return 'success';
-            case 'REJECTED': return 'danger';
-            case 'DISPATCHED': return 'info';
-            default: return 'neutral';
+            case 'PARTIALLY_APPROVED': return 'success';
+            case 'REJECTED': return 'error';
+            case 'DELIVERED': return 'success';
+            case 'RECEIVED': return 'blue';
+            default: return 'light';
+        }
+    };
+
+    const handleFlagAnomaly = async (request: StockRequest) => {
+        try {
+            toast.loading("Flagging anomaly...");
+            await auditAPI.createException({
+                audit_session_id: 'MANUAL_REQUEST_' + new Date().getTime(),
+                exception_type: 'REQUEST_ANOMALY',
+                severity: 'medium',
+                description: `Potential anomaly in stock request ${request.request_number}. Items: ${request.items?.length || 0}`,
+                amount: request.items?.length || 0,
+                reference_type: 'stock_request',
+                reference_id: request.id,
+            });
+            toast.dismiss();
+            toast.success("Anomaly flagged for review");
+        } catch (error) {
+            console.error(error);
+            toast.dismiss();
+            toast.error("Failed to flag anomaly");
+        }
+    };
+
+    const handleVerify = async (request: StockRequest) => {
+        try {
+            toast.loading("Verifying request...");
+            await auditAPI.verifyAnomaly({
+                id: request.id,
+                type: 'stock_request',
+                notes: 'Verified by auditor'
+            });
+            toast.dismiss();
+            toast.success("Request verified successfully");
+            fetchRequests(); // Refresh data
+            setIsDetailModalOpen(false);
+        } catch (error) {
+            console.error(error);
+            toast.dismiss();
+            toast.error("Failed to verify request");
         }
     };
 
@@ -92,17 +160,68 @@ export default function BranchRequestsPage() {
             UserRole.SUPER_ADMIN,
             UserRole.GENERAL_MANAGER,
             UserRole.BARTENDER,
-            UserRole.RESTAURANT
+            UserRole.RESTAURANT,
+            UserRole.AUDITOR
         ]}>
             <DashboardLayout>
                 <div className="space-y-6">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                        <div><h1 className="text-2xl font-bold text-gray-900">Stock Requests</h1><p className="text-gray-500">Request items from central store</p></div>
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-900">
+                                {user?.role === UserRole.AUDITOR ? 'Stock Request Oversight' : 'Stock Requests'}
+                            </h1>
+                            <p className="text-gray-500">
+                                {user?.role === UserRole.AUDITOR ? 'Review and audit branch stock requisitions' : 'Request items from central store'}
+                            </p>
+                        </div>
                         <div className="flex gap-2">
-                            <IOSButton variant="secondary" onClick={fetchRequests} leftIcon={<RefreshCw />}>Refresh</IOSButton>
-                            <IOSButton onClick={() => setIsNewRequestModalOpen(true)} leftIcon={<Plus />}>New Request</IOSButton>
+                            <IOSButton variant="secondary" onClick={fetchRequests} leftIcon={<RefreshCw className={isLoading ? 'animate-spin' : ''} />}>Refresh</IOSButton>
+                            {user?.role === UserRole.AUDITOR && (
+                                <IOSButton variant="secondary" onClick={handleExport} leftIcon={<FileDown />}>Export Ledger</IOSButton>
+                            )}
+                            {user?.role !== UserRole.AUDITOR && (
+                                <IOSButton onClick={() => setIsNewRequestModalOpen(true)} leftIcon={<Plus />}>New Request</IOSButton>
+                            )}
                         </div>
                     </div>
+
+                    {user?.role === UserRole.AUDITOR && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <IOSCard className="p-4 bg-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center text-stone-600">
+                                        <ClipboardList className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Total Requisitions</p>
+                                        <p className="text-xl font-black text-stone-900">{requests.length}</p>
+                                    </div>
+                                </div>
+                            </IOSCard>
+                            <IOSCard className="p-4 bg-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
+                                        <Clock className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest text-amber-600">Pending Approval</p>
+                                        <p className="text-xl font-black text-amber-600">{stats.pending}</p>
+                                    </div>
+                                </div>
+                            </IOSCard>
+                            <IOSCard className="p-4 bg-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center text-rose-600">
+                                        <AlertTriangle className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest text-rose-600">With Rejections</p>
+                                        <p className="text-xl font-black text-rose-600">{stats.hasRejections}</p>
+                                    </div>
+                                </div>
+                            </IOSCard>
+                        </div>
+                    )}
 
                     {isLoading ? (
                         <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
@@ -352,8 +471,42 @@ export default function BranchRequestsPage() {
                             </div>
                         )}
 
-                        <div className="p-4 bg-stone-50 border-t border-stone-100 flex justify-end">
-                            <IOSButton variant="secondary" onClick={() => setIsDetailModalOpen(false)}>Close</IOSButton>
+                        <div className="p-6 bg-stone-50 border-t border-stone-100">
+                            <div className="flex items-center justify-between mb-4">
+                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Audit Status</p>
+                                {(selectedRequest as any).audited_at ? (
+                                    <div className="flex items-center gap-1 text-emerald-600">
+                                        <Check className="h-3 w-3" />
+                                        <span className="text-[10px] font-bold uppercase tracking-widest">Verified</span>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-1 text-amber-600">
+                                        <Clock className="h-3 w-3" />
+                                        <span className="text-[10px] font-bold uppercase tracking-widest">Unverified</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                <IOSButton variant="secondary" onClick={() => setIsDetailModalOpen(false)} className="w-full">Close</IOSButton>
+                                {user?.role === UserRole.AUDITOR && !(selectedRequest as any).audited_at && (
+                                    <IOSButton variant="secondary" onClick={() => handleVerify(selectedRequest!)} leftIcon={<Check />} className="w-full">
+                                        Verify
+                                    </IOSButton>
+                                )}
+                            </div>
+
+                            {user?.role === UserRole.AUDITOR && !(selectedRequest as any).audited_at && (
+                                <IOSButton variant="destructive" onClick={() => handleFlagAnomaly(selectedRequest!)} leftIcon={<AlertTriangle />} className="w-full">
+                                    Flag Anomaly
+                                </IOSButton>
+                            )}
+
+                            {user?.role === UserRole.AUDITOR && (selectedRequest as any).audited_at && (
+                                <div className="pt-2 italic text-[10px] text-stone-500">
+                                    Verified on {new Date((selectedRequest as any).audited_at).toLocaleDateString()} {new Date((selectedRequest as any).audited_at).toLocaleTimeString()}.
+                                </div>
+                            )}
                         </div>
                     </DialogContent>
                 </Dialog>

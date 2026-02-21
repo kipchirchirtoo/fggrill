@@ -953,6 +953,18 @@ class BrandedPDFGenerator:
         elements.extend(self._create_header("INVENTORY STATUS REPORT", 
             f"As of {datetime.now().strftime('%d/%m/%Y')}"))
         
+        # Check if we have an error or no data
+        if data.get('error') or not data.get('has_data', True):
+            elements.append(Spacer(1, 0.5*inch))
+            error_msg = data.get('error_message', data.get('error', 'No data available for the selected filters'))
+            elements.append(Paragraph(f"<b>Notice:</b> {error_msg}", 
+                ParagraphStyle('ErrorMsg', parent=self.styles['Normal'], 
+                              fontSize=12, textColor=colors.red, alignment=TA_CENTER)))
+            elements.append(Spacer(1, 0.3*inch))
+            elements.append(Paragraph("Please check your filters and try again, or contact support if the issue persists.", 
+                self.styles['Normal']))
+            return self._create_pdf(elements)
+        
         # Summary
         summary_data = [
             ['INVENTORY SUMMARY', '', '', ''],
@@ -983,30 +995,31 @@ class BrandedPDFGenerator:
         headers = ['Item Code', 'Item Name', 'Category', 'Qty', 'Min Qty', 'Unit', 'Value', 'Status']
         item_data = [headers]
         
-        for item in data.get('items', []):  # Removed limit to allow full inventory
-            qty = item.get('quantity') or 0
-            min_qty = item.get('min_quantity') or 0
-            
-            if qty == 0:
-                status = 'OUT OF STOCK'
-            elif qty < min_qty:
-                status = 'LOW STOCK'
-            else:
-                status = 'OK'
-            
-            item_data.append([
-                Paragraph(str(item.get('code') or ''), self.styles['TableText']),
-                Paragraph(str(item.get('name') or ''), self.styles['TableText']),
-                Paragraph(str(item.get('category') or ''), self.styles['TableText']),
-                self._format_number(qty),
-                self._format_number(min_qty),
-                str(item.get('unit') or 'pcs'),
-                self._format_currency(item.get('value') or 0),
-                status
-            ])
-        
-        if len(item_data) == 1:
-            item_data.append(['No items', '-', '-', '-', '-', '-', '-', '-'])
+        items = data.get('items', [])
+        if not items:
+            item_data.append(['No inventory items found', '-', '-', '-', '-', '-', '-', '-'])
+        else:
+            for item in items:  # Removed limit to allow full inventory
+                qty = item.get('quantity') or 0
+                min_qty = item.get('min_quantity') or 0
+                
+                if qty == 0:
+                    status = 'OUT OF STOCK'
+                elif qty < min_qty:
+                    status = 'LOW STOCK'
+                else:
+                    status = 'OK'
+                
+                item_data.append([
+                    Paragraph(str(item.get('code') or ''), self.styles['TableText']),
+                    Paragraph(str(item.get('name') or ''), self.styles['TableText']),
+                    Paragraph(str(item.get('category') or ''), self.styles['TableText']),
+                    self._format_number(qty),
+                    self._format_number(min_qty),
+                    str(item.get('unit') or 'pcs'),
+                    self._format_currency(item.get('value') or 0),
+                    status
+                ])
         
         item_table = Table(item_data, colWidths=[1.2*inch, 1.4*inch, 1*inch, 0.6*inch, 0.6*inch, 0.5*inch, 1*inch, 0.9*inch])
         item_table.setStyle(TableStyle([
@@ -3156,13 +3169,29 @@ class BrandedPDFGenerator:
         
         elements.extend(self._create_header("AUDIT EXCEPTION & RISK REPORT", date_range, branch_name))
         
+        # Check if we have an error or no data
+        if data.get('error') or not data.get('has_data', True):
+            elements.append(Spacer(1, 0.5*inch))
+            error_msg = data.get('error_message', data.get('error', 'No exception data found for the selected period'))
+            elements.append(Paragraph(f"<b>Notice:</b> {error_msg}", 
+                ParagraphStyle('ErrorMsg', parent=self.styles['Normal'], 
+                              fontSize=12, textColor=colors.orange, alignment=TA_CENTER)))
+            elements.append(Spacer(1, 0.3*inch))
+            elements.append(Paragraph("This could mean there were no exceptions during this period (which is good!), or the filters need adjustment.", 
+                self.styles['Normal']))
+            return self._create_pdf(elements)
+        
         # Summary Section
+        voided_count = len(data.get('voided_orders', []))
+        cancelled_count = len(data.get('cancelled_bookings', []))
+        total_value = data.get('total_exception_value', 0)
+        
         summary_data = [
             ['RISK SUMMARY', '', '', ''],
-            ['Total Exception Value:', self._format_currency(data.get('total_exception_value', 0)),
-             'Voided Orders:', str(len(data.get('voided_orders', [])))],
-            ['Cancelled Bookings:', str(len(data.get('cancelled_bookings', []))),
-             'Risk Level:', 'HIGH' if data.get('total_exception_value', 0) > 10000 else 'MEDIUM'],
+            ['Total Exception Value:', self._format_currency(total_value),
+             'Voided Orders:', str(voided_count)],
+            ['Cancelled Bookings:', str(cancelled_count),
+             'Risk Level:', 'HIGH' if total_value > 10000 else ('MEDIUM' if total_value > 1000 else 'LOW')],
         ]
         
         summary_table = Table(summary_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
@@ -3184,17 +3213,19 @@ class BrandedPDFGenerator:
         elements.append(Paragraph("<b>VOIDED & CANCELLED ORDERS</b>", self.styles['SectionHeader']))
         void_headers = ['ID', 'Type', 'Reason', 'Amount', 'Timestamp']
         void_data = [void_headers]
-        for v in data.get('voided_orders', []):
-            void_data.append([
-                str(v.get('id', '')),
-                v.get('type', ''),
-                Paragraph(v.get('reason', 'N/A'), self.styles['TableText']),
-                self._format_currency(v.get('amount', 0)),
-                v.get('timestamp', '')[:16]
-            ])
         
-        if len(void_data) == 1:
-            void_data.append(['No voids found', '-', '-', '-', '-'])
+        voided_orders = data.get('voided_orders', [])
+        if not voided_orders:
+            void_data.append(['No voided orders found', '-', '-', '-', '-'])
+        else:
+            for v in voided_orders:
+                void_data.append([
+                    str(v.get('id', '')),
+                    v.get('type', ''),
+                    Paragraph(v.get('reason', 'N/A'), self.styles['TableText']),
+                    self._format_currency(v.get('amount', 0)),
+                    v.get('timestamp', '')[:16]
+                ])
             
         void_table = Table(void_data, colWidths=[1*inch, 1*inch, 2.7*inch, 1.3*inch, 1.5*inch])
         void_table.setStyle(self._get_table_style())
@@ -3205,16 +3236,18 @@ class BrandedPDFGenerator:
         elements.append(Paragraph("<b>CANCELLED BOOKINGS</b>", self.styles['SectionHeader']))
         cancel_headers = ['ID', 'Guest Name', 'Amount', 'Cancellation Date']
         cancel_data = [cancel_headers]
-        for c in data.get('cancelled_bookings', []):
-            cancel_data.append([
-                str(c.get('id', '')),
-                c.get('guest', ''),
-                self._format_currency(c.get('amount', 0)),
-                c.get('date', '')[:10]
-            ])
-            
-        if len(cancel_data) == 1:
-            cancel_data.append(['No cancellations', '-', '-', '-'])
+        
+        cancelled_bookings = data.get('cancelled_bookings', [])
+        if not cancelled_bookings:
+            cancel_data.append(['No cancelled bookings', '-', '-', '-'])
+        else:
+            for c in cancelled_bookings:
+                cancel_data.append([
+                    str(c.get('id', '')),
+                    c.get('guest', ''),
+                    self._format_currency(c.get('amount', 0)),
+                    c.get('date', '')[:10]
+                ])
             
         cancel_table = Table(cancel_data, colWidths=[1.2*inch, 2.5*inch, 1.8*inch, 2*inch])
         cancel_table.setStyle(self._get_table_style())

@@ -341,7 +341,7 @@ export const reviewStockRequest = async (
                         type: 'success',
                         category: 'stock_request',
                         priority: 'medium',
-                        actionUrl: `/dashboard/store/requests/${id}`,
+                        actionUrl: `/dashboard/branch-store/requests/${id}`,
                         metadata: { request_id: id, status: 'APPROVED' }
                     }
                 ).catch(e => logger.error('Failed to notify requester of stock request approval', e));
@@ -392,7 +392,7 @@ export const reviewStockRequest = async (
                         type: 'error',
                         category: 'stock_request',
                         priority: 'high',
-                        actionUrl: `/dashboard/store/requests/${id}`,
+                        actionUrl: `/dashboard/branch-store/requests/${id}`,
                         metadata: { request_id: id, status: 'REJECTED' }
                     }
                 ).catch(e => logger.error('Failed to notify requester of stock request rejection', e));
@@ -469,7 +469,7 @@ export const approveStockRequest = async (
                     type: 'success',
                     category: 'stock_request',
                     priority: 'medium',
-                    actionUrl: `/dashboard/store/requests/${id}`,
+                    actionUrl: `/dashboard/branch-store/requests/${id}`,
                     metadata: { request_id: id, status: 'APPROVED' }
                 }
             ).catch(e => logger.error('Failed to notify requester of stock request approval', e));
@@ -535,7 +535,7 @@ export const rejectStockRequest = async (
                     type: 'error',
                     category: 'stock_request',
                     priority: 'high',
-                    actionUrl: `/dashboard/store/requests/${id}`,
+                    actionUrl: `/dashboard/branch-store/requests/${id}`,
                     metadata: { request_id: id, status: 'REJECTED' }
                 }
             ).catch(e => logger.error('Failed to notify requester of stock request rejection', e));

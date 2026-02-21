@@ -82,6 +82,7 @@ import {
   updateSupplier,
   deleteSupplier,
   getStockTakes,
+  getStockTake,
   createStockTake,
   getStockTakeItems,
   updateStockTakeItem,
@@ -100,6 +101,11 @@ import {
   getTrackableItems
 } from '../controllers/storekeeping/kitchen-usage.controller';
 
+import {
+  convertStock,
+  getYieldRules
+} from '../controllers/storekeeping/conversions.controller';
+
 const router = express.Router();
 
 // Apply authentication to all routes
@@ -108,7 +114,7 @@ router.use(protect);
 // Define authorized roles
 const centralRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.AUDITOR]; // Central warehouse management
 const branchRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.AUDITOR, UserRole.BRANCH_ACCOUNTANT]; // Branch stock viewing
-const allStoreRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_ACCOUNTANT]; // All storekeeping roles
+const allStoreRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]; // All storekeeping roles
 const staffRoles = [
   UserRole.SUPER_ADMIN,
   UserRole.GENERAL_MANAGER,
@@ -118,7 +124,8 @@ const staffRoles = [
   UserRole.RESTAURANT,
   UserRole.HOUSEKEEPING,
   UserRole.MAINTENANCE,
-  UserRole.BRANCH_ACCOUNTANT
+  UserRole.BRANCH_ACCOUNTANT,
+  UserRole.AUDITOR
 ];
 const managerRoles = [
   UserRole.SUPER_ADMIN,
@@ -126,7 +133,8 @@ const managerRoles = [
   UserRole.CENTRAL_STOREKEEPER,
   UserRole.BRANCH_STOREKEEPER,
   UserRole.BRANCH_MANAGER,
-  UserRole.BRANCH_ACCOUNTANT
+  UserRole.BRANCH_ACCOUNTANT,
+  UserRole.AUDITOR
 ]; // Management level access
 
 // =====================================================
@@ -187,6 +195,13 @@ router.post('/set_edit_lock_status', authorize(managerRoles), setEditLockStatus)
 
 router.get('/export_data', authorize(staffRoles), exportDataExcel);
 router.post('/import_data', authorize(managerRoles), upload.single('file') as any, importDataExcel);
+
+// =====================================================
+// STOCK CONVERSION ROUTES (Yield Control)
+// =====================================================
+
+router.post('/conversions', authorize(staffRoles), convertStock);
+router.get('/yield-rules', authorize(staffRoles), getYieldRules);
 
 // =====================================================
 // MULTI-BRANCH INVENTORY ROUTES
@@ -274,6 +289,7 @@ router.route('/stock-takes')
   .get(authorize(staffRoles), getStockTakes)
   .post(authorize(managerRoles), createStockTake);
 
+router.get('/stock-takes/:id', authorize(staffRoles), getStockTake);
 router.get('/stock-takes/:id/items', authorize(staffRoles), getStockTakeItems);
 router.put('/stock-takes/:id/complete', authorize(managerRoles), completeStockTake);
 router.put('/stock-take-items/:id', authorize(staffRoles), updateStockTakeItem);

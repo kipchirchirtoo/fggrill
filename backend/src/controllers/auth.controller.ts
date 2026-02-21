@@ -583,6 +583,12 @@ export const posLogin = async (
       return;
     }
 
+    logger.debug('POS Login Debug:', {
+      pinPrefix: pin[0],
+      userRole: user.role,
+      userId: user.id
+    });
+
     // Validate role against PIN prefix
     const prefix = pin[0];
     const restaurantRoles = [
@@ -590,19 +596,30 @@ export const posLogin = async (
       'line_cook', 'prep_cook', 'waiter', 'waitress', 'head_waiter',
       'food_runner', 'busser', 'host_hostess', 'pos_kitchen',
       'kitchen', 'kitchen_helper', 'dishwasher', 'manager',
-      'branch_manager', 'super_admin', 'cashier'
+      'branch_manager', 'super_admin', 'cashier',
+      'kyogong_spa_cashier', 'kyogong_executive_bar_cashier',
+      'kyogong_sports_bar_cashier', 'kyogong_reception_cashier'
     ];
 
     const barRoles = [
       'barmaid', 'barman', 'bartender', 'barista', 'bar_manager',
-      'manager', 'branch_manager', 'super_admin', 'cashier'
+      'manager', 'branch_manager', 'super_admin', 'cashier',
+      'kyogong_spa_cashier', 'kyogong_executive_bar_cashier',
+      'kyogong_sports_bar_cashier', 'kyogong_reception_cashier'
     ];
 
     const cashierRoles = [
-      'cashier', 'accountant', 'manager', 'branch_manager', 'super_admin'
+      'cashier', 'accountant', 'manager', 'branch_manager', 'super_admin',
+      'kyogong_spa_cashier', 'kyogong_executive_bar_cashier',
+      'kyogong_sports_bar_cashier', 'kyogong_reception_cashier'
     ];
 
+    logger.info(`POS Login Attempt - User: ${user.email}, Role: ${user.role}, Prefix: ${prefix}, PIN: ${pin}`);
+    logger.info(`Allowed Cashier Roles: ${JSON.stringify(cashierRoles)}`);
+    logger.info(`Is role allowed for C prefix? ${cashierRoles.includes(user.role)}`);
+
     if (prefix === 'R' && !restaurantRoles.includes(user.role)) {
+      logger.warn(`POS Login Denied: Role ${user.role} not allowed for prefix R`);
       res.status(403).json({
         success: false,
         message: 'This PIN is for restaurant staff only'
@@ -611,6 +628,7 @@ export const posLogin = async (
     }
 
     if (prefix === 'B' && !barRoles.includes(user.role)) {
+      logger.warn(`POS Login Denied: Role ${user.role} not allowed for prefix B`);
       res.status(403).json({
         success: false,
         message: 'This PIN is for bar staff only'
@@ -619,9 +637,10 @@ export const posLogin = async (
     }
 
     if (prefix === 'C' && !cashierRoles.includes(user.role)) {
+      logger.warn(`POS Login Denied: Role ${user.role} not allowed for prefix C`);
       res.status(403).json({
         success: false,
-        message: 'This PIN is for cashier/finance staff only'
+        message: 'This PIN is for cashier/finance staff only [FIX-V1]'
       });
       return;
     }

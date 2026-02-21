@@ -2,8 +2,6 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
-import bcrypt from 'bcryptjs';
-import { Pool } from 'pg';
 
 // @desc    Get all users
 // @route   GET /api/users
@@ -87,12 +85,16 @@ export const getUser = async (
 // @desc    Create user
 // @route   POST /api/users
 // @access  Private/Admin
+// @desc    Create user
+// @route   POST /api/users
+// @access  Private/Admin
 export const createUser = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
+    console.log('[DEBUG] createUser request body:', JSON.stringify(req.body, null, 2));
     const {
       email, password, role, status,
       firstName, first_name,
@@ -116,167 +118,90 @@ export const createUser = async (
 
     // Validate required fields
     if (!fName || !lName || !role) {
-      res.status(400).json({
-        success: false,
-        message: 'Please provide firstName, lastName, and role'
-      });
+      console.log('[DEBUG] Missing required fields:', { fName, lName, role });
+      res.status(400).json({ success: false, message: 'Please provide firstName, lastName, and role' });
       return;
     }
 
-    // Validate name lengths to match database constraints
-    if (fName.length < 2 || fName.length > 50) {
-      res.status(400).json({
-        success: false,
-        message: 'First name must be between 2 and 50 characters'
-      });
-      return;
-    }
-
-    if (lName.length < 2 || lName.length > 50) {
-      res.status(400).json({
-        success: false,
-        message: 'Last name must be between 2 and 50 characters'
-      });
-      return;
-    }
-
-    // For POS users with PIN, email/password are optional
-    // Generate dummy credentials if not provided
-    const isPOSUser = !!pos_pin;
+    // Step 1: Create auth user via Supabase Admin API
     const userEmail = email || `pos_${Date.now()}_${Math.random().toString(36).substr(2, 9)}@pos.local`;
-    const userPassword = password || Math.random().toString(36).substr(2, 15);
+    const userPassword = password || (Math.random().toString(36).substr(2, 12) + 'Aa1!');
 
-    // Check if user already exists (only if email was provided)
-    if (email) {
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', email)
-        .single();
-
-      if (existingUser) {
-        res.status(400).json({
-          success: false,
-          message: 'User with this email already exists'
-        });
-        return;
-      }
-    }
-
-    // Use direct database insertion to create user in auth.users and public.users
-    // This bypasses Supabase Auth API issues while maintaining data integrity
-    const pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false }
+    console.log('[DEBUG] Creating auth user:', { userEmail, role });
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email: userEmail,
+      password: userPassword,
+      email_confirm: true,
+      user_metadata: { first_name: fName, last_name: lName }
     });
 
-    try {
-      const userId = uuidv4();
-      const hashedPassword = await bcrypt.hash(userPassword, 12);
-
-      // Start transaction
-      const client = await pool.connect();
-
-      try {
-        await client.query('BEGIN');
-
-        // 1. Create user in auth.users table
-        await client.query(`
-          INSERT INTO auth.users (
-            id, instance_id, email, encrypted_password,
-            email_confirmed_at, aud, role,
-            raw_app_meta_data, raw_user_meta_data,
-            created_at, updated_at
-          )
-          VALUES (
-            $1, '00000000-0000-0000-0000-000000000000', $2, $3,
-            NOW(), 'authenticated', 'authenticated',
-            '{"provider": "email", "providers": ["email"]}',
-            $4,
-            NOW(), NOW()
-          )
-        `, [userId, userEmail, hashedPassword, JSON.stringify({
-          first_name: fName,
-          last_name: lName
-        })]);
-
-        // 2. Update the public.users entry created by trigger with correct data
-        // The handle_new_user trigger creates a basic entry, we update it with full data
-        await client.query(`
-          UPDATE public.users SET
-            first_name = $1,
-            last_name = $2,
-            role = $3,
-            branch_id = $4,
-            phone_number = $5,
-            employee_id = $7,
-            department = $8,
-            shift = $9,
-            start_date = $10,
-            emergency_contact = $11,
-            address = $12,
-            status = $13,
-            pos_pin = $14,
-            updated_at = NOW()
-          WHERE id = $6
-        `, [
-          fName,
-          lName,
-          role,
-          bId || null,
-          pNumber || null,
-          userId,
-          empId || null,
-          department || null,
-          shift || null,
-          sDate || null,
-          eContact ? JSON.stringify(eContact) : null,
-          address || null,
-          status || 'active',
-          pos_pin || null
-        ]);
-
-        await client.query('COMMIT');
-
-        // Fetch the created user
-        const { data: profile, error: fetchError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', userId)
-          .single();
-
-        if (fetchError) {
-          throw fetchError;
-        }
-
-        res.status(201).json({
-          success: true,
-          data: profile,
-          message: 'User created successfully'
-        });
-
-        logger.info(`User created by admin: ${userEmail} (${role})`);
-
-      } catch (txError) {
-        await client.query('ROLLBACK');
-        throw txError;
-      } finally {
-        client.release();
-      }
-
-    } finally {
-      await pool.end();
+    if (authError || !authData?.user) {
+      console.error('[DEBUG] auth.admin.createUser error:', authError);
+      logger.error('Supabase auth.admin.createUser error:', authError);
+      res.status(500).json({
+        success: false,
+        message: authError?.message || 'Failed to create auth user',
+        details: authError
+      });
+      return;
     }
+
+    const userId = authData.user.id;
+    console.log('[DEBUG] Auth user created with ID:', userId);
+
+    // Step 2: Upsert public.users profile
+    const profileData: Record<string, any> = {
+      id: userId,
+      email: userEmail,
+      first_name: fName,
+      last_name: lName,
+      role,
+      branch_id: bId || null,
+      phone_number: pNumber || null,
+      employee_id: empId || null,
+      department: department || null,
+      shift: shift || null,
+      start_date: sDate || null,
+      emergency_contact: eContact ? JSON.stringify(eContact) : null,
+      address: address || null,
+      status: status || 'active',
+      pos_pin: pos_pin || null,
+      updated_at: new Date().toISOString()
+    };
+
+    console.log('[DEBUG] Upserting profile for ID:', userId);
+    const { data: profile, error: upsertError } = await supabase
+      .from('users')
+      .upsert(profileData, { onConflict: 'id' })
+      .select()
+      .single();
+
+    if (upsertError) {
+      console.error('[DEBUG] upsertError:', upsertError);
+      // Cleanup orphaned auth user
+      await supabase.auth.admin.deleteUser(userId);
+      logger.error('Error upserting public.users profile:', upsertError);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to create user profile',
+        details: upsertError.message,
+        error: upsertError
+      });
+      return;
+    }
+
+    console.log('[DEBUG] User created successfully');
+    res.status(201).json({ success: true, data: profile, message: 'User created successfully' });
+    logger.info(`User created by admin: ${userEmail} (${role})`);
 
   } catch (error: any) {
+    console.error('[DEBUG] Fatal error in createUser:', error);
     logger.error('Error creating user:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create user',
-      details: error.message
-    });
+    res.status(500).json({ success: false, message: 'Failed to create user', details: error.message, stack: error.stack });
   }
 };
+
+
 
 // @desc    Update user
 // @route   PUT /api/users/:id

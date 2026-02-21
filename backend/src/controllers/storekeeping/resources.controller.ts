@@ -194,15 +194,36 @@ export const createSupplier = async (req: Request, res: Response) => {
     const tax_id_val = tax_id || (req.body as any).supplier_pin;
     const vat_number_val = vat_number || (req.body as any).vat_registration_number;
 
-    if (!supplier_code_val) {
-      return res.status(400).json({ success: false, message: 'Supplier code is required' });
+    // Generate supplier code if not provided
+    let finalSupplierCode = supplier_code_val;
+    if (!finalSupplierCode) {
+      const { count } = await supabase.from('store_suppliers').select('*', { count: 'exact', head: true });
+      const nextNum = (count || 0) + 1;
+      finalSupplierCode = `SUP-${nextNum.toString().padStart(4, '0')}`;
+    }
+
+    // Validate Status and Payment Terms Enums
+    const validStatus = ['active', 'inactive', 'blacklisted', 'pending_approval'];
+    const validPaymentTerms = ['cash', 'credit_7_days', 'credit_15_days', 'credit_30_days', 'credit_45_days', 'credit_60_days', 'credit_90_days', 'advance_payment'];
+
+    let finalStatus = status;
+    if (status && !validStatus.includes(status)) {
+      // Map common potentially invalid values to valid ones
+      if (status.toLowerCase() === 'active') finalStatus = 'active';
+      else if (status.toLowerCase() === 'inactive') finalStatus = 'inactive';
+      else finalStatus = 'active'; // Default
+    }
+
+    let finalPaymentTerms = payment_terms;
+    if (payment_terms && !validPaymentTerms.includes(payment_terms)) {
+      finalPaymentTerms = 'cash'; // Default safe value
     }
 
     const { data, error } = await supabase
       .from('store_suppliers')
       .insert([{
         name,
-        supplier_code: supplier_code_val,
+        supplier_code: finalSupplierCode,
         legal_name,
         contact_person,
         email,
@@ -218,22 +239,27 @@ export const createSupplier = async (req: Request, res: Response) => {
         tax_id: tax_id_val,
         vat_number: vat_number_val,
         registration_number,
-        payment_terms,
+        payment_terms: finalPaymentTerms,
         credit_limit,
         bank_name,
         bank_account_number,
         bank_branch,
         lead_time_days,
-        status,
+        status: finalStatus,
         is_preferred,
-        notes
+        notes,
+        created_at: new Date().toISOString()
       }])
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      logger.error('Error creating supplier:', error);
+      throw error;
+    }
     res.status(201).json({ success: true, data });
   } catch (error: any) {
+    logger.error('Create Supplier Exception:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -271,6 +297,20 @@ export const updateSupplier = async (req: Request, res: Response) => {
     if (body.supplier_pin && !updateData.tax_id) updateData.tax_id = body.supplier_pin;
     if (body.vat_registration_number && !updateData.vat_number) updateData.vat_number = body.vat_registration_number;
 
+    // Validate Enums if they are being updated
+    const validStatus = ['active', 'inactive', 'blacklisted', 'pending_approval'];
+    const validPaymentTerms = ['cash', 'credit_7_days', 'credit_15_days', 'credit_30_days', 'credit_45_days', 'credit_60_days', 'credit_90_days', 'advance_payment'];
+
+    if (updateData.status && !validStatus.includes(updateData.status)) {
+      if (updateData.status.toLowerCase() === 'active') updateData.status = 'active';
+      else if (updateData.status.toLowerCase() === 'inactive') updateData.status = 'inactive';
+      else delete updateData.status; // Ignore invalid status to avoid error
+    }
+
+    if (updateData.payment_terms && !validPaymentTerms.includes(updateData.payment_terms)) {
+      delete updateData.payment_terms; // Ignore invalid payment terms
+    }
+
     updateData.updated_at = new Date().toISOString();
 
     const { data, error } = await supabase
@@ -280,25 +320,34 @@ export const updateSupplier = async (req: Request, res: Response) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      logger.error('Error updating supplier:', error);
+      throw error;
+    }
 
     // Create audit log
     if (userId) {
-      await supabase.rpc('create_audit_log', {
-        p_user_id: userId,
-        p_action: 'UPDATE',
-        p_entity_type: 'SUPPLIER',
-        p_entity_id: id,
-        p_entity_reference: data.supplier_code || data.name,
-        p_old_values: oldValues,
-        p_new_values: data,
-        p_description: `Updated supplier profile: ${data.name}`,
-        p_supplier_id: id
-      });
+      // Safe audit log creation - if it fails, don't revert the update
+      try {
+        await supabase.rpc('create_audit_log', {
+          p_user_id: userId,
+          p_action: 'UPDATE',
+          p_entity_type: 'SUPPLIER',
+          p_entity_id: id,
+          p_entity_reference: data.supplier_code || data.name,
+          p_old_values: oldValues,
+          p_new_values: data,
+          p_description: `Updated supplier profile: ${data.name}`,
+          p_supplier_id: id
+        });
+      } catch (auditError) {
+        logger.warn('Failed to create audit log for supplier update', auditError);
+      }
     }
 
     res.json({ success: true, data });
   } catch (error: any) {
+    logger.error('Update Supplier Exception:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -326,7 +375,9 @@ export const getStockTakes = async (req: Request, res: Response) => {
       .from('stock_counts')
       .select(`
         *,
-        branch:branches(id, name, code)
+        branch:branches(id, name, code),
+        created_by_user:users(id, first_name, last_name),
+        counted_by_user:users(id, first_name, last_name)
       `)
       .order('count_date', { ascending: false });
 
@@ -336,7 +387,177 @@ export const getStockTakes = async (req: Request, res: Response) => {
     const { data, error } = await query;
 
     if (error) throw error;
-    res.json({ success: true, data });
+
+    // Resolve names robustly
+    const enrichedData = (data || []).map((item: any) => {
+      let started_by_name = 'System';
+      let completed_by_name = 'System';
+
+      const creator = item.created_by_user;
+      if (creator) {
+        const u = Array.isArray(creator) ? creator[0] : creator;
+        const fname = u.first_name || u.firstName;
+        const lname = u.last_name || u.lastName || '';
+        if (fname) started_by_name = `${fname} ${lname}`.trim();
+      }
+
+      const counter = item.counted_by_user;
+      if (counter) {
+        const u = Array.isArray(counter) ? counter[0] : counter;
+        const fname = u.first_name || u.firstName;
+        const lname = u.last_name || u.lastName || '';
+        if (fname) completed_by_name = `${fname} ${lname}`.trim();
+      }
+
+      return {
+        ...item,
+        take_number: item.count_number,
+        take_type: item.count_type,
+        started_by: started_by_name,
+        completed_by: completed_by_name,
+        // Aligned with what frontend might expect
+        started_at: item.created_at,
+        completed_at: item.status === 'submitted' ? item.updated_at : null
+      };
+    });
+
+    res.json({ success: true, data: enrichedData });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getStockTake = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+      .from('stock_counts')
+      .select(`
+        *,
+        branch:branches(id, name, code),
+        created_by_user:users(id, first_name, last_name),
+        counted_by_user:users(id, first_name, last_name)
+      `)
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ success: false, message: 'Stock take not found' });
+      }
+      throw error;
+    }
+
+    let totalVarianceValue = 0;
+    let itemsWithVarianceCount = 0;
+
+    // 1. Try to fetch from new table (stock_count_items)
+    const { data: rawItems, error: itemsError } = await supabase
+      .from('stock_count_items')
+      .select('*')
+      .eq('stock_count_id', id);
+
+    let items = rawItems || [];
+    let isLegacy = false;
+
+    // 2. Fallback to legacy table (stock_take_items) if new table is empty
+    if (items.length === 0) {
+      const { data: legacyItems } = await supabase
+        .from('stock_take_items')
+        .select('*')
+        .eq('stock_take_id', id);
+
+      if (legacyItems && legacyItems.length > 0) {
+        items = legacyItems;
+        isLegacy = true;
+      }
+    }
+
+    // 3. Resolve item details manually if join is unreliable
+    let enrichedItems = [];
+    if (items.length > 0) {
+      const itemIds = items.map((i: any) => i.item_id).filter(id => id);
+      const itemSkus = items.map((i: any) => i.item_sku).filter(sku => sku);
+
+      const { data: itemDetails } = await supabase
+        .from(isLegacy ? 'inventory_items' : 'store_items')
+        .select('id, name, unit, item_code, category')
+        .in(isLegacy ? 'item_code' : 'id', isLegacy ? itemSkus : itemIds);
+
+      const detailsMap = (itemDetails || []).reduce((acc: any, curr: any) => {
+        const key = isLegacy ? curr.item_code : curr.id;
+        acc[key] = curr;
+        return acc;
+      }, {});
+
+      let totalVal = 0;
+      let varCount = 0;
+
+      enrichedItems = items.map((item: any) => {
+        const detailKey = isLegacy ? item.item_sku : item.item_id;
+        const detail = detailsMap[detailKey];
+
+        const physicalQty = isLegacy ? item.counted_quantity : item.physical_quantity;
+        const systemQty = item.system_quantity || 0;
+        const unitCost = item.unit_cost || 0;
+        const variance = (physicalQty || 0) - systemQty;
+        const varianceValue = variance * unitCost;
+
+        if (variance !== 0) varCount++;
+        totalVal += varianceValue;
+
+        return {
+          ...item,
+          physical_quantity: physicalQty,
+          counted_quantity: physicalQty, // Map for frontend
+          variance,
+          variance_value: varianceValue,
+          item_name: detail?.name || 'Unknown',
+          unit: detail?.unit || 'pcs',
+          item: detail || null
+        };
+      });
+
+      totalVarianceValue = totalVal;
+      itemsWithVarianceCount = varCount;
+    }
+
+    // Resolve names robustly
+    let started_by_name = 'System';
+    let completed_by_name = 'System';
+
+    const creator = (data as any).created_by_user;
+    if (creator) {
+      const u = Array.isArray(creator) ? creator[0] : creator;
+      const fname = u.first_name || u.firstName;
+      const lname = u.last_name || u.lastName || '';
+      if (fname) started_by_name = `${fname} ${lname}`.trim();
+    }
+
+    const counter = (data as any).counted_by_user;
+    if (counter) {
+      const u = Array.isArray(counter) ? counter[0] : counter;
+      const fname = u.first_name || u.firstName;
+      const lname = u.last_name || u.lastName || '';
+      if (fname) completed_by_name = `${fname} ${lname}`.trim();
+    }
+
+    const enrichedResult = {
+      ...data,
+      take_number: (data as any).count_number || (data as any).take_number,
+      take_type: (data as any).count_type || (data as any).take_type,
+      total_variance_value: totalVarianceValue,
+      items_with_variance: itemsWithVarianceCount,
+      total_items_counted: enrichedItems.length,
+      started_by: started_by_name,
+      completed_by: completed_by_name,
+      started_at: (data as any).created_at,
+      completed_at: data.status === 'submitted' ? (data as any).updated_at : null,
+      items: enrichedItems
+    };
+
+    res.json({ success: true, data: enrichedResult });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -359,7 +580,8 @@ export const createStockTake = async (req: Request, res: Response) => {
         count_date: new Date().toISOString().split('T')[0],
         count_type: count_type || 'daily',
         status: 'draft',
-        notes
+        notes,
+        created_by: userId // Ensure the person who starts the count is recorded
       }])
       .select()
       .single();

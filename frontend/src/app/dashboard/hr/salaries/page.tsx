@@ -276,7 +276,7 @@ export default function HRSalariesPage() {
                             <div className="w-14 h-14 bg-white rounded-2xl shadow-sm border border-stone-100 flex items-center justify-center mx-auto mb-4">
                                 <DollarSign className="h-7 w-7 text-emerald-500" />
                             </div>
-                            <h3 className="text-xl font-bold text-stone-900 tracking-tight">Contract Adjustment</h3>
+                            <DialogTitle className="text-xl font-bold text-stone-900 tracking-tight">Contract Adjustment</DialogTitle>
                             <p className="text-stone-500 text-[13px] mt-1.5 font-bold uppercase tracking-widest">{selectedStaff?.first_name || 'Unknown'} {selectedStaff?.last_name || 'Staff'}</p>
                         </div>
 

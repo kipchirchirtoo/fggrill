@@ -3,11 +3,12 @@ import {
     getStockTakes,
     getStockTake,
     createStockTake,
-    updateStockTake,
-    deleteStockTake
-} from '../controllers/stock-take.controller';
+    completeStockTake
+} from '../controllers/storekeeping/resources.controller';
+import { updateStockTake } from '../controllers/stock-take.controller'; // Keep for now if resources doesn't have a generic update
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
+import { deleteStockTake } from '../controllers/stock-take.controller';
 
 const router = express.Router();
 
@@ -35,7 +36,8 @@ router.get('/:id',
         UserRole.BRANCH_MANAGER,
         UserRole.ACCOUNTANT,
         UserRole.AUDITOR,
-        UserRole.BRANCH_ACCOUNTANT
+        UserRole.BRANCH_ACCOUNTANT,
+        UserRole.BRANCH_STOREKEEPER
     ]),
     getStockTake
 );

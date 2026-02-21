@@ -74,7 +74,7 @@ export function BranchProvider({ children }: { children: ReactNode }) {
 
   // Helper to check if user can access all branches
   const canAccessAllBranches = (u: any): boolean => {
-    return ['super_admin', 'general_manager', 'central_storekeeper', 'accountant', 'auditor', 'branch_operations_manager'].includes(u?.role);
+    return ['super_admin', 'general_manager', 'central_storekeeper', 'accountant', 'auditor', 'branch_operations_manager', 'hr_manager', 'facilities_manager'].includes(u?.role);
   };
 
   // Check if a branch is available for the user

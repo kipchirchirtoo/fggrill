@@ -1147,3 +1147,71 @@ export async function getBranchDashboardStats(branchId: number) {
     incomingDispatches: incomingDispatches.count || 0
   };
 }
+
+/**
+ * Record stock conversion (Yield Control)
+ */
+export async function recordConversion(
+  branchId: number,
+  userId: string,
+  rawSku: string,
+  rawQty: number,
+  producedSku: string,
+  producedQty: number,
+  notes?: string
+) {
+  // 1. Validate Raw Item Stock
+  const { data: rawStock, error: rawError } = await supabase
+    .from('branch_stock')
+    .select('quantity')
+    .eq('branch_id', branchId)
+    .eq('item_sku', rawSku)
+    .single();
+
+  if (rawError && rawError.code !== 'PGRST116') throw rawError;
+  const currentRawQty = rawStock?.quantity || 0;
+
+  if (currentRawQty < rawQty) {
+    throw new Error(`Insufficient stock for ${rawSku}. Current: ${currentRawQty}, Required: ${rawQty}`);
+  }
+
+  // 2. Validate Produced Item exists in catalog (optional but good)
+  const { data: producedItem, error: prodError } = await supabase
+    .from('simple_items')
+    .select('item_name')
+    .eq('sku', producedSku)
+    .single();
+
+  const producedItemName = producedItem?.item_name || producedSku;
+
+  // 3. Deduct Raw Item
+  await updateBranchStock(
+    branchId,
+    rawSku,
+    -rawQty,
+    'CONVERSION_OUT',
+    userId,
+    'CONVERSION',
+    undefined,
+    undefined,
+    `Converted to ${producedQty} of ${producedItemName}. ${notes || ''}`
+  );
+
+  // 4. Add Produced Item
+  await updateBranchStock(
+    branchId,
+    producedSku,
+    producedQty,
+    'CONVERSION_IN',
+    userId,
+    'CONVERSION',
+    undefined,
+    undefined,
+    `Converted from ${rawQty} of ${rawSku}. ${notes || ''}`
+  );
+
+  return {
+    success: true,
+    message: `Converted ${rawQty} ${rawSku} to ${producedQty} ${producedSku}`
+  };
+}
