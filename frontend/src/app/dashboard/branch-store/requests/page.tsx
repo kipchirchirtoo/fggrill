@@ -472,40 +472,47 @@ export default function BranchRequestsPage() {
                         )}
 
                         <div className="p-6 bg-stone-50 border-t border-stone-100">
-                            <div className="flex items-center justify-between mb-4">
-                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Audit Status</p>
-                                {(selectedRequest as any).audited_at ? (
-                                    <div className="flex items-center gap-1 text-emerald-600">
-                                        <Check className="h-3 w-3" />
-                                        <span className="text-[10px] font-bold uppercase tracking-widest">Verified</span>
+                            {selectedRequest && (
+                                <>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Audit Status</p>
+                                        {(selectedRequest as any).audited_at ? (
+                                            <div className="flex items-center gap-1 text-emerald-600">
+                                                <Check className="h-3 w-3" />
+                                                <span className="text-[10px] font-bold uppercase tracking-widest">Verified</span>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-1 text-amber-600">
+                                                <Clock className="h-3 w-3" />
+                                                <span className="text-[10px] font-bold uppercase tracking-widest">Unverified</span>
+                                            </div>
+                                        )}
                                     </div>
-                                ) : (
-                                    <div className="flex items-center gap-1 text-amber-600">
-                                        <Clock className="h-3 w-3" />
-                                        <span className="text-[10px] font-bold uppercase tracking-widest">Unverified</span>
+
+                                    <div className="grid grid-cols-2 gap-3 mb-3">
+                                        <IOSButton variant="secondary" onClick={() => setIsDetailModalOpen(false)} className="w-full">Close</IOSButton>
+                                        {user?.role === UserRole.AUDITOR && !(selectedRequest as any).audited_at && (
+                                            <IOSButton variant="secondary" onClick={() => handleVerify(selectedRequest!)} leftIcon={<Check />} className="w-full">
+                                                Verify
+                                            </IOSButton>
+                                        )}
                                     </div>
-                                )}
-                            </div>
 
-                            <div className="grid grid-cols-2 gap-3 mb-3">
-                                <IOSButton variant="secondary" onClick={() => setIsDetailModalOpen(false)} className="w-full">Close</IOSButton>
-                                {user?.role === UserRole.AUDITOR && !(selectedRequest as any).audited_at && (
-                                    <IOSButton variant="secondary" onClick={() => handleVerify(selectedRequest!)} leftIcon={<Check />} className="w-full">
-                                        Verify
-                                    </IOSButton>
-                                )}
-                            </div>
+                                    {user?.role === UserRole.AUDITOR && !(selectedRequest as any).audited_at && (
+                                        <IOSButton variant="destructive" onClick={() => handleFlagAnomaly(selectedRequest)} leftIcon={<AlertTriangle />} className="w-full">
+                                            Flag Anomaly
+                                        </IOSButton>
+                                    )}
 
-                            {user?.role === UserRole.AUDITOR && selectedRequest && !(selectedRequest as any).audited_at && (
-                                <IOSButton variant="destructive" onClick={() => handleFlagAnomaly(selectedRequest!)} leftIcon={<AlertTriangle />} className="w-full">
-                                    Flag Anomaly
-                                </IOSButton>
+                                    {user?.role === UserRole.AUDITOR && (selectedRequest as any).audited_at && (
+                                        <div className="pt-2 italic text-[10px] text-stone-500">
+                                            Verified on {new Date((selectedRequest as any).audited_at).toLocaleDateString()} {new Date((selectedRequest as any).audited_at).toLocaleTimeString()}.
+                                        </div>
+                                    )}
+                                </>
                             )}
-
-                            {user?.role === UserRole.AUDITOR && selectedRequest && (selectedRequest as any).audited_at && (
-                                <div className="pt-2 italic text-[10px] text-stone-500">
-                                    Verified on {new Date((selectedRequest as any).audited_at).toLocaleDateString()} {new Date((selectedRequest as any).audited_at).toLocaleTimeString()}.
-                                </div>
+                            {!selectedRequest && (
+                                <IOSButton variant="secondary" onClick={() => setIsDetailModalOpen(false)} className="w-full">Close</IOSButton>
                             )}
                         </div>
                     </DialogContent>
