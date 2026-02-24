@@ -37,6 +37,7 @@ import {
 } from '../controllers/cashier-shifts.controller';
 import { protect as authenticate, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
+import { logger } from '../utils/logger';
 
 const router = Router();
 

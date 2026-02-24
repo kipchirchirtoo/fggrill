@@ -240,9 +240,16 @@ self.addEventListener('sync', (event) => {
 // Sync pending requests when back online
 async function syncPendingRequests() {
   const db = await openIndexedDB();
-  const tx = db.transaction('pending-requests', 'readwrite');
-  const store = tx.objectStore('pending-requests');
-  const requests = await store.getAll();
+
+  const requests = await new Promise((resolve, reject) => {
+    const tx = db.transaction('pending-requests', 'readonly');
+    const store = tx.objectStore('pending-requests');
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+
+  if (!Array.isArray(requests)) return;
 
   for (const requestData of requests) {
     try {
@@ -254,7 +261,13 @@ async function syncPendingRequests() {
 
       if (response.ok) {
         // Remove from queue on success
-        await store.delete(requestData.timestamp);
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction('pending-requests', 'readwrite');
+          const store = tx.objectStore('pending-requests');
+          const request = store.delete(requestData.id); // Use 'id' (keyPath) instead of timestamp
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(request.error);
+        });
 
         // Notify the app
         self.clients.matchAll().then((clients) => {
