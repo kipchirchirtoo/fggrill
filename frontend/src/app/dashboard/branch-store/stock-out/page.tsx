@@ -59,7 +59,7 @@ function formatTime(dateStr?: string): string {
 
 export default function BranchStockOutPage() {
   const { user } = useAuth();
-  console.log('[BranchStockOutPage] UserRole.AUDITOR:', UserRole.AUDITOR, 'User Role:', user?.role);
+  // console.log('[BranchStockOutPage] UserRole.AUDITOR:', UserRole.AUDITOR, 'User Role:', user?.role);
   const searchParams = useSearchParams();
   const branchId = useMemo(() => {
     const id = searchParams.get('branch_id');

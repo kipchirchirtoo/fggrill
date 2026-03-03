@@ -56,14 +56,14 @@ class HousekeepingWebSocketService {
     });
 
     this.io.on('connection', (socket: Socket) => {
-      console.log(`[HK-WS] Client connected: ${socket.id}`);
+      // console.log(`[HK-WS] Client connected: ${socket.id}`);
       this.handleConnection(socket);
     });
 
     // Subscribe to Supabase real-time changes
     this.setupSupabaseRealtimeListeners();
 
-    console.log('[HK-WS] WebSocket service initialized');
+    // console.log('[HK-WS] WebSocket service initialized');
   }
 
   private handleConnection(socket: Socket) {
@@ -108,7 +108,7 @@ class HousekeepingWebSocketService {
     });
 
     socket.on('disconnect', () => {
-      console.log(`[HK-WS] Client disconnected: ${socket.id}`);
+      // console.log(`[HK-WS] Client disconnected: ${socket.id}`);
       this.handleDisconnection(socket);
     });
 

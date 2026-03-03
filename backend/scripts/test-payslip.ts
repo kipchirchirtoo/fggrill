@@ -45,8 +45,8 @@ async function runTest() {
             bank_account_number: '1234567890',
             department: 'Supply Chain & Logistics'
         },
-        company: 'Famous Gate Hotel',
-        company_email: 'accounts@famousgate.co.ke'
+        company: 'Kyogong',
+        company_email: 'accounts@kyogong.co.ke'
     };
 
     try {

@@ -93,10 +93,10 @@ function BranchRoomsManagementContent() {
 
   const fetchRooms = async () => {
     setIsLoading(true);
-    console.log('Fetching rooms for branch:', activeBranchId);
+    // console.log('Fetching rooms for branch:', activeBranchId);
 
     if (!activeBranchId) {
-      console.warn('No active branch ID, cannot fetch rooms');
+      // console.warn('No active branch ID, cannot fetch rooms');
       setIsLoading(false);
       return;
     }
@@ -377,11 +377,11 @@ function BranchRoomsManagementContent() {
       status: formData.status || 'available'
     };
 
-    console.log('Creating room with data:', JSON.stringify(roomData, null, 2), 'for branch:', activeBranchId);
+    // console.log('Creating room with data:', JSON.stringify(roomData, null, 2), 'for branch:', activeBranchId);
 
     try {
       const response = await branchOperationsAPI.createRoom(roomData, activeBranchId);
-      console.log('Create room response:', response);
+      // console.log('Create room response:', response);
 
       if (response.success) {
         toast.success('Room created successfully!');

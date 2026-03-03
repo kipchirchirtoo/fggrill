@@ -48,14 +48,7 @@ export const PYTHON_SERVICE_URL = PYTHON_API_URL; // Alias for consistency
 export const ROOM_SERVICE_URL = PYTHON_API_URL; // Alias for consistency
 export const REPORTS_SERVICE_URL = normalizeUrl(process.env.NEXT_PUBLIC_REPORTS_SERVICE_URL, 'https://services.hirall.com');
 
-// Log the URLs in development for debugging
-if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-    console.log('API Configuration:', {
-        API_URL,
-        PYTHON_API_URL,
-        REPORTS_SERVICE_URL
-    });
-}
+
 
 // Global log suppression for production
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {

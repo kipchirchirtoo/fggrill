@@ -60,7 +60,7 @@ class ThermalPrinter:
         }
         
         # Company info
-        self.company_name = "FAMOUS GATE HOTEL"
+        self.company_name = "Kyogong"
         self.company_address = "Kericho, Kenya"
         self.company_phone = "+254 700 000 000"
         

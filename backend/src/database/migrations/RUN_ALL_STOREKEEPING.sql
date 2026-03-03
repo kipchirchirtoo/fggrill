@@ -1,5 +1,5 @@
 -- ============================================================
--- FAMOUS GATE HOTEL - COMPLETE STOREKEEPING DATABASE
+-- Kyogong - COMPLETE STOREKEEPING DATABASE
 -- Run this single file to set up all storekeeping tables
 -- Execute in Supabase SQL Editor
 -- ============================================================

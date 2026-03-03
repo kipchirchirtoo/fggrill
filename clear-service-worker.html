@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Service Worker & Caches</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        button {
+            background: #FF3B30;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:hover { background: #cc2e24; }
+        .success { color: #34C759; font-weight: bold; }
+        .error { color: #FF3B30; font-weight: bold; }
+        .info { background: #E3F2FD; padding: 15px; border-radius: 8px; margin: 15px 0; }
+        #output { margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Clear Service Worker & Caches</h1>
+        
+        <div class="info">
+            <strong>This tool will:</strong>
+            <ul>
+                <li>Unregister all service workers</li>
+                <li>Clear all browser caches</li>
+                <li>Force reload the page</li>
+            </ul>
+            <p><strong>Use this when:</strong> The UI isn't updating despite code changes</p>
+        </div>
+
+        <button onclick="clearEverything()">🗑️ Clear All & Reload</button>
+        <button onclick="checkStatus()">📊 Check Status</button>
+        
+        <div id="output"></div>
+    </div>
+
+    <script>
+        const output = document.getElementById('output');
+
+        function log(message, type = 'info') {
+            const p = document.createElement('p');
+            p.className = type;
+            p.textContent = message;
+            output.appendChild(p);
+        }
+
+        async function clearEverything() {
+            output.innerHTML = '<h3>Clearing...</h3>';
+            
+            try {
+                // 1. Unregister all service workers
+                if ('serviceWorker' in navigator) {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    log(`Found ${registrations.length} service worker(s)`);
+                    
+                    for (let registration of registrations) {
+                        await registration.unregister();
+                        log('✓ Service worker unregistered', 'success');
+                    }
+                } else {
+                    log('Service workers not supported', 'info');
+                }
+
+                // 2. Clear all caches
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    log(`Found ${cacheNames.length} cache(s): ${cacheNames.join(', ')}`);
+                    
+                    for (let cacheName of cacheNames) {
+                        await caches.delete(cacheName);
+                        log(`✓ Deleted cache: ${cacheName}`, 'success');
+                    }
+                } else {
+                    log('Cache API not supported', 'info');
+                }
+
+                // 3. Clear localStorage
+                localStorage.clear();
+                log('✓ LocalStorage cleared', 'success');
+
+                // 4. Clear sessionStorage
+                sessionStorage.clear();
+                log('✓ SessionStorage cleared', 'success');
+
+                log('✅ ALL CLEARED! Reloading in 2 seconds...', 'success');
+                
+                setTimeout(() => {
+                    window.location.href = 'http://localhost:3001/dashboard/branch-store/stock-out';
+                }, 2000);
+
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function checkStatus() {
+            output.innerHTML = '<h3>Status Check</h3>';
+            
+            try {
+                // Check service workers
+                if ('serviceWorker' in navigator) {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    log(`Service Workers: ${registrations.length} registered`);
+                    registrations.forEach((reg, i) => {
+                        log(`  ${i + 1}. ${reg.scope}`, 'info');
+                    });
+                }
+
+                // Check caches
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    log(`Caches: ${cacheNames.length} found`);
+                    cacheNames.forEach((name, i) => {
+                        log(`  ${i + 1}. ${name}`, 'info');
+                    });
+                }
+
+                // Check storage
+                log(`LocalStorage items: ${localStorage.length}`);
+                log(`SessionStorage items: ${sessionStorage.length}`);
+
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-check on load
+        window.onload = () => {
+            checkStatus();
+        };
+    </script>
+</body>
+</html>

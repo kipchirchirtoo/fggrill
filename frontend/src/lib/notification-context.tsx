@@ -70,7 +70,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     const requestPushPermission = async (): Promise<boolean> => {
         if (!('Notification' in window)) {
-            console.warn('This browser does not support notifications');
+            // console.warn('This browser does not support notifications');
             return false;
         }
 
@@ -89,7 +89,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                 if ('serviceWorker' in navigator) {
                     try {
                         const registration = await navigator.serviceWorker.register('/sw.js');
-                        console.log('Service Worker registered:', registration);
+                        // console.log('Service Worker registered:', registration);
                     } catch (error) {
                         console.error('Service Worker registration failed:', error);
                     }

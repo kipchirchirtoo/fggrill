@@ -240,7 +240,7 @@ export async function deductIngredientsForItem(params: {
         .single();
 
     if (recipeError || !recipe) {
-        console.warn(`No active recipe found for menu item ${menu_item_id}`);
+        // console.warn(`No active recipe found for menu item ${menu_item_id}`);
         return null;
     }
 

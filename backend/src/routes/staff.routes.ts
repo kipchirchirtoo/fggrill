@@ -51,7 +51,7 @@ router.post('/attendance/clock-out', clockOut);
 // Protected routes
 router.use(protect);
 
-// Admin, Manager, Restaurant staff, POS Kitchen, and Cashier routes (POS/Cashier needs to access staff for order assignment and credit bills)
+// Admin, Manager, Restaurant staff, POS Kitchen, Cashier, and Auditor routes
 router.get('/',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RESTAURANT, UserRole.POS_KITCHEN, UserRole.KITCHEN, UserRole.HR_MANAGER, UserRole.CASHIER, UserRole.AUDITOR, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   getStaff

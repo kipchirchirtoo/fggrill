@@ -117,7 +117,7 @@ async function sendBookingEmails() {
       await transporter.sendMail({
         from: `${process.env.SMTP_FROM_NAME} <${process.env.SMTP_FROM_EMAIL}>`,
         to: guest.email,
-        subject: 'Booking Confirmation - Famous Gate Hotel',
+        subject: 'Booking Confirmation - Kyogong',
         html: emailHtml
       });
 
@@ -146,7 +146,7 @@ const oldTemplateCode = `
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Booking Confirmation - Famous Gate Hotel</title>
+          <title>Booking Confirmation - Kyogong</title>
           <style>
             body { 
               font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
@@ -317,14 +317,14 @@ const oldTemplateCode = `
         <body>
           <div class="container">
             <div class="header">
-              <h1>FAMOUS GATE HOTEL</h1>
+              <h1>Kyogong</h1>
               <p>Your Booking is Confirmed</p>
             </div>
             
             <div class="content">
               <p class="greeting">Dear ${guest.first_name} ${guest.last_name},</p>
               
-              <p>Thank you for choosing Famous Gate Hotel. We are delighted to confirm your reservation and look forward to welcoming you.</p>
+              <p>Thank you for choosing Kyogong. We are delighted to confirm your reservation and look forward to welcoming you.</p>
               
               <div class="confirmation-box">
                 <h2>Confirmation Number</h2>
@@ -383,23 +383,23 @@ const oldTemplateCode = `
 
               <div style="text-align: center; margin: 30px 0;">
                 <p style="color: #6c757d; margin-bottom: 15px;">Need to make changes to your reservation?</p>
-                <a href="mailto:reservations@famousgatehotel.com" class="cta-button">Contact Us</a>
+                <a href="mailto:reservations@kyogong.com" class="cta-button">Contact Us</a>
               </div>
 
               <p style="color: #6c757d; font-size: 14px; margin-top: 30px;">
                 If you have any questions or special requests, please don't hesitate to contact us at 
-                <a href="mailto:reservations@famousgatehotel.com" style="color: #667eea;">reservations@famousgatehotel.com</a> 
+                <a href="mailto:reservations@kyogong.com" style="color: #667eea;">reservations@kyogong.com</a> 
                 or call us at +254 XXX XXX XXX.
               </p>
             </div>
             
             <div class="footer">
-              <p><strong>FAMOUS GATE HOTEL</strong></p>
+              <p><strong>Kyogong</strong></p>
               <p>Nairobi, Kenya</p>
-              <p>Email: <a href="mailto:info@famousgatehotel.com">info@famousgatehotel.com</a></p>
+              <p>Email: <a href="mailto:info@kyogong.com">info@kyogong.com</a></p>
               <p>Phone: +254 XXX XXX XXX</p>
               <p style="margin-top: 20px; font-size: 12px; opacity: 0.7;">
-                © ${new Date().getFullYear()} Famous Gate Hotel. All rights reserved.
+                © ${new Date().getFullYear()} Kyogong. All rights reserved.
               </p>
             </div>
           </div>
@@ -410,7 +410,7 @@ const oldTemplateCode = `
       await transporter.sendMail({
         from: `${process.env.SMTP_FROM_NAME} <${process.env.SMTP_FROM_EMAIL}>`,
         to: guest.email,
-        subject: 'Booking Confirmation - Famous Gate Hotel',
+        subject: 'Booking Confirmation - Kyogong',
         html: emailHtml
       });
 

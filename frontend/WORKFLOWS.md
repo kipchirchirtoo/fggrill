@@ -1,4 +1,4 @@
-# Famous Gate Hotel - Role-Based Workflows
+# Kyogong - Role-Based Workflows
 
 ## Complete Workflow Documentation
 

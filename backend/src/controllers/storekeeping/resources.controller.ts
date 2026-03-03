@@ -115,11 +115,22 @@ export const createDriver = async (req: Request, res: Response) => {
 export const updateDriver = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, phone, license_number, license_expiry, status } = req.body;
+    const { name, phone, license_number, license_expiry, status, basic_salary, bank_name, account_number } = req.body;
+
+    // Build the update object dynamically so we only update what's provided
+    const updateData: any = { updated_at: new Date().toISOString() };
+    if (name !== undefined) updateData.name = name;
+    if (phone !== undefined) updateData.phone = phone;
+    if (license_number !== undefined) updateData.license_number = license_number;
+    if (license_expiry !== undefined) updateData.license_expiry = license_expiry;
+    if (status !== undefined) updateData.status = status;
+    if (basic_salary !== undefined) updateData.basic_salary = basic_salary;
+    if (bank_name !== undefined) updateData.bank_name = bank_name;
+    if (account_number !== undefined) updateData.account_number = account_number;
 
     const { data, error } = await supabase
       .from('drivers')
-      .update({ name, phone, license_number, license_expiry, status, updated_at: new Date().toISOString() })
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();
@@ -353,13 +364,137 @@ export const updateSupplier = async (req: Request, res: Response) => {
 };
 
 export const deleteSupplier = async (req: Request, res: Response) => {
+  const { pool } = require('../../config/pg');
+  let client;
+
   try {
     const { id } = req.params;
-    const { error } = await supabase.from('store_suppliers').delete().eq('id', id);
-    if (error) throw error;
-    res.json({ success: true, message: 'Supplier deleted' });
+
+    // Validate UUID format to prevent any injection
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid supplier ID format' });
+    }
+
+    client = await pool.connect();
+
+    // Pass supplier ID via session variable for safe use in DO block
+    await client.query(`SELECT set_config('app.delete_supplier_id', $1, true)`, [id]);
+
+    // Use a PL/pgSQL DO block to handle all cascade deletes in a single transaction.
+    // Each delete is wrapped in its own BEGIN/EXCEPTION block so missing tables
+    // (from migrations not yet applied) won't abort the whole transaction.
+    await client.query(`
+      DO $$
+      DECLARE
+        v_id UUID := current_setting('app.delete_supplier_id')::UUID;
+      BEGIN
+        -- 1. Credit note items (child of credit notes)
+        BEGIN
+          DELETE FROM store_credit_note_items 
+          WHERE credit_note_id IN (SELECT id FROM store_supplier_credit_notes WHERE supplier_id = v_id);
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END;
+
+        -- 2. Credit notes
+        BEGIN
+          DELETE FROM store_supplier_credit_notes WHERE supplier_id = v_id;
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END;
+
+        -- 3. Payment-invoice allocations
+        BEGIN
+          DELETE FROM store_payment_invoice_allocations 
+          WHERE payment_id IN (SELECT id FROM store_supplier_payments WHERE supplier_id = v_id);
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END;
+
+        -- 4. Supplier payments
+        BEGIN
+          DELETE FROM store_supplier_payments WHERE supplier_id = v_id;
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END;
+
+        -- 5. Invoice items then invoices
+        BEGIN
+          DELETE FROM store_supplier_invoice_items 
+          WHERE invoice_id IN (SELECT id FROM store_supplier_invoices WHERE supplier_id = v_id);
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END;
+        BEGIN
+          DELETE FROM store_supplier_invoices WHERE supplier_id = v_id;
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END;
+
+        -- 6. VAT summary & transactions
+        BEGIN
+          DELETE FROM store_supplier_vat_summary WHERE supplier_id = v_id;
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END;
+        BEGIN
+          DELETE FROM store_vat_transactions WHERE supplier_id = v_id;
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END;
+
+        -- 7. Supplier ledger & balances
+        BEGIN
+          DELETE FROM store_supplier_ledger WHERE supplier_id = v_id;
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END;
+        BEGIN
+          DELETE FROM store_supplier_balances WHERE supplier_id = v_id;
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END;
+
+        -- 8. GRNI control account entries
+        BEGIN
+          DELETE FROM store_grni_control_account WHERE supplier_id = v_id;
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END;
+
+        -- 9. GRN items then GRNs
+        BEGIN
+          DELETE FROM store_grn_items 
+          WHERE grn_id IN (SELECT id FROM store_grn WHERE supplier_id = v_id);
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END;
+        BEGIN
+          DELETE FROM store_grn WHERE supplier_id = v_id;
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END;
+
+        -- 10. PO items then purchase orders
+        BEGIN
+          DELETE FROM store_po_items 
+          WHERE po_id IN (SELECT id FROM store_purchase_orders WHERE supplier_id = v_id);
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END;
+        BEGIN
+          DELETE FROM store_purchase_orders WHERE supplier_id = v_id;
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END;
+
+        -- 11. Supplier quotations & performance
+        BEGIN
+          DELETE FROM store_supplier_quotations WHERE supplier_id = v_id;
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END;
+        BEGIN
+          DELETE FROM store_supplier_performance WHERE supplier_id = v_id;
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END;
+
+        -- 12. Finally delete the supplier
+        DELETE FROM store_suppliers WHERE id = v_id;
+      END $$;
+    `);
+
+    res.json({ success: true, message: 'Supplier and all related records deleted successfully' });
   } catch (error: any) {
+    logger.error('Error deleting supplier:', error);
     res.status(500).json({ success: false, message: error.message });
+  } finally {
+    if (client) client.release();
   }
 };
 

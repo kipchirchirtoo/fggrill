@@ -7,7 +7,7 @@ export default function KyogongExecutiveBarPage() {
         <ProtectedRoute allowedRoles={[UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER, UserRole.SUPER_ADMIN]}>
             <KyogongPOSLayout
                 title="Executive Bar POS"
-                subtitle="Famous Gates Hotel – Kyogong Branch"
+                subtitle="Kyogong – Kyogong Branch"
                 serviceType="bar"
                 salesPointCode="EXEC_BAR"
                 allowedRole={UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER}

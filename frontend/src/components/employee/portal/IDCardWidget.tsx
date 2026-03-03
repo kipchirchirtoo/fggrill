@@ -219,7 +219,7 @@ export function IDCardWidget({ user }: IDCardWidgetProps) {
                 <DialogContent className="sm:max-w-xl">
                     <DialogHeader>
                         <DialogTitle>ID Card Preview</DialogTitle>
-                        <DialogDescription>Official Famous Gate Hotel Identification.</DialogDescription>
+                        <DialogDescription>Official Kyogong Identification.</DialogDescription>
                     </DialogHeader>
                     <div className="flex items-center justify-center p-4 bg-stone-100 rounded-2xl min-h-[400px]">
                         {isLoading ? (

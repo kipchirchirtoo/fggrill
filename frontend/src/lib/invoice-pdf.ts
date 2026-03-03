@@ -82,13 +82,13 @@ export const generateInvoicePDF = async (invoice: InvoiceData) => {
     doc.setFontSize(10);
     doc.setTextColor(100);
     cursorY += 15;
-    doc.text(invoice.branch?.name || 'FAMOUS GATE GRILL & LOUNGE', 190, cursorY + 15, { align: 'right' });
+    doc.text(invoice.branch?.name || 'Kyogong GRILL & LOUNGE', 190, cursorY + 15, { align: 'right' });
     cursorY += 5;
     doc.text(invoice.branch?.address || 'Bomet, Kenya', 190, cursorY + 15, { align: 'right' });
     cursorY += 5;
     doc.text(invoice.branch?.phone || '0706782828', 190, cursorY + 15, { align: 'right' });
     cursorY += 5;
-    doc.text(invoice.branch?.email || 'famousgatesbmt@gmail.com', 190, cursorY + 15, { align: 'right' });
+    doc.text(invoice.branch?.email || 'kyogongsbmt@gmail.com', 190, cursorY + 15, { align: 'right' });
 
     cursorY = 75;
     doc.setDrawColor(200);
@@ -231,7 +231,7 @@ export const generateInvoicePDF = async (invoice: InvoiceData) => {
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(150);
-        doc.text('Famous Gate Grill & Lounge - Finance System', 105, 285, { align: 'center' });
+        doc.text('Kyogong Grill & Lounge - Finance System', 105, 285, { align: 'center' });
         doc.text(`Page ${i} of ${pageCount}`, 190, 285, { align: 'right' });
     }
 

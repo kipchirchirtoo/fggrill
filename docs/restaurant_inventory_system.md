@@ -1,4 +1,4 @@
-# Famous Gate Hotel - Restaurant Inventory & Cost Tracking System
+# Kyogong - Restaurant Inventory & Cost Tracking System
 
 ## Overview
 A comprehensive restaurant inventory management system that tracks kitchen supplies, monitors consumption, wastage, and provides detailed cost-to-revenue analysis for auditors and managers according to current hotel industry standards.

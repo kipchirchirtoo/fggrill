@@ -1,4 +1,4 @@
--- BAR MODULE MIGRATION - Famous Gate Hotel
+-- BAR MODULE MIGRATION - Kyogong
 -- Created: 2025-11-28
 
 -- Drink Categories

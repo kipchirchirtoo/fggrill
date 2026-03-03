@@ -1,5 +1,5 @@
 -- ============================================================
--- FAMOUS GATE HOTEL - DATABASE CLEANUP FOR CLIENT HANDOVER
+-- Kyogong - DATABASE CLEANUP FOR CLIENT HANDOVER
 -- ============================================================
 -- 
 -- PURPOSE: Remove all operational data while preserving superadmin login

@@ -4,8 +4,8 @@ import { Providers } from "@/components/providers"
 import { AuthProvider } from '@/lib/auth-context'
 
 export const metadata = {
-  title: "Famous Gate Hotel Management System",
-  description: "Professional hotel management system for Famous Gate Hotel in Kericho, Kenya",
+  title: "Kyogong Management System",
+  description: "Professional hotel management system for Kyogong in Kericho, Kenya",
 }
 
 export default function RootLayout({

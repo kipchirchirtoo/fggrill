@@ -94,7 +94,7 @@ export const createLedgerEntry = async (req: Request, res: Response) => {
       if (rpcError) throw rpcError;
       entry_number = entryNumberData;
     } catch (rpcErr) {
-      console.warn('RPC generate_kitchen_ledger_number failed, using fallback:', rpcErr);
+      // console.warn('RPC generate_kitchen_ledger_number failed, using fallback:', rpcErr);
       entry_number = `KL${Date.now()}`;
     }
 
@@ -351,7 +351,7 @@ export const createStoreReceipt = async (req: Request, res: Response) => {
       if (rpcError) throw rpcError;
       receipt_number = receiptNumberData;
     } catch (rpcErr) {
-      console.warn('RPC generate_kitchen_receipt_number failed, using fallback:', rpcErr);
+      // console.warn('RPC generate_kitchen_receipt_number failed, using fallback:', rpcErr);
       receipt_number = `KR${Date.now()}`;
     }
 
@@ -523,7 +523,7 @@ export const createPortionTracking = async (req: Request, res: Response) => {
       if (rpcError) throw rpcError;
       tracking_number = trackingNumberData;
     } catch (rpcErr) {
-      console.warn('RPC generate_portion_tracking_number failed, using fallback:', rpcErr);
+      // console.warn('RPC generate_portion_tracking_number failed, using fallback:', rpcErr);
       tracking_number = `PT${Date.now()}`;
     }
 

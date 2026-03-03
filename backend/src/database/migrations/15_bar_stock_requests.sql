@@ -1,4 +1,4 @@
--- BAR STOCK REQUESTS - Famous Gate Hotel
+-- BAR STOCK REQUESTS - Kyogong
 -- Created: 2025-12-01
 -- Description: Allow bartenders to request stock items from central/branch store
 

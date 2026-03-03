@@ -67,7 +67,7 @@ export default function StaffAttendanceDetailPage() {
         const startOfYear = new Date(selectedYear, 0, 1);
         const data: { [key: string]: 'present' | 'absent' | 'overtime' | 'late' | 'excused' } = {};
 
-        console.log('[Heatmap] Processing attendance records:', attendance.length);
+        // console.log('[Heatmap] Processing attendance records:', attendance.length);
 
         attendance.forEach(record => {
             const dateStr = record.attendance_date.split('T')[0];
@@ -79,7 +79,7 @@ export default function StaffAttendanceDetailPage() {
             else data[dateStr] = 'present';
         });
 
-        console.log('[Heatmap] Processed attendance data:', Object.keys(data).length, 'days with attendance');
+        // console.log('[Heatmap] Processed attendance data:', Object.keys(data).length, 'days with attendance');
 
         const calendar: any[] = [];
         for (let i = 0; i < 371; i++) {
@@ -94,8 +94,8 @@ export default function StaffAttendanceDetailPage() {
             });
         }
 
-        console.log('[Heatmap] Generated calendar:', calendar.length, 'days');
-        console.log('[Heatmap] Sample days:', calendar.slice(0, 5).map(d => ({ date: d.date.toISOString().split('T')[0], status: d.status })));
+        // console.log('[Heatmap] Generated calendar:', calendar.length, 'days');
+        // console.log('[Heatmap] Sample days:', calendar.slice(0, 5).map(d => ({ date: d.date.toISOString().split('T')[0], status: d.status })));
 
         return calendar;
     }, [attendance, selectedYear]);

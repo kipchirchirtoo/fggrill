@@ -8,7 +8,7 @@ const pool = new Pool({
 
 async function checkRoles() {
     try {
-        console.log('🔍 Checking user_role enum values...');
+        // console.log('🔍 Checking user_role enum values...');
         const result = await pool.query(`
       SELECT enumlabel 
       FROM pg_enum 
@@ -16,16 +16,16 @@ async function checkRoles() {
       ORDER BY enumlabel;
     `);
 
-        console.log('Result:', result.rows.map(r => r.enumlabel));
+        // console.log('Result:', result.rows.map(r => r.enumlabel));
 
-        console.log('\n🔍 Checking if kitchen_operations table exists...');
+        // console.log('\n🔍 Checking if kitchen_operations table exists...');
         const tableResult = await pool.query(`
       SELECT table_name 
       FROM information_schema.tables 
       WHERE table_schema = 'public' 
       AND table_name = 'kitchen_stock';
     `);
-        console.log('Kitchen Stock Table exists:', tableResult.rows.length > 0);
+        // console.log('Kitchen Stock Table exists:', tableResult.rows.length > 0);
 
     } catch (error) {
         console.error('❌ Error:', error.message);

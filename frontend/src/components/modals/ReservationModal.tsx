@@ -150,9 +150,16 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JS
       let guestId = selectedGuest?.id;
       if (!guestId) {
         // Create new guest
-        const nameParts = reservationData.guestName.split(' ');
-        const firstName = nameParts[0];
+        const trimmedName = reservationData.guestName.trim();
+        const nameParts = trimmedName.split(/\s+/).filter(part => part.length > 0);
+
+        // Ensure first_name and last_name are at least 2 chars (DB constraint)
+        const firstName = nameParts[0] || '';
         const lastName = nameParts.slice(1).join(' ') || 'Guest';
+
+        if (firstName.length < 2) {
+          throw new Error('Guest first name must be at least 2 characters long');
+        }
 
         const newGuestRes = await guestAPI.createGuest({
           firstName,
@@ -480,6 +487,13 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JS
                     toast.error('Please fill in guest name and email');
                     return;
                   }
+
+                  const nameParts = reservationData.guestName.trim().split(/\s+/);
+                  if (nameParts[0].length < 2) {
+                    toast.error('First name must be at least 2 characters long');
+                    return;
+                  }
+
                   setStep(2);
                 } else if (step === 2) {
                   if (!reservationData.checkIn || !reservationData.checkOut || !reservationData.roomTypeId) {

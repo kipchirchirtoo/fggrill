@@ -409,7 +409,7 @@ export default function RestaurantPOSPage() {
                   <div className="w-16 h-16 mx-auto mb-2 bg-gray-100 rounded-full flex items-center justify-center">
                     <FileText className="h-8 w-8 text-gray-600" />
                   </div>
-                  <h2 className="text-xl font-bold tracking-wide">FAMOUS GATE HOTEL</h2>
+                  <h2 className="text-xl font-bold tracking-wide">Kyogong</h2>
                   <p className="text-sm text-gray-500">{user?.branch_name || 'Restaurant'}</p>
                   <p className="text-xs text-gray-400">Kericho, Kenya</p>
                   <p className="text-xs text-gray-400">Tel: +254 700 000 000</p>
@@ -466,7 +466,7 @@ export default function RestaurantPOSPage() {
                 <div className="border-t border-dashed pt-4 mt-4 text-center">
                   <p className="font-bold text-lg">THANK YOU!</p>
                   <p className="text-xs text-gray-500">Please come again</p>
-                  <p className="text-xs text-gray-400 mt-1">info@famousgate.co.ke</p>
+                  <p className="text-xs text-gray-400 mt-1">info@kyogong.co.ke</p>
                 </div>
                 
                 {/* Action Buttons - Hidden on print */}

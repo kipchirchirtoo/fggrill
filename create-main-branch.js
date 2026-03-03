@@ -12,7 +12,7 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function createMainBranch() {
-    console.log('🏨 Creating Famous Gates Hotels main branch...\n');
+    console.log('🏨 Creating Kyogongs main branch...\n');
 
     try {
         // Check if branch already exists
@@ -32,10 +32,10 @@ async function createMainBranch() {
             const { error: updateError } = await supabase
                 .from('branches')
                 .update({
-                    name: 'Famous Gates Hotels',
+                    name: 'Kyogongs',
                     settings: {
                         phone: '0706782828',
-                        email: 'famousgatesbmt@gmail.com'
+                        email: 'kyogongsbmt@gmail.com'
                     }
                 })
                 .eq('id', existing[0].id);
@@ -51,12 +51,12 @@ async function createMainBranch() {
             const { data, error: insertError } = await supabase
                 .from('branches')
                 .insert({
-                    name: 'Famous Gates Hotels',
+                    name: 'Kyogongs',
                     location: 'Bomet, Kenya',
                     status: 'active',
                     settings: {
                         phone: '0706782828',
-                        email: 'famousgatesbmt@gmail.com'
+                        email: 'kyogongsbmt@gmail.com'
                     }
                 })
                 .select();
@@ -70,9 +70,9 @@ async function createMainBranch() {
         }
 
         console.log('\n📝 Receipt will now display:');
-        console.log('   Hotel Name: FAMOUS GATES HOTELS');
+        console.log('   Hotel Name: KyogongS');
         console.log('   Phone: 0706782828');
-        console.log('   Email: famousgatesbmt@gmail.com');
+        console.log('   Email: kyogongsbmt@gmail.com');
         console.log('\n✅ Done! Restart your app to see the changes.');
 
     } catch (error) {

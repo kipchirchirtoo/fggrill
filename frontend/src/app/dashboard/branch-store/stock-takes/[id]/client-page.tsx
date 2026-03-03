@@ -59,7 +59,7 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
     setIsLoading(true);
     try {
       const result = await storeAPI.getStockTake(id);
-      console.log('Stock take data (consolidated):', result);
+      // console.log('Stock take data (consolidated):', result);
 
       if (result.success) {
         setStockTake(result.data);

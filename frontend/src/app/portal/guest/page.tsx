@@ -82,7 +82,7 @@ export default function GuestPortal() {
             setServiceRequests(requestsData.data);
           }
         } catch (pyErr) {
-          console.log('Python service not available, using Node API only');
+          // console.log('Python service not available, using Node API only');
         }
       }
     } catch (error) {

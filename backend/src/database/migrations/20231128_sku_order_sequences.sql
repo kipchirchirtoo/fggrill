@@ -1,5 +1,5 @@
 -- ============================================================
--- FAMOUS GATE HOTEL - SKU & ORDER NUMBER SEQUENCE SYSTEM
+-- Kyogong - SKU & ORDER NUMBER SEQUENCE SYSTEM
 -- Migration: 20231128_sku_order_sequences.sql
 -- ============================================================
 

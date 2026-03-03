@@ -6,8 +6,10 @@ import {
     User, DollarSign, CreditCard, Scan, Printer, Loader2,
     Banknote, AlertTriangle, Layout, Calculator, BarChart3, TrendingUp, Activity,
     History, Trash2, ShoppingCart, Search, Receipt, Clock, AlertCircle, CheckCircle,
-    Smartphone, ArrowLeft, RefreshCcw, Wallet, Zap
+    Smartphone, ArrowLeft, RefreshCcw, Wallet, Zap, Plus
 } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
+import { CashierModals } from '@/components/modals/CashierModals';
 import {
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
     Tooltip, LineChart, Line, AreaChart, Area
@@ -50,6 +52,7 @@ function CashierPageContent() {
     const [scanInput, setScanInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isGeneratingBill, setIsGeneratingBill] = useState(false);
+    const [showDynamicBillModal, setShowDynamicBillModal] = useState(false);
     const [billData, setBillData] = useState<any>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [paymentAmount, setPaymentAmount] = useState('');
@@ -66,10 +69,12 @@ function CashierPageContent() {
     const [customerName, setCustomerName] = useState('');
     const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
     const [showReceipt, setShowReceipt] = useState(false);
-    const [insightsData, setInsightsData] = useState<any>(null);
-    const [forecastData, setForecastData] = useState<any>(null);
     const [stockAlerts, setStockAlerts] = useState<any>(null);
     const [isInsightLoading, setIsInsightLoading] = useState(false);
+    const [unpaidBills, setUnpaidBills] = useState<any[]>([]);
+    const [isUnpaidLoading, setIsUnpaidLoading] = useState(false);
+    const [insightsData, setInsightsData] = useState<any>(null);
+    const [forecastData, setForecastData] = useState<any>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
     const currentTotal = isPOSType ? cart.reduce((sum, i) => sum + i.line_total, 0) : (billData?.financials?.balance || 0);
@@ -105,11 +110,29 @@ function CashierPageContent() {
             fetchInsights();
         }
 
+        if (activeTab === 'station' && !isOffline) {
+            fetchUnpaidBills();
+        }
+
         return () => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
         };
     }, [isOffline]);
+
+    const fetchUnpaidBills = async () => {
+        setIsUnpaidLoading(true);
+        try {
+            const response = await fetchAPI('/cashier/unpaid-bills') as any;
+            if (response.success) {
+                setUnpaidBills(response.data);
+            }
+        } catch (error) {
+            console.error('Failed to fetch unpaid bills', error);
+        } finally {
+            setIsUnpaidLoading(false);
+        }
+    };
 
     const fetchInsights = async () => {
         setIsInsightLoading(true);
@@ -182,7 +205,7 @@ function CashierPageContent() {
                     category: item.category_id
                 }));
                 await cacheProducts(products);
-                console.log('Products cached for offline mode');
+                // console.log('Products cached for offline mode');
             }
         } catch (error) {
             console.error('Failed to sync products', error);
@@ -299,7 +322,11 @@ function CashierPageContent() {
 
         setIsProcessing(true);
         try {
-            const identifier = (billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'kyogong') ? billData.order.order_number : (billData.type === 'invoice' ? billData.invoice.invoice_number : billData.booking.id);
+            const identifier = (billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'kyogong')
+                ? billData.order.order_number
+                : (billData.type === 'invoice'
+                    ? billData.invoice.invoice_number
+                    : (billData.type === 'unpaid_bill' ? billData.bill.bill_number : billData.booking.id));
             const methodKey = paymentMethod === 'mpesa' ? 'mpesa_manual' : (paymentMethod === 'card' ? 'card_manual' : 'cash');
 
             const response = await fetchAPI('/cashier/pay', {
@@ -332,7 +359,11 @@ function CashierPageContent() {
                 // Add to local history
                 const newTxn = {
                     id: response.data.id,
-                    customerName: billData.type === 'invoice' ? billData.invoice.customer_name : ((billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'kyogong') ? billData.order.guest_name : billData.booking.guest_name),
+                    customerName: billData.type === 'invoice'
+                        ? billData.invoice.customer_name
+                        : (billData.type === 'unpaid_bill'
+                            ? billData.bill.customer_name
+                            : ((billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'kyogong') ? billData.order.guest_name : billData.booking.guest_name)),
                     billNo: identifier,
                     amount: amount,
                     paymentMethod: paymentMethod,
@@ -347,7 +378,9 @@ function CashierPageContent() {
                 if (refresh.success) {
                     setBillData(refresh.data);
                     setPaymentAmount(refresh.data.financials.balance.toString());
-                    setMpesaCode('');
+                    setCustomerPhone('');
+                    syncProducts(); // Refresh local cache
+                    fetchUnpaidBills();
                 }
             }
         } catch (error: any) {
@@ -531,10 +564,10 @@ function CashierPageContent() {
                             total_amount: total,
                             mpesa_code: mpesaCode,
                             businessInfo: {
-                                name: 'Famous Gates Hotels',
+                                name: 'Kyogongs',
                                 address: 'Bomet, Kenya',
                                 phone: '0706782828',
-                                email: 'famousgatesbmt@gmail.com'
+                                email: 'kyogongsbmt@gmail.com'
                             }
                         });
                         setShowReceipt(true);
@@ -560,10 +593,10 @@ function CashierPageContent() {
                         items: [...cart],
                         total_amount: total,
                         businessInfo: {
-                            name: 'FAMOUS GATE HOTEL',
+                            name: 'Kyogong',
                             address: 'Kericho, Kenya',
                             phone: '+254 700 000 000',
-                            email: 'info@famousgate.co.ke'
+                            email: 'info@kyogong.co.ke'
                         }
                     });
                     setShowReceipt(true);
@@ -848,6 +881,13 @@ function CashierPageContent() {
                             <p className="text-stone-500 text-sm">Verify and process payments for hotel and restaurant bills</p>
                         </div>
                         <div className="flex items-center gap-4">
+                            <button
+                                onClick={() => setShowDynamicBillModal(true)}
+                                className="px-4 py-2 bg-orange-50 text-orange-700 rounded-xl flex items-center gap-2 border border-orange-100 font-bold hover:bg-orange-100 transition-all shadow-sm text-xs"
+                            >
+                                <Plus size={16} />
+                                Create General Bill
+                            </button>
                             <div className="flex bg-stone-100 p-1 rounded-lg">
                                 <button
                                     onClick={() => setActiveTab('station')}
@@ -975,6 +1015,61 @@ function CashierPageContent() {
                                                     {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : (isPOSType ? 'Add' : 'Lookup')}
                                                 </IOSButton>
                                             </form>
+
+                                            {/* Scrollable Unpaid Bills List */}
+                                            {!isPOSType && unpaidBills.length > 0 && (
+                                                <div className="mt-6 pt-6 border-t border-stone-100">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <h3 className="text-xs font-black uppercase tracking-widest text-stone-400 flex items-center gap-2">
+                                                            <Receipt size={14} className="text-orange-500" />
+                                                            Unpaid Bills & Reservations
+                                                        </h3>
+                                                        <button
+                                                            onClick={fetchUnpaidBills}
+                                                            className="text-[10px] font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1"
+                                                        >
+                                                            <RefreshCcw size={10} className={isUnpaidLoading ? 'animate-spin' : ''} />
+                                                            Refresh
+                                                        </button>
+                                                    </div>
+                                                    <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                                                        {unpaidBills.slice(0, 10).map((bill) => (
+                                                            <button
+                                                                key={`${bill.id}-${bill.bill_number}`}
+                                                                onClick={() => {
+                                                                    setScanInput(bill.bill_number);
+                                                                    // Use setTimeout to ensure state updates before form submission simulation
+                                                                    setTimeout(() => {
+                                                                        const event = { preventDefault: () => { } } as any;
+                                                                        handleScan(event);
+                                                                    }, 0);
+                                                                }}
+                                                                className="flex-shrink-0 w-48 bg-stone-50 p-3 rounded-2xl border border-stone-100 hover:border-orange-500 hover:bg-orange-50/30 transition-all text-left group"
+                                                            >
+                                                                <div className="flex justify-between items-start mb-2">
+                                                                    <span className="text-[10px] font-black text-stone-900 truncate max-w-[100px]">{bill.bill_number}</span>
+                                                                    <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase ${bill.is_hotel ? 'bg-blue-100 text-blue-700' :
+                                                                        bill.is_kyogong ? 'bg-purple-100 text-purple-700' :
+                                                                            'bg-stone-200 text-stone-700'
+                                                                        }`}>
+                                                                        {bill.bill_type || 'BILL'}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="text-xs font-bold text-stone-800 line-clamp-1 mb-1">{bill.customer_name}</div>
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-[10px] text-stone-500 font-mono">KES {bill.balance_amount?.toLocaleString() || bill.total_amount?.toLocaleString()}</span>
+                                                                    <ArrowLeft size={12} className="text-orange-600 rotate-180 opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0" />
+                                                                </div>
+                                                            </button>
+                                                        ))}
+                                                        {unpaidBills.length > 10 && (
+                                                            <div className="flex-shrink-0 flex items-center justify-center p-4">
+                                                                <span className="text-[10px] font-bold text-stone-400">+{unpaidBills.length - 10} more</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </IOSCard>
 
                                         {isPOSType && (
@@ -1144,28 +1239,40 @@ function CashierPageContent() {
                                                         <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">Bill Number</p>
                                                         <p className="font-bold text-stone-900">
                                                             {(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos' || billData.type === 'kyogong')
-                                                                ? billData.order.order_number
-                                                                : (billData.type === 'invoice' ? billData.invoice.invoice_number : billData.booking.id.slice(0, 8))}
+                                                                ? (billData.order?.order_number || 'N/A')
+                                                                : (billData.type === 'invoice'
+                                                                    ? (billData.invoice?.invoice_number || 'N/A')
+                                                                    : (billData.type === 'unpaid_bill' ? (billData.bill?.bill_number || 'N/A') : (billData.booking?.id?.slice(0, 8) || 'N/A')))}
                                                         </p>
                                                     </div>
                                                     <div>
                                                         <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">Customer</p>
                                                         <p className="font-bold text-stone-900">
                                                             {(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos' || billData.type === 'kyogong')
-                                                                ? billData.order.guest_name
-                                                                : (billData.type === 'invoice' ? billData.invoice.customer_name : billData.booking.guest_name)}
+                                                                ? (billData.order?.guest_name || 'Walk-in')
+                                                                : (billData.type === 'invoice'
+                                                                    ? (billData.invoice?.customer_name || 'Walk-in')
+                                                                    : (billData.type === 'unpaid_bill' ? (billData.bill?.customer_name || 'Walk-in') : (billData.booking?.guest_name || 'Walk-in')))}
                                                         </p>
                                                     </div>
                                                     <div>
                                                         <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">Module</p>
-                                                        <p className="font-bold text-stone-900 capitalize">{billData.type}</p>
+                                                        <p className="font-bold text-stone-900 capitalize">{billData.type === 'unpaid_bill' ? 'General Bill' : billData.type}</p>
                                                     </div>
                                                     <div>
                                                         <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">
-                                                            {billData.type === 'hotel' ? 'Room' : (billData.type === 'pos' ? 'Source' : (billData.type === 'invoice' ? 'Reference' : (billData.type === 'kyogong' ? 'Service' : 'Table')))}
+                                                            {billData.type === 'hotel' ? 'Room' : (billData.type === 'pos' ? 'Source' : (billData.type === 'invoice' ? 'Reference' : (billData.type === 'kyogong' ? 'Service' : (billData.type === 'unpaid_bill' ? 'Reference' : 'Table'))))}
                                                         </p>
                                                         <p className="font-bold text-stone-900">
-                                                            {billData.type === 'hotel' ? billData.booking.room_number : (billData.type === 'pos' ? 'POS Terminal' : (billData.type === 'invoice' ? 'AR Invoice' : (billData.type === 'kyogong' ? (billData.order.service_category || 'Kyogong') : (billData.order.table_number || 'N/A'))))}
+                                                            {billData.type === 'hotel'
+                                                                ? (billData.booking?.room_number || 'N/A')
+                                                                : (billData.type === 'pos'
+                                                                    ? 'POS Terminal'
+                                                                    : (billData.type === 'invoice'
+                                                                        ? 'AR Invoice'
+                                                                        : (billData.type === 'kyogong'
+                                                                            ? (billData.order?.service_category || 'Kyogong')
+                                                                            : (billData.type === 'unpaid_bill' ? (billData.bill?.room_number || 'N/A') : (billData.order?.table_number || 'N/A')))))}
                                                         </p>
                                                     </div>
                                                     {billData.type === 'invoice' && (
@@ -1187,18 +1294,24 @@ function CashierPageContent() {
                                                         </>
                                                     )}
                                                 </div>
-                                                {(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos' || billData.type === 'invoice' || billData.type === 'kyogong') && (
+                                                {(billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos' || billData.type === 'invoice' || billData.type === 'kyogong' || billData.type === 'unpaid_bill') && (
                                                     <div className="mb-8">
                                                         <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight mb-3">
-                                                            {billData.type === 'invoice' ? 'Invoice Items' : 'Order Items'}
+                                                            {billData.type === 'invoice' ? 'Invoice Items' : (billData.type === 'unpaid_bill' ? 'Bill Items' : 'Order Items')}
                                                         </p>
                                                         <div className="bg-stone-50 rounded-xl p-4 space-y-2 border border-stone-100">
-                                                            {(billData.type === 'invoice' ? billData.invoice.items : (billData.order.items || [])).map((item: any, idx: number) => (
+                                                            {(billData.type === 'invoice' ? billData.invoice.items : (billData.type === 'unpaid_bill' ? (billData.bill.items || []) : (billData.order.items || []))).map((item: any, idx: number) => (
                                                                 <div key={idx} className="flex justify-between text-sm">
                                                                     <span className="text-stone-600">{item.name} <span className="text-stone-400 text-xs">x{item.quantity}</span></span>
                                                                     <span className="font-bold text-stone-900">KES {(item.total || (item.price * item.quantity)).toLocaleString()}</span>
                                                                 </div>
                                                             ))}
+                                                            {(billData.type === 'unpaid_bill' && (!billData.bill.items || billData.bill.items.length === 0)) && (
+                                                                <div className="flex justify-between text-sm">
+                                                                    <span className="text-stone-600">General Service</span>
+                                                                    <span className="font-bold text-stone-900">KES {billData.financials.total_amount.toLocaleString()}</span>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 )}
@@ -1525,6 +1638,17 @@ function CashierPageContent() {
                         </div>
                     )}
                 </div>
+                <AnimatePresence mode="wait">
+                    {showDynamicBillModal && (
+                        <CashierModals.CreateDynamicBillModal
+                            isOpen={showDynamicBillModal}
+                            onClose={() => setShowDynamicBillModal(false)}
+                            onSuccess={() => {
+                                setShowDynamicBillModal(false);
+                            }}
+                        />
+                    )}
+                </AnimatePresence>
             </DashboardLayout>
         </ProtectedRoute >
     );

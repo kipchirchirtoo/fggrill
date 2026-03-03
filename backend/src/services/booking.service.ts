@@ -40,6 +40,7 @@ export interface BookingRequest {
   // Payment
   paymentMethod: string;
   depositAmount?: number;
+  depositPaid?: boolean;
 
   // Source
   bookingSource: string;
@@ -294,9 +295,9 @@ class BookingService {
         serviceCharge: pricing.serviceCharge,
         discountAmount: pricing.discountAmount,
         totalAmount: pricing.totalAmount,
-        depositAmount: bookingRequest.depositAmount || pricing.totalAmount,
-        depositPaid: true,
-        depositPaidAt: new Date(),
+        depositAmount: bookingRequest.depositAmount || 0,
+        depositPaid: bookingRequest.depositPaid || false,
+        depositPaidAt: (bookingRequest.depositPaid) ? new Date() : undefined,
         paymentMethod: bookingRequest.paymentMethod,
         bookingSource: bookingRequest.bookingSource,
         mealPlan: bookingRequest.mealPlan,
@@ -350,33 +351,40 @@ class BookingService {
    */
   private async createOrFindGuest(guestInfo: BookingRequest['guestInfo']): Promise<string> {
     try {
-      // Use the Guest model for consistent handling of users and profiles
-      const { Guest } = require('../models/Guest');
-
-      if (!guestInfo.email) {
-        throw new AppError('Guest email is required', 400);
-      }
+      // Guests are stored directly in the `guests` table.
+      // They do NOT need auth accounts or entries in the `users` table.
 
       // Check if guest exists by email
-      let guest = await Guest.findByEmail(guestInfo.email);
+      if (guestInfo.email) {
+        const { data: existingGuest } = await supabase
+          .from('guests')
+          .select('id')
+          .eq('email', guestInfo.email)
+          .maybeSingle();
 
-      if (!guest) {
-        // Create new guest
-        guest = new Guest({
-          firstName: guestInfo.firstName,
-          lastName: guestInfo.lastName,
-          email: guestInfo.email,
-          phone: guestInfo.phone,
-          idType: guestInfo.idType,
-          idNumber: guestInfo.idNumber,
-          nationality: guestInfo.nationality,
-          address: guestInfo.address,
-          isVip: false
-        });
-        await guest.save();
+        if (existingGuest) {
+          return existingGuest.id;
+        }
       }
 
-      return guest.id;
+      // Create new guest directly in the guests table
+      const { data: newGuest, error } = await supabase
+        .from('guests')
+        .insert([{
+          first_name: guestInfo.firstName,
+          last_name: guestInfo.lastName,
+          email: guestInfo.email,
+          phone: guestInfo.phone,
+          id_type: guestInfo.idType,
+          id_number: guestInfo.idNumber,
+          nationality: guestInfo.nationality,
+          address: guestInfo.address
+        }])
+        .select('id')
+        .single();
+
+      if (error) throw error;
+      return newGuest.id;
 
     } catch (error) {
       logger.error('Error creating/finding guest:', error);

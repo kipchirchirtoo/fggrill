@@ -450,8 +450,8 @@ export const processPayrollPayment = async (
       const pdfBuffer = await generatePayslipPDF({
         ...payrollRecord,
         month: monthName,
-        company: 'Famous Gate Hotel',
-        company_email: 'famousgatesbmt@gmail.com'
+        company: 'Famous Gates Hotels',
+        company_email: 'famous-gates-hotelsbmt@gmail.com'
       });
       await emailService.sendPayslipEmail(payrollRecord.employee, monthName, payrollRecord.year, pdfBuffer);
       logger.info(`Payslip email sent to ${payrollRecord.employee.user.email} after payment`);
@@ -516,7 +516,7 @@ export const generatePayslip = async (
         reportType: 'payslip',
         data: {
           ...record,
-          company: 'Famous Gate Hotel',
+          company: 'Famous Gates Hotels',
           generatedAt: new Date().toISOString()
         }
       }, {
@@ -533,8 +533,8 @@ export const generatePayslip = async (
       // Fallback to Node.js PDF generation
       const pdfBuffer = await generatePayslipPDF({
         ...record,
-        company: 'Famous Gate Hotel',
-        company_email: 'famousgatesbmt@gmail.com',
+        company: 'Famous Gates Hotels',
+        company_email: 'famous-gates-hotelsbmt@gmail.com',
         company_address: 'Bomet, Kenya'
       });
 

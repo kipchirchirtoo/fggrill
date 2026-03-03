@@ -1,4 +1,4 @@
--- Core organizational, fleet, finance, and audit tables for Famous Gate Hotel
+-- Core organizational, fleet, finance, and audit tables for Kyogong
 -- This migration is designed to be additive and non-breaking.
 
 -- =========================

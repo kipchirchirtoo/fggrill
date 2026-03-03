@@ -21,9 +21,10 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
         }
 
         // 1. Fetch Staff Profiles (Active only)
+        // 1. Fetch Staff Profiles (Active only)
         let staffQuery = supabase
             .from('staff_profiles')
-            .select('id, basic_salary')
+            .select('id, basic_salary, nssf_enabled, shif_enabled, housing_fund_enabled, kra_pin')
             .eq('status', 'active');
 
         if (staff_id) {
@@ -47,6 +48,9 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
         for (const staff of staffList) {
             try {
                 const basicSalary = Number(staff.basic_salary) || 0;
+                const nssfEnabled = staff.nssf_enabled !== false; // Default true
+                const shifEnabled = staff.shif_enabled !== false; // Default true
+                const housingEnabled = staff.housing_fund_enabled !== false; // Default true
 
                 // A. Helper to get start/end dates for the month
                 // month is likely a number 1-12 or string. 
@@ -54,64 +58,136 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
                 const startDate = new Date(year, monthIndex, 1).toISOString().split('T')[0];
                 const endDate = new Date(year, monthIndex + 1, 0).toISOString().split('T')[0];
 
-                // B. Calculate Credit Bills (Pending bills up to end of this month)
-                const { data: bills } = await supabase
-                    .from('staff_credit_bills')
-                    .select('id, amount')
+                // B. Fetch Pending Adjustments (Deductions & Additions)
+                const { data: adjustments } = await supabase
+                    .from('staff_payroll_adjustments')
+                    .select('id, type, category, amount')
                     .eq('staff_id', staff.id)
-                    .eq('is_paid', false) // Schema uses is_paid boolean
-                    .lte('date', endDate); // Schema uses date
+                    .eq('status', 'pending');
 
-                const totalCreditBills = bills?.reduce((sum, b) => sum + Number(b.amount), 0) || 0;
-                const billIds = bills?.map(b => b.id) || [];
+                // C. Fetch Direct Financials (Advances, Loans, Credit Bills) not yet linked to adjustments
+                // This ensures we capture items directly filled by accountants/cashiers
+                const [advancesRes, loansRes, creditBillsRes, unpaidBillsRes] = await Promise.all([
+                    supabase.from('staff_advances').select('id, amount').eq('staff_id', staff.id).eq('status', 'approved').is('payroll_id', null),
+                    supabase.from('staff_loans').select('id, monthly_installment').eq('staff_id', staff.id).eq('status', 'active'),
+                    supabase.from('staff_credit_bills').select('id, amount, balance').eq('staff_id', staff.id).eq('is_paid', false).is('payroll_id', null),
+                    supabase.from('unpaid_bills').select('id, total_amount, balance_amount').eq('waiter_id', staff.id).eq('status', 'unpaid')
+                ]);
 
-                // C. Calculate Advances (Approved advances that are NOT 'deducted')
-                // We assume any approved advance that hasn't been deducted should be deducted now
-                const { data: advances } = await supabase
-                    .from('staff_advances')
-                    .select('id, amount')
-                    .eq('staff_id', staff.id)
-                    .eq('status', 'approved') // Only approved
-                    .lte('request_date', endDate);
-
-                const totalAdvances = advances?.reduce((sum, a) => sum + Number(a.amount), 0) || 0;
-                const advanceIds = advances?.map(a => a.id) || [];
-
-                // D. Calculate Loans (Active loans)
-                const { data: loans } = await supabase
-                    .from('staff_loans')
-                    .select('id, monthly_installment, remaining_balance, start_date')
-                    .eq('staff_id', staff.id)
-                    .eq('status', 'active')
-                    .lte('start_date', endDate); // Added this line to match the pattern of other queries.
-
+                let totalCreditBills = 0;
+                let totalAdvances = 0;
                 let totalLoanDeductions = 0;
-                const loanUpdates = [];
+                let totalUnpaidBills = 0;
+                let uniformDeductions = 0;
+                let absenceDeductions = 0;
+                let otherUnifiedDeductions = 0;
+                let totalAllowances = 0;
+                let totalBonuses = 0;
+                const adjustmentUpdates: string[] = [];
+                const advanceUpdates: string[] = [];
+                const creditBillUpdates: string[] = [];
+                const unpaidBillUpdates: string[] = [];
 
-                if (loans) {
-                    for (const loan of loans) {
-                        const installment = Math.min(Number(loan.monthly_installment), Number(loan.remaining_balance));
-                        if (installment > 0) {
-                            totalLoanDeductions += installment;
-                            loanUpdates.push({
-                                id: loan.id,
-                                deduction: installment,
-                                new_balance: Number(loan.remaining_balance) - installment
-                            });
+                if (adjustments) {
+                    for (const adj of adjustments) {
+                        const amt = Number(adj.amount || 0);
+                        if (adj.type === 'deduction') {
+                            if (adj.category === 'credit_bill') totalCreditBills += amt;
+                            else if (adj.category === 'advance') totalAdvances += amt;
+                            else if (adj.category === 'loan_installment') totalLoanDeductions += amt;
+                            else if (adj.category === 'uniform') uniformDeductions += amt;
+                            else if (adj.category === 'absent_day') absenceDeductions += amt;
+                            else otherUnifiedDeductions += amt;
+                        } else if (adj.type === 'addition') {
+                            if (adj.category === 'allowance') totalAllowances += amt;
+                            else totalBonuses += amt;
                         }
+                        adjustmentUpdates.push(adj.id);
                     }
                 }
 
-                // E. Statutory Deductions (Simplified for now - strictly 0 unless logic added)
-                // In future, calculate NSSF/NHIF/PAYE based on basicSalary limits
-                const nssf = 0; // Placeholder
-                const nhif = 0; // Placeholder
-                const paye = 0; // Placeholder
-                const housingLevy = 0; // Placeholder 
+                // Process Direct Advances
+                if (advancesRes.data) {
+                    for (const adv of advancesRes.data) {
+                        totalAdvances += Number(adv.amount || 0);
+                        advanceUpdates.push(adv.id);
+                    }
+                }
+
+                // Process Direct Loans (Recurring installments)
+                if (loansRes.data) {
+                    for (const loan of loansRes.data) {
+                        totalLoanDeductions += Number(loan.monthly_installment || 0);
+                    }
+                }
+
+                // Process Direct Credit Bills
+                if (creditBillsRes.data) {
+                    for (const bill of creditBillsRes.data) {
+                        totalCreditBills += Number(bill.balance || bill.amount || 0);
+                        creditBillUpdates.push(bill.id);
+                    }
+                }
+
+                // Process Unpaid Bills (Waiters accountability)
+                if (unpaidBillsRes.data) {
+                    for (const bill of unpaidBillsRes.data) {
+                        totalUnpaidBills += Number(bill.balance_amount || bill.total_amount || 0);
+                        unpaidBillUpdates.push(bill.id);
+                    }
+                }
+
+
+                // E. Kenyan Statutory Deductions (Manual entry by branch accountants)
+                let nssf = 0;
+                let shif = 0;
+                const nhif = 0; // Deprecated
+                let housingLevy = 0;
+                let statutoryDeductionId = null;
+
+                const { data: manualStatutory } = await supabase
+                    .from('staff_monthly_statutory_deductions')
+                    .select('*')
+                    .eq('staff_id', staff.id)
+                    .eq('month', month)
+                    .eq('year', year)
+                    .eq('status', 'pending')
+                    .maybeSingle();
+
+                if (manualStatutory) {
+                    nssf = Number(manualStatutory.nssf_amount || 0);
+                    shif = Number(manualStatutory.shif_amount || 0);
+                    housingLevy = Number(manualStatutory.housing_fund_amount || 0);
+                    statutoryDeductionId = manualStatutory.id;
+                }
+
+                // --- PAYE (Pay As You Earn - Income Tax) ---
+                // Taxable income = gross salary - NSSF (NSSF is tax-deductible)
+                // Calculate PAYE (Taxable Income = Gross - NSSF)
+                const calculatePAYE = (taxablePay: number) => {
+                    let tax = 0;
+                    if (taxablePay <= 24000) {
+                        tax = taxablePay * 0.1;
+                    } else if (taxablePay <= 32333) {
+                        tax = 2400 + (taxablePay - 24000) * 0.25;
+                    } else if (taxablePay <= 500000) {
+                        tax = 2400 + 2083.25 + (taxablePay - 32333) * 0.3;
+                    } else if (taxablePay <= 800000) {
+                        tax = 2400 + 2083.25 + 140300.1 + (taxablePay - 500000) * 0.325;
+                    } else {
+                        tax = 2400 + 2083.25 + 140300.1 + 97500 + (taxablePay - 800000) * 0.35;
+                    }
+                    return Math.max(0, tax - 2400); // Less personal relief
+                };
+
+                const grossSalary = basicSalary + totalAllowances + totalBonuses;
+                const paye = calculatePAYE(grossSalary - nssf);
 
                 // F. Calculate Net Pay
-                const totalDeductions = totalCreditBills + totalAdvances + totalLoanDeductions + nssf + nhif + paye + housingLevy;
-                const netPay = basicSalary - totalDeductions;
+                const statutoryDeductions = nssf + shif + paye + housingLevy;
+                const otherDeductions = totalCreditBills + totalAdvances + totalLoanDeductions + totalUnpaidBills + uniformDeductions + absenceDeductions + otherUnifiedDeductions;
+                const totalDeductions = statutoryDeductions + otherDeductions;
+                const netPay = (basicSalary + totalAllowances + totalBonuses) - totalDeductions;
 
                 // G. Create/Update Payroll Record
                 const { data: payroll, error: payrollError } = await supabase
@@ -121,13 +197,21 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
                         month: String(month),
                         year: Number(year),
                         basic_salary: basicSalary,
+                        allowances: totalAllowances,
+                        bonuses: totalBonuses,
                         total_credit_bills: totalCreditBills,
                         total_advances: totalAdvances,
                         loan_deduction: totalLoanDeductions,
+                        uncollected_bills_deduction: totalUnpaidBills,
+                        uniform_deduction: uniformDeductions,
+                        absence_deduction: absenceDeductions,
                         nssf,
                         nhif,
                         paye,
                         housing_levy: housingLevy,
+                        nssf_deduction: nssf,
+                        shif_deduction: shif,
+                        housing_levy_deduction: housingLevy,
                         total_deductions: totalDeductions,
                         net_pay: netPay,
                         status: 'draft', // Draft until confirmed/paid
@@ -138,49 +222,52 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
 
                 if (payrollError) throw payrollError;
 
-                // H. Update Related Records (Mark as deducted)
-                // We link them to this payroll ID. 
-                // Note: If we re-run, we might re-deduct if we don't check `deducted_in_payroll_id`.
-                // For 'is_paid', we set to true.
-
+                // H. Update Related Records (Mark as applied)
                 if (payroll) {
-                    // Update Bills
-                    if (billIds.length > 0) {
-                        await supabase
-                            .from('staff_credit_bills')
-                            .update({ is_paid: true, payroll_id: payroll.id })
-                            .in('id', billIds);
+                    const updatePromises = [];
+                    if (adjustmentUpdates.length > 0) {
+                        updatePromises.push(
+                            supabase
+                                .from('staff_payroll_adjustments')
+                                .update({ status: 'applied', payroll_id: payroll.id })
+                                .in('id', adjustmentUpdates)
+                        );
                     }
-
-                    // Update Advances
-                    if (advanceIds.length > 0) {
-                        await supabase
-                            .from('staff_advances')
-                            .update({ status: 'deducted', payroll_id: payroll.id })
-                            .in('id', advanceIds);
+                    if (advanceUpdates.length > 0) {
+                        updatePromises.push(
+                            supabase
+                                .from('staff_advances')
+                                .update({ payroll_id: payroll.id })
+                                .in('id', advanceUpdates)
+                        );
                     }
-
-                    // Update Loans (Record payment)
-                    for (const update of loanUpdates) {
-                        // Insert loan payment record
-                        await supabase.from('staff_loan_payments').insert({
-                            loan_id: update.id,
-                            amount: update.deduction,
-                            payment_date: new Date().toISOString(),
-                            payroll_id: payroll.id
-                        });
-
-                        // Update loan balance
-                        const newStatus = update.new_balance <= 0 ? 'completed' : 'active';
-                        await supabase
-                            .from('staff_loans')
-                            .update({
-                                remaining_balance: update.new_balance,
-                                status: newStatus
-                            })
-                            .eq('id', update.id);
+                    if (creditBillUpdates.length > 0) {
+                        updatePromises.push(
+                            supabase
+                                .from('staff_credit_bills')
+                                .update({ is_paid: true, balance: 0, payroll_id: payroll.id })
+                                .in('id', creditBillUpdates)
+                        );
                     }
+                    if (unpaidBillUpdates.length > 0) {
+                        updatePromises.push(
+                            supabase
+                                .from('unpaid_bills')
+                                .update({ status: 'deducted', remarks: `Deducted from payroll for ${month}/${year}` })
+                                .in('id', unpaidBillUpdates)
+                        );
+                    }
+                    if (statutoryDeductionId) {
+                        updatePromises.push(
+                            supabase
+                                .from('staff_monthly_statutory_deductions')
+                                .update({ status: 'applied', payroll_id: payroll.id })
+                                .eq('id', statutoryDeductionId)
+                        );
+                    }
+                    await Promise.all(updatePromises);
                 }
+
 
                 results.push(payroll);
             } catch (err: any) {
@@ -230,16 +317,18 @@ export const getPayrollRecords = async (req: Request, res: Response, next: NextF
         // Transform data for frontend if needed (e.g. flatten staff details)
         const transformed = data.map(item => ({
             ...item,
-            staff_name: item.staff?.user ? `${item.staff.user.first_name || ''} ${item.staff.user.last_name || ''}`.trim() : '',
+            staff_name: item.staff?.user
+                ? `${item.staff.user.first_name || ''} ${item.staff.user.last_name || ''}`.trim()
+                : `${item.staff?.first_name || ''} ${item.staff?.last_name || ''}`.trim(),
             staff_role: item.staff?.role,
             staff_department: item.staff?.department,
             branch_name: item.staff?.branch?.name || 'Main Branch',
             staff: item.staff ? {
                 ...item.staff,
-                first_name: item.staff.user?.first_name || '',
-                last_name: item.staff.user?.last_name || '',
-                phone_number: item.staff.user?.phone_number || '',
-                email: item.staff.user?.email || ''
+                first_name: item.staff.user?.first_name || item.staff.first_name || '',
+                last_name: item.staff.user?.last_name || item.staff.last_name || '',
+                phone_number: item.staff.user?.phone_number || item.staff.phone || '',
+                email: item.staff.user?.email || item.staff.email || ''
             } : null
         }));
 
@@ -485,8 +574,8 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
                     const pdfBuffer = await generatePayslipPDF({
                         ...record,
                         month: monthName,
-                        company: 'Famous Gate Hotel',
-                        company_email: 'famousgatesbmt@gmail.com',
+                        company: 'Famous Gates Hotels',
+                        company_email: 'famous-gates-hotelsbmt@gmail.com',
                         company_address: 'Bomet, Kenya'
                     });
 

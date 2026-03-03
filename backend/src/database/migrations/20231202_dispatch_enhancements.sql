@@ -1,5 +1,5 @@
 -- ============================================================
--- FAMOUS GATE HOTEL - DISPATCH ENHANCEMENTS
+-- Kyogong - DISPATCH ENHANCEMENTS
 -- Additional fields for vehicle tracking and delivery management
 -- Run this in Supabase SQL Editor
 -- ============================================================

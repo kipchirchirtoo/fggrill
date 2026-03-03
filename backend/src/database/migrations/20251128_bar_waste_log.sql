@@ -1,4 +1,4 @@
--- BAR MODULE WASTE & STOCK LOGS - Famous Gate Hotel
+-- BAR MODULE WASTE & STOCK LOGS - Kyogong
 -- Created: 2025-11-28
 
 CREATE TABLE IF NOT EXISTS bar_stock_logs (

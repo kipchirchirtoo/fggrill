@@ -239,13 +239,13 @@ export class Booking implements IBooking {
   }
 
   async save(): Promise<Booking> {
-    console.log('Saving booking payload...');
-    console.log('Booking data:', {
-      id: this.id,
-      guestId: this.guestId,
-      roomId: this.roomId,
-      roomTypeId: this.roomTypeId
-    });
+    // console.log('Saving booking payload...');
+    // console.log('Booking data:', {
+    //       id: this.id,
+    //       guestId: this.guestId,
+    //       roomId: this.roomId,
+    //       roomTypeId: this.roomTypeId
+    //     });
 
     // Validate UUID fields
     if (!this.guestId || this.guestId.trim() === '') {
@@ -288,15 +288,15 @@ export class Booking implements IBooking {
           deposit_paid: this.depositPaid,
           deposit_paid_at: this.depositPaidAt,
           payment_method: this.paymentMethod,
-          payment_status: this.paymentStatus,
+          // payment_status: this.paymentStatus, // Column does not exist in DB
 
-          // booking_source: this.bookingSource, // Column missing in DB
-          // channel_manager_ref: this.channelManagerRef,
-          // meal_plan: this.mealPlan,
-          // purpose: this.purpose,
-          // special_requests: this.specialRequests,
-          // notes: this.notes,
-          // internal_notes: this.internalNotes,
+          booking_source: this.bookingSource,
+          channel_manager_ref: this.channelManagerRef,
+          meal_plan: this.mealPlan,
+          purpose: this.purpose,
+          special_requests: this.specialRequests,
+          notes: this.notes,
+          internal_notes: this.internalNotes,
 
           created_by: this.createdBy,
           checked_in_at: this.checkedInAt,

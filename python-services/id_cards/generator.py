@@ -144,7 +144,7 @@ class IDCardGenerator:
         # Hotel Name
         c.setFillColor(colors.white)
         c.setFont("Helvetica-Bold", 10)
-        c.drawString(32*mm, self.height - 7*mm, "FAMOUS GATES HOTELS")
+        c.drawString(32*mm, self.height - 7*mm, "KyogongS")
         
         c.setFont("Helvetica", 6)
         c.drawString(32*mm, self.height - 10*mm, "Quality Hospitality Services")
@@ -234,7 +234,7 @@ class IDCardGenerator:
         
         # Terms Text
         terms_y = self.height - 14*mm
-        c.drawString(5*mm, terms_y, "1. This card is the property of Famous Gates Hotels.")
+        c.drawString(5*mm, terms_y, "1. This card is the property of Kyogongs.")
         c.drawString(5*mm, terms_y - 4*mm, "2. Must be visible at all times while on duty.")
         c.drawString(5*mm, terms_y - 8*mm, "3. Report loss/theft immediately to HR/Security.")
         
@@ -247,7 +247,7 @@ class IDCardGenerator:
         # 4. QR Code (Left Side Bottom)
         # QR Data points to verification URL
         id_no = data.get('id_no', 'N/A')
-        verify_url = f"https://famousgates.hirall.com/verify?id={id_no}"
+        verify_url = f"https://kyogongs.hirall.com/verify?id={id_no}"
         
         qr_size = 18*mm
         qr_x = self.width - qr_size - 5*mm

@@ -18,11 +18,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 // Standard sound effects (using base64 or public URLs would be better, but simulating for now)
 const playSuccessSound = () => {
     // In a real app, use a dedicated sound library or HTML5 Audio
-    console.log('Beep! (Success)');
+    // console.log('Beep! (Success)');
 };
 
 const playErrorSound = () => {
-    console.log('Buzz! (Error)');
+    // console.log('Buzz! (Error)');
 };
 
 interface ScannedItem {

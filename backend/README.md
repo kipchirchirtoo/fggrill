@@ -1,6 +1,6 @@
-# Famous Gate Hotel Management System - Backend
+# Kyogong Management System - Backend
 
-Backend API for the Famous Gate Hotel Management System built with Node.js, Express, TypeScript, and MongoDB.
+Backend API for the Kyogong Management System built with Node.js, Express, TypeScript, and MongoDB.
 
 ## Features
 

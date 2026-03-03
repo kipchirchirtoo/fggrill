@@ -148,7 +148,7 @@ export function BranchProvider({ children }: { children: ReactNode }) {
         const cachedUserBranches = localStorage.getItem('userBranches');
 
         if (cachedBranches && cachedUserBranches) {
-          console.log('Using cached branch data after API error');
+          // console.log('Using cached branch data after API error');
           const allBranches = JSON.parse(cachedBranches);
           const accessibleBranches = JSON.parse(cachedUserBranches);
 
@@ -162,7 +162,7 @@ export function BranchProvider({ children }: { children: ReactNode }) {
 
       setBranches([]);
       setUserBranches([]);
-      console.warn('Failed to load branch data. Please check network connection.');
+      // console.warn('Failed to load branch data. Please check network connection.');
     } finally {
       setIsLoading(false);
     }

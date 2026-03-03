@@ -15,10 +15,10 @@ import { IOSCard } from '@/components/ui/ios-card';
 export default function AdminSettingsPage() {
   const { user } = useAuth();
   const [settings, setSettings] = useState({
-    hotelName: 'FAMOUSGATES HOTELS',
-    email: 'famousgatesbmt@gmail.com',
+    hotelName: 'kyogongS HOTELS',
+    email: 'kyogongsbmt@gmail.com',
     phone: '0706 782 828',
-    website: 'www.famousgate.com',
+    website: 'www.kyogong.com',
     address: 'Bomet, Kenya',
     currency: 'KES',
     timezone: 'Africa/Nairobi',

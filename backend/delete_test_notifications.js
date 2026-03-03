@@ -14,7 +14,7 @@ async function deleteTestNotifications() {
         const { data, error } = await supabase
             .from('notifications')
             .delete()
-            .or('title.eq.Test Notification,title.eq.Famous Gates Connected!')
+            .or('title.eq.Test Notification,title.eq.Kyogongs Connected!')
             .select();
 
         if (error) {

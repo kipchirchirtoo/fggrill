@@ -1,4 +1,4 @@
-# Famous Gate Hotel Management System - Portal Features
+# Kyogong Management System - Portal Features
 
 ## 🚀 Implemented Features
 
@@ -48,12 +48,12 @@
 
 | Role | Email | Password |
 |------|-------|----------|
-| Super Admin | admin@famousgate.com | admin123 |
-| Manager | manager@famousgate.com | manager123 |
-| Receptionist | reception@famousgate.com | reception123 |
-| Housekeeping | housekeeping@famousgate.com | house123 |
-| Restaurant | restaurant@famousgate.com | rest123 |
-| Accountant | accountant@famousgate.com | account123 |
+| Super Admin | admin@kyogong.com | admin123 |
+| Manager | manager@kyogong.com | manager123 |
+| Receptionist | reception@kyogong.com | reception123 |
+| Housekeeping | housekeeping@kyogong.com | house123 |
+| Restaurant | restaurant@kyogong.com | rest123 |
+| Accountant | accountant@kyogong.com | account123 |
 
 ## 🎨 UI/UX Features
 

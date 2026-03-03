@@ -459,9 +459,9 @@ ORDER BY date DESC;
 
 ## 📞 Support Contacts
 
-**Development Team**: dev@famousgate.com  
-**Database Admin**: dba@famousgate.com  
-**Branch Manager**: kyogong@famousgate.com
+**Development Team**: dev@kyogong.com  
+**Database Admin**: dba@kyogong.com  
+**Branch Manager**: kyogong@kyogong.com
 
 ---
 

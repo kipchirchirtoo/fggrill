@@ -24,11 +24,12 @@ export const getFolio = async (req: Request, res: Response, next: NextFunction) 
       folio = new Folio({
         reservationId: reservation.id,
         guestId: reservation.guest_id,
+        folioNumber: reservation.confirmation_number,
         status: 'open',
         roomCharges: reservation.total_amount || 0
       });
       await folio.save();
-      console.log(`Lazy created folio for reservation: ${reservationId}`);
+      // console.log(`Lazy created folio for reservation: ${reservationId}`);
     }
 
     const transactions = await folio.getTransactions();

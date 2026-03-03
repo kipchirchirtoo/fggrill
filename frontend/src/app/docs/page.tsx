@@ -17,10 +17,10 @@ export default function DocsPage() {
             {/* Hero Section */}
             <div className="space-y-6">
                 <h1 className="text-4xl font-bold text-stone-900 tracking-tight">
-                    Famous Gate System Documentation
+                    Kyogong System Documentation
                 </h1>
                 <p className="text-xl text-stone-600 leading-relaxed max-w-2xl">
-                    Comprehensive guide for the Famous Gate Hotel Management System. Learn about the architecture, modules, and how to use the platform effectively.
+                    Comprehensive guide for the Kyogong Management System. Learn about the architecture, modules, and how to use the platform effectively.
                 </p>
                 <div className="flex items-center gap-4">
                     <Link

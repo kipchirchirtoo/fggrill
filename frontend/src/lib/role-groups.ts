@@ -1,7 +1,7 @@
 import { UserRole } from './auth-context';
 
 /**
- * Role Groups for Famous Gate Hotel ERP
+ * Role Groups for Kyogong ERP
  * Use these constants for consistent role-based access control across the application
  */
 

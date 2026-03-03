@@ -198,15 +198,15 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
             if (isRestaurant) {
                 const [itemsRes, categoriesRes] = await Promise.all([
                     restaurantAPI.getMenuItems(undefined, currentBranchId || undefined, true),
-                    restaurantAPI.getCategories()
+                    restaurantAPI.getCategories(currentBranchId || undefined, true)
                 ]);
 
                 if (itemsRes.success) setItems(itemsRes.data || []);
                 if (categoriesRes.success) setCategories(categoriesRes.data || []);
             } else {
                 const [drinksRes, categoriesRes, tabsRes] = await Promise.all([
-                    barAPI.getDrinks(),
-                    barAPI.getCategories(),
+                    barAPI.getDrinks(undefined, currentBranchId || undefined, true),
+                    barAPI.getCategories(currentBranchId || undefined, true),
                     barAPI.getTabs(currentBranchId || undefined, 'open')
                 ]);
 
@@ -219,7 +219,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
 
             // Fetch recent orders for history with date filter - only current user's orders
             if (user?.id) {
-                console.log('[UnifiedPOS] Fetching orders for user:', user.id, 'branch:', currentBranchId, 'date:', startOfDay.toISOString().split('T')[0]);
+                // console.log('[UnifiedPOS] Fetching orders for user:', user.id, 'branch:', currentBranchId, 'date:', startOfDay.toISOString().split('T')[0]);
                 const ordersRes = isRestaurant
                     ? await restaurantAPI.getMyOrders(user.id, Number(currentBranchId) || undefined, {
                         from_date: startOfDay.toISOString().split('T')[0],
@@ -230,12 +230,12 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                         ...dateParams
                     });
 
-                console.log('[UnifiedPOS] Orders fetch result:', ordersRes.success, 'count:', ordersRes.data?.length || 0);
+                // console.log('[UnifiedPOS] Orders fetch result:', ordersRes.success, 'count:', ordersRes.data?.length || 0);
                 if (ordersRes.success) {
                     setRecentOrders(ordersRes.data || []);
                 }
             } else {
-                console.warn('[UnifiedPOS] No user ID available for fetching orders');
+                // console.warn('[UnifiedPOS] No user ID available for fetching orders');
             }
         } catch (error) {
             console.error(`Error fetching ${mode} data:`, error);
@@ -292,10 +292,10 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
 
     const handlePrintReceipt = async (orderData: any) => {
         // Debug user object
-        console.log('[Bill] User object:', user);
-        console.log('[Bill] firstName:', user?.firstName, 'first_name:', user?.first_name);
-        console.log('[Bill] lastName:', user?.lastName, 'last_name:', user?.last_name);
-        
+        // console.log('[Bill] User object:', user);
+        // console.log('[Bill] firstName:', user?.firstName, 'first_name:', user?.first_name);
+        // console.log('[Bill] lastName:', user?.lastName, 'last_name:', user?.last_name);
+
         // Desktop App Native Printing Intercept
         if (typeof window !== 'undefined' && (window as any).electronAPI) {
             try {
@@ -317,7 +317,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                     return;
                 }
             } catch (e) {
-                console.warn('Native printing failed, falling back to window.print', e);
+                // console.warn('Native printing failed, falling back to window.print', e);
             }
         }
 
@@ -333,11 +333,11 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                 total: (item.unit_price || item.price) * item.quantity
             }));
             const totalAmount = orderData.total || orderData.total_amount;
-            const b = activeBranch || { name: 'Famous Gates Hotels', location: 'Bomet, Kenya', settings: { phone: '0706782828', pin: '', email: 'famousgatesbmt@gmail.com' } };
+            const b = activeBranch || { name: 'Kyogongs', location: 'Bomet, Kenya', settings: { phone: '0706782828', pin: '', email: 'kyogongsbmt@gmail.com' } };
             const companyName = b.name.toUpperCase();
             const companyAddress = b.location;
             const companyPhone = b.settings?.phone || '0706782828';
-            const companyEmail = b.settings?.email || 'famousgatesbmt@gmail.com';
+            const companyEmail = b.settings?.email || 'kyogongsbmt@gmail.com';
 
             const receiptHtml = `
                 <html>
@@ -380,7 +380,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                             // Fallback for offline if script fails to load
                             window.addEventListener('error', function(e) {
                                 if (e.target.src && e.target.src.includes('jsbarcode')) {
-                                    console.warn('JsBarcode failed to load - likely offline');
+                                    // console.warn('JsBarcode failed to load - likely offline');
                                     window.jsBarcodeError = true;
                                 }
                             }, true);
@@ -774,13 +774,13 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                     // Trigger orders sync when opening history
                                     if (typeof window !== 'undefined' && (window as any).electronAPI) {
                                         try {
-                                            console.log('[POS] Triggering orders sync...');
+                                            // console.log('[POS] Triggering orders sync...');
                                             await (window as any).electronAPI.invoke('autosync:syncOrdersNow', currentBranchId, 1);
-                                            console.log('[POS] Orders sync complete');
+                                            // console.log('[POS] Orders sync complete');
                                             // Refresh orders after sync
                                             fetchData();
                                         } catch (e) {
-                                            console.warn('[POS] Orders sync failed:', e);
+                                            // console.warn('[POS] Orders sync failed:', e);
                                         }
                                     }
                                 }}
@@ -823,13 +823,13 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                             // Trigger orders sync when opening history
                                             if (typeof window !== 'undefined' && (window as any).electronAPI) {
                                                 try {
-                                                    console.log('[POS] Triggering orders sync...');
+                                                    // console.log('[POS] Triggering orders sync...');
                                                     await (window as any).electronAPI.invoke('autosync:syncOrdersNow', currentBranchId, 1);
-                                                    console.log('[POS] Orders sync complete');
+                                                    // console.log('[POS] Orders sync complete');
                                                     // Refresh orders after sync
                                                     fetchData();
                                                 } catch (e) {
-                                                    console.warn('[POS] Orders sync failed:', e);
+                                                    // console.warn('[POS] Orders sync failed:', e);
                                                 }
                                             }
                                         }}
@@ -1069,14 +1069,14 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                                     const orderDate = new Date(o.created_at);
                                                     const isSameDate = orderDate.toDateString() === historyDate.toDateString();
                                                     if (!isSameDate) return false;
-                                                    
+
                                                     if (status.value === 'all') return true;
                                                     if (status.value === 'pending') return o.status === 'pending' || o.status === 'kitchen_ready';
                                                     if (status.value === 'completed') return o.status === 'completed' || o.status === 'paid' || o.status === 'delivered' || o.status === 'served' || o.status === 'ready';
                                                     if (status.value === 'cancelled') return o.status === 'cancelled' || o.status === 'voided';
                                                     return false;
                                                 }).length;
-                                                
+
                                                 return (
                                                     <button
                                                         key={status.value}

@@ -1,4 +1,4 @@
--- BAR MODULE FUNCTIONS - Famous Gate Hotel
+-- BAR MODULE FUNCTIONS - Kyogong
 -- Created: 2025-11-28
 
 -- Function to decrement stock

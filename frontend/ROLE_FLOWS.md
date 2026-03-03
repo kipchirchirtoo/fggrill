@@ -1,4 +1,4 @@
-# Famous Gate Hotel - Role-Based System Flow
+# Kyogong - Role-Based System Flow
 ## UPDATED: All Dashboards Now Connected to Backend API
 
 > **See also:** `WORKFLOWS.md` for detailed workflow diagrams
@@ -27,7 +27,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                          FAMOUS GATE HOTEL                               │
+│                          Kyogong                               │
 │                     Management Information System                        │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
@@ -389,12 +389,12 @@ GET  /api/reports/*             # All reports (read-only)
 
 | ID | Name | Code | Location | Type |
 |----|------|------|----------|------|
-| 1 | Famous Gate Bomet (HQ) | FGB-HQ | Bomet Town | Central Warehouse |
-| 2 | Famous Gate Bomet Town | FGB-BMT | Bomet Town Center | Branch |
-| 3 | Famous Gate Kericho | FGB-KER | Kericho Town | Branch |
-| 4 | Famous Gate Kapsoit | FGB-KAP | Kapsoit Center | Branch |
-| 5 | Famous Gate Mogogosiek | FGB-MOG | Mogogosiek Town | Branch |
-| 6 | Famous Gate Litein | FGB-LIT | Litein Town | Branch |
+| 1 | Kyogong Bomet (HQ) | FGB-HQ | Bomet Town | Central Warehouse |
+| 2 | Kyogong Bomet Town | FGB-BMT | Bomet Town Center | Branch |
+| 3 | Kyogong Kericho | FGB-KER | Kericho Town | Branch |
+| 4 | Kyogong Kapsoit | FGB-KAP | Kapsoit Center | Branch |
+| 5 | Kyogong Mogogosiek | FGB-MOG | Mogogosiek Town | Branch |
+| 6 | Kyogong Litein | FGB-LIT | Litein Town | Branch |
 
 ---
 
@@ -403,34 +403,34 @@ GET  /api/reports/*             # All reports (read-only)
 ### Management
 | Role | Email | Password |
 |------|-------|----------|
-| Super Admin | admin@famousgate.com | admin123 |
-| General Manager | gm@famousgate.com | gm123 |
+| Super Admin | admin@kyogong.com | admin123 |
+| General Manager | gm@kyogong.com | gm123 |
 
 ### Branch Managers
 | Branch | Email | Password |
 |--------|-------|----------|
-| Bomet HQ | manager.bomet@famousgate.com | bomet123 |
-| Kericho | manager.kericho@famousgate.com | kericho123 |
-| Litein | manager.litein@famousgate.com | litein123 |
+| Bomet HQ | manager.bomet@kyogong.com | bomet123 |
+| Kericho | manager.kericho@kyogong.com | kericho123 |
+| Litein | manager.litein@kyogong.com | litein123 |
 
 ### Storekeeping
 | Role | Email | Password |
 |------|-------|----------|
-| Central Storekeeper | central@famousgate.com | central123 |
-| Store (Bomet) | store.bomet@famousgate.com | store123 |
-| Store (Kericho) | store.kericho@famousgate.com | store123 |
-| Store (Kapsoit) | store.kapsoit@famousgate.com | store123 |
+| Central Storekeeper | central@kyogong.com | central123 |
+| Store (Bomet) | store.bomet@kyogong.com | store123 |
+| Store (Kericho) | store.kericho@kyogong.com | store123 |
+| Store (Kapsoit) | store.kapsoit@kyogong.com | store123 |
 
 ### Operations
 | Role | Email | Password |
 |------|-------|----------|
-| Receptionist | reception@famousgate.com | reception123 |
-| Housekeeping | housekeeping@famousgate.com | house123 |
-| Restaurant | restaurant@famousgate.com | rest123 |
-| Maintenance | maintenance@famousgate.com | maint123 |
+| Receptionist | reception@kyogong.com | reception123 |
+| Housekeeping | housekeeping@kyogong.com | house123 |
+| Restaurant | restaurant@kyogong.com | rest123 |
+| Maintenance | maintenance@kyogong.com | maint123 |
 
 ### Finance
 | Role | Email | Password |
 |------|-------|----------|
-| Accountant | accountant@famousgate.com | account123 |
-| Auditor | auditor@famousgate.com | audit123 |
+| Accountant | accountant@kyogong.com | account123 |
+| Auditor | auditor@kyogong.com | audit123 |

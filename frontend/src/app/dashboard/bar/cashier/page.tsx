@@ -6,8 +6,10 @@ import {
     CheckCircle, XCircle, Search, AlertCircle, Receipt, Clock,
     User, DollarSign, CreditCard, Scan, Printer, Loader2,
     Banknote, AlertTriangle, Layout, Calculator, BarChart3, TrendingUp, Activity,
-    Shield, ArrowRight, FileSpreadsheet, RefreshCw
+    Shield, ArrowRight, FileSpreadsheet, RefreshCw, Plus
 } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
+import { CashierModals } from '@/components/modals/CashierModals';
 import {
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
     Tooltip, LineChart, Line, AreaChart, Area
@@ -59,6 +61,7 @@ function BarCashierContent() {
 
     const [scanInput, setScanInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [showDynamicBillModal, setShowDynamicBillModal] = useState(false);
     const [billData, setBillData] = useState<any>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [paymentAmount, setPaymentAmount] = useState('');
@@ -624,6 +627,14 @@ function BarCashierContent() {
                                 </div>
                             )}
 
+                            <button
+                                onClick={() => setShowDynamicBillModal(true)}
+                                className="px-4 py-2 bg-orange-50 text-orange-700 rounded-xl flex items-center gap-2 border border-orange-100 font-bold hover:bg-orange-100 transition-all shadow-sm text-xs"
+                            >
+                                <Plus size={16} />
+                                Create General Bill
+                            </button>
+
                             <div className="flex bg-stone-100 p-1 rounded-xl">
                                 <button
                                     onClick={() => setActiveTab('station')}
@@ -868,8 +879,19 @@ function BarCashierContent() {
                         </div>
                     )}
                 </div>
-            </DashboardLayout>
-        </ProtectedRoute>
+                <AnimatePresence mode="wait">
+                    {showDynamicBillModal && (
+                        <CashierModals.CreateDynamicBillModal
+                            isOpen={showDynamicBillModal}
+                            onClose={() => setShowDynamicBillModal(false)}
+                            onSuccess={() => {
+                                setShowDynamicBillModal(false);
+                            }}
+                        />
+                    )}
+                </AnimatePresence>
+            </DashboardLayout >
+        </ProtectedRoute >
     );
 }
 

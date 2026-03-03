@@ -1,4 +1,4 @@
--- BAR MODULE SEED DATA - Famous Gate Hotel
+-- BAR MODULE SEED DATA - Kyogong
 -- Drink prices in KES
 
 -- Get category IDs

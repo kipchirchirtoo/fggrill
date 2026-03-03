@@ -196,7 +196,7 @@ export const createPaymentIntent = async (
     paymentIntents.set(intentId, paymentIntent);
 
     // Log payment intent creation
-    console.log(`[Payment] Created intent ${intentId} for ${amount} ${currency}`);
+    // console.log(`[Payment] Created intent ${intentId} for ${amount} ${currency}`);
 
     res.status(201).json({
       success: true,
@@ -275,7 +275,7 @@ export const confirmPayment = async (
               .eq('id', paymentIntent.folioId);
           }
 
-          console.log(`[Payment] Payment ${paymentIntent.id} succeeded, folio updated`);
+          // console.log(`[Payment] Payment ${paymentIntent.id} succeeded, folio updated`);
         } catch (err) {
           console.error('[Payment] Failed to update folio:', err);
         }

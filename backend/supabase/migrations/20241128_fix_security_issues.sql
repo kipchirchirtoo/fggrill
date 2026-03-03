@@ -1,7 +1,7 @@
 -- =====================================================
 -- SECURITY FIX MIGRATION
 -- Fix SECURITY DEFINER views and enable RLS on tables
--- Famous Gate Hotel Management System
+-- Kyogong Management System
 -- =====================================================
 
 -- =====================================================

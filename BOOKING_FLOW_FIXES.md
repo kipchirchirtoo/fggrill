@@ -41,7 +41,7 @@ curl -X POST "http://localhost:5000/api/bookings/BOOKING_ID/send-email"
 
 ### 4. Email Configuration
 - Host: smtp-relay.brevo.com
-- From: Famous Gate Hotel <noreply@hirall.com>
+- From: Kyogong <noreply@hirall.com>
 - Status: Working
 
 ### 5. Files Created

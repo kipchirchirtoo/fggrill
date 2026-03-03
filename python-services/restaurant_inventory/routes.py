@@ -1,5 +1,5 @@
 """
-Famous Gate Hotel - Restaurant Inventory & Consumption Tracking
+Kyogong - Restaurant Inventory & Consumption Tracking
 Handles kitchen inventory consumption, wastage tracking, and cost analysis
 """
 

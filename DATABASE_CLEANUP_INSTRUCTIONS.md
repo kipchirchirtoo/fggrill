@@ -1,7 +1,7 @@
 # Database Cleanup for Client Handover - Instructions
 
 ## Overview
-This guide will help you safely remove all operational data from your Famous Gate Hotel database while preserving the superadmin login credentials for client handover.
+This guide will help you safely remove all operational data from your Kyogong database while preserving the superadmin login credentials for client handover.
 
 ## ⚠️ CRITICAL WARNINGS
 
@@ -166,7 +166,7 @@ INSERT INTO users (
     status,
     created_at
 ) VALUES (
-    'admin@famousgate.com',
+    'admin@kyogong.com',
     crypt('YourSecurePassword', gen_salt('bf')),
     'System',
     'Administrator',

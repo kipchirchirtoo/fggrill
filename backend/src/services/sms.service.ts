@@ -28,14 +28,14 @@ class SMSService {
 
   async sendBookingConfirmation(phone: string, bookingDetails: any): Promise<void> {
     const message = `
-Famous Gate Hotel - Booking Confirmation
+Kyogong - Booking Confirmation
 Booking: ${bookingDetails.bookingNumber}
 Check-in: ${new Date(bookingDetails.checkIn).toLocaleDateString()}
 Check-out: ${new Date(bookingDetails.checkOut).toLocaleDateString()}
 Room: ${bookingDetails.roomType}
 Amount: KES ${bookingDetails.totalAmount.toLocaleString()}
 
-Thank you for choosing Famous Gate Hotel!
+Thank you for choosing Kyogong!
     `.trim();
 
     await this.sendSMS(phone, message);
@@ -43,7 +43,7 @@ Thank you for choosing Famous Gate Hotel!
 
   async sendCheckInReminder(phone: string, bookingDetails: any): Promise<void> {
     const message = `
-Famous Gate Hotel - Check-in Reminder
+Kyogong - Check-in Reminder
 Dear ${bookingDetails.guest.firstName},
 This is a reminder that your check-in is tomorrow.
 Booking: ${bookingDetails.bookingNumber}
@@ -57,7 +57,7 @@ We look forward to welcoming you!
 
   async sendMaintenanceAlert(phone: string, taskDetails: any): Promise<void> {
     const message = `
-Famous Gate Hotel - Maintenance Alert
+Kyogong - Maintenance Alert
 Task: ${taskDetails.taskNumber}
 Location: ${taskDetails.location}
 Priority: ${taskDetails.priority}
@@ -71,7 +71,7 @@ Please check maintenance portal for details.
 
   async sendLowStockAlert(phone: string, itemDetails: any): Promise<void> {
     const message = `
-Famous Gate Hotel - Low Stock Alert
+Kyogong - Low Stock Alert
 Item: ${itemDetails.name}
 Code: ${itemDetails.itemCode}
 Current Stock: ${itemDetails.currentStock}
@@ -85,7 +85,7 @@ Please reorder soon.
 
   async sendHousekeepingAlert(phone: string, taskDetails: any): Promise<void> {
     const message = `
-Famous Gate Hotel - Housekeeping Alert
+Kyogong - Housekeeping Alert
 Room ${taskDetails.roomNumber} needs attention
 Type: ${taskDetails.taskType}
 Priority: ${taskDetails.priority}
@@ -98,7 +98,7 @@ Please check housekeeping portal for details.
 
   async sendEmergencyAlert(phone: string, details: any): Promise<void> {
     const message = `
-URGENT: Famous Gate Hotel Emergency Alert
+URGENT: Kyogong Emergency Alert
 Location: ${details.location}
 Type: ${details.type}
 Details: ${details.description}

@@ -1,6 +1,6 @@
 # Role Access Updates - Implementation Guide
 
-This document contains the specific code changes needed to implement proper RBAC in Famous Gate Hotel ERP.
+This document contains the specific code changes needed to implement proper RBAC in Kyogong ERP.
 
 ---
 

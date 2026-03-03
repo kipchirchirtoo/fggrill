@@ -94,7 +94,7 @@ export const createUser = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    console.log('[DEBUG] createUser request body:', JSON.stringify(req.body, null, 2));
+    // console.log('[DEBUG] createUser request body:', JSON.stringify(req.body, null, 2));
     const {
       email, password, role, status,
       firstName, first_name,
@@ -118,7 +118,7 @@ export const createUser = async (
 
     // Validate required fields
     if (!fName || !lName || !role) {
-      console.log('[DEBUG] Missing required fields:', { fName, lName, role });
+      // console.log('[DEBUG] Missing required fields:', { fName, lName, role });
       res.status(400).json({ success: false, message: 'Please provide firstName, lastName, and role' });
       return;
     }
@@ -127,7 +127,7 @@ export const createUser = async (
     const userEmail = email || `pos_${Date.now()}_${Math.random().toString(36).substr(2, 9)}@pos.local`;
     const userPassword = password || (Math.random().toString(36).substr(2, 12) + 'Aa1!');
 
-    console.log('[DEBUG] Creating auth user:', { userEmail, role });
+    // console.log('[DEBUG] Creating auth user:', { userEmail, role });
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email: userEmail,
       password: userPassword,
@@ -147,7 +147,7 @@ export const createUser = async (
     }
 
     const userId = authData.user.id;
-    console.log('[DEBUG] Auth user created with ID:', userId);
+    // console.log('[DEBUG] Auth user created with ID:', userId);
 
     // Step 2: Upsert public.users profile
     const profileData: Record<string, any> = {
@@ -169,7 +169,7 @@ export const createUser = async (
       updated_at: new Date().toISOString()
     };
 
-    console.log('[DEBUG] Upserting profile for ID:', userId);
+    // console.log('[DEBUG] Upserting profile for ID:', userId);
     const { data: profile, error: upsertError } = await supabase
       .from('users')
       .upsert(profileData, { onConflict: 'id' })
@@ -190,7 +190,7 @@ export const createUser = async (
       return;
     }
 
-    console.log('[DEBUG] User created successfully');
+    // console.log('[DEBUG] User created successfully');
     res.status(201).json({ success: true, data: profile, message: 'User created successfully' });
     logger.info(`User created by admin: ${userEmail} (${role})`);
 

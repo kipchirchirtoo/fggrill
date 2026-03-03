@@ -13,7 +13,7 @@ const pool = new Pool({
 async function runMigrations() {
     const client = await pool.connect();
     try {
-        console.log('🚀 Starting automated migration runner...');
+        // console.log('🚀 Starting automated migration runner...');
 
         // 1. Ensure schema_migrations table exists
         await client.query(`
@@ -34,7 +34,7 @@ async function runMigrations() {
             .filter(f => f.endsWith('.sql'))
             .sort(); // Sort alphabetically (00, 01, ..., 2023, 2024, ...)
 
-        console.log(`Found ${files.length} SQL migration files.`);
+        // console.log(`Found ${files.length} SQL migration files.`);
 
         let successCount = 0;
         let skipCount = 0;
@@ -43,18 +43,18 @@ async function runMigrations() {
         for (const file of files) {
             // Skip 00_drop_existing.sql unless specifically requested (too dangerous for 'run all')
             if (file === '00_drop_existing.sql') {
-                console.log(`- Skipping ${file} (protection)`);
+                // console.log(`- Skipping ${file} (protection)`);
                 skipCount++;
                 continue;
             }
 
             if (appliedFilenames.has(file)) {
-                console.log(`- Skipping ${file} (already applied)`);
+                // console.log(`- Skipping ${file} (already applied)`);
                 skipCount++;
                 continue;
             }
 
-            console.log(`Executing ${file}...`);
+            // console.log(`Executing ${file}...`);
             const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
 
             try {
@@ -63,13 +63,13 @@ async function runMigrations() {
                 await client.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
                 await client.query('COMMIT');
 
-                console.log(`✅ Applied ${file}`);
+                // console.log(`✅ Applied ${file}`);
                 successCount++;
             } catch (err) {
                 await client.query('ROLLBACK');
 
                 if (err.message.includes('already exists')) {
-                    console.log(`- Marking ${file} as applied (objects already exist)`);
+                    // console.log(`- Marking ${file} as applied (objects already exist)`);
                     try {
                         await client.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
                         successCount++;
@@ -80,16 +80,16 @@ async function runMigrations() {
                     console.error(`❌ Error in ${file}:`, err.message);
                     errorCount++;
                     // Stop on first fatal error
-                    console.log('Migration stopped due to fatal error.');
+                    // console.log('Migration stopped due to fatal error.');
                     break;
                 }
             }
         }
 
-        console.log('\nMigration Summary:');
-        console.log(`- Applied: ${successCount}`);
-        console.log(`- Skipped: ${skipCount}`);
-        console.log(`- Errors:  ${errorCount}`);
+        // console.log('\nMigration Summary:');
+        // console.log(`- Applied: ${successCount}`);
+        // console.log(`- Skipped: ${skipCount}`);
+        // console.log(`- Errors:  ${errorCount}`);
 
     } catch (error) {
         console.error('Fatal Migration Error:', error.message);

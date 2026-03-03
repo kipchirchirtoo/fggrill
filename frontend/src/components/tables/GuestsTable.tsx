@@ -33,7 +33,7 @@ export function GuestsTable({ guests }: GuestsTableProps) {
 
   const handleDelete = (guest: Guest) => {
     // TODO: Implement delete functionality
-    console.log('Delete guest:', guest);
+    // console.log('Delete guest:', guest);
   };
 
   return (

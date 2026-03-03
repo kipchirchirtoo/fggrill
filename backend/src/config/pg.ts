@@ -35,7 +35,7 @@ const initPool = (): Pool => {
 
   // Skip PostgreSQL if explicitly disabled
   if (SKIP_PG) {
-    console.warn('PostgreSQL disabled via SKIP_POSTGRES - using mock pool');
+    // console.warn('PostgreSQL disabled via SKIP_POSTGRES - using mock pool');
     poolInitialized = true;
     pgAvailable = false;
     return mockPool as unknown as Pool;
@@ -43,7 +43,7 @@ const initPool = (): Pool => {
 
   // Check if DATABASE_URL is set
   if (!process.env.DATABASE_URL) {
-    console.warn('DATABASE_URL not set - PostgreSQL features will be unavailable');
+    // console.warn('DATABASE_URL not set - PostgreSQL features will be unavailable');
     poolInitialized = true;
     pgAvailable = false;
     return mockPool as unknown as Pool;
@@ -58,7 +58,7 @@ const initPool = (): Pool => {
       // Connection pool settings to handle Supabase connection pooler
       max: 10,                    // Maximum number of clients in the pool
       idleTimeoutMillis: 30000,   // Close idle clients after 30 seconds
-      connectionTimeoutMillis: 30000, // Increased timeout for slow connections
+      connectionTimeoutMillis: 5000, // Reduced timeout for better responsiveness during failures
       allowExitOnIdle: true       // Allow the pool to close all connections when idle
     });
 

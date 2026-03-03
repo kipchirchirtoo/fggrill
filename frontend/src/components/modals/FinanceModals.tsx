@@ -68,7 +68,7 @@ export function FolioModal({ isOpen, onClose, initialData }: FinanceModalProps) 
             <div>
               <h2 className="text-xl font-bold text-gray-900">Folio Management</h2>
               <p className="text-sm text-gray-500">
-                Reservation: {initialData?.booking_number || initialData?.confirmation_number} • Guest: {initialData?.guest_name}
+                Reservation: {initialData?.confirmation_number || initialData?.id?.slice(0, 8)} • Guest: {initialData?.guest_name}
               </p>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">

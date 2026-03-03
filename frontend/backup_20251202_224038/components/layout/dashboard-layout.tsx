@@ -406,7 +406,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         <div className="w-10 h-10 rounded-xl bg-[#3C3C43] flex items-center justify-center overflow-hidden">
                           <Image
                             src="/fglogo.png"
-                            alt="Famous Gate"
+                            alt="Kyogong"
                             width={32}
                             height={32}
                             className="object-cover scale-150"
@@ -414,7 +414,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                           />
                         </div>
                         <div>
-                          <h1 className="text-base font-bold text-[#000000]">Famous Gate</h1>
+                          <h1 className="text-base font-bold text-[#000000]">Kyogong</h1>
                           <p className="text-xs text-[#8E8E93]">Management</p>
                         </div>
                       </div>
@@ -542,14 +542,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       <div className="w-8 h-8 rounded-lg bg-[#3C3C43] flex items-center justify-center overflow-hidden">
                         <Image
                           src="/fglogo.png"
-                          alt="Famous Gate"
+                          alt="Kyogong"
                           width={24}
                           height={24}
                           className="object-cover scale-150"
                           style={{ objectPosition: 'center 30%', width: 'auto', height: 'auto' }}
                         />
                       </div>
-                      <h1 className="text-base font-bold text-[#000000]">Famous Gate</h1>
+                      <h1 className="text-base font-bold text-[#000000]">Kyogong</h1>
                     </div>
                     <button
                       onClick={() => setMobileMenuOpen(false)}

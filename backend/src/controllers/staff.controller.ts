@@ -29,10 +29,17 @@ const generateStaffId = async (branchId: number | string | null, role: string): 
     const isManagement = managementRoles.includes(role.toLowerCase());
 
     // 3. Get existing staff count for this branch
-    const { count } = await supabase
+    let countQuery = supabase
       .from('staff_profiles')
-      .select('id', { count: 'exact', head: true })
-      .eq('branch_id', branchId);
+      .select('id', { count: 'exact', head: true });
+
+    if (branchId === null || branchId === undefined || branchId === 'null') {
+      countQuery = countQuery.is('branch_id', null);
+    } else {
+      countQuery = countQuery.eq('branch_id', branchId);
+    }
+
+    const { count } = await countQuery;
 
     const currentCount = count || 0;
 
@@ -482,22 +489,183 @@ export const updateStaffMember = async (
     } = req.body;
 
     logger.debug('Update staff request:', { id: req.params.id, body: req.body });
-    console.log('DEBUG: Update staff request body:', JSON.stringify(req.body, null, 2));
+    // console.log('DEBUG: Update staff request body:', JSON.stringify(req.body, null, 2));
 
     // Get staff profile
-    const { data: staff, error: getError } = await supabase
+    let { data: staff, error: getError } = await supabase
       .from('staff_profiles')
       .select('*, user_id')
       .eq('id', req.params.id)
       .single();
 
     if (getError || !staff) {
-      logger.error('Staff member not found:', getError);
-      res.status(404).json({
-        success: false,
-        message: 'Staff member not found'
-      });
-      return;
+      // If not in staff_profiles, check if they exist in the users table
+      const { data: userProfile, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', req.params.id)
+        .single();
+
+      if (userError || !userProfile) {
+        // Finally, check if it's a driver
+        const { data: driverProfile, error: driverError } = await supabase
+          .from('drivers')
+          .select('*')
+          .eq('id', req.params.id)
+          .single();
+
+        if (driverProfile) {
+          // Update driver payroll fields directly
+          const { data: updatedDriver, error: updateDriverError } = await supabase
+            .from('drivers')
+            .update({
+              basic_salary: basic_salary !== undefined ? basic_salary : driverProfile.basic_salary,
+              bank_name: bank_name !== undefined ? bank_name : driverProfile.bank_name,
+              account_number: account_number !== undefined ? account_number : driverProfile.account_number,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', req.params.id)
+            .select()
+            .single();
+
+          if (updateDriverError) {
+            logger.error('Failed to update driver salary:', updateDriverError);
+            res.status(500).json({ success: false, message: 'Failed to update driver salary' });
+            return;
+          }
+
+          res.json({ success: true, data: updatedDriver, message: 'Driver salary updated successfully' });
+          return;
+        }
+
+        logger.error('Staff member, user, or driver not found:', { getError, userError, driverError });
+        res.status(404).json({
+          success: false,
+          message: 'Staff member not found'
+        });
+        return;
+      }
+
+      // Map user roles to valid database departments
+      // Valid departments: 'housekeeping','restaurant','reception','maintenance','finance','management','security','bar_lounge','administration','general'
+      const roleToDept: Record<string, string> = {
+        // Management
+        'super_admin': 'management',
+        'admin': 'management',
+        'manager': 'management',
+        'general_manager': 'management',
+        'branch_manager': 'management',
+        'hr_manager': 'management',
+        'finance_manager': 'management',
+        'branch_operations_manager': 'management',
+        'central_operations_manager': 'management',
+        'facilities_manager': 'management',
+        'restaurant_manager': 'management',
+        'maintenance_supervisor': 'management',
+        'housekeeping_supervisor': 'management',
+        'front_desk_supervisor': 'management',
+        'security_supervisor': 'management',
+        // Finance
+        'accountant': 'finance',
+        'auditor': 'finance',
+        'branch_accountant': 'finance',
+        'night_auditor': 'finance',
+        'payroll_clerk': 'finance',
+        // Restaurant / F&B
+        'restaurant': 'restaurant',
+        'pos_kitchen': 'restaurant',
+        'kitchen': 'restaurant',
+        'kitchen_operations': 'restaurant',
+        'kitchen_helper': 'restaurant',
+        'head_chef': 'restaurant',
+        'sous_chef': 'restaurant',
+        'chef': 'restaurant',
+        'cook': 'restaurant',
+        'line_cook': 'restaurant',
+        'prep_cook': 'restaurant',
+        'waiter': 'restaurant',
+        'waitress': 'restaurant',
+        'head_waiter': 'restaurant',
+        'food_runner': 'restaurant',
+        'busser': 'restaurant',
+        'host_hostess': 'restaurant',
+        'dishwasher': 'restaurant',
+        // Bar & Lounge
+        'bartender': 'bar_lounge',
+        'barista': 'bar_lounge',
+        'barman': 'bar_lounge',
+        'barmaid': 'bar_lounge',
+        'bar_manager': 'bar_lounge',
+        // Reception
+        'receptionist': 'reception',
+        'concierge': 'reception',
+        'bell_captain': 'reception',
+        'bellhop': 'reception',
+        // Housekeeping
+        'housekeeping': 'housekeeping',
+        'room_attendant': 'housekeeping',
+        'laundry_attendant': 'housekeeping',
+        // Maintenance
+        'maintenance': 'maintenance',
+        'electrician': 'maintenance',
+        'plumber': 'maintenance',
+        'hvac_technician': 'maintenance',
+        'groundskeeper': 'maintenance',
+        // Security
+        'security': 'security',
+        'security_guard': 'security',
+        // Administration
+        'cashier': 'administration',
+        'kyogong_spa_cashier': 'administration',
+        'kyogong_executive_bar_cashier': 'administration',
+        'kyogong_sports_bar_cashier': 'administration',
+        'kyogong_reception_cashier': 'administration',
+        'procurement': 'administration',
+        'central_storekeeper': 'administration',
+        'branch_storekeeper': 'administration',
+        'storekeeper': 'administration',
+        'employee': 'administration',
+      };
+
+      const userRole = (userProfile.role || 'employee') as string;
+      const mappedDepartment = roleToDept[userRole] || 'general';
+
+      const idNumber = await generateStaffId(userProfile.branch_id, userRole);
+
+      const newProfileInfo = {
+        id: userProfile.id,
+        user_id: userProfile.id,
+        first_name: userProfile.first_name,
+        last_name: userProfile.last_name,
+        phone: userProfile.phone_number,
+        email: userProfile.email,
+        role: userRole,
+        status: userProfile.status || 'active',
+        branch_id: userProfile.branch_id,
+        department: mappedDepartment,
+        basic_salary: 0,
+        shift: 'morning',
+        start_date: new Date().toISOString().split('T')[0],
+        id_number: idNumber
+      };
+
+      const { data: newStaff, error: createError } = await supabase
+        .from('staff_profiles')
+        .upsert(newProfileInfo, { onConflict: 'id', ignoreDuplicates: false })
+        .select()
+        .single();
+
+      if (createError || !newStaff) {
+        logger.error(`Failed to auto-create staff_profile for user ${userProfile.id}:`, createError);
+        res.status(500).json({
+          success: false,
+          message: 'Failed to initialize staff profile for user'
+        });
+        return;
+      }
+
+      staff = newStaff;
+      logger.info('Auto-created missing staff_profiles row for user:', userProfile.id);
     }
 
     // Get current email from users table for comparison

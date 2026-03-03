@@ -12,7 +12,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 async function runMigration() {
     try {
-        console.log('🚀 Starting Kitchen Management Module migration...\n');
+        // console.log('🚀 Starting Kitchen Management Module migration...\n');
 
         // Read the SQL file
         const sqlPath = path.join(__dirname, '20260114_kitchen_management.sql');
@@ -24,7 +24,7 @@ async function runMigration() {
             .map(s => s.trim())
             .filter(s => s.length > 0 && !s.startsWith('--'));
 
-        console.log(`📝 Found ${statements.length} SQL statements to execute\n`);
+        // console.log(`📝 Found ${statements.length} SQL statements to execute\n`);
 
         let successCount = 0;
         let errorCount = 0;
@@ -39,7 +39,7 @@ async function runMigration() {
             }
 
             try {
-                console.log(`Executing statement ${i + 1}/${statements.length}...`);
+                // console.log(`Executing statement ${i + 1}/${statements.length}...`);
 
                 const { data, error } = await supabase.rpc('exec_sql', {
                     sql: statement
@@ -58,7 +58,7 @@ async function runMigration() {
                         successCount++;
                     }
                 } else {
-                    console.log(`✅ Statement ${i + 1} executed successfully`);
+                    // console.log(`✅ Statement ${i + 1} executed successfully`);
                     successCount++;
                 }
             } catch (err: any) {
@@ -67,11 +67,11 @@ async function runMigration() {
             }
         }
 
-        console.log('\n' + '='.repeat(50));
-        console.log(`✅ Migration completed!`);
-        console.log(`   Successful: ${successCount}`);
-        console.log(`   Errors: ${errorCount}`);
-        console.log('='.repeat(50));
+        // console.log('\n' + '='.repeat(50));
+        // console.log(`✅ Migration completed!`);
+        // console.log(`   Successful: ${successCount}`);
+        // console.log(`   Errors: ${errorCount}`);
+        // console.log('='.repeat(50));
 
     } catch (error: any) {
         console.error('❌ Migration failed:', error.message);

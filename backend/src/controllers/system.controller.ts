@@ -16,7 +16,7 @@ export const getBranches = async (
 ): Promise<void> => {
   try {
     const { status } = req.query;
-    
+
     let query = supabase
       .from('branches')
       .select('*')
@@ -102,8 +102,7 @@ export const getDepartments = async (
       .from('departments')
       .select(`
         *,
-        branch:branches(id, name),
-        supervisor:users(id, first_name, last_name)
+        branch:branches(id, name)
       `)
       .order('name', { ascending: true });
 
@@ -224,3 +223,34 @@ export const getRolePermissions = async (
     next(error);
   }
 };
+
+// =====================================================
+// USERS (SYSTEM-WIDE)
+// =====================================================
+
+// @desc    Get all system users
+// @route   GET /api/system/users
+// @access  Private
+export const getSystemUsers = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, email, first_name, last_name, phone_number, role, avatar, status, branch_id, created_at')
+      .order('first_name', { ascending: true });
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      count: data?.length || 0,
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

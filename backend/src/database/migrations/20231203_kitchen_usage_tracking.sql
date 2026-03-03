@@ -1,5 +1,5 @@
 -- ============================================================
--- FAMOUS GATE HOTEL - KITCHEN USAGE TRACKING
+-- Kyogong - KITCHEN USAGE TRACKING
 -- Track how received items are consumed in the kitchen
 -- Run this in Supabase SQL Editor
 -- ============================================================

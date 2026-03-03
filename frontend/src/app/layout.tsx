@@ -4,7 +4,7 @@ import { Providers } from "@/components/providers"
 import { AuthProvider } from '@/lib/auth-context'
 
 export const metadata = {
-  title: 'FAMOUS GATES SYSTEM',
+  title: 'Famous Gates Hotels SYSTEM',
   description: 'Ultra-Premium Hospitality Management Architecture by Hirall Systems',
   formatDetection: {
     telephone: false,

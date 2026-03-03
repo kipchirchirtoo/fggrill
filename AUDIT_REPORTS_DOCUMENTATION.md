@@ -96,7 +96,7 @@ await auditorReportsAPI.exportComprehensiveStockAudit({
 ## Report Features
 
 ### Professional Formatting
-- **Famous Gate Branding**: Company logo and brand colors
+- **Kyogong Branding**: Company logo and brand colors
 - **Color-Coded Tables**: 
   - Blue headers for financial data
   - Green headers for branch performance

@@ -83,7 +83,14 @@ export default function AdminSuppliersPage() {
       setDeleteConfirmOpen(false);
       setSelectedSupplier(null);
       fetchSuppliers();
-    } catch (error: any) { toast.error(error.message || 'Failed'); }
+    } catch (error: any) { 
+      const errorMessage = error.message || 'Failed';
+      if (errorMessage.includes('foreign key constraint') || errorMessage.includes('violates')) {
+        toast.error('Cannot delete supplier: This supplier has related records (GRNI, purchase orders, etc.). Please remove or reassign those records first.');
+      } else {
+        toast.error(errorMessage);
+      }
+    }
     finally { setIsSubmitting(false); }
   };
 

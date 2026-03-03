@@ -95,7 +95,7 @@ export function DashboardLayout(props: DashboardLayoutProps) {
                         <div className="w-9 h-9 rounded-lg bg-stone-900 flex items-center justify-center overflow-hidden">
                           <Image
                             src="/fglogo.png"
-                            alt="Famous Gate"
+                            alt="Kyogong"
                             width={28}
                             height={28}
                             className="object-cover scale-150"
@@ -103,7 +103,7 @@ export function DashboardLayout(props: DashboardLayoutProps) {
                           />
                         </div>
                         <div>
-                          <h1 className="text-[15px] font-semibold text-stone-900">Famous Gates</h1>
+                          <h1 className="text-[15px] font-semibold text-stone-900">Famous Gates Hotels</h1>
                           <p className="text-[11px] text-stone-500">Management System</p>
                         </div>
                       </div>
@@ -171,14 +171,14 @@ export function DashboardLayout(props: DashboardLayoutProps) {
                         <div className="w-8 h-8 rounded-lg bg-stone-900 flex items-center justify-center overflow-hidden">
                           <Image
                             src="/fglogo.png"
-                            alt="Famous Gate"
+                            alt="Kyogong"
                             width={24}
                             height={24}
                             className="object-cover scale-150"
                             style={{ objectPosition: 'center 30%' }}
                           />
                         </div>
-                        <span className="text-[15px] font-semibold text-stone-900">Famous Gates</span>
+                        <span className="text-[15px] font-semibold text-stone-900">Famous Gates Hotels</span>
                       </div>
                       <button
                         onClick={() => setMobileMenuOpen(false)}

@@ -304,16 +304,16 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
   const handleGenerateBill = async (order: TodayOrder) => {
     setIsGeneratingBill(order.id);
     try {
-      console.log('[POS] ========== BILL GENERATION DEBUG ==========');
-      console.log('[POS] Full order object:', JSON.stringify(order, null, 2));
-      console.log('[POS] User object:', JSON.stringify(user, null, 2));
-      console.log('[POS] Order waiter_name:', order.waiter_name);
-      console.log('[POS] User firstName:', user?.firstName);
-      console.log('[POS] User lastName:', user?.lastName);
+      // console.log('[POS] ========== BILL GENERATION DEBUG ==========');
+      // console.log('[POS] Full order object:', JSON.stringify(order, null, 2));
+      // console.log('[POS] User object:', JSON.stringify(user, null, 2));
+      // console.log('[POS] Order waiter_name:', order.waiter_name);
+      // console.log('[POS] User firstName:', user?.firstName);
+      // console.log('[POS] User lastName:', user?.lastName);
       
       const servedBy = order.waiter_name || (user?.firstName ? `${user.firstName} ${user.lastName || ''}` : 'Staff');
-      console.log('[POS] Final served_by value:', servedBy);
-      console.log('[POS] ===============================================');
+      // console.log('[POS] Final served_by value:', servedBy);
+      // console.log('[POS] ===============================================');
       
       const receiptData = {
         receipt_type: 'sale' as const,
@@ -346,7 +346,7 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
           return;
         }
       } catch (printError) {
-        console.log('Thermal printing failed, falling back to PDF');
+        // console.log('Thermal printing failed, falling back to PDF');
       }
 
       // Fallback to PDF generation
@@ -374,8 +374,8 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
           toast.success(`Bill generated for Order #${order.order_number}!`);
         } else {
           // Offline mode: Show success message (receipt data is already in receiptData)
-          console.log('[POS] Offline mode - bill generated without PDF');
-          console.log('[POS] Receipt data:', receiptData);
+          // console.log('[POS] Offline mode - bill generated without PDF');
+          // console.log('[POS] Receipt data:', receiptData);
           toast.success(`Bill generated for Order #${order.order_number} (Offline Mode)`);
         }
       } else {
@@ -670,9 +670,9 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
                     const selectedWaiter = waiters.find(w => w.id === selectedWaiterId);
                     const waiterName = selectedWaiter ? `${selectedWaiter.first_name} ${selectedWaiter.last_name}` : undefined;
                     
-                    console.log('[POS Bill Button] Selected waiter:', selectedWaiter);
-                    console.log('[POS Bill Button] Waiter name:', waiterName);
-                    console.log('[POS Bill Button] User:', user);
+                    // console.log('[POS Bill Button] Selected waiter:', selectedWaiter);
+                    // console.log('[POS Bill Button] Waiter name:', waiterName);
+                    // console.log('[POS Bill Button] User:', user);
                     
                     handleGenerateBill({
                       id: 'current-cart',

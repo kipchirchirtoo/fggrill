@@ -3,7 +3,7 @@ import { logger } from '../utils/logger';
 
 export interface Notification {
   id?: number;
-  user_id?: number;
+  user_id?: string;
   role?: string;
   branch_id?: number;
   department?: string;
@@ -21,7 +21,7 @@ export interface Notification {
 }
 
 export interface NotificationFilter {
-  user_id?: number;
+  user_id?: string;
   role?: string;
   branch_id?: number;
   is_read?: boolean;
@@ -143,32 +143,11 @@ class NotificationService {
         return [];
       }
 
-      // First get user details
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('role, branch_id')
-        .eq('id', userId)
-        .single();
-
-      if (userError || !userData) {
-        logger.warn('Could not fetch user details for notifications:', userError?.message);
-        return [];
-      }
-
-      // Build query conditions based on user data
-      let orConditions = `user_id.eq.${userId}`;
-      if (userData.role) {
-        orConditions += `,role.eq.${userData.role}`;
-      }
-      if (userData.branch_id) {
-        orConditions += `,branch_id.eq.${userData.branch_id}`;
-      }
-
-      // Build query for notifications
+      // Build query for notifications - ONLY user-specific notifications
       let query = supabase
         .from('notifications')
         .select('*')
-        .or(orConditions);
+        .eq('user_id', userId); // Only get notifications specifically for this user
 
       // Apply filters
       if (filters?.is_read !== undefined) {
@@ -227,31 +206,10 @@ class NotificationService {
         return 0;
       }
 
-      // Get user details
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('role, branch_id')
-        .eq('id', userId)
-        .single();
-
-      if (userError || !userData) {
-        logger.error('Error fetching user for count:', userError?.message);
-        return 0;
-      }
-
-      // Build query conditions based on user data
-      let orConditions = `user_id.eq.${userId}`;
-      if (userData.role) {
-        orConditions += `,role.eq.${userData.role}`;
-      }
-      if (userData.branch_id) {
-        orConditions += `,branch_id.eq.${userData.branch_id}`;
-      }
-
       const { count, error } = await supabase
         .from('notifications')
         .select('*', { count: 'exact', head: true })
-        .or(orConditions)
+        .eq('user_id', userId) // Only count notifications specifically for this user
         .eq('is_read', false);
 
       if (error) {
@@ -282,7 +240,7 @@ class NotificationService {
   /**
    * Mark notification as read
    */
-  async markAsRead(notificationId: number, userId: number): Promise<boolean> {
+  async markAsRead(notificationId: number, userId: string): Promise<boolean> {
     try {
       const { error } = await supabase
         .from('notifications')
@@ -291,7 +249,7 @@ class NotificationService {
           read_at: new Date().toISOString()
         })
         .eq('id', notificationId)
-        .or(`user_id.eq.${userId},user_id.is.null`);
+        .eq('user_id', userId); // Only mark if it belongs to this user
 
       if (error) {
         logger.error('Error marking notification as read:', error);
@@ -308,28 +266,16 @@ class NotificationService {
   /**
    * Mark all notifications as read for a user
    */
-  async markAllAsRead(userId: number): Promise<number> {
+  async markAllAsRead(userId: string): Promise<number> {
     try {
-      // Get user details
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('role, branch_id')
-        .eq('id', userId)
-        .single();
-
-      if (userError) {
-        logger.error('Error fetching user for mark all:', userError);
-        return 0;
-      }
-
       const { data, error } = await supabase
         .from('notifications')
         .update({
           is_read: true,
           read_at: new Date().toISOString()
         })
+        .eq('user_id', userId) // Only mark notifications for this user
         .eq('is_read', false)
-        .or(`user_id.eq.${userId},role.eq.${userData.role},branch_id.eq.${userData.branch_id}`)
         .select();
 
       if (error) {
@@ -429,32 +375,11 @@ class NotificationService {
         return 0;
       }
 
-      // Get user details
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('role, branch_id')
-        .eq('id', userId)
-        .single();
-
-      if (userError || !userData) {
-        logger.error('Error fetching user for clearing notifications:', userError?.message);
-        return 0;
-      }
-
-      // Build query conditions based on user data
-      let orConditions = `user_id.eq.${userId}`;
-      if (userData.role) {
-        orConditions += `,role.eq.${userData.role}`;
-      }
-      if (userData.branch_id) {
-        orConditions += `,branch_id.eq.${userData.branch_id}`;
-      }
-
       const { data, error } = await supabase
         .from('notifications')
         .delete()
+        .eq('user_id', userId) // Only delete notifications for this user
         .eq('is_read', true)
-        .or(orConditions)
         .select();
 
       if (error) {
@@ -509,16 +434,41 @@ class NotificationService {
       metadata?: any;
     }
   ): Promise<Notification | null> {
-    return this.createNotification({
-      role,
-      title,
-      message,
-      type: options?.type || 'info',
-      category: options?.category || 'general',
-      priority: options?.priority || 'medium',
-      action_url: options?.actionUrl,
-      metadata: options?.metadata
-    });
+    try {
+      // Get all users with this role
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', role);
+
+      if (usersError || !users || users.length === 0) {
+        logger.warn(`No users found with role: ${role}`);
+        return null;
+      }
+
+      // Create individual notifications for each user
+      const notifications = users.map(user => ({
+        user_id: user.id,
+        title,
+        message,
+        type: options?.type || 'info',
+        category: options?.category || 'general',
+        priority: options?.priority || 'medium',
+        action_url: options?.actionUrl,
+        metadata: options?.metadata,
+        is_read: false
+      }));
+
+      const createdNotifications = await this.bulkCreateNotifications(notifications);
+      
+      logger.info(`Created ${createdNotifications.length} notifications for role: ${role}`);
+      
+      // Return the first notification as a representative
+      return createdNotifications[0] || null;
+    } catch (error) {
+      logger.error('Exception in notifyRole:', error);
+      return null;
+    }
   }
 
   /**
@@ -536,23 +486,48 @@ class NotificationService {
       metadata?: any;
     }
   ): Promise<Notification | null> {
-    return this.createNotification({
-      branch_id: branchId,
-      title,
-      message,
-      type: options?.type || 'info',
-      category: options?.category || 'general',
-      priority: options?.priority || 'medium',
-      action_url: options?.actionUrl,
-      metadata: options?.metadata
-    });
+    try {
+      // Get all users in this branch
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('branch_id', branchId);
+
+      if (usersError || !users || users.length === 0) {
+        logger.warn(`No users found in branch: ${branchId}`);
+        return null;
+      }
+
+      // Create individual notifications for each user
+      const notifications = users.map(user => ({
+        user_id: user.id,
+        title,
+        message,
+        type: options?.type || 'info',
+        category: options?.category || 'general',
+        priority: options?.priority || 'medium',
+        action_url: options?.actionUrl,
+        metadata: options?.metadata,
+        is_read: false
+      }));
+
+      const createdNotifications = await this.bulkCreateNotifications(notifications);
+      
+      logger.info(`Created ${createdNotifications.length} notifications for branch: ${branchId}`);
+      
+      // Return the first notification as a representative
+      return createdNotifications[0] || null;
+    } catch (error) {
+      logger.error('Exception in notifyBranch:', error);
+      return null;
+    }
   }
 
   /**
    * Notify specific user
    */
   async notifyUser(
-    userId: number,
+    userId: string,
     title: string,
     message: string,
     options?: {

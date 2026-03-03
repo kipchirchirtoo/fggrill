@@ -314,7 +314,7 @@ export function GuestPortal({ isOpen, onClose }: GuestPortalProps) {
             </div>
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-gray-500" />
-              <span>famousgatesbmt@gmail.com</span>
+              <span>kyogongsbmt@gmail.com</span>
             </div>
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-gray-500" />

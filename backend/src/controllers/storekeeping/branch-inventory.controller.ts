@@ -244,12 +244,12 @@ export const getBranchRequests = async (
     let branchId = queryBranchId;
     const status = req.query.status as string;
 
-    console.log('getBranchRequests Debug:', {
-      userRole: req.user?.role,
-      userBranchId: req.user?.branch_id,
-      queryBranchId,
-      initialBranchId: branchId
-    });
+    // console.log('getBranchRequests Debug:', {
+//       userRole: req.user?.role,
+//       userBranchId: req.user?.branch_id,
+//       queryBranchId,
+//       initialBranchId: branchId
+//     });
 
     // Allow central roles to fetch all requests (branchId is optional)
     const isCentralRole = [
@@ -260,7 +260,7 @@ export const getBranchRequests = async (
       'auditor'
     ].includes(req.user?.role || '');
 
-    console.log('isCentralRole:', isCentralRole);
+    // console.log('isCentralRole:', isCentralRole);
 
     if (branchId === null) {
       if (!isCentralRole) {
@@ -275,10 +275,10 @@ export const getBranchRequests = async (
       // Central roles keep branchId as null to fetch all
     }
 
-    console.log('Final branchId for service call:', branchId);
+    // console.log('Final branchId for service call:', branchId);
 
     const data = await BranchInventoryService.getRequests(branchId, status);
-    console.log('Data returned from service:', data?.length);
+    // console.log('Data returned from service:', data?.length);
 
     res.status(200).json({
       success: true,

@@ -1,7 +1,7 @@
 {
-  "name": "Famous Gate Housekeeping",
+  "name": "Kyogong Housekeeping",
   "short_name": "FG Housekeeping",
-  "description": "Housekeeping management system for Famous Gate Hotels",
+  "description": "Housekeeping management system for Kyogongs",
   "start_url": "/dashboard/housekeeping",
   "display": "standalone",
   "background_color": "#0f172a",

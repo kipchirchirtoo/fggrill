@@ -66,83 +66,32 @@ export class Guest implements IGuest {
     this.updatedAt = data.updatedAt || new Date();
   }
 
+  // ===========================================================
+  // All queries use the standalone `guests` table.
+  // Guests are NOT users and do NOT need auth accounts.
+  // The `reservations` table FK references `guests(id)`.
+  // ===========================================================
+
   static async findById(id: string): Promise<Guest | null> {
-    // 1. Try guest_profiles first
-    const { data: profile, error: profileError } = await supabase
-      .from('guest_profiles')
-      .select('*, users!inner(first_name, last_name, email, phone_number)')
-      .eq('id', id)
-      .maybeSingle();
-
-    if (profile) return Guest.fromDatabase(profile);
-
-    // 2. Fallback to guests table
-    const { data: guest, error: guestError } = await supabase
+    const { data, error } = await supabase
       .from('guests')
       .select('*')
       .eq('id', id)
       .maybeSingle();
 
-    if (guest) {
-      return new Guest({
-        id: guest.id,
-        firstName: guest.first_name,
-        lastName: guest.last_name,
-        email: guest.email,
-        phone: guest.phone,
-        idType: guest.id_type,
-        idNumber: guest.id_number,
-        address: guest.address,
-        nationality: guest.nationality,
-        isVip: guest.is_vip,
-        notes: guest.notes,
-        createdAt: new Date(guest.created_at),
-        updatedAt: new Date(guest.updated_at)
-      });
-    }
-
-    return null;
+    if (error || !data) return null;
+    return Guest.fromDatabase(data);
   }
 
   static async findByEmail(email: string): Promise<Guest | null> {
-    // First check guest_profiles (linked to users)
     const { data, error } = await supabase
-      .from('guest_profiles')
-      .select('*, users!inner(first_name, last_name, email, phone_number)')
-      .eq('users.email', email)
-      .maybeSingle();
-
-    if (data) return Guest.fromDatabase(data);
-
-    // If not found, check guests table
-    const { data: guestData, error: guestError } = await supabase
       .from('guests')
       .select('*')
       .eq('email', email)
       .maybeSingle();
 
-    if (guestData) {
-      return new Guest({
-        id: guestData.id,
-        firstName: guestData.first_name,
-        lastName: guestData.last_name,
-        email: guestData.email,
-        phone: guestData.phone,
-        idType: guestData.id_type,
-        idNumber: guestData.id_number,
-        address: guestData.address,
-        nationality: guestData.nationality,
-        preferences: guestData.preferences,
-        isVip: guestData.is_vip,
-        blacklistStatus: guestData.blacklist_status,
-        blacklistReason: guestData.blacklist_reason,
-        notes: guestData.notes,
-        createdAt: new Date(guestData.created_at),
-        updatedAt: new Date(guestData.updated_at)
-      });
-    }
-
-    return null;
+    if (error || !data) return null;
+    return Guest.fromDatabase(data);
   }
 
   static async search(query: string, branchId?: number, checkedInOnly?: boolean): Promise<Guest[]> {
@@ -198,200 +147,61 @@ export class Guest implements IGuest {
       return [];
     }
 
-    return (guestsData || []).map(d => new Guest({
-      id: d.id,
-      firstName: d.first_name,
-      lastName: d.last_name,
-      email: d.email,
-      phone: d.phone,
-      idType: d.id_type,
-      idNumber: d.id_number,
-      address: d.address,
-      nationality: d.nationality,
-      isVip: d.is_vip,
-      notes: d.notes,
-      createdAt: new Date(d.created_at),
-      updatedAt: new Date(d.updated_at)
-    }));
+    return (guestsData || []).map(d => Guest.fromDatabase(d));
   }
 
+  /**
+   * Save guest to the `guests` table.
+   * Guests do NOT need auth accounts or entries in the `users` table.
+   */
   async save(): Promise<Guest> {
-    // First check if this guest exists
-    const { data: existingGuest, error: findError } = await supabase
-      .from('guest_profiles')
-      .select('id, user_id')
-      .eq('id', this.id)
-      .single();
-
-    if (findError && findError.code !== 'PGRST116') throw findError;
-
-    // If guest exists, update the profile
-    if (existingGuest) {
-      const { data, error } = await supabase
-        .from('guest_profiles')
-        .update({
+    const { data, error } = await supabase
+      .from('guests')
+      .upsert([
+        {
+          id: this.id,
+          first_name: this.firstName,
+          last_name: this.lastName,
+          email: this.email,
+          phone: this.phone,
           id_type: this.idType,
           id_number: this.idNumber,
           address: this.address,
           nationality: this.nationality,
-          vip_status: this.isVip,
+          city: this.city,
+          country: this.country,
+          date_of_birth: this.dateOfBirth,
+          preferences: this.preferences,
+          is_vip: this.isVip,
+          blacklist_status: this.blacklistStatus,
+          blacklist_reason: this.blacklistReason,
           notes: this.notes,
           updated_at: new Date()
-        })
-        .eq('id', this.id)
-        .select('*, users!inner(first_name, last_name, email, phone_number)')
-        .single();
-
-      if (error) throw error;
-
-      // Sync with guests table for reservations compatibility
-      await supabase
-        .from('guests')
-        .upsert([
-          {
-            id: this.id,
-            first_name: this.firstName,
-            last_name: this.lastName,
-            email: this.email,
-            phone: this.phone,
-            id_type: this.idType,
-            id_number: this.idNumber,
-            address: this.address,
-            nationality: this.nationality,
-            preferences: this.preferences,
-            is_vip: this.isVip,
-            blacklist_status: this.blacklistStatus,
-            blacklist_reason: this.blacklistReason,
-            notes: this.notes,
-            updated_at: new Date()
-          }
-        ]);
-
-      // Also update user details if changed
-      if (this.firstName || this.lastName || this.email || this.phone) {
-        await supabase
-          .from('users')
-          .update({
-            first_name: this.firstName,
-            last_name: this.lastName,
-            email: this.email,
-            phone_number: this.phone
-          })
-          .eq('id', existingGuest.user_id);
-      }
-
-      return Guest.fromDatabase(data);
-    } else {
-      // For new guests, we need to check if a user with this email already exists
-      let userData;
-      if (this.email) {
-        const { data: existingUser } = await supabase
-          .from('users')
-          .select('id')
-          .eq('email', this.email)
-          .maybeSingle();
-        userData = existingUser;
-      }
-
-      if (!userData) {
-        // Create new user if not exists
-        if (!this.email) {
-          throw new Error('Email is required for guest registration');
         }
-        const { data: newUserData, error: userError } = await supabase
-          .from('users')
-          .insert([
-            {
-              id: crypto.randomUUID(),
-              first_name: this.firstName,
-              last_name: this.lastName,
-              email: this.email,
-              phone_number: this.phone,
-              role: 'guest'
-            }
-          ])
-          .select()
-          .single();
+      ], { onConflict: 'id' })
+      .select()
+      .single();
 
-        if (userError) throw userError;
-        userData = newUserData;
-      }
-
-      const { data, error } = await supabase
-        .from('guest_profiles')
-        .insert([
-          {
-            id: this.id,
-            user_id: userData.id,
-            id_type: this.idType || 'national_id',
-            id_number: this.idNumber || 'pending',
-            nationality: this.nationality || 'Kenyan',
-            address: this.address,
-            vip_status: this.isVip,
-            notes: this.notes,
-            updated_at: new Date()
-          }
-        ])
-        .select('*, users!inner(first_name, last_name, email, phone_number)')
-        .single();
-
-      if (error) throw error;
-
-      // Sync with guests table for reservations compatibility
-      await supabase
-        .from('guests')
-        .upsert([
-          {
-            id: this.id,
-            first_name: this.firstName,
-            last_name: this.lastName,
-            email: this.email,
-            phone: this.phone,
-            id_type: this.idType,
-            id_number: this.idNumber,
-            address: this.address,
-            nationality: this.nationality,
-            preferences: this.preferences,
-            is_vip: this.isVip,
-            blacklist_status: this.blacklistStatus,
-            blacklist_reason: this.blacklistReason,
-            notes: this.notes,
-            created_at: this.createdAt,
-            updated_at: new Date()
-          }
-        ]);
-
-      return Guest.fromDatabase(data);
-    }
+    if (error) throw error;
+    return Guest.fromDatabase(data);
   }
 
   async delete(): Promise<void> {
-    // 1. Delete from guest_profiles
-    const { error: profileError } = await supabase
-      .from('guest_profiles')
-      .delete()
-      .eq('id', this.id);
-
-    if (profileError) throw profileError;
-
-    // 2. Delete from guests table
-    const { error: guestError } = await supabase
+    const { error } = await supabase
       .from('guests')
       .delete()
       .eq('id', this.id);
 
-    if (guestError) throw guestError;
+    if (error) throw error;
   }
 
   static fromDatabase(data: any): Guest {
-    const userData = data.users || {};
-
     return new Guest({
       id: data.id,
-      firstName: userData.first_name || data.first_name,
-      lastName: userData.last_name || data.last_name,
-      email: userData.email || data.email,
-      phone: userData.phone_number || data.phone,
+      firstName: data.first_name,
+      lastName: data.last_name,
+      email: data.email,
+      phone: data.phone,
       idType: data.id_type,
       idNumber: data.id_number,
       address: data.address,
@@ -399,7 +209,7 @@ export class Guest implements IGuest {
       city: data.city,
       country: data.country,
       dateOfBirth: data.date_of_birth,
-      isVip: data.vip_status || data.is_vip,
+      isVip: data.is_vip,
       notes: data.notes,
       preferences: data.preferences,
       blacklistStatus: data.blacklist_status,

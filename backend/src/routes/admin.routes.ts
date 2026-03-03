@@ -125,21 +125,21 @@ router.get('/role-migrations/:id/users',
         {
           id: 1,
           name: 'John Doe',
-          email: 'john.doe@famousgate.co.ke',
+          email: 'john.doe@kyogong.co.ke',
           role: 'STAFF',
           branch_name: 'Main Branch'
         },
         {
           id: 2,
           name: 'Jane Smith',
-          email: 'jane.smith@famousgate.co.ke',
+          email: 'jane.smith@kyogong.co.ke',
           role: 'STAFF',
           branch_name: 'Downtown Branch'
         },
         {
           id: 3,
           name: 'Mike Johnson',
-          email: 'mike.johnson@famousgate.co.ke',
+          email: 'mike.johnson@kyogong.co.ke',
           role: 'STAFF',
           branch_name: 'Airport Branch'
         }

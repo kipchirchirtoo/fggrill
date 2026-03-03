@@ -29,13 +29,13 @@ class KPIDashboardGenerator(BrandedPDFGenerator):
         branch = filters.get('branch_name', 'Branch')
         if branch == 'All Branches' and filters.get('branch_id'):
             branch_names = {
-                1: 'Famous Gate Bomet (Central)',
-                2: 'Famous Gate Bomet Town', 
-                3: 'Famous Gate Kericho',
-                4: 'Famous Gate Kapsoit',
-                5: 'Famous Gate Mogogosiek',
-                6: 'Famous Gate Litein',
-                7: 'Famous Gate Grill'
+                1: 'Kyogong Bomet (Central)',
+                2: 'Kyogong Bomet Town', 
+                3: 'Kyogong Kericho',
+                4: 'Kyogong Kapsoit',
+                5: 'Kyogong Mogogosiek',
+                6: 'Kyogong Litein',
+                7: 'Kyogong Grill'
             }
             branch_id = int(filters.get('branch_id', 0))
             branch = branch_names.get(branch_id, f'Branch {branch_id}')

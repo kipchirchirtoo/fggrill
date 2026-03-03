@@ -96,7 +96,7 @@ class EmailService {
       // Prepare email options with CID attachment for barcode
       const mailOptions: any = {
         to: email,
-        subject: 'Booking Confirmation - Famous Gate Hotel',
+        subject: 'Booking Confirmation - Kyogong',
         html: enterpriseEmailTemplates.bookingConfirmation(bookingDetails, barcodeBase64 || undefined),
         attachments: []
       };
@@ -106,7 +106,7 @@ class EmailService {
         mailOptions.attachments.push({
           filename: 'barcode.png',
           content: Buffer.from(barcodeBase64, 'base64'),
-          cid: 'barcode@famousgatehotel',
+          cid: 'barcode@kyogong',
           contentType: 'image/png'
         });
       }
@@ -120,7 +120,7 @@ class EmailService {
       // Fallback to sending without barcode if there's an error
       await this.sendEmail({
         to: email,
-        subject: 'Booking Confirmation - Famous Gate Hotel',
+        subject: 'Booking Confirmation - Kyogong',
         html: enterpriseEmailTemplates.bookingConfirmation(bookingDetails)
       });
     }
@@ -205,7 +205,7 @@ class EmailService {
   async sendPayslipEmail(staff: any, month: string, year: number, pdfBuffer: Buffer): Promise<void> {
     await this.sendEmail({
       to: staff.user.email,
-      subject: `Payslip for ${month} ${year} - Famous Gate Hotel`,
+      subject: `Payslip for ${month} ${year} - Kyogong`,
       html: enterpriseEmailTemplates.payslipNotification(`${staff.user.first_name} ${staff.user.last_name}`, month, year),
       attachments: [
         {

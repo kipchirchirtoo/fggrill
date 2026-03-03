@@ -5,7 +5,7 @@ import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { IOSBadge } from '@/components/ui/ios-badge';
-import { staffAPI } from '@/lib/api';
+import { staffAPI, systemAPI } from '@/lib/api';
 import Link from 'next/link';
 import {
     Calendar,
@@ -60,6 +60,8 @@ export default function HRAttendancePage() {
     const [isLoading, setIsLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [searchQuery, setSearchQuery] = useState('');
+    const [branches, setBranches] = useState<any[]>([]);
+    const [selectedBranch, setSelectedBranch] = useState<string>('all');
 
     const [showOnlyOnDuty, setShowOnlyOnDuty] = useState(false);
 
@@ -68,7 +70,8 @@ export default function HRAttendancePage() {
         try {
             const response = await staffAPI.getAttendanceReports({
                 startDate: selectedDate,
-                endDate: selectedDate
+                endDate: selectedDate,
+                branchId: selectedBranch === 'all' ? undefined : selectedBranch
             });
             if (response.success) {
                 setRecords(response.data || []);
@@ -79,11 +82,26 @@ export default function HRAttendancePage() {
         } finally {
             setIsLoading(false);
         }
-    }, [selectedDate]);
+    }, [selectedDate, selectedBranch]);
 
     useEffect(() => {
         fetchRecords();
     }, [fetchRecords]);
+
+    // Fetch branches on mount
+    useEffect(() => {
+        const fetchBranches = async () => {
+            try {
+                const response = await systemAPI.getBranches();
+                if (response.success && response.data) {
+                    setBranches(response.data);
+                }
+            } catch (error) {
+                console.error('Error fetching branches:', error);
+            }
+        };
+        fetchBranches();
+    }, []);
 
     const handleApprove = async (id: string, approved: boolean) => {
         try {
@@ -172,33 +190,52 @@ export default function HRAttendancePage() {
 
                     {/* Controls & Sync */}
                     <div className="flex flex-col lg:flex-row items-center justify-between gap-4 bg-stone-50 p-2 rounded-2xl border border-stone-100">
-                        <div className="flex items-center bg-white rounded-xl border border-stone-200 p-1 shadow-sm w-full lg:w-auto">
-                            <button
-                                onClick={() => {
-                                    const d = new Date(selectedDate);
-                                    d.setDate(d.getDate() - 1);
-                                    setSelectedDate(d.toISOString().split('T')[0]);
-                                }}
-                                className="p-2 hover:bg-stone-50 rounded-lg text-stone-400 hover:text-stone-900 transition-colors"
-                            >
-                                <ChevronLeft className="h-4 w-4" />
-                            </button>
-                            <input
-                                type="date"
-                                value={selectedDate}
-                                onChange={(e) => setSelectedDate(e.target.value)}
-                                className="bg-transparent border-none text-[13px] font-bold text-stone-900 focus:ring-0 w-36 px-2 text-center"
-                            />
-                            <button
-                                onClick={() => {
-                                    const d = new Date(selectedDate);
-                                    d.setDate(d.getDate() + 1);
-                                    setSelectedDate(d.toISOString().split('T')[0]);
-                                }}
-                                className="p-2 hover:bg-stone-50 rounded-lg text-stone-400 hover:text-stone-900 transition-colors"
-                            >
-                                <ChevronRight className="h-4 w-4" />
-                            </button>
+                        <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+                            {/* Date Picker */}
+                            <div className="flex items-center bg-white rounded-xl border border-stone-200 p-1 shadow-sm w-full sm:w-auto">
+                                <button
+                                    onClick={() => {
+                                        const d = new Date(selectedDate);
+                                        d.setDate(d.getDate() - 1);
+                                        setSelectedDate(d.toISOString().split('T')[0]);
+                                    }}
+                                    className="p-2 hover:bg-stone-50 rounded-lg text-stone-400 hover:text-stone-900 transition-colors"
+                                >
+                                    <ChevronLeft className="h-4 w-4" />
+                                </button>
+                                <input
+                                    type="date"
+                                    value={selectedDate}
+                                    onChange={(e) => setSelectedDate(e.target.value)}
+                                    className="bg-transparent border-none text-[13px] font-bold text-stone-900 focus:ring-0 w-36 px-2 text-center"
+                                />
+                                <button
+                                    onClick={() => {
+                                        const d = new Date(selectedDate);
+                                        d.setDate(d.getDate() + 1);
+                                        setSelectedDate(d.toISOString().split('T')[0]);
+                                    }}
+                                    className="p-2 hover:bg-stone-50 rounded-lg text-stone-400 hover:text-stone-900 transition-colors"
+                                >
+                                    <ChevronRight className="h-4 w-4" />
+                                </button>
+                            </div>
+
+                            {/* Branch Filter */}
+                            <div className="flex items-center bg-white rounded-xl border border-stone-200 p-1 shadow-sm w-full sm:w-auto">
+                                <select
+                                    value={selectedBranch}
+                                    onChange={(e) => setSelectedBranch(e.target.value)}
+                                    className="bg-transparent border-none text-[13px] font-bold text-stone-900 focus:ring-0 px-3 py-2 cursor-pointer w-full sm:w-auto"
+                                >
+                                    <option value="all">All Branches</option>
+                                    {branches.map((branch) => (
+                                        <option key={branch.id} value={branch.id}>
+                                            {branch.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
 
                         <div className="flex items-center gap-3 w-full lg:w-auto">

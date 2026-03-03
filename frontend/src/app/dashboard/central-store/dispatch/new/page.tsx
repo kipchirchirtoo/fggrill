@@ -14,8 +14,8 @@ import { useRouter } from 'next/navigation';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 // Helper for sound effects
-const playSuccessSound = () => { console.log('Beep!'); };
-const playErrorSound = () => { console.log('Buzz!'); };
+const playSuccessSound = () => { /* console.log('Beep!'); */ };
+const playErrorSound = () => { /* console.log('Buzz!'); */ };
 
 interface ScannedDispatchItem {
     id: string; // unique ID for key

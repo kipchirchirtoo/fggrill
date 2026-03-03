@@ -46,7 +46,7 @@ function VerificationContent() {
                         <ShieldCheck className="w-8 h-8" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold text-stone-900">Famous Gate Hotel</h1>
+                        <h1 className="text-2xl font-bold text-stone-900">Kyogong</h1>
                         <p className="text-stone-500 text-sm">Official ID Verification Portal</p>
                     </div>
                 </div>
@@ -110,7 +110,7 @@ function VerificationContent() {
                     <div className="px-4">
                         <h3 className="font-bold text-stone-400 mb-2 text-xs uppercase tracking-widest text-center">Terms of Use</h3>
                         <ul className="space-y-2 text-xs text-stone-500 text-center">
-                            <li>Property of Famous Gate Hotel. Not transferable.</li>
+                            <li>Property of Kyogong. Not transferable.</li>
                             <li>Visible wear mandatory while on duty.</li>
                             <li>Unauthorized use is a punishable offense.</li>
                         </ul>
@@ -118,7 +118,7 @@ function VerificationContent() {
                 </div>
 
                 <div className="text-center text-stone-300 text-[10px] py-4">
-                    &copy; {new Date().getFullYear()} Famous Gate Hotel<br />Security & Verification System
+                    &copy; {new Date().getFullYear()} Kyogong<br />Security & Verification System
                 </div>
             </div>
         </div>

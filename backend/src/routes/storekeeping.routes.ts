@@ -260,13 +260,16 @@ router.route('/vehicles/:id')
 // DRIVERS ROUTES
 // =====================================================
 
+const driverManagerRoles = [...managerRoles, UserRole.HR_MANAGER];
+const driverStaffRoles = [...staffRoles, UserRole.HR_MANAGER];
+
 router.route('/drivers')
-  .get(authorize(staffRoles), getDrivers)
-  .post(authorize(managerRoles), createDriver);
+  .get(authorize(driverStaffRoles), getDrivers)
+  .post(authorize(driverManagerRoles), createDriver);
 
 router.route('/drivers/:id')
-  .put(authorize(managerRoles), updateDriver)
-  .delete(authorize(managerRoles), deleteDriver);
+  .put(authorize(driverManagerRoles), updateDriver)
+  .delete(authorize(driverManagerRoles), deleteDriver);
 
 // =====================================================
 // SUPPLIERS ROUTES

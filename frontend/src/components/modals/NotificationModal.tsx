@@ -40,22 +40,15 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
   const loadNotifications = async () => {
     setIsLoading(true);
     try {
-      console.log('🔔 [Notifications] Fetching notifications for user:', {
-        userId: user?.id,
-        role: user?.role,
-        branchId: user?.branch_id,
-        branchName: user?.branch_name
-      });
-
       const response = await notificationsAPI.getNotifications();
 
-      console.log('🔔 [Notifications] API Response:', response);
+      // console.log('🔔 [Notifications] API Response:', response);
 
       if (response.success && response.data) {
-        console.log(`🔔 [Notifications] Loaded ${response.data.length} notifications`);
+        // console.log(`🔔 [Notifications] Loaded ${response.data.length} notifications`);
         setNotifications(response.data);
       } else {
-        console.warn('🔔 [Notifications] No data in response:', response);
+        // console.warn('🔔 [Notifications] No data in response:', response);
         setNotifications([]);
       }
     } catch (error) {
@@ -85,9 +78,12 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
   const markAsRead = async (id: number) => {
     try {
       await notificationsAPI.markAsRead(id);
+      // Immediately update local state
       setNotifications(prev =>
         prev.map(n => n.id === id ? { ...n, is_read: true, read_at: new Date().toISOString() } : n)
       );
+      // Reload to get fresh data from server
+      await loadNotifications();
     } catch (error) {
       console.error('Error marking notification as read:', error);
     }
@@ -97,10 +93,13 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
     try {
       const response = await notificationsAPI.markAllAsRead();
       if (response.success) {
+        // Immediately update local state
         setNotifications(prev =>
           prev.map(n => ({ ...n, is_read: true, read_at: new Date().toISOString() }))
         );
         toast.success(response.message || 'All notifications marked as read');
+        // Reload to get fresh data from server
+        await loadNotifications();
       }
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
@@ -112,9 +111,11 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
     try {
       const response = await notificationsAPI.clearMyNotifications();
       if (response.success) {
-        // Remove all read notifications from the list
+        // Remove all read notifications from the list immediately
         setNotifications(prev => prev.filter(n => !n.is_read));
         toast.success(response.message || 'All read notifications cleared');
+        // Reload to get fresh data from server
+        await loadNotifications();
       }
     } catch (error) {
       console.error('Error clearing notifications:', error);

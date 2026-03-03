@@ -1,5 +1,5 @@
 """
-Famous Gate Hotel - Accounting & Audit Routes
+Kyogong - Accounting & Audit Routes
 Handles journal entries, reviews, reconciliation, and audit trails
 """
 

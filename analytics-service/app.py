@@ -23,7 +23,7 @@ from reports.excel_exporter import ExcelExporter
 
 app = FastAPI(
     title="Restaurant Analytics Service",
-    description="Advanced analytics and reporting for Famous Gate Hotel Restaurant",
+    description="Advanced analytics and reporting for Kyogong Restaurant",
     version="1.0.0"
 )
 

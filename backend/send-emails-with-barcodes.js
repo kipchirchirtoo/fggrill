@@ -122,12 +122,12 @@ async function sendBookingEmails() {
       const mailOptions = {
         from: `${process.env.SMTP_FROM_NAME} <${process.env.SMTP_FROM_EMAIL}>`,
         to: guest.email,
-        subject: 'Booking Confirmation - Famous Gate Hotel',
+        subject: 'Booking Confirmation - Kyogong',
         html: emailHtml,
         attachments: barcodeBase64 ? [{
           filename: 'barcode.png',
           content: Buffer.from(barcodeBase64, 'base64'),
-          cid: 'barcode@famousgatehotel',
+          cid: 'barcode@kyogong',
           contentType: 'image/png'
         }] : []
       };

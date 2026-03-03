@@ -44,13 +44,13 @@ export async function fetchWithBranchContext<T>(
 
     // Always ensure branchId is a number before using it
     if (branchId && typeof branchId === 'number' && !isNaN(branchId) && !multiBranch) {
-      console.log(`Using branch ID: ${branchId}`);
+      // console.log(`Using branch ID: ${branchId}`);
     } else if (!multiBranch) {
-      console.warn('No valid branch ID available for API request');
+      // console.warn('No valid branch ID available for API request');
       branchId = null;
     } else {
       // In multi-branch mode, we don't need a specific branch ID
-      console.log('Using multi-branch mode for central operations');
+      // console.log('Using multi-branch mode for central operations');
       branchId = null;
     }
 
@@ -59,7 +59,7 @@ export async function fetchWithBranchContext<T>(
         // If this is a retry, wait with exponential backoff
         if (retries > 0) {
           const delay = getBackoffDelay(retries - 1);
-          console.log(`Retry attempt ${retries} for ${endpoint} after ${delay}ms`);
+          // console.log(`Retry attempt ${retries} for ${endpoint} after ${delay}ms`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
 
@@ -111,7 +111,7 @@ export async function fetchWithBranchContext<T>(
           break; // Don't retry client errors or other issues
         }
 
-        console.warn(`Branch API request failed (attempt ${retries + 1}/${MAX_RETRIES + 1}):`, error);
+        // console.warn(`Branch API request failed (attempt ${retries + 1}/${MAX_RETRIES + 1}):`, error);
         retries++;
       }
     }
@@ -509,6 +509,44 @@ export const branchOperationsAPI = {
   rejectExpense: (expenseId: string, branchId?: number) =>
     fetchWithBranchContext<any>(`/api/branch-operations/finances/expenses/${expenseId}/reject`, {
       method: 'PUT'
+    }, branchId),
+
+  // Statutory Deductions (Manual entry)
+  getStatutoryDeductions: (params: { staffId?: string; month: number; year: number }, branchId?: number) => {
+    const query = new URLSearchParams();
+    if (params.staffId) query.append('staffId', params.staffId);
+    query.append('month', params.month.toString());
+    query.append('year', params.year.toString());
+    return fetchWithBranchContext<any>(`/api/payroll-statutory?${query}`, {}, branchId);
+  },
+
+  saveStatutoryDeductions: (data: any, branchId?: number) =>
+    fetchWithBranchContext<any>('/api/payroll-statutory/monthly', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }, branchId),
+
+  getStaffPerformance: (params: { month: number; year: number }, branchId?: number | null) => {
+    const isMultiBranch = branchId === undefined || branchId === null;
+    return fetchWithBranchContext<any>(
+      `/api/performance/staff-metrics?month=${params.month}&year=${params.year}`,
+      { method: 'GET' },
+      branchId,
+      isMultiBranch
+    );
+  },
+
+  getPayrollAdjustments: (params: any, branchId?: number) => {
+    const qs = new URLSearchParams(params).toString();
+    return fetchWithBranchContext<any>(`/api/payroll-adjustments?${qs}`, {
+      method: 'GET'
+    }, branchId);
+  },
+
+  createPayrollAdjustment: (data: any, branchId?: number) =>
+    fetchWithBranchContext<any>('/api/payroll-adjustments', {
+      method: 'POST',
+      body: JSON.stringify(data)
     }, branchId),
 };
 

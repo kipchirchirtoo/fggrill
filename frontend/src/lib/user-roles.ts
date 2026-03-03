@@ -1,4 +1,4 @@
-// User roles for Famous Gate Hotel
+// User roles for Kyogong
 // NOTE: This file must NOT have 'use client' — keeping the enum here
 // prevents Next.js RSC bundler from registering each member as a separate
 // client module (which causes "Could not find the module" manifest errors).

@@ -22,7 +22,7 @@ async function createKitchenUser() {
     
     // Create user in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: 'kitchen@famousgate.com',
+      email: 'kitchen@kyogong.com',
       password: 'Allan@13900',
       email_confirm: true,
       user_metadata: {
@@ -44,7 +44,7 @@ async function createKitchenUser() {
       .insert([
         {
           id: authData.user.id,
-          email: 'kitchen@famousgate.com',
+          email: 'kitchen@kyogong.com',
           first_name: 'Kitchen',
           last_name: 'Staff',
           role: 'kitchen',
@@ -65,7 +65,7 @@ async function createKitchenUser() {
 
     console.log('✓ User profile created');
     console.log('\n=== Kitchen User Created Successfully ===');
-    console.log('Email: kitchen@famousgate.com');
+    console.log('Email: kitchen@kyogong.com');
     console.log('Password: Allan@13900');
     console.log('Role: kitchen');
     console.log('Branch ID: 1');

@@ -188,7 +188,7 @@ export default function GuestPortal() {
               <Home className="h-10 w-10 text-gray-800" />
             </div>
             <h1 className="text-3xl font-bold text-white mb-2">Guest Portal</h1>
-            <p className="text-gray-400">Famous Gate Hotel & Lounge</p>
+            <p className="text-gray-400">Kyogong & Lounge</p>
           </div>
 
           <IOSCard className="p-6">
@@ -345,7 +345,7 @@ export default function GuestPortal() {
             </div>
             <div className="flex items-center gap-3 text-sm">
               <Wifi className="h-4 w-4 text-gray-400" />
-              <span>WiFi: FamousGate_Guest</span>
+              <span>WiFi: kyogong_Guest</span>
             </div>
             <div className="flex items-center gap-3 text-sm">
               <UtensilsCrossed className="h-4 w-4 text-gray-400" />

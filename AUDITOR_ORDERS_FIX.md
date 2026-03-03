@@ -102,7 +102,7 @@ Fixed the Eye icon (view option) and PDF Archive button on the auditor orders pa
    - Auditor name field
 
 **Features**:
-- Professional formatting with Famous Gate branding
+- Professional formatting with Kyogong branding
 - Color-coded tables (Blue, Green headers)
 - Status indicators (✓ verified, ⚠ warnings)
 - Proper date formatting

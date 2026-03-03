@@ -1,5 +1,5 @@
 """
-Famous Gate Hotel - Budget Analytics Module
+Kyogong - Budget Analytics Module
 Advanced budget analytics and forecasting for the branch operations module
 """
 

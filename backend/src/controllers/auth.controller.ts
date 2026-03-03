@@ -142,49 +142,37 @@ export const login = async (
       return;
     }
 
-    // Fallback: Direct database authentication
-    logger.info(`Supabase Auth failed for ${email}, trying direct DB auth`);
+    // Fallback: Direct database authentication using Supabase client
+    logger.info(`Supabase Auth failed for ${email}, trying direct DB auth via Supabase client`);
 
     let storedHash: string | null = null;
     let userId: string | null = null;
     let userProfile: any = null;
 
     try {
-      // Use direct PostgreSQL connection with timeout settings
-      const { Pool } = require('pg');
-      const pool = new Pool({
-        connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false },
-        connectionTimeoutMillis: 10000,
-        query_timeout: 10000,
-        max: 1
-      });
+      // Get user profile with password_hash from users table using Supabase client
+      logger.info(`[AUTH-DEBUG] Querying users table for email: ${email}`);
+      const { data: dbUser, error: dbError } = await supabase
+        .from('users')
+        .select('id, email, first_name, last_name, role, branch_id, status, password_hash')
+        .eq('email', email)
+        .single();
 
-      // Get user profile and auth data in one query
-      const result = await pool.query(
-        `SELECT 
-          u.id, u.email, u.first_name, u.last_name, u.role, u.branch_id,
-          au.encrypted_password
-        FROM public.users u
-        LEFT JOIN auth.users au ON u.id = au.id
-        WHERE u.email = $1`,
-        [email]
-      );
+      logger.info(`[AUTH-DEBUG] Query result - dbUser: ${dbUser ? 'FOUND' : 'NULL'}, error: ${dbError ? JSON.stringify(dbError) : 'NONE'}`);
 
-      await pool.end();
-
-      if (result.rows[0]) {
-        const row = result.rows[0];
-        userId = row.id;
-        storedHash = row.encrypted_password;
+      if (dbError || !dbUser) {
+        logger.warn(`User not found in users table: ${email} - Error: ${dbError ? JSON.stringify(dbError) : 'No error, but no data'}`);
+      } else {
+        userId = dbUser.id;
+        storedHash = dbUser.password_hash;
         userProfile = {
-          id: row.id,
-          email: row.email,
-          first_name: row.first_name,
-          last_name: row.last_name,
-          role: row.role,
-          branch_id: row.branch_id,
-          status: row.status
+          id: dbUser.id,
+          email: dbUser.email,
+          first_name: dbUser.first_name,
+          last_name: dbUser.last_name,
+          role: dbUser.role,
+          branch_id: dbUser.branch_id,
+          status: dbUser.status
         };
       }
     } catch (dbError) {
@@ -192,6 +180,7 @@ export const login = async (
     }
 
     if (!storedHash || !userId) {
+      logger.warn(`Login failed for ${email}: User found but no password hash in users table`);
       res.status(401).json({
         success: false,
         message: 'Invalid credentials'
@@ -203,6 +192,7 @@ export const login = async (
     const passwordMatch = await bcrypt.compare(password, storedHash);
 
     if (!passwordMatch) {
+      logger.warn(`Login failed: Password mismatch for ${email}`);
       res.status(401).json({
         success: false,
         message: 'Invalid credentials'
@@ -218,12 +208,12 @@ export const login = async (
       return;
     }
 
-    // Update last login using direct DB (avoid Supabase timeout)
+    // Update last login using Supabase client
     try {
-      await db.query(
-        'UPDATE public.users SET last_login = NOW() WHERE id = $1',
-        [userId]
-      );
+      await supabase
+        .from('users')
+        .update({ last_login: new Date().toISOString() })
+        .eq('id', userId);
     } catch (updateError) {
       logger.warn('Failed to update last login:', updateError);
     }
@@ -231,11 +221,10 @@ export const login = async (
     // Generate JWT token
     const jwtSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'fallback-secret-key';
 
-    logger.debug('Generating token for user login', {
+    logger.info('Generating local JWT token for user login fallback', {
       userId,
       email: userProfile.email,
-      hasSecret: !!jwtSecret,
-      secretLength: jwtSecret.length
+      secretSource: process.env.JWT_SECRET ? 'JWT_SECRET' : (process.env.SUPABASE_JWT_SECRET ? 'SUPABASE_JWT_SECRET' : 'fallback')
     });
 
     const accessToken = jwt.sign(
@@ -364,17 +353,18 @@ export const getMe = async (
       return;
     }
 
-    // Get full user profile from database with staff profile data
+    // Get user profile from database (without joins to avoid RLS/FK issues)
     const { data: profile, error: profileError } = await supabase
       .from('users')
-      .select(`
-        *,
-        staff_profile:staff_profiles(id_number)
-      `)
+      .select('*')
       .eq('id', req.user.id)
       .single();
 
     if (profileError || !profile) {
+      logger.error('getMe: User profile not found', {
+        userId: req.user.id,
+        error: profileError?.message || 'No profile data'
+      });
       res.status(404).json({
         success: false,
         message: 'User profile not found'
@@ -382,11 +372,26 @@ export const getMe = async (
       return;
     }
 
-    // Flatten staff_profile data
+    // Optionally fetch staff_profile data (non-blocking)
+    let idNumber = null;
+    try {
+      const { data: staffProfile } = await supabase
+        .from('staff_profiles')
+        .select('id_number')
+        .eq('user_id', req.user.id)
+        .maybeSingle();
+
+      if (staffProfile) {
+        idNumber = staffProfile.id_number;
+      }
+    } catch (staffErr) {
+      logger.warn('getMe: Failed to fetch staff_profile, continuing without it', staffErr);
+    }
+
+    // Build response
     const responseData = {
       ...profile,
-      id_number: profile.staff_profile?.[0]?.id_number || profile.staff_profile?.id_number || null,
-      staff_profile: undefined // Remove nested object
+      id_number: idNumber
     };
 
     res.status(200).json({

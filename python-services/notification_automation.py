@@ -1,5 +1,5 @@
 """
-Notification Automation Service for Famous Gate Hotel
+Notification Automation Service for Kyogong
 Monitors system events and generates automated notifications
 """
 
@@ -431,7 +431,7 @@ class NotificationAutomation:
 
 def main():
     """Main function to run the notification automation service"""
-    print("Starting Famous Gate Hotel Notification Automation Service")
+    print("Starting Kyogong Notification Automation Service")
     print(f"Environment: {os.getenv('NODE_ENV', 'development')}")
     print(f"Backend URL: {BACKEND_URL}")
     print("="*60)

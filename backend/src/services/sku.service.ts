@@ -1,5 +1,5 @@
 /**
- * FAMOUS GATE HOTEL - SKU & Order Number Generation Service
+ * Kyogong - SKU & Order Number Generation Service
  * 
  * SKU Format: FGH-[CATEGORY]-[PRODUCT]-[SERIAL]
  * Order Format: FGH-[TYPE]-YYYYMMDD-XXXX

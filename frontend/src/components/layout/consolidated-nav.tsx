@@ -653,6 +653,12 @@ export function ConsolidatedNav() {
           label="Staff Financials"
           active={pathname === '/dashboard/auditor/staff-audit'}
         />
+        <NavItem
+          href="/dashboard/hr/performance"
+          icon={Award}
+          label="Performance Leaderboard"
+          active={pathname === '/dashboard/hr/performance'}
+        />
       </NavGroup>
 
       <NavGroup label="Stock & Inventory" icon={Package}>
@@ -1089,6 +1095,12 @@ export function ConsolidatedNav() {
           label="Leave Requests"
           active={pathname === '/dashboard/gm/leave-requests'}
         />
+        <NavItem
+          href="/dashboard/hr/performance"
+          icon={Award}
+          label="Performance Leaderboard"
+          active={pathname === '/dashboard/hr/performance'}
+        />
       </NavGroup>
 
       <NavItem
@@ -1246,6 +1258,12 @@ export function ConsolidatedNav() {
           label="Leave Requests"
           active={pathname === '/dashboard/hr/leave'}
         />
+        <NavItem
+          href="/dashboard/hr/performance"
+          icon={Award}
+          label="Performance Leaderboard"
+          active={pathname === '/dashboard/hr/performance'}
+        />
       </NavGroup>
 
       <NavGroup label="Payroll" icon={DollarSign}>
@@ -1260,6 +1278,12 @@ export function ConsolidatedNav() {
           icon={DollarSign}
           label="Payroll Processing"
           active={pathname === '/dashboard/hr/payroll'}
+        />
+        <NavItem
+          href="/dashboard/hr/adjustments"
+          icon={ArrowDownUp}
+          label="Adjustments"
+          active={pathname === '/dashboard/hr/adjustments'}
         />
       </NavGroup>
     </>

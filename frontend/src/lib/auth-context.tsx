@@ -75,22 +75,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const token = localStorage.getItem('token');
       const cachedUser = localStorage.getItem('user');
 
-      console.log('[Auth V3] checkAuth - token:', token ? 'EXISTS' : 'NONE');
-      console.log('[Auth V3] cachedUser:', cachedUser ? 'EXISTS' : 'NONE');
-
       if (token) {
         if (cachedUser) {
           try {
             const parsedUser = JSON.parse(cachedUser);
-            console.log('[Auth V3] Setting user from cache:', (parsedUser.firstName || parsedUser.first_name), parsedUser.role);
             setUser(parsedUser);
           } catch (e) {
-            console.error('[Auth V3] Failed to parse cached user:', e);
+            // cached user parse failed, will re-fetch
           }
         }
 
         if (token === 'offline-bridge-token') {
-          console.log('[Auth V3] Offline bridge token detected');
           setIsLoading(false);
           return;
         }
@@ -130,7 +125,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             localStorage.removeItem('user');
             setUser(null);
           }
-          console.warn('[Auth V3] Auth check failed, using cached session:', error.message);
         }
       } else {
         setUser(null);
@@ -336,21 +330,10 @@ export function hasPermission(user: User | null, permission: string): boolean {
 }
 
 export function hasRole(user: User | null, roles: UserRole[]): boolean {
-  if (!user) {
-    console.log('[hasRole V3] NO USER');
-    return false;
-  }
+  if (!user) return false;
 
   const userRole = (user.role as string).toLowerCase().trim();
   const normalizedRoles = roles.map(r => (r as string).toLowerCase().trim());
 
-  const result = normalizedRoles.includes(userRole);
-
-  if (!result) {
-    console.error('[hasRole V3] FAILED - User Role:', `"${userRole}"`, 'Allowed Roles:', normalizedRoles);
-  } else {
-    console.log('[hasRole V3] SUCCESS - User Role:', `"${userRole}"`, 'matches one of:', normalizedRoles);
-  }
-
-  return result;
+  return normalizedRoles.includes(userRole);
 }

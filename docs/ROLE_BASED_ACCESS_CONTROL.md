@@ -1,7 +1,7 @@
-# Famous Gate Hotel - Role-Based Access Control (RBAC) Analysis
+# Kyogong - Role-Based Access Control (RBAC) Analysis
 
 ## Overview
-This document analyzes and recommends role-based access control for the Famous Gate Hotel ERP system based on industry best practices and hotel management standards.
+This document analyzes and recommends role-based access control for the Kyogong ERP system based on industry best practices and hotel management standards.
 
 ---
 

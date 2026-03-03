@@ -4,7 +4,7 @@
 
 ## 🌟 Overview
 
-The Kyogong Shift-Based POS System is a production-ready solution designed specifically for Famous Gates Hotels - Kyogong Branch. It provides:
+The Kyogong Shift-Based POS System is a production-ready solution designed specifically for Kyogongs - Kyogong Branch. It provides:
 
 - **4 Specialized Sales Points**: SPA, Executive Bar, Sports Bar, and Reception
 - **Shift Management**: Complete lifecycle from open to close with reconciliation
@@ -349,7 +349,7 @@ For questions or issues:
 
 ## 📝 License
 
-Proprietary - Famous Gates Hotels
+Proprietary - Kyogongs
 
 ## 👥 Contributors
 
@@ -369,7 +369,7 @@ Proprietary - Famous Gates Hotels
 
 ---
 
-**Built with ❤️ for Famous Gates Hotels - Kyogong Branch**
+**Built with ❤️ for Kyogongs - Kyogong Branch**
 
 **Last Updated**: February 19, 2026  
 **Version**: 1.0.0 (Phase 1 Complete)  

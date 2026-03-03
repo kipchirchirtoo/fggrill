@@ -78,7 +78,7 @@ initializeApp().then(({ app, httpServer }) => {
         'http://localhost:3001',
         'http://127.0.0.1:3000',
         'http://127.0.0.1:3001',
-        'https://famousgate.hirall.com',
+        'https://kyogong.hirall.com',
         'https://api.hirall.com',
         'https://services.hirall.com'
       ];

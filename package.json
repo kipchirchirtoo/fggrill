@@ -3,9 +3,9 @@
   "version": "1.0.29",
   "author": {
     "name": "HIRALL",
-    "email": "info@famousgate.com"
+    "email": "info@kyogong.com"
   },
-  "description": "Famous Gate Hotel Management System",
+  "description": "Kyogong Management System",
   "main": "electron/main.js",
   "repository": {
     "type": "git",

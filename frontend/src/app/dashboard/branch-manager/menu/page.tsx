@@ -90,11 +90,11 @@ export default function BranchManagerMenuPage() {
         systemAPI.getBranches(),
       ]);
 
-      console.log('API Response Debug:', {
-        itemsRes,
-        currentBranchId,
-        itemsData: itemsRes.data
-      });
+      // console.log('API Response Debug:', {
+//         itemsRes,
+//         currentBranchId,
+//         itemsData: itemsRes.data
+//       });
 
       if (itemsRes.success) setItems(itemsRes.data || []);
       if (categoriesRes.success) setCategories(categoriesRes.data || []);
@@ -118,13 +118,13 @@ export default function BranchManagerMenuPage() {
   });
 
   // Debug logging
-  console.log('Debug Menu Items:', {
-    totalItems: items.length,
-    filteredItems: filteredItems.length,
-    items: items,
-    branchFilter,
-    currentBranchId: activeBranchId || user?.branch_id
-  });
+  // console.log('Debug Menu Items:', {
+//     totalItems: items.length,
+//     filteredItems: filteredItems.length,
+//     items: items,
+//     branchFilter,
+//     currentBranchId: activeBranchId || user?.branch_id
+//   });
 
   // Image handling
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -62,13 +62,13 @@ export const generatePurchaseOrderPDF = async (po: PurchaseOrderData) => {
     doc.setFontSize(10);
     doc.setTextColor(100);
     cursorY += 15;
-    doc.text(po.branch?.name || 'FAMOUS GATE GRILL & LOUNGE', 190, cursorY, { align: 'right' });
+    doc.text(po.branch?.name || 'Kyogong GRILL & LOUNGE', 190, cursorY, { align: 'right' });
     cursorY += 5;
     doc.text(po.branch?.address || 'Bomet, Kenya', 190, cursorY, { align: 'right' });
     cursorY += 5;
     doc.text(po.branch?.phone || '0706782828', 190, cursorY, { align: 'right' });
     cursorY += 5;
-    doc.text(po.branch?.email || 'famousgatesbmt@gmail.com', 190, cursorY, { align: 'right' });
+    doc.text(po.branch?.email || 'kyogongsbmt@gmail.com', 190, cursorY, { align: 'right' });
 
     cursorY = 60;
     doc.setDrawColor(200);
@@ -179,7 +179,7 @@ export const generatePurchaseOrderPDF = async (po: PurchaseOrderData) => {
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(150);
-        doc.text('Famous Gate Grill & Lounge - Procurement System', 105, 285, { align: 'center' });
+        doc.text('Kyogong Grill & Lounge - Procurement System', 105, 285, { align: 'center' });
         doc.text(`Page ${i} of ${pageCount}`, 190, 285, { align: 'right' });
     }
 

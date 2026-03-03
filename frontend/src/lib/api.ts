@@ -1,5 +1,5 @@
 /**
- * Unified API Service for Famous Gate Hotel Management System
+ * Unified API Service for Kyogong Management System
  * All API calls should go through this service for consistency
  */
 
@@ -37,7 +37,7 @@ async function fetchAPI<T>(endpoint: string, options?: FetchOptions): Promise<T>
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('token');
     if (token === 'offline-bridge-token') {
-      console.log('[API] Offline mode detected, skipping API call:', endpoint);
+      // console.log('[API] Offline mode detected, skipping API call:', endpoint);
       // Return empty success response for offline mode
       return {
         success: true,
@@ -52,7 +52,7 @@ async function fetchAPI<T>(endpoint: string, options?: FetchOptions): Promise<T>
       // If this is a retry, wait with exponential backoff
       if (retries > 0) {
         const delay = getBackoffDelay(retries - 1);
-        console.log(`Retry attempt ${retries} for ${endpoint} after ${delay}ms`);
+        // console.log(`Retry attempt ${retries} for ${endpoint} after ${delay}ms`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
 
@@ -87,7 +87,7 @@ async function fetchAPI<T>(endpoint: string, options?: FetchOptions): Promise<T>
 
           return result as T;
         } catch (proxyError) {
-          console.warn('C# Proxy request failed, falling back to direct fetch:', proxyError);
+          // console.warn('C# Proxy request failed, falling back to direct fetch:', proxyError);
           // Fall through to traditional fetch if proxy fails
         }
       }
@@ -108,7 +108,7 @@ async function fetchAPI<T>(endpoint: string, options?: FetchOptions): Promise<T>
       if (!response.ok) {
         // Handle 401 Unauthorized - log but don't auto-redirect to prevent loops
         if (response.status === 401) {
-          console.warn('401 Unauthorized - token may be invalid');
+          // console.warn('401 Unauthorized - token may be invalid');
           if (typeof window !== 'undefined') {
             localStorage.removeItem('token');
             localStorage.removeItem('user');
@@ -150,7 +150,7 @@ async function fetchAPI<T>(endpoint: string, options?: FetchOptions): Promise<T>
         break; // Don't retry client errors, token issues, or other problems
       }
 
-      console.warn(`API request failed (attempt ${retries + 1}/${MAX_RETRIES + 1}):`, error);
+      // console.warn(`API request failed (attempt ${retries + 1}/${MAX_RETRIES + 1}):`, error);
       retries++;
     }
   }
@@ -174,7 +174,7 @@ async function fetchPythonAPI<T>(endpoint: string, options?: FetchOptions): Prom
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('token');
     if (token === 'offline-bridge-token') {
-      console.log('[Python API] Offline mode detected, skipping Python API call:', endpoint);
+      // console.log('[Python API] Offline mode detected, skipping Python API call:', endpoint);
       // Return empty success response for offline mode
       return {
         success: false,
@@ -219,7 +219,7 @@ async function fetchPythonAPI<T>(endpoint: string, options?: FetchOptions): Prom
 
           return result as T;
         } catch (proxyError) {
-          console.warn('C# Proxy request failed for Python API:', proxyError);
+          // console.warn('C# Proxy request failed for Python API:', proxyError);
         }
       }
 
@@ -720,11 +720,11 @@ export const systemAPI = {
       try {
         const branches = await (window as any).electronAPI.db.get('branches');
         if (branches && branches.length > 0) {
-          console.log('Branches: Loaded from local SQLite');
+          // console.log('Branches: Loaded from local SQLite');
           return { success: true, data: branches };
         }
       } catch (e) {
-        console.warn('Failed to load branches from local DB, falling back to API', e);
+        // console.warn('Failed to load branches from local DB, falling back to API', e);
       }
     }
     return fetchAPI<any>('/system/branches');
@@ -736,6 +736,7 @@ export const systemAPI = {
   createDepartment: (data: any) => fetchAPI<any>('/system/departments', { method: 'POST', body: JSON.stringify(data) }),
   updateDepartment: (id: string, data: any) => fetchAPI<any>(`/system/departments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteDepartment: (id: string) => fetchAPI<any>(`/system/departments/${id}`, { method: 'DELETE' }),
+  getSystemUsers: () => fetchAPI<any>('/system/users'),
   getRoles: () => fetchAPI<any>('/system/roles'),
 };
 
@@ -778,14 +779,14 @@ export const staffAPI = {
               return r;
             }
           });
-          console.log(`Staff: Loaded ${staff.length} from local SQLite`);
+          // console.log(`Staff: Loaded ${staff.length} from local SQLite`);
           return {
             success: true,
             data: staff
           };
         }
       } catch (e) {
-        console.warn('Native Bridge getStaff failed', e);
+        // console.warn('Native Bridge getStaff failed', e);
       }
     }
 
@@ -1220,13 +1221,15 @@ export const guestAPI = {
     if (checkedInOnly) query.append('checked_in_only', 'true');
     const queryString = query.toString() ? `?${query.toString()}` : '';
     return fetchAPI<any>(`/guests${queryString}`).then(response => {
-      console.log('Guest API response:', response);
+      // console.log('Guest API response:', response);
       // Transform response to match frontend expected format
       if (response.success && Array.isArray(response.data)) {
         response.data = response.data.map((guest: any) => ({
           id: guest.id,
           firstName: guest.firstName,
           lastName: guest.lastName,
+          first_name: guest.firstName, // Alias for compatibility
+          last_name: guest.lastName,   // Alias for compatibility
           email: guest.email,
           phone: guest.phone,
           idType: guest.idType,
@@ -1255,6 +1258,8 @@ export const guestAPI = {
         id: guest.id,
         firstName: guest.firstName,
         lastName: guest.lastName,
+        first_name: guest.firstName, // Alias for compatibility
+        last_name: guest.lastName,   // Alias for compatibility
         email: guest.email,
         phone: guest.phone,
         idType: guest.idType,
@@ -1277,8 +1282,8 @@ export const guestAPI = {
   createGuest: (data: any) => {
     // Transform frontend format to backend expected format
     const backendData = {
-      firstName: data.first_name,
-      lastName: data.last_name,
+      firstName: data.firstName || data.first_name,
+      lastName: data.lastName || data.last_name,
       email: data.email,
       phone: data.phone,
       idType: data.id_type,
@@ -1296,8 +1301,8 @@ export const guestAPI = {
   updateGuest: (id: string, data: any) => {
     // Transform frontend format to backend expected format
     const backendData = {
-      firstName: data.first_name,
-      lastName: data.last_name,
+      firstName: data.firstName || data.first_name,
+      lastName: data.lastName || data.last_name,
       email: data.email,
       phone: data.phone,
       idType: data.id_type,
@@ -1396,6 +1401,8 @@ export const bookingsAPI = {
 
           return {
             id: booking.id,
+            confirmation_number: booking.confirmation_number || booking.booking_number,
+            booking_number: booking.booking_number || booking.confirmation_number,
             guest_id: booking.guest_id,
             guest_name: booking.guest_name || `${guestInfo.first_name || ''} ${guestInfo.last_name || ''}`.trim(),
             guest_phone: booking.guest_phone || guestInfo.phone,
@@ -1434,6 +1441,8 @@ export const bookingsAPI = {
 
       response.data = {
         id: booking.id,
+        confirmation_number: booking.confirmation_number || booking.booking_number,
+        booking_number: booking.booking_number || booking.confirmation_number,
         guest_id: booking.guest_id,
         guest_name: booking.guest_name || `${guestInfo.first_name || ''} ${guestInfo.last_name || ''}`.trim(),
         room_id: booking.room_id,
@@ -1463,6 +1472,7 @@ export const bookingsAPI = {
     // Map frontend field names to backend expected names
     const backendData: Record<string, any> = {
       room_id: data.room_id || data.roomId,
+      roomTypeId: data.roomTypeId || data.room_type_id,
       guest_id: data.guest_id || data.guestId,
       rate_plan_id: data.rate_plan_id || data.ratePlanId,
       checkInDate: data.check_in || data.check_in_date || data.checkInDate,
@@ -2245,7 +2255,7 @@ export const restaurantAPI = {
           localStorage.getItem('token') || ''
         );
 
-        console.log(`[Order] Created offline order: ${orderNumber}`);
+        // console.log(`[Order] Created offline order: ${orderNumber}`);
 
         // Return success response matching API format
         return {
@@ -2299,7 +2309,7 @@ export const restaurantAPI = {
             return orderDate === today;
           });
 
-          console.log(`[Restaurant Orders] Loaded ${todayOrders.length} today's orders from local SQLite`);
+          // console.log(`[Restaurant Orders] Loaded ${todayOrders.length} today's orders from local SQLite`);
 
           // Fetch items for each order
           const ordersWithItems = await Promise.all(todayOrders.map(async (order: any) => {
@@ -2325,7 +2335,7 @@ export const restaurantAPI = {
           };
         }
       } catch (e) {
-        console.warn('[Restaurant Orders] Native Bridge getTodayOrders failed', e);
+        // console.warn('[Restaurant Orders] Native Bridge getTodayOrders failed', e);
       }
     }
 
@@ -2345,24 +2355,24 @@ export const restaurantAPI = {
         const fromDate = filters?.from_date || today;
         const toDate = filters?.to_date || today;
 
-        console.log(`[Restaurant Orders] Fetching from cache: user=${userId}, branch=${branchId}, from=${fromDate}, to=${toDate}`);
+        // console.log(`[Restaurant Orders] Fetching from cache: user=${userId}, branch=${branchId}, from=${fromDate}, to=${toDate}`);
 
         const orders = await (window as any).electronAPI.invoke('cache:getOrders', userId, branchId, fromDate, toDate);
 
         if (orders && Array.isArray(orders)) {
-          console.log(`[Restaurant Orders] Loaded ${orders.length} orders from cache`);
+          // console.log(`[Restaurant Orders] Loaded ${orders.length} orders from cache`);
 
           // Apply status filter if provided
           let filteredOrders = orders;
           if (filters?.status) {
             filteredOrders = orders.filter((order: any) => order.status === filters.status);
-            console.log(`[Restaurant Orders] Filtered to ${filteredOrders.length} orders with status=${filters.status}`);
+            // console.log(`[Restaurant Orders] Filtered to ${filteredOrders.length} orders with status=${filters.status}`);
           }
 
           // Apply waiter filter if provided
           if (filters?.waiter_id) {
             filteredOrders = filteredOrders.filter((order: any) => order.waiter_id === filters.waiter_id);
-            console.log(`[Restaurant Orders] Filtered to ${filteredOrders.length} orders for waiter=${filters.waiter_id}`);
+            // console.log(`[Restaurant Orders] Filtered to ${filteredOrders.length} orders for waiter=${filters.waiter_id}`);
           }
 
           return {
@@ -2371,7 +2381,7 @@ export const restaurantAPI = {
           };
         }
       } catch (e) {
-        console.warn('Native Bridge getMyOrders failed', e);
+        // console.warn('Native Bridge getMyOrders failed', e);
       }
     }
 
@@ -2395,31 +2405,36 @@ export const restaurantAPI = {
   },
 
   // Menu Categories
-  getCategories: async () => {
+  getCategories: async (branchId?: number, bypassCache: boolean = false) => {
     // Intercept for C# Desktop App - OFFLINE FIRST
-    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+    if (!bypassCache && typeof window !== 'undefined' && (window as any).electronAPI) {
       try {
         // Use restaurant_menu_categories table request
         // Filter by is_active = 1 (true)
         const categories = await (window as any).electronAPI.db.get('restaurant_menu_categories', { is_active: 1 });
         if (categories) {
-          console.log(`Restaurant Categories: Loaded ${categories.length} via local SQLite`);
-          return { success: true, data: categories.sort((a: any, b: any) => a.sort_order - b.sort_order) };
+          // Branch filter: include categories for this branch OR with null branch_id
+          const filteredCategories = categories.filter((cat: any) =>
+            !branchId || cat.branch_id === branchId || cat.branch_id === null
+          );
+          // console.log(`Restaurant Categories: Loaded ${filteredCategories.length} via local SQLite`);
+          return { success: true, data: filteredCategories.sort((a: any, b: any) => a.sort_order - b.sort_order) };
         }
       } catch (e) {
-        console.warn('Native Bridge getCategories failed', e);
+        // console.warn('Native Bridge getCategories failed', e);
       }
     }
-    return fetchAPI<any>('/restaurant/menu/categories');
+    const query = branchId ? `?branch_id=${branchId}` : '';
+    return fetchAPI<any>(`/restaurant/menu/categories${query}`);
   },
   createCategory: (data: any) => fetchAPI<any>('/restaurant/menu/categories', { method: 'POST', body: JSON.stringify(data) }),
   updateCategory: (id: string, data: any) => fetchAPI<any>(`/restaurant/menu/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteCategory: (id: string) => fetchAPI<any>(`/restaurant/menu/categories/${id}`, { method: 'DELETE' }),
 
   // Menu Items
-  getMenuItems: async (categoryId?: string, branchId?: number, onlyAvailable: boolean = false) => {
+  getMenuItems: async (categoryId?: string, branchId?: number, onlyAvailable: boolean = false, bypassCache: boolean = false) => {
     // Intercept for C# Desktop App - OFFLINE FIRST
-    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+    if (!bypassCache && typeof window !== 'undefined' && (window as any).electronAPI) {
       try {
         // For menu items, we need to get items for the specific branch OR items with null branch_id (available to all)
         // Since db.get doesn't support OR queries, we'll fetch all items and filter in JS
@@ -2428,8 +2443,8 @@ export const restaurantAPI = {
           (window as any).electronAPI.db.get('restaurant_menu_categories', {})
         ]);
 
-        console.log(`[Menu Debug] Total items in cache: ${allItems?.length || 0}`);
-        console.log(`[Menu Debug] Filter params - branchId: ${branchId}, categoryId: ${categoryId}, onlyAvailable: ${onlyAvailable}`);
+        // console.log(`[Menu Debug] Total items in cache: ${allItems?.length || 0}`);
+        // console.log(`[Menu Debug] Filter params - branchId: ${branchId}, categoryId: ${categoryId}, onlyAvailable: ${onlyAvailable}`);
 
         if (allItems) {
           // Filter items based on criteria
@@ -2446,8 +2461,8 @@ export const restaurantAPI = {
             return matchesBranch && matchesCategory && matchesAvailability;
           });
 
-          console.log(`[Menu Debug] After filtering: ${filteredItems.length} items`);
-          console.log(`[Menu Debug] Sample item:`, filteredItems[0]);
+          // console.log(`[Menu Debug] After filtering: ${filteredItems.length} items`);
+          // console.log(`[Menu Debug] Sample item:`, filteredItems[0]);
 
           // Client-side join for category name
           const catMap = new Map(categories?.map((c: any) => [c.id, c]) || []);
@@ -2460,13 +2475,13 @@ export const restaurantAPI = {
             category: catMap.get(item.category_id) || { name: 'Unknown' }
           }));
 
-          console.log(`Restaurant Menu Items: Loaded ${enrichedItems.length} items from local cache (branch: ${branchId || 'all'})`);
+          // console.log(`Restaurant Menu Items: Loaded ${enrichedItems.length} items from local cache (branch: ${branchId || 'all'})`);
           return { success: true, data: enrichedItems };
         } else {
-          console.warn('[Menu Debug] allItems is null or undefined');
+          // console.warn('[Menu Debug] allItems is null or undefined');
         }
       } catch (e) {
-        console.warn('Native Bridge getMenuItems failed', e);
+        // console.warn('Native Bridge getMenuItems failed', e);
       }
     }
 
@@ -2503,11 +2518,11 @@ export const restaurantAPI = {
         if (branchId) query.branch_id = branchId;
         const tables = await (window as any).electronAPI.db.get('restaurant_tables', query);
         if (tables && tables.length > 0) {
-          console.log('Restaurant Tables: Loaded via local SQLite');
+          // console.log('Restaurant Tables: Loaded via local SQLite');
           return { success: true, data: tables };
         }
       } catch (e) {
-        console.warn('Native Bridge getTables failed', e);
+        // console.warn('Native Bridge getTables failed', e);
       }
     }
     const query = branchId ? `?branch_id=${branchId}` : '';
@@ -2529,7 +2544,7 @@ export const restaurantAPI = {
     // In offline mode (Electron), skip Python API and return success
     // The frontend will handle printing/display locally
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
-      console.log('[Bill] Offline mode - skipping Python API for bill generation');
+      // console.log('[Bill] Offline mode - skipping Python API for bill generation');
 
       // Return a mock success response
       // The frontend can handle the receipt data directly
@@ -2791,14 +2806,14 @@ export const barAPI = {
             result = result.filter((o: any) => new Date(o.created_at).getTime() <= to);
           }
 
-          console.log(`Bar Orders: Loaded ${result.length} from local SQLite`);
+          // console.log(`Bar Orders: Loaded ${result.length} from local SQLite`);
           return {
             success: true,
             data: result
           };
         }
       } catch (e) {
-        console.warn('Native Bridge getOrders (bar) failed', e);
+        // console.warn('Native Bridge getOrders (bar) failed', e);
       }
     }
 
@@ -2841,29 +2856,34 @@ export const barAPI = {
   },
 
   // Drink Categories
-  getCategories: async () => {
+  getCategories: async (branchId?: number, bypassCache: boolean = false) => {
     // Intercept for C# Desktop App - OFFLINE FIRST
-    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+    if (!bypassCache && typeof window !== 'undefined' && (window as any).electronAPI) {
       try {
         const categories = await (window as any).electronAPI.db.get('restaurant_menu_categories', { is_active: 1, is_bar: 1 });
         if (categories) {
-          console.log(`Bar Categories: Loaded ${categories.length} via local SQLite`);
-          return { success: true, data: categories.sort((a: any, b: any) => a.sort_order - b.sort_order) };
+          // Branch filter: include categories for this branch OR with null branch_id
+          const filteredCategories = categories.filter((cat: any) =>
+            !branchId || cat.branch_id === branchId || cat.branch_id === null
+          );
+          // console.log(`Bar Categories: Loaded ${filteredCategories.length} via local SQLite`);
+          return { success: true, data: filteredCategories.sort((a: any, b: any) => a.sort_order - b.sort_order) };
         }
       } catch (e) {
-        console.warn('Native Bridge getCategories (bar) failed', e);
+        // console.warn('Native Bridge getCategories (bar) failed', e);
       }
     }
-    return fetchAPI<any>('/bar/categories');
+    const query = branchId ? `?branch_id=${branchId}` : '';
+    return fetchAPI<any>(`/bar/categories${query}`);
   },
   createCategory: (data: any) => fetchAPI<any>('/bar/categories', { method: 'POST', body: JSON.stringify(data) }),
   updateCategory: (id: string, data: any) => fetchAPI<any>(`/bar/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteCategory: (id: string) => fetchAPI<any>(`/bar/categories/${id}`, { method: 'DELETE' }),
 
   // Drinks Menu
-  getDrinks: async (categoryId?: string) => {
+  getDrinks: async (categoryId?: string, branchId?: number, bypassCache: boolean = false) => {
     // Intercept for C# Desktop App - OFFLINE FIRST
-    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+    if (!bypassCache && typeof window !== 'undefined' && (window as any).electronAPI) {
       try {
         // Fetch all bar categories first to know what to filter by if no categoryId matches
         const barCategories = await (window as any).electronAPI.db.get('restaurant_menu_categories', { is_bar: 1 });
@@ -2881,7 +2901,13 @@ export const barAPI = {
 
         if (items) {
           // Filter out items that are not in bar categories (if fetching all)
-          const filteredItems = items.filter((item: any) => barCatIds.has(item.category_id));
+          // AND filter by branchId
+          const filteredItems = items.filter((item: any) => {
+            const matchesCat = barCatIds.has(item.category_id);
+            const matchesBranch = !branchId || item.branch_id === branchId || item.branch_id === null;
+            return matchesCat && matchesBranch;
+          });
+
           // Join category data
           const catMap = new Map(barCategories?.map((c: any) => [c.id, c]) || []);
 
@@ -2891,15 +2917,19 @@ export const barAPI = {
             category: catMap.get(item.category_id) || { name: 'Unknown' }
           }));
 
-          console.log(`Bar Drinks: Loaded ${enrichedItems.length} items via local SQLite`);
+          // console.log(`Bar Drinks: Loaded ${enrichedItems.length} items via local SQLite (branch: ${branchId || 'all'})`);
           return { success: true, data: enrichedItems };
         }
       } catch (e) {
-        console.warn('Native Bridge getDrinks failed', e);
+        // console.warn('Native Bridge getDrinks failed', e);
       }
     }
-    const query = categoryId ? `?category_id=${categoryId}` : '';
-    return fetchAPI<any>(`/bar/drinks${query}`);
+    const queryParams = new URLSearchParams();
+    if (categoryId) queryParams.append('category_id', categoryId);
+    if (branchId) queryParams.append('branch_id', String(branchId));
+
+    const qs = queryParams.toString();
+    return fetchAPI<any>(`/bar/drinks${qs ? `?${qs}` : ''}`);
   },
   getDrink: (id: string) => fetchAPI<any>(`/bar/drinks/${id}`),
   createDrink: (data: any) => fetchAPI<any>('/bar/drinks', { method: 'POST', body: JSON.stringify(data) }),
@@ -3822,8 +3852,8 @@ export const authAPI = {
         // 1. Try local offline verification first
         const userData = await (window as any).electronAPI.cache.verifyPin(pin);
         if (userData) {
-          console.log('POS Login: Successful via local SQLite');
-          console.log('POS Login: User data from cache:', userData);
+          // console.log('POS Login: Successful via local SQLite');
+          // console.log('POS Login: User data from cache:', userData);
 
           // Normalize user data to match backend API format (ensure both snake_case and camelCase exist)
           const normalizedUser = {
@@ -3838,7 +3868,7 @@ export const authAPI = {
             is_central: userData.is_central || false
           };
 
-          console.log('POS Login: Normalized user data:', normalizedUser);
+          // console.log('POS Login: Normalized user data:', normalizedUser);
 
           return {
             success: true,
@@ -3850,16 +3880,16 @@ export const authAPI = {
         }
 
         // 2. If not found locally, proxy the online request through C# to avoid CORS
-        console.log('POS Login: PIN not found locally, proxying to production via Native Bridge...');
+        // console.log('POS Login: PIN not found locally, proxying to production via Native Bridge...');
         const proxyResponse = await (window as any).electronAPI.invoke('auth:posLogin', { pin });
         if (proxyResponse && proxyResponse.success) {
-          console.log('POS Login: Successful via Native Bridge Proxy');
+          // console.log('POS Login: Successful via Native Bridge Proxy');
           return proxyResponse;
         } else if (proxyResponse) {
           return proxyResponse; // Return the error from the server
         }
       } catch (e) {
-        console.warn('Native Bridge posLogin proxy failed, falling back to direct fetch (may hit CORS)', e);
+        // console.warn('Native Bridge posLogin proxy failed, falling back to direct fetch (may hit CORS)', e);
       }
     }
     return fetchAPI<any>('/auth/pos-login', { method: 'POST', body: JSON.stringify({ pin }) });
@@ -3874,14 +3904,14 @@ export const authAPI = {
       try {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
-          console.log('getMe: Returning cached user for Desktop App');
+          // console.log('getMe: Returning cached user for Desktop App');
           return {
             success: true,
             data: JSON.parse(storedUser)
           };
         }
       } catch (e) {
-        console.warn('Native Bridge getMe fallback failed', e);
+        // console.warn('Native Bridge getMe fallback failed', e);
       }
     }
     return fetchAPI<any>('/auth/me');
@@ -3924,6 +3954,27 @@ export const payrollAPI = {
   // Workflow Actions
   review: (id: string) => fetchAPI<any>(`/payroll/${id}/review`, { method: 'PUT' }),
   approve: (id: string) => fetchAPI<any>(`/payroll/${id}/approve`, { method: 'PUT' }),
+
+  // Unified Adjustments (Deductions/Additions)
+  getAdjustments: (params?: { staff_id?: string; status?: string; type?: string; month?: string; year?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.staff_id) query.append('staff_id', params.staff_id);
+    if (params?.status) query.append('status', params.status);
+    if (params?.type) query.append('type', params.type);
+    if (params?.month) query.append('month', params.month);
+    if (params?.year) query.append('year', params.year);
+    return fetchAPI<any>(`/payroll-adjustments?${query}`);
+  },
+  createAdjustment: (data: {
+    staff_id: string;
+    type: 'deduction' | 'addition';
+    category: string;
+    amount: number;
+    description?: string;
+    month: string;
+    year: number
+  }) => fetchAPI<any>('/payroll-adjustments', { method: 'POST', body: JSON.stringify(data) }),
+  voidAdjustment: (id: string) => fetchAPI<any>(`/payroll-adjustments/${id}/void`, { method: 'PATCH' }),
 };
 
 // =====================================================

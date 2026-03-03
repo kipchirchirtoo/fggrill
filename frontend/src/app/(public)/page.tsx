@@ -250,7 +250,7 @@ export default function HomePage() {
   ];
 
   const branches = [
-    { name: 'Famous Gates Hotels (HQ)', location: 'Bomet, Kenya', phone: '0706 782 828' },
+    { name: 'Kyogong (HQ)', location: 'Bomet, Kenya', phone: '0706 782 828' },
     { name: 'Famous Gates Kericho', location: 'Kericho Town', phone: '+254 700 000 002' },
     { name: 'Famous Gates Kapsoit', location: 'Kapsoit Center', phone: '+254 700 000 003' },
     { name: 'Famous Gates Litein', location: 'Litein Town', phone: '+254 700 000 004' },
@@ -279,7 +279,7 @@ export default function HomePage() {
           <div className="flex items-center gap-3">
             <Image src="/fglogo.png" alt="Logo" width={48} height={48} className="object-contain" style={{ height: 'auto' }} priority />
             <div>
-              <span className="font-semibold text-stone-900 text-lg">FAMOUS GATES</span>
+              <span className="font-semibold text-stone-900 text-lg">Famous Gates Hotels</span>
               <span className="text-xs text-amber-600 block -mt-1 font-medium">SYSTEM</span>
             </div>
           </div>
@@ -321,7 +321,7 @@ export default function HomePage() {
               Welcome to
             </p>
             <h1 className="text-5xl md:text-7xl font-dm-serif text-white mb-4 tracking-tight">
-              FAMOUSGATES <span className="italic">HOTELS</span>
+              Famous Gates <span className="italic">HOTELS</span>
             </h1>
             <p className="text-xl text-white/80 max-w-xl mx-auto mb-8">
               Experience unmatched hospitality and comfort across our 6 branches in Kenya
@@ -597,9 +597,9 @@ export default function HomePage() {
                 </div>
                 <div className="p-6 bg-white rounded-xl border border-stone-200">
                   <h1 className="text-6xl md:text-8xl font-black text-stone-900 tracking-tighter leading-[0.9] uppercase mb-8">
-                    FAMOUS GATES <br />
+                    Famous Gates <br />
                     <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-600 to-orange-600">
-                      SYSTEM
+                      HOTELS
                     </span>
                   </h1>
                 </div>
@@ -615,7 +615,7 @@ export default function HomePage() {
               <div className="aspect-[4/5] rounded-2xl overflow-hidden shadow-2xl relative">
                 <Image
                   src={galleryImages[1].src}
-                  alt="About Famous Gate"
+                  alt="About Kyogong"
                   fill
                   className="object-cover"
                 />
@@ -729,7 +729,7 @@ export default function HomePage() {
                     Featured
                   </span>
                   <h3 className="text-3xl font-dm-serif text-white mb-2">{galleryImages[0].title}</h3>
-                  <p className="text-white/70 text-sm">Experience the beauty of Famous Gates Hotels</p>
+                  <p className="text-white/70 text-sm">Experience the beauty of Kyogongs</p>
                 </motion.div>
                 {/* Hover overlay */}
                 <div className="absolute inset-0 bg-amber-500/0 group-hover:bg-amber-500/10 transition-colors duration-500" />
@@ -948,7 +948,7 @@ export default function HomePage() {
             Ready for an <span className="italic text-amber-400">Unforgettable</span> Stay?
           </h2>
           <p className="text-stone-400 text-lg mb-8 max-w-2xl mx-auto">
-            Book now and experience the warmth of Kenyan hospitality at Famous Gates Hotels
+            Book now and experience the warmth of Kenyan hospitality at Kyogongs
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <button
@@ -975,7 +975,7 @@ export default function HomePage() {
             <div className="flex flex-col items-center md:items-start gap-4">
               <div className="flex items-center gap-3">
                 <Image src="/fglogo.png" alt="Logo" width={36} height={36} className="object-contain" />
-                <span className="font-semibold text-white">Famous Gates Hotels</span>
+                <span className="font-semibold text-white">Kyogongs</span>
               </div>
               <p className="text-stone-500 text-sm max-w-xs text-center md:text-left">
                 Experience the finest hospitality in Kericho. Your comfort is our priority.
@@ -990,7 +990,7 @@ export default function HomePage() {
               </div>
               <div className="text-center md:text-right">
                 <p className="text-stone-500 text-xs mb-1">
-                  © 2024 Famous Gates Hotels. All rights reserved.
+                  © 2024 Kyogongs. All rights reserved.
                 </p>
 
               </div>

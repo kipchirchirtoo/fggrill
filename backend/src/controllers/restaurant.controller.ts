@@ -12,10 +12,17 @@ export const getMenuCategories = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { data: categories, error } = await supabase
+    let query = supabase
       .from('restaurant_menu_categories')
       .select('*')
-      .eq('is_active', true)
+      .eq('is_active', true);
+
+    const branchId = req.query.branch_id || req.user?.branch_id;
+    if (branchId) {
+      query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
+    }
+
+    const { data: categories, error } = await query
       .order('sort_order', { ascending: true });
 
     if (error) {
@@ -342,7 +349,7 @@ export const createOrder = async (
     }
 
     // Generate order number
-    console.log('Generating order number via RPC...');
+    // console.log('Generating order number via RPC...');
     const { data: orderNumber, error: rpcError } = await supabase
       .rpc('generate_order_number');
 
@@ -353,7 +360,7 @@ export const createOrder = async (
 
     // Determine order number with fallback
     const finalOrderNumber = orderNumber || `ORD${new Date().toISOString().replace(/[-:T]/g, '').slice(2, 12)}`;
-    console.log('Final order number being used:', finalOrderNumber);
+    // console.log('Final order number being used:', finalOrderNumber);
 
     // Create order
     const orderData = {
@@ -374,7 +381,7 @@ export const createOrder = async (
       branch_id: branchId
     };
 
-    console.log('Creating order with data:', JSON.stringify(orderData, null, 2));
+    // console.log('Creating order with data:', JSON.stringify(orderData, null, 2));
 
     const { data: order, error: orderError } = await supabase
       .from('restaurant_orders')
@@ -387,7 +394,7 @@ export const createOrder = async (
     }
 
     // Create order items - support both camelCase and snake_case field names
-    console.log('Creating order items, received items:', JSON.stringify(items, null, 2));
+    // console.log('Creating order items, received items:', JSON.stringify(items, null, 2));
 
     if (!items || items.length === 0) {
       throw new Error('No items provided for order');
@@ -399,7 +406,7 @@ export const createOrder = async (
       const qty = item.quantity;
       const notes = item.specialInstructions || item.special_instructions || item.notes;
 
-      console.log('Processing item:', { menuItemId, unitPrice, qty, notes });
+      // console.log('Processing item:', { menuItemId, unitPrice, qty, notes });
 
       return {
         order_id: order.id,
@@ -411,7 +418,7 @@ export const createOrder = async (
       };
     });
 
-    console.log('Inserting order items:', JSON.stringify(orderItems, null, 2));
+    // console.log('Inserting order items:', JSON.stringify(orderItems, null, 2));
 
     const { error: itemsError } = await supabase
       .from('restaurant_order_items')
@@ -422,7 +429,7 @@ export const createOrder = async (
       throw itemsError;
     }
 
-    console.log('Order items created successfully');
+    // console.log('Order items created successfully');
 
     // Calculate total amount from order items
     const totalAmount = orderItems.reduce((sum: number, item: any) => sum + item.total_price, 0);

@@ -1298,11 +1298,11 @@ router.get('/rooms', protect, validateBranch, async (req, res) => {
     const { status, floor } = req.query;
     const branchId = req.headers['x-branch-id'] || req.query.branch_id;
 
-    console.log('GET /rooms - Branch ID:', branchId, 'Type:', typeof branchId);
+    // console.log('GET /rooms - Branch ID:', branchId, 'Type:', typeof branchId);
 
     // First, let's see ALL rooms in the database for debugging
     const allRoomsResult = await db.query('SELECT id, room_number, branch_id FROM rooms LIMIT 10');
-    console.log('All rooms in DB:', allRoomsResult.rows);
+    // console.log('All rooms in DB:', allRoomsResult.rows);
 
     // Build query with filters
     let query = `
@@ -2377,7 +2377,7 @@ VALUES
           WHERE id = $2
   `, [fileSize, rows[0].id]);
 
-        console.log(`Report ${rows[0].id} generated successfully with size ${fileSize} `);
+        // console.log(`Report ${rows[0].id} generated successfully with size ${fileSize} `);
       } catch (updateError) {
         console.error('Error updating report status:', updateError);
       }
@@ -3049,9 +3049,9 @@ router.post('/rooms', protect, async (req, res) => {
 
     const branchId = req.headers['x-branch-id'] || req.query.branch_id;
 
-    console.log('Creating room - Request body:', req.body);
-    console.log('Creating room - Branch ID:', branchId);
-    console.log('Creating room - Extracted fields:', { room_number, room_type, floor });
+    // console.log('Creating room - Request body:', req.body);
+    // console.log('Creating room - Branch ID:', branchId);
+    // console.log('Creating room - Extracted fields:', { room_number, room_type, floor });
 
     // Validate branch ID
     if (!branchId) {
@@ -3068,7 +3068,7 @@ router.post('/rooms', protect, async (req, res) => {
     if (floor === undefined || floor === null || isNaN(Number(floor))) missingFields.push('floor');
 
     if (missingFields.length > 0) {
-      console.log('Room creation failed - missing or invalid fields:', missingFields);
+      // console.log('Room creation failed - missing or invalid fields:', missingFields);
       return res.status(400).json({
         success: false,
         message: `Missing or invalid required fields: ${missingFields.join(', ')}`,
@@ -3116,7 +3116,7 @@ router.post('/rooms', protect, async (req, res) => {
       const fallbackType = await db.query('SELECT id FROM room_types LIMIT 1');
       if (fallbackType.rows.length > 0) {
         roomTypeId = fallbackType.rows[0].id;
-        console.log('Using fallback room type ID:', roomTypeId);
+        // console.log('Using fallback room type ID:', roomTypeId);
       } else {
         // If no room types exist, we need to handle this differently
         throw new Error('No room types available in database. Please create room types first.');
@@ -3133,14 +3133,14 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING id, room_number, floor, status, image_url, images
   `;
 
-    console.log('Inserting room with params:', {
-      branchId,
-      room_number,
-      roomTypeId,
-      floor,
-      status: status || 'available',
-      rate_per_night
-    });
+    // console.log('Inserting room with params:', {
+//       branchId,
+//       room_number,
+//       roomTypeId,
+//       floor,
+//       status: status || 'available',
+//       rate_per_night
+//     });
 
     const { rows } = await db.query(insertQuery, [
       branchId,
@@ -3154,7 +3154,7 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
       images && images.length > 0 ? JSON.stringify(images) : null
     ]);
 
-    console.log('Insert result:', rows);
+    // console.log('Insert result:', rows);
 
     res.status(201).json({
       success: true,
@@ -3178,9 +3178,9 @@ router.put('/rooms/:roomId', protect, async (req, res) => {
     const { room_number, room_type, floor, price_override, status } = req.body;
     const branchId = req.headers['x-branch-id'] || req.query.branch_id;
 
-    console.log('Updating room - Request body:', req.body);
-    console.log('Updating room - Room ID:', roomId);
-    console.log('Updating room - Branch ID:', branchId);
+    // console.log('Updating room - Request body:', req.body);
+    // console.log('Updating room - Room ID:', roomId);
+    // console.log('Updating room - Branch ID:', branchId);
 
     // Check if room exists and belongs to this branch
     const roomCheck = await db.query(
@@ -3277,8 +3277,8 @@ router.put('/rooms/:roomId', protect, async (req, res) => {
       RETURNING id, room_number, floor, status, price_override
     `;
 
-    console.log('Update query:', updateQuery);
-    console.log('Update values:', updateValues);
+    // console.log('Update query:', updateQuery);
+    // console.log('Update values:', updateValues);
 
     const { rows } = await db.query(updateQuery, updateValues);
 

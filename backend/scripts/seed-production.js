@@ -154,9 +154,9 @@ async function seedProductionData() {
       await client.query(`
         INSERT INTO branches (name, code, address, phone, email, status, created_at, updated_at)
         VALUES 
-          ('Famous Gate Bomet', 'BOMET', 'Bomet Town, Kenya', '+254700000001', 'bomet@famousgate.com', 'active', NOW(), NOW()),
-          ('Famous Gate Kericho', 'KERICHO', 'Kericho Town, Kenya', '+254700000002', 'kericho@famousgate.com', 'active', NOW(), NOW()),
-          ('Famous Gate Kapsoit', 'KAPSOIT', 'Kapsoit, Kenya', '+254700000003', 'kapsoit@famousgate.com', 'active', NOW(), NOW())
+          ('Kyogong Bomet', 'BOMET', 'Bomet Town, Kenya', '+254700000001', 'bomet@kyogong.com', 'active', NOW(), NOW()),
+          ('Kyogong Kericho', 'KERICHO', 'Kericho Town, Kenya', '+254700000002', 'kericho@kyogong.com', 'active', NOW(), NOW()),
+          ('Kyogong Kapsoit', 'KAPSOIT', 'Kapsoit, Kenya', '+254700000003', 'kapsoit@kyogong.com', 'active', NOW(), NOW())
         ON CONFLICT DO NOTHING
       `);
       console.log('✅ Created 3 default branches\n');

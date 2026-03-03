@@ -7,7 +7,7 @@ export default function KyogongReceptionPage() {
         <ProtectedRoute allowedRoles={[UserRole.KYOGONG_RECEPTION_CASHIER, UserRole.SUPER_ADMIN]}>
             <KyogongPOSLayout
                 title="Reception & Car Wash POS"
-                subtitle="Famous Gates Hotel – Kyogong Branch"
+                subtitle="Kyogong – Kyogong Branch"
                 serviceType="car_wash"
                 salesPointCode="RECEPTION"
                 allowedRole={UserRole.KYOGONG_RECEPTION_CASHIER}

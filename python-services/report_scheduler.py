@@ -1,5 +1,5 @@
 """
-Famous Gate Hotel - Automated Report Scheduler
+Kyogong - Automated Report Scheduler
 Generates and distributes reports on schedule
 """
 
@@ -45,7 +45,7 @@ class ReportScheduler:
         self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
         self.smtp_user = os.getenv('SMTP_USER', '')
         self.smtp_password = os.getenv('SMTP_PASSWORD', '')
-        self.from_email = os.getenv('FROM_EMAIL', 'reports@famousgate.co.ke')
+        self.from_email = os.getenv('FROM_EMAIL', 'reports@kyogong.co.ke')
         
         # Supabase for scheduled reports
         self.supabase_url = os.getenv('SUPABASE_URL', '')
@@ -166,12 +166,12 @@ class ReportScheduler:
             
             # Send email if recipients configured
             if recipients:
-                subject = f"Famous Gate Hotel - {schedule_data.get('name', report_type.replace('_', ' ').title())}"
+                subject = f"Kyogong - {schedule_data.get('name', report_type.replace('_', ' ').title())}"
                 body = f"""
                 <html>
                 <body style="font-family: Arial, sans-serif; color: #333;">
                     <div style="background: #3C3C43; padding: 20px; text-align: center;">
-                        <h1 style="color: white; margin: 0;">Famous Gate Hotel & Lounge</h1>
+                        <h1 style="color: white; margin: 0;">Kyogong & Lounge</h1>
                     </div>
                     <div style="padding: 20px;">
                         <h2>{schedule_data.get('name', 'Scheduled Report')}</h2>
@@ -181,8 +181,8 @@ class ReportScheduler:
                         <p><strong>Generated:</strong> {today.strftime('%B %d, %Y at %I:%M %p')}</p>
                         <hr>
                         <p style="color: #888; font-size: 12px;">
-                            This is an automated report from Famous Gate Hotel Management System.
-                            <br>For questions, contact management@famousgate.co.ke
+                            This is an automated report from Kyogong Management System.
+                            <br>For questions, contact management@kyogong.co.ke
                         </p>
                     </div>
                 </body>
@@ -296,7 +296,7 @@ class ReportScheduler:
                 'report_type': 'daily_sales',
                 'frequency': 'daily',
                 'schedule_time': '08:00',
-                'recipients': ['management@famousgate.co.ke'],
+                'recipients': ['management@kyogong.co.ke'],
                 'is_active': True,
                 'parameters': {}
             },
@@ -306,7 +306,7 @@ class ReportScheduler:
                 'frequency': 'weekly',
                 'schedule_time': '09:00',
                 'schedule_day': 1,  # Monday
-                'recipients': ['management@famousgate.co.ke'],
+                'recipients': ['management@kyogong.co.ke'],
                 'is_active': True,
                 'parameters': {}
             },
@@ -316,7 +316,7 @@ class ReportScheduler:
                 'frequency': 'monthly',
                 'schedule_time': '07:00',
                 'schedule_day': 1,  # 1st of month
-                'recipients': ['finance@famousgate.co.ke', 'management@famousgate.co.ke'],
+                'recipients': ['finance@kyogong.co.ke', 'management@kyogong.co.ke'],
                 'is_active': True,
                 'parameters': {}
             },
@@ -325,7 +325,7 @@ class ReportScheduler:
                 'report_type': 'inventory_status',
                 'frequency': 'daily',
                 'schedule_time': '06:00',
-                'recipients': ['store@famousgate.co.ke'],
+                'recipients': ['store@kyogong.co.ke'],
                 'is_active': True,
                 'parameters': {}
             }

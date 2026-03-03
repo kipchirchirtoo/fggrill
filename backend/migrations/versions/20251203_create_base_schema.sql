@@ -1,4 +1,4 @@
--- Create base schema for Famous Gate Hotel Management System
+-- Create base schema for Kyogong Management System
 -- This migration creates the foundational tables required before running the branch enhancement scripts
 
 -- Create users table if not exists
@@ -135,7 +135,7 @@ CREATE TABLE IF NOT EXISTS dispatch_items (
 -- Insert initial branches
 INSERT INTO branches (name, code, location, is_main_branch, status)
 VALUES 
-  ('Famous Gate Bomet', 'FGBOMET', 'Bomet', TRUE, 'active'),
-  ('Famous Gate Kericho', 'FGKRCHO', 'Kericho', FALSE, 'active'),
-  ('Famous Gate Litein', 'FGLITEIN', 'Litein', FALSE, 'active')
+  ('Kyogong Bomet', 'FGBOMET', 'Bomet', TRUE, 'active'),
+  ('Kyogong Kericho', 'FGKRCHO', 'Kericho', FALSE, 'active'),
+  ('Kyogong Litein', 'FGLITEIN', 'Litein', FALSE, 'active')
 ON CONFLICT (code) DO NOTHING;

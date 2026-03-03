@@ -4,39 +4,40 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { financeAPI, staffAPI, systemAPI } from '@/lib/api';
+import { financeAPI, staffAPI, systemAPI, procurementAPI } from '@/lib/api';
 import {
   DollarSign, Users, Building2, Bed, RefreshCw,
   UserCog, Package, FileText, Wrench, Utensils, ClipboardList, Settings,
-  TrendingUp, ArrowUpRight, ChevronRight, Truck, Car, ShieldCheck, Activity, FileCheck, Landmark
+  TrendingUp, ArrowUpRight, ChevronRight, Truck, Car, ShieldCheck, Activity, FileCheck, Landmark,
+  Briefcase
 } from 'lucide-react';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState({
     staff: 0,
     branches: 0,
-    rooms: 0,
-    totalRevenue: 0,
-    netProfit: 0
+    departments: 0,
+    suppliers: 0
   });
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [financeRes, staffRes, branchesRes] = await Promise.all([
-        financeAPI.getDashboard(),
+      const [staffRes, branchesRes, departmentsRes, suppliersRes] = await Promise.all([
         staffAPI.getStaff(),
         systemAPI.getBranches(),
+        systemAPI.getDepartments(),
+        procurementAPI.getSuppliers(),
       ]);
       setStats({
         staff: staffRes.data?.length || 0,
         branches: branchesRes.data?.length || 0,
-        rooms: 0,
-        totalRevenue: financeRes.data?.totalRevenue || 0,
-        netProfit: financeRes.data?.netProfit || 0
+        departments: departmentsRes.data?.length || 0,
+        suppliers: suppliersRes.data?.length || 0
       });
     } catch (error) { console.error('Error fetching admin stats:', error); }
     finally { setIsLoading(false); }
@@ -104,46 +105,44 @@ export default function AdminDashboard() {
             <div className="stat-card border-l-4 border-l-stone-900">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="stat-label uppercase tracking-widest text-[10px]">Total Revenue</p>
-                  <p className="stat-value text-2xl">KES {stats.totalRevenue.toLocaleString()}</p>
+                  <p className="stat-label uppercase tracking-widest text-[10px]">Operational Branches</p>
+                  <p className="stat-value text-2xl">{stats.branches}</p>
                 </div>
                 <div className="w-8 h-8 rounded-full bg-stone-50 flex items-center justify-center">
-                  <DollarSign className="h-4 w-4 text-stone-400" />
-                </div>
-              </div>
-            </div>
-            <div className="stat-card border-l-4 border-l-emerald-500">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="stat-label uppercase tracking-widest text-[10px]">Net Profit</p>
-                  <p className={`stat-value text-2xl ${stats.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                    KES {stats.netProfit.toLocaleString()}
-                  </p>
-                </div>
-                <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center">
-                  <TrendingUp className="h-4 w-4 text-emerald-400" />
+                  <Building2 className="h-4 w-4 text-stone-400" />
                 </div>
               </div>
             </div>
             <div className="stat-card border-l-4 border-l-blue-500">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="stat-label uppercase tracking-widest text-[10px]">Operational Branches</p>
-                  <p className="stat-value text-2xl">{stats.branches}</p>
-                </div>
-                <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
-                  <Building2 className="h-4 w-4 text-blue-400" />
-                </div>
-              </div>
-            </div>
-            <div className="stat-card border-l-4 border-l-stone-400">
-              <div className="flex justify-between items-start">
-                <div>
                   <p className="stat-label uppercase tracking-widest text-[10px]">System Users</p>
                   <p className="stat-value text-2xl">{stats.staff}</p>
                 </div>
-                <div className="w-8 h-8 rounded-full bg-stone-50 flex items-center justify-center">
-                  <Users className="h-4 w-4 text-stone-400" />
+                <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
+                  <Users className="h-4 w-4 text-blue-400" />
+                </div>
+              </div>
+            </div>
+            <div className="stat-card border-l-4 border-l-amber-500">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="stat-label uppercase tracking-widest text-[10px]">Active Departments</p>
+                  <p className="stat-value text-2xl">{stats.departments}</p>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center">
+                  <Briefcase className="h-4 w-4 text-amber-400" />
+                </div>
+              </div>
+            </div>
+            <div className="stat-card border-l-4 border-l-emerald-500">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="stat-label uppercase tracking-widest text-[10px]">System Suppliers</p>
+                  <p className="stat-value text-2xl">{stats.suppliers}</p>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center">
+                  <Truck className="h-4 w-4 text-emerald-400" />
                 </div>
               </div>
             </div>
@@ -268,8 +267,4 @@ export default function AdminDashboard() {
       </DashboardLayout>
     </ProtectedRoute>
   );
-}
-
-function cn(...classes: any[]) {
-  return classes.filter(Boolean).join(' ');
 }

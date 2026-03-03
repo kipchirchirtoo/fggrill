@@ -7,7 +7,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { restaurantAPI, financeAPI } from '@/lib/api';
 import { Utensils, RefreshCw, Plus, Search, Edit2, Trash2, DollarSign, MapPin } from 'lucide-react';
@@ -30,15 +30,16 @@ export default function AdminMenuPage() {
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({ name: '', description: '', price: 0, category_id: '', branchId: '' });
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
       const promises = [
-        restaurantAPI.getMenuItems(),
-        restaurantAPI.getCategories()
+        restaurantAPI.getMenuItems(undefined, undefined, false, true), // bypass cache
+        restaurantAPI.getCategories(true) // bypass cache
       ];
-      
+
       // Fetch branches if user is super admin
       if (user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER) {
         promises.push(financeAPI.getBranches());
@@ -52,14 +53,19 @@ export default function AdminMenuPage() {
       if (itemsRes.success) setItems(itemsRes.data || []);
       if (catsRes.success) setCategories(catsRes.data || []);
       if (branchesRes && branchesRes.success) setBranches(branchesRes.data || []);
-      
+
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
   }, [user]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const filteredItems = items.filter((i) => i.name?.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredItems = items.filter((i) => {
+    const matchesSearch = i.name?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesBranch = selectedBranchId === 'all' ||
+      (selectedBranchId === 'global' ? !i.branch_id : String(i.branch_id) === selectedBranchId);
+    return matchesSearch && matchesBranch;
+  });
 
   const resetForm = () => setFormData({ name: '', description: '', price: 0, category_id: '', branchId: '' });
 
@@ -76,7 +82,7 @@ export default function AdminMenuPage() {
         price: formData.price,
         branchId: formData.branchId || null // Send null for global
       };
-      
+
       await restaurantAPI.createMenuItem(payload);
       toast.success('Menu item added');
       setAddModalOpen(false);
@@ -88,10 +94,10 @@ export default function AdminMenuPage() {
 
   const openEditModal = (item: MenuItem) => {
     setSelectedItem(item);
-    setFormData({ 
-      name: item.name, 
-      description: item.description || '', 
-      price: item.price, 
+    setFormData({
+      name: item.name,
+      description: item.description || '',
+      price: item.price,
       category_id: (item as any).category_id || '',
       branchId: item.branch_id ? String(item.branch_id) : ''
     });
@@ -102,7 +108,7 @@ export default function AdminMenuPage() {
     if (!selectedItem || !formData.name) { toast.error('Fill required fields'); return; }
     setIsSubmitting(true);
     try {
-       const payload = {
+      const payload = {
         categoryId: formData.category_id,
         name: formData.name,
         description: formData.description,
@@ -160,9 +166,27 @@ export default function AdminMenuPage() {
           </div>
 
           <IOSCard className="p-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
-              <Input placeholder="Search menu items..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
+                <Input placeholder="Search menu items..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
+              </div>
+
+              {branches.length > 0 && (
+                <div className="md:w-64">
+                  <select
+                    value={selectedBranchId}
+                    onChange={(e) => setSelectedBranchId(e.target.value)}
+                    className="w-full p-2 border rounded-ios-lg bg-white h-10 text-sm"
+                  >
+                    <option value="all">All Branches</option>
+                    <option value="global">Global Items (No Branch)</option>
+                    {branches.map((branch) => (
+                      <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </IOSCard>
 
@@ -182,7 +206,7 @@ export default function AdminMenuPage() {
                     <IOSBadge className={item.is_available ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>{item.is_available ? 'Available' : 'Unavailable'}</IOSBadge>
                   </div>
                   {item.description && <p className="text-sm text-gray-500 mb-3">{item.description}</p>}
-                  
+
                   {/* Branch Indicator */}
                   {branches.length > 0 && (
                     <div className="flex items-center gap-1 text-xs text-gray-400 mb-3">
@@ -206,71 +230,73 @@ export default function AdminMenuPage() {
         </div>
 
         <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>Add Menu Item</DialogTitle></DialogHeader>
-            <div className="space-y-4 mt-4">
-              <div><label className="text-sm font-medium">Name *</label><Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} /></div>
-              <div><label className="text-sm font-medium">Description</label><Input value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} /></div>
-              <div><label className="text-sm font-medium">Price *</label><Input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} /></div>
-              
-              <div><label className="text-sm font-medium">Category *</label>
-                <select value={formData.category_id} onChange={(e) => setFormData({ ...formData, category_id: e.target.value })} className="w-full p-2 border rounded-ios-lg">
-                  <option value="">Select category</option>
-                  {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
-                </select>
-              </div>
+            <DialogBody>
+              <div className="space-y-4">
+                <div><label className="text-sm font-medium">Name *</label><Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} /></div>
+                <div><label className="text-sm font-medium">Description</label><Input value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} /></div>
+                <div><label className="text-sm font-medium">Price *</label><Input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} /></div>
 
-              {/* Branch Selection (Only if branches loaded) */}
-              {branches.length > 0 && (
-                 <div><label className="text-sm font-medium">Branch</label>
-                 <select value={formData.branchId} onChange={(e) => setFormData({ ...formData, branchId: e.target.value })} className="w-full p-2 border rounded-ios-lg">
-                   <option value="">All Branches (Global)</option>
-                   {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-                 </select>
-                 <p className="text-xs text-gray-500 mt-1">Leave empty to make this item available to all branches.</p>
-               </div>
-              )}
+                <div><label className="text-sm font-medium">Category *</label>
+                  <select value={formData.category_id} onChange={(e) => setFormData({ ...formData, category_id: e.target.value })} className="w-full p-2 border rounded-ios-lg">
+                    <option value="">Select category</option>
+                    {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                  </select>
+                </div>
 
-              <div className="flex gap-3">
-                <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                <IOSButton onClick={handleAddItem} disabled={isSubmitting} className="flex-1">{isSubmitting ? 'Adding...' : 'Add'}</IOSButton>
+                {/* Branch Selection (Only if branches loaded) */}
+                {branches.length > 0 && (
+                  <div><label className="text-sm font-medium">Branch</label>
+                    <select value={formData.branchId} onChange={(e) => setFormData({ ...formData, branchId: e.target.value })} className="w-full p-2 border rounded-ios-lg">
+                      <option value="">All Branches (Global)</option>
+                      {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">Leave empty to make this item available to all branches.</p>
+                  </div>
+                )}
               </div>
-            </div>
+            </DialogBody>
+            <DialogFooter>
+              <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
+              <IOSButton onClick={handleAddItem} disabled={isSubmitting} className="flex-1">{isSubmitting ? 'Adding...' : 'Add'}</IOSButton>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
         {/* Edit Modal */}
         <Dialog open={editModalOpen} onOpenChange={(open) => { setEditModalOpen(open); if (!open) setSelectedItem(null); }}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>Edit Menu Item</DialogTitle></DialogHeader>
-            <div className="space-y-4 mt-4">
-              <div><label className="text-sm font-medium">Name *</label><Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} /></div>
-              <div><label className="text-sm font-medium">Description</label><Input value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} /></div>
-              <div><label className="text-sm font-medium">Price *</label><Input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} /></div>
-              
-              <div><label className="text-sm font-medium">Category</label>
-                <select value={formData.category_id} onChange={(e) => setFormData({ ...formData, category_id: e.target.value })} className="w-full p-2 border rounded-ios-lg">
-                  <option value="">Select category</option>
-                  {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
-                </select>
-              </div>
+            <DialogBody>
+              <div className="space-y-4">
+                <div><label className="text-sm font-medium">Name *</label><Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} /></div>
+                <div><label className="text-sm font-medium">Description</label><Input value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} /></div>
+                <div><label className="text-sm font-medium">Price *</label><Input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} /></div>
 
-               {/* Branch Selection (Only if branches loaded) */}
-               {branches.length > 0 && (
-                 <div><label className="text-sm font-medium">Branch</label>
-                 <select value={formData.branchId} onChange={(e) => setFormData({ ...formData, branchId: e.target.value })} className="w-full p-2 border rounded-ios-lg">
-                   <option value="">All Branches (Global)</option>
-                   {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-                 </select>
-                 <p className="text-xs text-gray-500 mt-1">Move item to a specific branch or make global.</p>
-               </div>
-              )}
+                <div><label className="text-sm font-medium">Category</label>
+                  <select value={formData.category_id} onChange={(e) => setFormData({ ...formData, category_id: e.target.value })} className="w-full p-2 border rounded-ios-lg">
+                    <option value="">Select category</option>
+                    {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                  </select>
+                </div>
 
-              <div className="flex gap-3">
-                <IOSButton variant="secondary" onClick={() => setEditModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                <IOSButton onClick={handleUpdateItem} disabled={isSubmitting} className="flex-1">{isSubmitting ? 'Updating...' : 'Update'}</IOSButton>
+                {/* Branch Selection (Only if branches loaded) */}
+                {branches.length > 0 && (
+                  <div><label className="text-sm font-medium">Branch</label>
+                    <select value={formData.branchId} onChange={(e) => setFormData({ ...formData, branchId: e.target.value })} className="w-full p-2 border rounded-ios-lg">
+                      <option value="">All Branches (Global)</option>
+                      {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">Move item to a specific branch or make global.</p>
+                  </div>
+                )}
               </div>
-            </div>
+            </DialogBody>
+            <DialogFooter>
+              <IOSButton variant="secondary" onClick={() => setEditModalOpen(false)} className="flex-1">Cancel</IOSButton>
+              <IOSButton onClick={handleUpdateItem} disabled={isSubmitting} className="flex-1">{isSubmitting ? 'Updating...' : 'Update'}</IOSButton>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 

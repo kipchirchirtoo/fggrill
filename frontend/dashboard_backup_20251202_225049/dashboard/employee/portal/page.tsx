@@ -44,7 +44,7 @@ export default function EmployeePortal() {
     employeeId: user?.id || 'EMP001',
     firstName: user?.firstName || 'Employee',
     lastName: user?.lastName || 'Doe',
-    email: user?.email || 'john.doe@famousgate.com',
+    email: user?.email || 'john.doe@kyogong.com',
     phone: '+254 712 345 678',
     department: 'Front Office',
     position: 'Receptionist',

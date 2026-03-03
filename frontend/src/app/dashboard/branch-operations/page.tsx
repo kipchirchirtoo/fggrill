@@ -45,11 +45,11 @@ function BranchOperationsDashboardContent() {
     setIsLoading(true);
     setApiError(null);
     try {
-      console.log(`Fetching dashboard data with branch ID: ${activeBranchId}`);
+      // console.log(`Fetching dashboard data with branch ID: ${activeBranchId}`);
       const response = await branchOperationsAPI.getDashboard(activeBranchId);
 
       // Debug response
-      console.log('API Response:', response);
+      // console.log('API Response:', response);
 
       if (response.success) {
         setStats({

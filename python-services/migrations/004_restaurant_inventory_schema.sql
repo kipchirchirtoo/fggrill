@@ -1,4 +1,4 @@
--- Famous Gate Hotel - Restaurant Inventory & Consumption Tracking
+-- Kyogong - Restaurant Inventory & Consumption Tracking
 -- Migration script for restaurant inventory management
 
 -- Restaurant Inventory Items
@@ -313,10 +313,10 @@ ON CONFLICT (item_code) DO NOTHING;
 
 -- Insert sample recipes
 INSERT INTO restaurant_recipes (name, category, description, servings, selling_price_per_serving, preparation_time, cooking_time, difficulty_level, branch_id, created_by) VALUES
-('Grilled Chicken with Rice', 'main_course', 'Grilled chicken breast served with seasoned rice and vegetables', 4, 850.00, 15, 25, 'medium', 1, (SELECT id FROM users WHERE email = 'restaurant@famousgate.com')),
-('Vegetable Stir Fry', 'main_course', 'Mixed vegetables stir-fried with herbs and spices', 2, 450.00, 10, 15, 'easy', 1, (SELECT id FROM users WHERE email = 'restaurant@famousgate.com')),
-('Fresh Garden Salad', 'salad', 'Mixed greens with fresh vegetables and dressing', 1, 280.00, 8, 5, 'easy', 1, (SELECT id FROM users WHERE email = 'restaurant@famousgate.com')),
-('Tomato Soup', 'soup', 'Creamy tomato soup with fresh herbs', 6, 180.00, 10, 20, 'easy', 1, (SELECT id FROM users WHERE email = 'restaurant@famousgate.com'))
+('Grilled Chicken with Rice', 'main_course', 'Grilled chicken breast served with seasoned rice and vegetables', 4, 850.00, 15, 25, 'medium', 1, (SELECT id FROM users WHERE email = 'restaurant@kyogong.com')),
+('Vegetable Stir Fry', 'main_course', 'Mixed vegetables stir-fried with herbs and spices', 2, 450.00, 10, 15, 'easy', 1, (SELECT id FROM users WHERE email = 'restaurant@kyogong.com')),
+('Fresh Garden Salad', 'salad', 'Mixed greens with fresh vegetables and dressing', 1, 280.00, 8, 5, 'easy', 1, (SELECT id FROM users WHERE email = 'restaurant@kyogong.com')),
+('Tomato Soup', 'soup', 'Creamy tomato soup with fresh herbs', 6, 180.00, 10, 20, 'easy', 1, (SELECT id FROM users WHERE email = 'restaurant@kyogong.com'))
 ON CONFLICT DO NOTHING;
 
 -- Insert recipe ingredients

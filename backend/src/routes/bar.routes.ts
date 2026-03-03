@@ -20,7 +20,7 @@ router.use(protect);
 // ====================
 // POOL TABLE TOKENS
 // ====================
-console.log('Mounting pool table routes at /bar/pool-table');
+// console.log('Mounting pool table routes at /bar/pool-table');
 router.get('/pool-table/earnings', poolTokenController.getSales);
 router.post('/pool-table/tokens', poolTokenController.recordSale);
 

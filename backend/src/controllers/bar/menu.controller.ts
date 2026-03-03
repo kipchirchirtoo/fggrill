@@ -14,12 +14,18 @@ const BAR_KEYWORDS = [
 
 export const getCategories = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { data: categories, error } = await supabase
+    let query = supabase
       .from('restaurant_menu_categories')
       .select('*')
       .eq('is_active', true)
-      .eq('is_bar', true)
-      .order('sort_order', { ascending: true });
+      .eq('is_bar', true);
+
+    const branchId = req.query.branch_id || req.user?.branch_id;
+    if (branchId) {
+      query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
+    }
+
+    const { data: categories, error } = await query.order('sort_order', { ascending: true });
 
     if (error) throw error;
 
@@ -60,14 +66,20 @@ export const createCategory = async (req: Request, res: Response, next: NextFunc
 export const getDrinks = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { category_id, search } = req.query;
+    const branchId = req.query.branch_id || req.user?.branch_id;
 
     // First, get valid bar category IDs
-    const { data: categories } = await supabase
+    let catQuery = supabase
       .from('restaurant_menu_categories')
       .select('id')
       .eq('is_active', true)
       .eq('is_bar', true);
 
+    if (branchId) {
+      catQuery = catQuery.or(`branch_id.eq.${branchId},branch_id.is.null`);
+    }
+
+    const { data: categories } = await catQuery;
     const barCategoryIds = (categories || []).map(cat => cat.id);
 
     if (barCategoryIds.length === 0) {
@@ -82,6 +94,10 @@ export const getDrinks = async (req: Request, res: Response, next: NextFunction)
         category:restaurant_menu_categories(name)
       `)
       .eq('is_available', true);
+
+    if (branchId) {
+      query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
+    }
 
     if (category_id) {
       // Ensure the category is a bar category
@@ -144,8 +160,7 @@ export const createDrink = async (req: Request, res: Response, next: NextFunctio
         name,
         description,
         price,
-        // cost_price is not in restaurant_menu_items, strictly speaking. 
-        // But for compatibility with frontend we might just ignore it here, or store it elsewhere (recipe).
+        branch_id: branch_id || null,
         image_url,
         preparation_time: 5, // Default for drinks
         is_available: true
@@ -170,7 +185,7 @@ export const updateDrink = async (req: Request, res: Response, next: NextFunctio
     const updates = req.body;
 
     // Filter out fields that might not exist in target table
-    const { cost_price, branch_id, unit, ...validUpdates } = updates;
+    const { cost_price, unit, ...validUpdates } = updates;
 
     const { data, error } = await supabase
       .from('restaurant_menu_items')

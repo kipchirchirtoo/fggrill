@@ -11,8 +11,10 @@ import { toast } from 'sonner';
 import {
     Clock, DollarSign, TrendingUp, BarChart3,
     Receipt, Wallet, X, AlertCircle, Loader2,
-    LogIn, LogOut, RefreshCcw, List
+    LogIn, LogOut, RefreshCcw, List, Plus
 } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
+import { CashierModals } from '@/components/modals/CashierModals';
 
 interface KyogongPOSLayoutProps {
     serviceType?: string;
@@ -37,6 +39,7 @@ export function KyogongPOSLayout({
     const [transactions, setTransactions] = useState<any[]>([]);
     const [activeTab, setActiveTab] = useState<'pos' | 'transactions' | 'close' | 'petty_cash'>('pos');
     const [showPettyCash, setShowPettyCash] = useState(false);
+    const [showDynamicBillModal, setShowDynamicBillModal] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
 
     useEffect(() => {
@@ -119,6 +122,13 @@ export function KyogongPOSLayout({
                     </div>
                     {activeShift && (
                         <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setShowDynamicBillModal(true)}
+                                className="flex items-center gap-1.5 bg-orange-50 text-orange-700 px-3 py-1.5 rounded-full text-sm font-bold border border-orange-100 hover:bg-orange-100 transition-colors"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Create General Bill
+                            </button>
                             <div className="flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1.5 rounded-full text-sm font-medium">
                                 <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                                 Shift Active
@@ -242,6 +252,19 @@ export function KyogongPOSLayout({
                     onSaved={() => setRefreshKey(k => k + 1)}
                 />
             )}
+
+            <AnimatePresence mode="wait">
+                {showDynamicBillModal && (
+                    <CashierModals.CreateDynamicBillModal
+                        isOpen={showDynamicBillModal}
+                        onClose={() => setShowDynamicBillModal(false)}
+                        onSuccess={() => {
+                            setShowDynamicBillModal(false);
+                            setRefreshKey(k => k + 1);
+                        }}
+                    />
+                )}
+            </AnimatePresence>
         </DashboardLayout>
     );
 }

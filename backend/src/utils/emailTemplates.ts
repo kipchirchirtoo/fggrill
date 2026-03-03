@@ -120,11 +120,11 @@ export const emailTemplates = {
               </tr>
               <tr>
                 <td class="highlight">Email:</td>
-                <td>famousgatesbmt@gmail.com</td>
+                <td>famous-gates-hotelsbmt@gmail.com</td>
               </tr>
               <tr>
                 <td class="highlight">Website:</td>
-                <td><a href="#">www.famousgates.hirall.com</a></td>
+                <td><a href="#">www.famous-gates-hotels.hirall.com</a></td>
               </tr>
             </table>
           </div>
@@ -180,7 +180,7 @@ export const emailTemplates = {
         </div>
         <div class="footer">
           <p>Famous Gates Hotels<br>
-          Email: famousgatesbmt@gmail.com<br>
+          Email: famous-gates-hotelsbmt@gmail.com<br>
           Phone: 0706 782 828</p>
         </div>
       </div>

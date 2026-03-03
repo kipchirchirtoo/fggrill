@@ -73,7 +73,7 @@ class ExcelReportGenerator:
     
     def _add_header(self, ws, report_type, filters):
         """Add report header"""
-        ws['A1'] = 'Famous Gate Hotel'
+        ws['A1'] = 'Kyogong'
         ws['A1'].font = Font(bold=True, size=16)
         
         ws['A2'] = report_type.replace('_', ' ').title()
@@ -1034,7 +1034,7 @@ class ExcelReportGenerator:
         
         # Title
         ws.merge_cells('A1:F1')
-        ws['A1'] = "FAMOUS GATE HOTEL - STAFF OVERVIEW REPORT"
+        ws['A1'] = "Kyogong - STAFF OVERVIEW REPORT"
         ws['A1'].font = Font(bold=True, size=14)
         ws['A1'].alignment = Alignment(horizontal='center')
         row = 3
@@ -1170,7 +1170,7 @@ class ExcelReportGenerator:
         
         # Title
         ws.merge_cells('A1:F1')
-        ws['A1'] = "FAMOUS GATE HOTEL - COMPLIANCE REPORT"
+        ws['A1'] = "Kyogong - COMPLIANCE REPORT"
         ws['A1'].font = Font(bold=True, size=14)
         ws['A1'].alignment = Alignment(horizontal='center')
         row = 3

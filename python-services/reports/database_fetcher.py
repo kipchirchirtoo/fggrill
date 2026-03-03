@@ -1,5 +1,5 @@
 """
-Famous Gate Hotel - Database Data Fetcher
+Kyogong - Database Data Fetcher
 Direct database connection for accurate report data
 """
 

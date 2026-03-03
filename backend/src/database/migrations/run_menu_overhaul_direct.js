@@ -49,19 +49,19 @@ function splitSql(sql) {
 
 async function runMigration() {
     try {
-        console.log('🚀 Starting Menu Overhaul migration (Direct PG)...');
+        // console.log('🚀 Starting Menu Overhaul migration (Direct PG)...');
 
         const sqlPath = path.join(__dirname, '20260114_menu_overhaul.sql');
         const sqlContent = fs.readFileSync(sqlPath, 'utf8');
 
         const statements = splitSql(sqlContent);
-        console.log(`📝 Found ${statements.length} SQL statements to execute.\n`);
+        // console.log(`📝 Found ${statements.length} SQL statements to execute.\n`);
 
         for (let i = 0; i < statements.length; i++) {
             const statement = statements[i];
             if (!statement.trim()) continue;
 
-            console.log(`Executing statement ${i + 1}/${statements.length}...`);
+            // console.log(`Executing statement ${i + 1}/${statements.length}...`);
             try {
                 await pool.query(statement + ';');
             } catch (err) {
@@ -70,14 +70,14 @@ async function runMigration() {
                 console.error(`Error: ${err.message}`);
                 // Don't throw, continue if possible unless it's a fatal error
                 if (err.message.includes('already exists')) {
-                    console.log('   (Object already exists, skipping)');
+                    // console.log('   (Object already exists, skipping)');
                 } else {
                     throw err;
                 }
             }
         }
 
-        console.log('\n✅ Migration completed successfully!');
+        // console.log('\n✅ Migration completed successfully!');
     } catch (error) {
         console.error('\n❌ Migration failed:', error.message);
         process.exit(1);

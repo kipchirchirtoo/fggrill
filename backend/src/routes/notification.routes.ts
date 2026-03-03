@@ -281,7 +281,7 @@ router.post('/test-notification', authenticate, async (req: Request, res: Respon
     const notification = await notificationService.createNotification({
       user_id: userId,
       title: 'Test Notification',
-      message: 'This is a test push notification from Famous Gates. If you can see this, push notifications are working!',
+      message: 'This is a test push notification from Famous Gates Hotels. If you can see this, push notifications are working!',
       type: 'info',
       category: 'system',
       priority: 'medium'

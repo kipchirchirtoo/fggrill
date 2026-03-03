@@ -55,13 +55,22 @@ export const getBookings = async (
 
     if (error) throw error;
 
+    const formattedBookings = bookings.map((b: any) => ({
+      ...b,
+      amount_paid: b.deposit_amount || 0,
+      guest_name: b.guest ? `${b.guest.first_name} ${b.guest.last_name}` : 'Unknown',
+      guest_phone: b.guest ? b.guest.phone : '-',
+      room_number: b.room ? b.room.room_number : '-',
+      room_type: b.room ? b.room.room_type : '-'
+    }));
+
     res.status(200).json({
       success: true,
-      count: bookings.length,
+      count: formattedBookings.length,
       total: count || 0,
       page,
       pages: Math.ceil((count || 0) / limit),
-      data: bookings
+      data: formattedBookings
     });
   } catch (error) {
     next(new AppError('Failed to fetch bookings', 500));

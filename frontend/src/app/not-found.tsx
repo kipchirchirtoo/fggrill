@@ -55,7 +55,7 @@ export default function NotFound() {
                 transition={{ delay: 0.6 }}
                 className="mt-8 text-sm text-gray-400"
             >
-                Famous Gates Hotels Management System
+                Kyogong Management System
             </motion.p>
         </div>
     )

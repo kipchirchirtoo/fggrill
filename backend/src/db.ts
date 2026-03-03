@@ -20,10 +20,11 @@ let pool: Pool | null = null;
 if (!SKIP_PG && process.env.DATABASE_URL) {
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : { rejectUnauthorized: false },
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 30000, // Increased timeout
+    ssl: { rejectUnauthorized: false },
+    max: 10, // Reduced from 20 to be more conservative with pooler
+    idleTimeoutMillis: 10000,
+    connectionTimeoutMillis: 10000, // Increased from 5000 to be more tolerant of pooler startup
+    maxUses: 7500, // Close connections after some use
   });
 
   // Handle pool errors gracefully
@@ -45,24 +46,39 @@ if (!SKIP_PG && process.env.DATABASE_URL) {
       // Don't exit - allow server to run without database
     });
 } else {
-  console.warn(']: PostgreSQL disabled or DATABASE_URL not set - using mock database');
+  // console.warn(']: PostgreSQL disabled or DATABASE_URL not set - using mock database');
 }
 
 // Export query function for use in routes
 export default {
   query: async (text: string, params?: any[]): Promise<QueryResult<any>> => {
-    if (!pool || !dbAvailable) {
-      console.error('Database not available! Pool:', !!pool, 'dbAvailable:', dbAvailable);
-      throw new Error('Database connection not available');
+    if (!pool) {
+      throw new Error('Database pool not initialized');
     }
+
+    // We try to query even if dbAvailable is false, as it might have recovered.
+    // The 8s timeout below will prevent long hangs.
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Database query timed out')), 8000);
+    });
+
     try {
-      const result = await pool.query(text, params);
+      const queryPromise = pool.query(text, params);
+      const result = await Promise.race([queryPromise, timeoutPromise]) as QueryResult<any>;
+
+      // If successful, ensure dbAvailable is true
+      dbAvailable = true;
       return result;
     } catch (error) {
-      console.error('Database query failed:', error instanceof Error ? error.message : 'Unknown error');
-      console.error('Query:', text);
-      console.error('Params:', params);
-      throw error; // Re-throw instead of returning mock data
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Database query failed:', errorMessage);
+
+      // If it's a connection/timeout error, mark DB as unavailable
+      if (errorMessage.includes('timeout') || errorMessage.includes('connection') || errorMessage.includes('terminated')) {
+        dbAvailable = false;
+      }
+
+      throw error;
     }
   },
   getClient: async () => {

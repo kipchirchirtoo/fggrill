@@ -21,7 +21,7 @@ const pool = new Pool({
 // Demo users to create
 const demoUsers = [
   {
-    email: 'branch-ops@famousgate.com',
+    email: 'branch-ops@kyogong.com',
     password: 'branch123',
     firstName: 'Branch',
     lastName: 'Operations',
@@ -31,7 +31,7 @@ const demoUsers = [
     account_type: 'BUSINESS'
   },
   {
-    email: 'facilities@famousgate.com',
+    email: 'facilities@kyogong.com',
     password: 'facil123',
     firstName: 'Facilities',
     lastName: 'Manager',

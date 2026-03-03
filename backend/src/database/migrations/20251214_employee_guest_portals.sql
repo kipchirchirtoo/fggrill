@@ -251,7 +251,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
 INSERT INTO users (id, email, password_hash, first_name, last_name, role, status, branch_id)
 VALUES (
   'e1000000-0000-0000-0000-000000000001',
-  'employee@famousgate.com',
+  'employee@kyogong.com',
   '$2b$10$rQEY9zL5qK8xH3mN7pJ1/.XvYwZ4kL6mN8oP0qR2sT4uV6wX8yZ0a',
   'John',
   'Employee',
@@ -267,7 +267,7 @@ VALUES (
 INSERT INTO users (id, email, password_hash, first_name, last_name, role, status)
 VALUES (
   'f1000000-0000-0000-0000-000000000001',
-  'guest@famousgate.com',
+  'guest@kyogong.com',
   '$2b$10$rQEY9zL5qK8xH3mN7pJ1/.XvYwZ4kL6mN8oP0qR2sT4uV6wX8yZ0a',
   'Jane',
   'Guest',
@@ -289,9 +289,9 @@ SELECT
   '2024-01-15',
   'EMP001234',
   'active'
-FROM users WHERE email = 'employee@famousgate.com'
+FROM users WHERE email = 'employee@kyogong.com'
 AND NOT EXISTS (
-  SELECT 1 FROM staff_profiles sp JOIN users u ON sp.user_id = u.id WHERE u.email = 'employee@famousgate.com'
+  SELECT 1 FROM staff_profiles sp JOIN users u ON sp.user_id = u.id WHERE u.email = 'employee@kyogong.com'
 );
 
 -- Create guest profile
@@ -302,9 +302,9 @@ SELECT
   'AB1234567',
   'Kenya',
   false
-FROM users WHERE email = 'guest@famousgate.com'
+FROM users WHERE email = 'guest@kyogong.com'
 AND NOT EXISTS (
-  SELECT 1 FROM guest_profiles gp JOIN users u ON gp.user_id = u.id WHERE u.email = 'guest@famousgate.com'
+  SELECT 1 FROM guest_profiles gp JOIN users u ON gp.user_id = u.id WHERE u.email = 'guest@kyogong.com'
 );
 
 -- Create guest loyalty record
@@ -315,9 +315,9 @@ SELECT
   'silver',
   3,
   45000
-FROM users WHERE email = 'guest@famousgate.com'
+FROM users WHERE email = 'guest@kyogong.com'
 AND NOT EXISTS (
-  SELECT 1 FROM guest_loyalty gl JOIN users u ON gl.guest_id = u.id WHERE u.email = 'guest@famousgate.com'
+  SELECT 1 FROM guest_loyalty gl JOIN users u ON gl.guest_id = u.id WHERE u.email = 'guest@kyogong.com'
 );
 
 -- Insert sample hotel amenities

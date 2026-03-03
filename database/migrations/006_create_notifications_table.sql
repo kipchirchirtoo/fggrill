@@ -1,5 +1,5 @@
 -- =====================================================
--- FAMOUS GATE HOTEL - NOTIFICATIONS SYSTEM
+-- Kyogong - NOTIFICATIONS SYSTEM
 -- Migration: Create notifications table and related indexes
 -- =====================================================
 
@@ -39,7 +39,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_i
 CREATE INDEX IF NOT EXISTS idx_notifications_role_unread ON notifications(role, is_read, created_at DESC) WHERE role IS NOT NULL;
 
 -- Add comment to table
-COMMENT ON TABLE notifications IS 'System-wide notification system for Famous Gate Hotel';
+COMMENT ON TABLE notifications IS 'System-wide notification system for Kyogong';
 COMMENT ON COLUMN notifications.user_id IS 'Specific user to notify (if targeted notification)';
 COMMENT ON COLUMN notifications.role IS 'Role to notify (if role-based notification)';
 COMMENT ON COLUMN notifications.branch_id IS 'Branch to notify (if branch-specific notification)';
@@ -151,7 +151,7 @@ $$ LANGUAGE plpgsql;
 -- Insert sample notifications for testing (optional - remove in production)
 -- INSERT INTO notifications (role, title, message, type, category, priority) 
 -- VALUES 
---     ('receptionist', 'System Notification', 'Welcome to the Famous Gate Hotel notification system!', 'info', 'system', 'low'),
+--     ('receptionist', 'System Notification', 'Welcome to the Kyogong notification system!', 'info', 'system', 'low'),
 --     ('super_admin', 'System Ready', 'Notification system is now active and ready to use.', 'success', 'system', 'medium');
 
 -- Grant permissions

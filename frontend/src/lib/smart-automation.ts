@@ -1,4 +1,4 @@
-// Smart Automation Features for Famous Gate Hotel Management System
+// Smart Automation Features for Kyogong Management System
 
 import type { 
   Booking, 
@@ -297,15 +297,15 @@ export class AutomationEngine {
   }
 
   private static sendSMS(notification: any) {
-    console.log('SMS sent:', notification.message);
+    // console.log('SMS sent:', notification.message);
   }
 
   private static sendEmail(notification: any) {
-    console.log('Email sent:', notification.message);
+    // console.log('Email sent:', notification.message);
   }
 
   private static sendPushNotification(notification: any) {
-    console.log('Push notification sent:', notification.message);
+    // console.log('Push notification sent:', notification.message);
   }
 }
 
@@ -444,7 +444,7 @@ export const SmartAutomation = {
     // Start monitoring
     this.startMonitoring();
     
-    console.log('Smart Automation System initialized');
+    // console.log('Smart Automation System initialized');
   },
   
   registerDefaultRules() {
@@ -500,7 +500,7 @@ export const SmartAutomation = {
     };
     
     // Log or process metrics
-    console.log('System health check:', metrics);
+    // console.log('System health check:', metrics);
   }
 };
 

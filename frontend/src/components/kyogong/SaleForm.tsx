@@ -161,7 +161,7 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
                     return;
                 }
             } catch (e) {
-                console.warn('Native printing failed, falling back to window.print', e);
+                // console.warn('Native printing failed, falling back to window.print', e);
             }
         }
 
@@ -181,11 +181,11 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
         }));
 
         const totalAmount = transactionData.total_amount;
-        const b = activeBranch || { name: 'Famous Gates Hotels', location: 'Bomet, Kenya', settings: { phone: '0706782828', pin: '', email: 'famousgatesbmt@gmail.com' } };
+        const b = activeBranch || { name: 'Kyogongs', location: 'Bomet, Kenya', settings: { phone: '0706782828', pin: '', email: 'kyogongsbmt@gmail.com' } };
         const companyName = b.name.toUpperCase();
         const companyAddress = b.location;
         const companyPhone = b.settings?.phone || '0706782828';
-        const companyEmail = b.settings?.email || 'famousgatesbmt@gmail.com';
+        const companyEmail = b.settings?.email || 'kyogongsbmt@gmail.com';
 
         const receiptHtml = `
             <html>

@@ -8,11 +8,12 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { staffAPI, systemAPI } from '@/lib/api';
+import { staffAPI, systemAPI, storeAPI } from '@/lib/api';
 import { toast } from 'sonner';
-import { Users, RefreshCw, Plus, Search, User, Building2, Edit2, Trash2, Mail, Phone, FileText, History, UserPlus, Archive, ArrowLeft } from 'lucide-react';
+import { Users, RefreshCw, Plus, Search, User, Building2, Edit2, Trash2, Mail, Phone, FileText, History, UserPlus, Archive, ArrowLeft, Download } from 'lucide-react';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { downloadEmployeePDF } from '@/lib/employee-pdf';
 
 interface Staff {
     id: string;
@@ -26,6 +27,9 @@ interface Staff {
     phone?: string;
     national_id?: string;
     status: 'active' | 'inactive';
+    nssf_enabled?: boolean;
+    shif_enabled?: boolean;
+    housing_fund_enabled?: boolean;
 }
 
 export default function HREmployeesPage() {
@@ -63,7 +67,10 @@ export default function HREmployeesPage() {
         supervisor_id: '',
         basic_salary: 0,
         status: 'active',
-        archive_notes: ''
+        archive_notes: '',
+        nssf_enabled: true,
+        shif_enabled: true,
+        housing_fund_enabled: true
     });
     const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,14 +82,97 @@ export default function HREmployeesPage() {
     const fetchStaffData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [staffRes, branchesRes, departmentsRes, rolesRes] = await Promise.all([
+            const [staffRes, branchesRes, departmentsRes, rolesRes, driversRes, usersRes] = await Promise.all([
                 staffAPI.getStaff(),
                 systemAPI.getBranches(),
                 systemAPI.getDepartments(),
                 staffAPI.getRoles(),
+                storeAPI.getDrivers(),
+                typeof systemAPI.getSystemUsers === 'function' ? systemAPI.getSystemUsers() : Promise.resolve({ data: [] }),
             ]);
 
-            if (staffRes.success) setStaff(staffRes.data || []);
+            // Map drivers from Central Store into the Staff shape
+            const rawDrivers: any[] = driversRes?.data || [];
+            const rawUsers: any[] = usersRes?.data || [];
+            const regularStaff: Staff[] = staffRes.success ? (staffRes.data || []) : [];
+
+            // Build a deduplication lookup set from existing staff_profiles
+            // Keys: lowercased email (if available) OR "firstname|lastname|phone"
+            const staffKeys = new Set<string>();
+            for (const s of regularStaff) {
+                if (s.email) staffKeys.add(s.email.toLowerCase().trim());
+                if (s.phone) staffKeys.add(`${s.first_name}|${s.last_name}|${s.phone}`.toLowerCase().trim());
+            }
+
+            // Extract users missing from staff_profiles (Waiters, Cashiers, Kitchen, etc)
+            const missingUsers: Staff[] = rawUsers
+                .filter((u: any) => {
+                    // Only include users who aren't drivers (already handled) without full profiles
+                    if (u.role === 'driver') return false;
+
+                    const emailKey = (u.email || '').toLowerCase().trim();
+                    const namePhoneKey = `${u.first_name || ''}|${u.last_name || ''}|${(u.phone_number || '')}`.toLowerCase().trim();
+
+                    return (
+                        (!emailKey || !staffKeys.has(emailKey)) &&
+                        !staffKeys.has(namePhoneKey)
+                    );
+                })
+                .map((u: any) => {
+                    return {
+                        id: u.id,
+                        first_name: u.first_name || '',
+                        last_name: u.last_name || '',
+                        email: u.email || '',
+                        role: u.role || 'user',
+                        branch_id: u.branch_id ? String(u.branch_id) : undefined,
+                        department: u.role === 'restaurant' || u.role === 'pos_kitchen' ? 'Service/F&B' : 'Operations',
+                        phone: u.phone_number || '',
+                        national_id: '',
+                        status: (u.status === 'active' ? 'active' : 'inactive') as 'active' | 'inactive',
+                        ...(u as any)
+                    } as Staff;
+                });
+
+            // Update staffKeys with the missing users to prevent drivers from colliding
+            for (const u of missingUsers) {
+                if (u.email) staffKeys.add(u.email.toLowerCase().trim());
+                if (u.phone) staffKeys.add(`${u.first_name}|${u.last_name}|${u.phone}`.toLowerCase().trim());
+            }
+
+            // Only include drivers NOT already present in staffKeys
+            const driverStaff: Staff[] = rawDrivers
+                .filter((d: any) => {
+                    const emailKey = (d.email || '').toLowerCase().trim();
+                    const nameParts = (d.name || '').trim().split(' ');
+                    const firstName = nameParts[0] || '';
+                    const lastName = nameParts.slice(1).join(' ');
+                    const namePhoneKey = `${firstName}|${lastName}|${(d.phone || '')}`.toLowerCase().trim();
+
+                    return (
+                        (!emailKey || !staffKeys.has(emailKey)) &&
+                        !staffKeys.has(namePhoneKey)
+                    );
+                })
+                .map((d: any) => {
+                    const nameParts = (d.name || '').trim().split(' ');
+                    return {
+                        id: d.id,
+                        first_name: nameParts[0] || d.name,
+                        last_name: nameParts.slice(1).join(' ') || '',
+                        email: d.email || '',
+                        role: 'driver',
+                        branch_id: d.branch_id ? String(d.branch_id) : undefined,
+                        department: 'Logistics',
+                        phone: d.phone || '',
+                        national_id: d.license_number || '',
+                        status: (d.status === 'active' ? 'active' : 'inactive') as 'active' | 'inactive',
+                        ...(d as any)
+                    } as Staff;
+                });
+
+            setStaff([...regularStaff, ...missingUsers, ...driverStaff]);
+
             if (branchesRes.success) setBranches(branchesRes.data || []);
             if (departmentsRes.success) setDepartments(departmentsRes.data || []);
             if (rolesRes.success) setRoles(rolesRes.data || []);
@@ -130,7 +220,10 @@ export default function HREmployeesPage() {
             supervisor_id: '',
             basic_salary: 0,
             status: 'active',
-            archive_notes: ''
+            archive_notes: '',
+            nssf_enabled: true,
+            shif_enabled: true,
+            housing_fund_enabled: true
         });
         setWizardStep(1);
         setFormErrors({});
@@ -192,7 +285,10 @@ export default function HREmployeesPage() {
             ec_relationship: (member as any).emergency_contact?.relationship || (member as any).ec_relationship || '',
             supervisor_id: (member as any).supervisor_id || '',
             basic_salary: (member as any).basic_salary || 0,
-            archive_notes: (member as any).archive_notes || ''
+            archive_notes: (member as any).archive_notes || '',
+            nssf_enabled: member.nssf_enabled !== false,
+            shif_enabled: member.shif_enabled !== false,
+            housing_fund_enabled: member.housing_fund_enabled !== false
         });
         setEditModalOpen(true);
     };
@@ -327,6 +423,19 @@ export default function HREmployeesPage() {
                                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                             </button>
                             <button
+                                onClick={() => {
+                                    const branchMap = branches.reduce((acc: any, b: any) => ({ ...acc, [b.id]: b.name }), {});
+                                    const departmentMap = departments.reduce((acc: any, d: any) => ({ ...acc, [d.name]: d.name }), {}); // Names are mostly used, mapping just in case
+                                    downloadEmployeePDF(filteredStaff, { branchMap, departmentMap });
+                                    toast.success('Downloading Employee Registry...');
+                                }}
+                                disabled={filteredStaff.length === 0}
+                                className="px-4 py-2.5 rounded-full bg-white border border-stone-200 text-stone-700 text-sm font-bold hover:bg-stone-50 transition-all flex items-center gap-2 shadow-sm active:scale-95"
+                            >
+                                <Download className="h-4 w-4" />
+                                <span>Export PDF</span>
+                            </button>
+                            <button
                                 onClick={() => setAddModalOpen(true)}
                                 className="px-5 py-2.5 rounded-full bg-stone-900 text-white text-sm font-bold hover:bg-stone-800 transition-all flex items-center gap-2 shadow-md active:scale-95"
                             >
@@ -408,7 +517,12 @@ export default function HREmployeesPage() {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <span className="text-[13px] font-semibold text-stone-700">{member.role}</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[13px] font-semibold text-stone-700">{member.role}</span>
+                                                        {member.role === 'driver' && (
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-blue-50 text-blue-600 border border-blue-100">Central Store</span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-1.5 text-[13px] text-stone-600 font-medium">
@@ -555,7 +669,7 @@ export default function HREmployeesPage() {
                                                     value={formData.email}
                                                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                                     className={`border-none p-0 h-auto focus-visible:ring-0 text-lg ${formErrors.email ? 'text-red-500' : ''}`}
-                                                    placeholder="famousgatesbmt@gmail.com"
+                                                    placeholder="kyogongsbmt@gmail.com"
                                                 />
                                             </div>
                                             <div className="p-4">
@@ -637,7 +751,7 @@ export default function HREmployeesPage() {
                                             </div>
                                         </div>
 
-                                        <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-stone-100 p-4">
+                                        <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-stone-100 p-4 space-y-4">
                                             <div className="flex items-center justify-between">
                                                 <label className="text-sm font-medium text-stone-700">Employment Status</label>
                                                 <select
@@ -648,6 +762,45 @@ export default function HREmployeesPage() {
                                                     <option value="active">Active</option>
                                                     <option value="inactive">Inactive</option>
                                                 </select>
+                                            </div>
+
+                                            <div className="pt-4 border-t border-stone-50 space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-[13px] font-bold text-stone-700">NSSF Contribution</p>
+                                                        <p className="text-[10px] text-stone-400">Social security savings</p>
+                                                    </div>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={formData.nssf_enabled}
+                                                        onChange={(e) => setFormData({ ...formData, nssf_enabled: e.target.checked })}
+                                                        className="w-5 h-5 rounded-md border-stone-300 text-[#007AFF] focus:ring-[#007AFF]"
+                                                    />
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-[13px] font-bold text-stone-700">SHIF Contribution</p>
+                                                        <p className="text-[10px] text-stone-400">Health insurance fund</p>
+                                                    </div>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={formData.shif_enabled}
+                                                        onChange={(e) => setFormData({ ...formData, shif_enabled: e.target.checked })}
+                                                        className="w-5 h-5 rounded-md border-stone-300 text-[#007AFF] focus:ring-[#007AFF]"
+                                                    />
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-[13px] font-bold text-stone-700">Housing Fund</p>
+                                                        <p className="text-[10px] text-stone-400">Affordable housing levy</p>
+                                                    </div>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={formData.housing_fund_enabled}
+                                                        onChange={(e) => setFormData({ ...formData, housing_fund_enabled: e.target.checked })}
+                                                        className="w-5 h-5 rounded-md border-stone-300 text-[#007AFF] focus:ring-[#007AFF]"
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
                                     </motion.div>

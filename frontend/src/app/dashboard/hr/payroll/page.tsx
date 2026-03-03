@@ -21,7 +21,8 @@ import {
     FileText,
     TrendingDown,
     Activity,
-    MinusCircle
+    MinusCircle,
+    ArrowDownUp
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -56,8 +57,7 @@ export default function HRPayrollPage() {
         try {
             const res = await staffAPI.simplePayroll.getPayrollRecords({
                 month: Number(selectedMonth),
-                year: Number(selectedYear),
-                branch_id: activeBranch?.id
+                year: Number(selectedYear)
             });
 
             if (res.success) {
@@ -82,7 +82,7 @@ export default function HRPayrollPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [selectedMonth, selectedYear, activeBranch]);
+    }, [selectedMonth, selectedYear]);
 
     useEffect(() => {
         fetchPayrollData();
@@ -97,8 +97,7 @@ export default function HRPayrollPage() {
         try {
             const res = await staffAPI.simplePayroll.generatePayroll({
                 month: Number(selectedMonth),
-                year: Number(selectedYear),
-                branch_id: activeBranch?.id
+                year: Number(selectedYear)
             });
 
             if (res.success) {
@@ -165,14 +164,21 @@ export default function HRPayrollPage() {
                                 <span>Process Payroll</span>
                             </button>
 
+                            <Link
+                                href="/dashboard/hr/adjustments"
+                                className="px-5 py-2 rounded-full bg-stone-100 text-stone-600 text-sm font-bold hover:bg-stone-200 transition-all flex items-center gap-2 active:scale-95 shadow-lg shadow-stone-100"
+                            >
+                                <ArrowDownUp className="h-4 w-4" />
+                                <span>Manage Adjustments</span>
+                            </Link>
+
                             <button
                                 onClick={async () => {
                                     if (!confirm(`Generate and download payslips ZIP for ${selectedMonth}/${selectedYear}?`)) return;
                                     toast.info('Generating ZIP...');
                                     const res = await staffAPI.simplePayroll.downloadPayslipsZip({
                                         month: Number(selectedMonth),
-                                        year: Number(selectedYear),
-                                        branch_id: activeBranch?.id
+                                        year: Number(selectedYear)
                                     });
                                     if (res.success) toast.success('Download started');
                                     else toast.error(res.message || 'Download failed');
@@ -189,8 +195,7 @@ export default function HRPayrollPage() {
                                     toast.info('Sending emails...');
                                     const res = await staffAPI.simplePayroll.emailPayslips({
                                         month: Number(selectedMonth),
-                                        year: Number(selectedYear),
-                                        branch_id: activeBranch?.id
+                                        year: Number(selectedYear)
                                     });
                                     if (res.success) toast.success('Emails sent successfully');
                                     else toast.error(res.message || 'Email sending failed');
@@ -251,54 +256,71 @@ export default function HRPayrollPage() {
                             <table className="w-full text-left text-sm">
                                 <thead className="bg-stone-50/50 border-b border-stone-100">
                                     <tr>
-                                        <th className="px-6 py-4 font-bold text-stone-400 text-xs uppercase tracking-wider">Staff Member</th>
-                                        <th className="px-6 py-4 font-bold text-stone-400 text-xs uppercase tracking-wider text-right">Basic Salary</th>
-                                        <th className="px-6 py-4 font-bold text-stone-400 text-xs uppercase tracking-wider text-right">Credit Bills</th>
-                                        <th className="px-6 py-4 font-bold text-stone-400 text-xs uppercase tracking-wider text-right">Advances</th>
-                                        <th className="px-6 py-4 font-bold text-stone-400 text-xs uppercase tracking-wider text-right">Loans</th>
-                                        <th className="px-6 py-4 font-bold text-emerald-600 text-xs uppercase tracking-wider text-right">Net Pay</th>
-                                        <th className="px-6 py-4 font-bold text-stone-400 text-xs uppercase tracking-wider text-center">Status</th>
-                                        <th className="px-6 py-4"></th>
+                                        <th className="px-4 py-4 font-bold text-stone-400 text-xs uppercase tracking-wider">Staff Member</th>
+                                        <th className="px-3 py-4 font-bold text-stone-400 text-xs uppercase tracking-wider text-right">Basic Salary</th>
+                                        <th className="px-3 py-4 font-bold text-stone-400 text-xs uppercase tracking-wider text-right">NSSF</th>
+                                        <th className="px-3 py-4 font-bold text-stone-400 text-xs uppercase tracking-wider text-right">SHIF</th>
+                                        <th className="px-3 py-4 font-bold text-stone-400 text-xs uppercase tracking-wider text-right">Housing</th>
+                                        <th className="px-3 py-4 font-bold text-stone-400 text-xs uppercase tracking-wider text-right">PAYE</th>
+                                        <th className="px-3 py-4 font-bold text-stone-400 text-xs uppercase tracking-wider text-right">Credits</th>
+                                        <th className="px-3 py-4 font-bold text-stone-400 text-xs uppercase tracking-wider text-right">Advances</th>
+                                        <th className="px-3 py-4 font-bold text-stone-400 text-xs uppercase tracking-wider text-right">Loans</th>
+                                        <th className="px-3 py-4 font-bold text-orange-500 text-xs uppercase tracking-wider text-right">Total Ded.</th>
+                                        <th className="px-3 py-4 font-bold text-emerald-600 text-xs uppercase tracking-wider text-right">Net Pay</th>
+                                        <th className="px-3 py-4 font-bold text-stone-400 text-xs uppercase tracking-wider text-center">Status</th>
+                                        <th className="px-3 py-4"></th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-stone-50">
                                     {isLoading ? (
-                                        <tr><td colSpan={8} className="p-8 text-center text-stone-400">Loading payroll data...</td></tr>
+                                        <tr><td colSpan={13} className="p-8 text-center text-stone-400">Loading payroll data...</td></tr>
                                     ) : filteredRecords.length === 0 ? (
-                                        <tr><td colSpan={8} className="p-8 text-center text-stone-400">No payroll records found for this period.</td></tr>
+                                        <tr><td colSpan={13} className="p-8 text-center text-stone-400">No payroll records found for this period.</td></tr>
                                     ) : (
                                         filteredRecords.map((item) => (
                                             <tr key={item.id} className="hover:bg-stone-50/50 transition-colors group">
-                                                <td className="px-6 py-4">
+                                                <td className="px-4 py-4">
                                                     <p className="font-bold text-stone-900">{item.staff?.first_name} {item.staff?.last_name}</p>
                                                     <p className="text-xs text-stone-500 uppercase tracking-tight">{item.staff?.role}</p>
                                                 </td>
-                                                <td className="px-6 py-4 text-right font-medium text-stone-600">
+                                                <td className="px-3 py-4 text-right font-medium text-stone-600">
                                                     {Number(item.basic_salary).toLocaleString()}
                                                 </td>
-                                                <td className="px-6 py-4 text-right font-medium text-red-500">
-                                                    {Number(item.total_credit_bills) > 0 && '-'}
-                                                    {Number(item.total_credit_bills).toLocaleString()}
+                                                <td className="px-3 py-4 text-right font-medium text-red-500">
+                                                    {Number(item.nssf_deduction || item.nssf || 0).toLocaleString()}
                                                 </td>
-                                                <td className="px-6 py-4 text-right font-medium text-red-500">
-                                                    {Number(item.total_advances) > 0 && '-'}
-                                                    {Number(item.total_advances).toLocaleString()}
+                                                <td className="px-3 py-4 text-right font-medium text-red-500">
+                                                    {Number(item.shif_deduction || 0).toLocaleString()}
                                                 </td>
-                                                <td className="px-6 py-4 text-right font-medium text-red-500">
-                                                    {Number(item.total_loan_deduction) > 0 && '-'}
-                                                    {Number(item.total_loan_deduction).toLocaleString()}
+                                                <td className="px-3 py-4 text-right font-medium text-red-500">
+                                                    {Number(item.housing_levy_deduction || item.housing_levy || 0).toLocaleString()}
                                                 </td>
-                                                <td className="px-6 py-4 text-right font-bold text-emerald-600 text-lg">
+                                                <td className="px-3 py-4 text-right font-medium text-red-500">
+                                                    {Number(item.paye || 0).toLocaleString()}
+                                                </td>
+                                                <td className="px-3 py-4 text-right font-medium text-red-500">
+                                                    {Number(item.total_credit_bills || 0).toLocaleString()}
+                                                </td>
+                                                <td className="px-3 py-4 text-right font-medium text-red-500">
+                                                    {Number(item.total_advances || 0).toLocaleString()}
+                                                </td>
+                                                <td className="px-3 py-4 text-right font-medium text-red-500">
+                                                    {Number(item.loan_deduction || 0).toLocaleString()}
+                                                </td>
+                                                <td className="px-3 py-4 text-right font-bold text-orange-500">
+                                                    {Number(item.total_deductions || 0).toLocaleString()}
+                                                </td>
+                                                <td className="px-3 py-4 text-right font-bold text-emerald-600 text-lg">
                                                     {Number(item.net_pay).toLocaleString()}
                                                 </td>
-                                                <td className="px-6 py-4 text-center">
+                                                <td className="px-3 py-4 text-center">
                                                     <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border ${item.status === 'paid' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
                                                         'bg-amber-50 border-amber-100 text-amber-600'
                                                         }`}>
                                                         {item.status}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-4 text-right">
+                                                <td className="px-3 py-4 text-right">
                                                     <button className="text-stone-300 hover:text-stone-900 transition-colors">
                                                         <ChevronRight className="h-5 w-5" />
                                                     </button>

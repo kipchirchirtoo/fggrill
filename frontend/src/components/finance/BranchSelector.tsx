@@ -24,7 +24,7 @@ export function BranchSelector({ selectedBranch, onBranchChange, className }: Br
         setIsLoading(true);
         try {
             const response = await financeAPI.getBranches();
-            console.log('Fetched branches:', response.data);
+            // console.log('Fetched branches:', response.data);
             if (response.success && Array.isArray(response.data)) {
                 setBranches(response.data);
             }

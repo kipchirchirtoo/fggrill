@@ -1,5 +1,5 @@
 -- ============================================================
--- FAMOUS GATE HOTEL - MULTI-BRANCH INVENTORY SYSTEM
+-- Kyogong - MULTI-BRANCH INVENTORY SYSTEM
 -- Complete migration for central dispatch inventory architecture
 -- Run this in Supabase SQL Editor
 -- ============================================================

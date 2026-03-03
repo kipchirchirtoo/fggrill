@@ -45,15 +45,15 @@ export default function MasterTerminalPage() {
 
     // Keyboard support
     useEffect(() => {
-        console.log('[Terminal] Page mounted successfully');
-        console.log('[Terminal] Environment check:');
-        console.log('  - DragEvent available:', typeof DragEvent !== 'undefined');
-        console.log('  - PointerEvent available:', typeof PointerEvent !== 'undefined');
-        console.log('  - electronAPI available:', typeof window !== 'undefined' && !!(window as any).electronAPI);
+        // console.log('[Terminal] Page mounted successfully');
+        // console.log('[Terminal] Environment check:');
+        // console.log('  - DragEvent available:', typeof DragEvent !== 'undefined');
+        // console.log('  - PointerEvent available:', typeof PointerEvent !== 'undefined');
+        // console.log('  - electronAPI available:', typeof window !== 'undefined' && !!(window as any).electronAPI);
         
         if (typeof window !== 'undefined') {
             (window as any).terminalMounted = true;
-            console.log('[Terminal] Window.terminalMounted flag set');
+            // console.log('[Terminal] Window.terminalMounted flag set');
         }
     }, []);
 
@@ -75,10 +75,10 @@ export default function MasterTerminalPage() {
     const handleLogin = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
 
-        console.log('[Terminal] handleLogin called');
-        console.log('[Terminal] isElectron:', isElectron);
-        console.log('[Terminal] isOnline:', isOnline);
-        console.log('[Terminal] PIN length:', pin.length);
+        // console.log('[Terminal] handleLogin called');
+        // console.log('[Terminal] isElectron:', isElectron);
+        // console.log('[Terminal] isOnline:', isOnline);
+        // console.log('[Terminal] PIN length:', pin.length);
 
         if (pin.length !== 5) {
             toast.warning('PIN must be 5 characters (e.g. R0123)');
@@ -90,9 +90,9 @@ export default function MasterTerminalPage() {
         try {
             // If in Electron and offline, try local PIN verification
             if (isElectron && !isOnline) {
-                console.log('[Terminal] Offline login attempt...');
+                // console.log('[Terminal] Offline login attempt...');
                 const cachedUser = await verifyPinOffline(pin);
-                console.log('[Terminal] Cached user result:', cachedUser);
+                // console.log('[Terminal] Cached user result:', cachedUser);
                 
                 if (cachedUser) {
                     toast.success(`Offline login: ${cachedUser.firstName || cachedUser.first_name}`, {
@@ -113,40 +113,40 @@ export default function MasterTerminalPage() {
                         targetPath = '/dashboard/pos-kitchen?tab=bar';
                     }
 
-                    console.log('[Terminal] Target path:', targetPath);
-                    console.log('[Terminal] Redirecting in Electron offline mode...');
+                    // console.log('[Terminal] Target path:', targetPath);
+                    // console.log('[Terminal] Redirecting in Electron offline mode...');
 
                     // Use IPC-based navigation for maximum reliability
                     if (typeof window !== 'undefined' && (window as any).electronAPI) {
                         const cleanPath = targetPath.startsWith('/') ? targetPath.substring(1) : targetPath;
                         const redirectUrl = `pos://terminal.html/${cleanPath}`;
-                        console.log('[Terminal] Redirect URL:', redirectUrl);
+                        // console.log('[Terminal] Redirect URL:', redirectUrl);
                         
                         // Give a moment for localStorage to persist
                         setTimeout(async () => {
-                            console.log('[Terminal] Executing redirect...');
+                            // console.log('[Terminal] Executing redirect...');
                             
                             // Try IPC navigation first (most reliable)
                             if ((window as any).electronAPI.navigate) {
                                 try {
                                     const success = await (window as any).electronAPI.navigate(redirectUrl);
                                     if (success) {
-                                        console.log('[Terminal] IPC navigation successful');
+                                        // console.log('[Terminal] IPC navigation successful');
                                         return;
                                     }
-                                    console.warn('[Terminal] IPC navigation returned false, trying window.location');
+                                    // console.warn('[Terminal] IPC navigation returned false, trying window.location');
                                 } catch (error) {
                                     console.error('[Terminal] IPC navigation error:', error);
                                 }
                             }
                             
                             // Fallback to window.location
-                            console.log('[Terminal] Using window.location.href fallback');
+                            // console.log('[Terminal] Using window.location.href fallback');
                             window.location.href = redirectUrl;
                         }, 100);
                     } else {
                         // Fallback: use Next.js router (shouldn't happen in Electron)
-                        console.warn('[Terminal] electronAPI not available, using router');
+                        // console.warn('[Terminal] electronAPI not available, using router');
                         router.push(targetPath);
                     }
                 } else {
@@ -155,7 +155,7 @@ export default function MasterTerminalPage() {
                 }
             } else {
                 // Online: normal API login (posLogin handles routing internally)
-                console.log('[Terminal] Online login attempt...');
+                // console.log('[Terminal] Online login attempt...');
                 await posLogin(pin);
                 
                 // Cache PIN + user data for offline use when in Electron
@@ -165,7 +165,7 @@ export default function MasterTerminalPage() {
                         if (storedUser) {
                             const userData = JSON.parse(storedUser) as any;
                             await cachePin(pin, userData.id, userData, userData.branch_id || 0);
-                            console.log('[Terminal] PIN cached for offline use');
+                            // console.log('[Terminal] PIN cached for offline use');
                         }
                     } catch (e) { 
                         console.error('[Terminal] PIN caching failed:', e);

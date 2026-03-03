@@ -52,7 +52,7 @@ if (isDev) {
     app.commandLine.appendSwitch('allow-insecure-localhost');
 }
 
-const DOMAIN_URL = isDev ? 'http://127.0.0.1:3001' : 'https://famousgate.hirall.com';
+const DOMAIN_URL = isDev ? 'http://127.0.0.1:3001' : 'https://kyogong.hirall.com';
 const API_BASE_URL = isDev ? 'http://127.0.0.1:5000' : 'https://api.hirall.com';
 const TERMINAL_PATH = '/terminal';
 const CACHE_DIR = path.join(app.getPath('userData'), 'page-cache');

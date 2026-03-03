@@ -1,5 +1,5 @@
-// Service Worker for Famous Gate Housekeeping PWA
-const CACHE_NAME = 'fg-housekeeping-v3';
+// Service Worker for Kyogong Housekeeping PWA
+const CACHE_NAME = 'fg-housekeeping-v4-stock-fix';
 const OFFLINE_URL = '/offline.html';
 
 // Resources to cache immediately
@@ -11,7 +11,7 @@ const STATIC_RESOURCES = [
 ];
 
 // API endpoints to cache for offline use
-const API_CACHE_NAME = 'fg-housekeeping-api-v1';
+const API_CACHE_NAME = 'fg-housekeeping-api-v2-stock-fix';
 const CACHEABLE_API_ROUTES = [
   '/api/housekeeping/dashboard',
   '/api/housekeeping/tasks',
@@ -298,7 +298,7 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  const title = data.title || 'Famous Gates';
+  const title = data.title || 'Kyogongs';
   const options = {
     body: data.message || data.body || 'You have a new notification',
     icon: '/fglogo.png',

@@ -1,5 +1,5 @@
 -- ============================================================
--- FAMOUS GATE HOTEL - DEMO USERS
+-- Kyogong - DEMO USERS
 -- Run this in Supabase SQL Editor to create demo accounts
 -- ============================================================
 
@@ -10,9 +10,9 @@
 -- First, ensure we have the branches set up
 INSERT INTO branches (name, code, location, is_main_branch, is_central_warehouse, can_create_items, can_dispatch, status)
 VALUES 
-  ('Famous Gate Kericho (Central)', 'KER', 'Kericho Town', TRUE, TRUE, TRUE, TRUE, 'active'),
-  ('Famous Gate Bomet', 'BOM', 'Bomet Town', FALSE, FALSE, FALSE, FALSE, 'active'),
-  ('Famous Gate Narok', 'NAR', 'Narok Town', FALSE, FALSE, FALSE, FALSE, 'active')
+  ('Kyogong Kericho (Central)', 'KER', 'Kericho Town', TRUE, TRUE, TRUE, TRUE, 'active'),
+  ('Kyogong Bomet', 'BOM', 'Bomet Town', FALSE, FALSE, FALSE, FALSE, 'active'),
+  ('Kyogong Narok', 'NAR', 'Narok Town', FALSE, FALSE, FALSE, FALSE, 'active')
 ON CONFLICT DO NOTHING;
 
 -- Demo Users
@@ -29,35 +29,35 @@ ON CONFLICT DO NOTHING;
 DEMO ACCOUNTS TO CREATE IN SUPABASE AUTH:
 
 1. Super Admin
-   Email: admin@famousgate.com
+   Email: admin@kyogong.com
    Password: admin123
    
 2. Manager  
-   Email: manager@famousgate.com
+   Email: manager@kyogong.com
    Password: manager123
    
 3. Central Storekeeper
-   Email: central@famousgate.com
+   Email: central@kyogong.com
    Password: central123
    
 4. Branch Storekeeper
-   Email: storekeeper@famousgate.com
+   Email: storekeeper@kyogong.com
    Password: store123
    
 5. Receptionist
-   Email: reception@famousgate.com
+   Email: reception@kyogong.com
    Password: reception123
    
 6. Housekeeping
-   Email: housekeeping@famousgate.com
+   Email: housekeeping@kyogong.com
    Password: house123
    
 7. Restaurant
-   Email: restaurant@famousgate.com
+   Email: restaurant@kyogong.com
    Password: rest123
    
 8. Accountant
-   Email: accountant@famousgate.com
+   Email: accountant@kyogong.com
    Password: account123
 */
 
@@ -69,13 +69,13 @@ DEMO ACCOUNTS TO CREATE IN SUPABASE AUTH:
 INSERT INTO users (id, email, full_name, role, branch_id, status, created_at)
 SELECT 
   auth.uid() as id,
-  'admin@famousgate.com' as email,
+  'admin@kyogong.com' as email,
   'System Administrator' as full_name,
   'super_admin' as role,
   NULL as branch_id,
   'active' as status,
   NOW() as created_at
-WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@famousgate.com');
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@kyogong.com');
 */
 
 -- ============================================================

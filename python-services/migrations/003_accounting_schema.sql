@@ -1,4 +1,4 @@
--- Famous Gate Hotel - Accounting & Audit Database Schema
+-- Kyogong - Accounting & Audit Database Schema
 -- Migration script for accounting functionality
 
 -- Chart of Accounts

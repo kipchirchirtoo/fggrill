@@ -96,7 +96,7 @@ class AutomationService {
         await this.emailTransporter.sendMail({
           from: process.env.SMTP_USER,
           to: booking.guest.email,
-          subject: 'Check-in Reminder - Famous Gate Hotel',
+          subject: 'Check-in Reminder - Kyogong',
           html: `
             <h2>Check-in Reminder</h2>
             <p>Dear ${booking.guest.first_name} ${booking.guest.last_name},</p>
@@ -139,7 +139,7 @@ class AutomationService {
         await this.emailTransporter.sendMail({
           from: process.env.SMTP_USER,
           to: booking.guest.email,
-          subject: 'Check-out Reminder - Famous Gate Hotel',
+          subject: 'Check-out Reminder - Kyogong',
           html: `
             <h2>Check-out Reminder</h2>
             <p>Dear ${booking.guest.first_name} ${booking.guest.last_name},</p>
@@ -213,7 +213,7 @@ class AutomationService {
             await this.emailTransporter.sendMail({
               from: process.env.SMTP_USER,
               to: manager.email,
-              subject: 'Low Stock Alert - Famous Gate Hotel',
+              subject: 'Low Stock Alert - Kyogong',
               html: `
                 <h2>Low Stock Alert</h2>
                 <p>Dear ${manager.first_name},</p>
@@ -353,12 +353,12 @@ class AutomationService {
         await this.emailTransporter.sendMail({
           from: process.env.SMTP_USER,
           to: staff.user.email,
-          subject: 'Happy Birthday from Famous Gate Hotel!',
+          subject: 'Happy Birthday from Kyogong!',
           html: `
             <h2>Happy Birthday, ${staff.user.first_name}! 🎉</h2>
-            <p>The entire team at Famous Gate Hotel wishes you a wonderful birthday!</p>
+            <p>The entire team at Kyogong wishes you a wonderful birthday!</p>
             <p>May your day be filled with joy and happiness.</p>
-            <p>Best wishes,<br>The Famous Gate Hotel Team</p>
+            <p>Best wishes,<br>The Kyogong Team</p>
           `
         });
       }

@@ -1,4 +1,4 @@
-// Comprehensive System Types for Famous Gate Hotel Management System
+// Comprehensive System Types for Kyogong Management System
 
 // ============= BOOKING SYSTEM =============
 export interface Booking {

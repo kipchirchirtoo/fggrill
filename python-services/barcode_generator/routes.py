@@ -121,7 +121,7 @@ class BarcodeGeneratorService:
             
             # Header
             draw.rectangle([0, 0, width, 80], fill=primary_color)
-            draw.text((20, 20), "FAMOUS GATE HOTEL", fill='white', font=title_font)
+            draw.text((20, 20), "Kyogong", fill='white', font=title_font)
             draw.text((20, 50), "BOOKING CONFIRMATION", fill='white', font=header_font)
             
             # Booking ID
@@ -267,7 +267,7 @@ def generate_qr_code():
         if not booking_id:
             return jsonify({'error': 'booking_id is required'}), 400
         
-        qr_data = booking_url or f"https://famousgatehotel.com/booking/{booking_id}"
+        qr_data = booking_url or f"https://kyogong.com/booking/{booking_id}"
         qr_bytes = barcode_service.generate_qr_code(qr_data, 300)
         qr_b64 = base64.b64encode(qr_bytes).decode('utf-8')
         

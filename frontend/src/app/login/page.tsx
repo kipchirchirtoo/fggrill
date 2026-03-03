@@ -91,7 +91,7 @@ export default function LoginPage() {
             >
               <Image
                 src="/fglogo.png"
-                alt="Famous Gate"
+                alt="Kyogong"
                 width={56}
                 height={56}
                 className="object-cover scale-150"
@@ -100,7 +100,7 @@ export default function LoginPage() {
               />
             </motion.div>
             <h1 className="text-3xl font-black text-white tracking-tighter uppercase mb-1">
-              FAMOUS GATES SYSTEM
+              Famous Gates Hotels SYSTEM
             </h1>
             <p className="text-white/70 text-sm font-medium tracking-wide uppercase">
               Exclusive Hospitality Gateway
@@ -209,7 +209,7 @@ export default function LoginPage() {
                     </>
                   ) : (
                     <>
-                      <span>ENTER FAMOUSGATES HOTELS</span>
+                      <span>ENTER Famous Gates Hotels</span>
                       <ArrowRight className="h-5 w-5" />
                     </>
                   )}

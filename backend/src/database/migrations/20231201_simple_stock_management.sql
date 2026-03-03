@@ -1,5 +1,5 @@
 -- ============================================================
--- FAMOUS GATE HOTEL - SIMPLE STOCK MANAGEMENT TABLES
+-- Kyogong - SIMPLE STOCK MANAGEMENT TABLES
 -- Based on simple-stock-management reference project
 -- Run this in Supabase SQL Editor
 -- ============================================================

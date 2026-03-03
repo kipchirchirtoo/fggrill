@@ -66,8 +66,9 @@ import suppliersRoutes from './suppliers.routes';
 import shiftsRoutes from './shifts.routes';
 import payrollEnhancedRoutes from './payroll-enhanced.routes';
 import cateringBookingsRoutes from './catering-bookings.routes';
-
-console.log('Index routes: importing staffRoutes', staffRoutes);
+import payrollAdjustmentsRoutes from './payroll-adjustments.routes';
+import statutoryDeductionsRoutes from './statutory-deductions.routes';
+import performanceRoutes from './performance.routes';
 
 const router = express.Router();
 
@@ -126,7 +127,6 @@ router.use('/channel-manager', channelManagerRoutes);
 router.use('/employee-portal', employeePortalRoutes);
 router.use('/guest-portal', guestPortalRoutes);
 router.use('/payroll', payrollRoutes);
-// router.use('/staff', staffRoutes); // Removed duplicate
 router.use('/email', emailRoutes);
 router.use('/barcode', barcodeRoutes);
 router.use('/storekeeping', storekeepingEnhancedRoutes);
@@ -150,6 +150,9 @@ router.use('/suppliers', suppliersRoutes);
 router.use('/shifts', shiftsRoutes);
 router.use('/payroll-enhanced', payrollEnhancedRoutes);
 router.use('/catering-bookings', cateringBookingsRoutes);
+router.use('/payroll-adjustments', payrollAdjustmentsRoutes);
+router.use('/payroll-statutory', statutoryDeductionsRoutes);
+router.use('/performance', performanceRoutes);
 
 // Email booking endpoints (public - no auth required)
 router.post('/email/send-booking/:bookingId', sendBookingEmail);
@@ -163,4 +166,3 @@ router.post('/mpesa/initiate', protect, initiateMpesaPayment);
 router.post('/mpesa/callback', mpesaCallback);
 
 export default router;
-

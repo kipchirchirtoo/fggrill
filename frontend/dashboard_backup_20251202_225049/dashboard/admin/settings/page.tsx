@@ -13,10 +13,10 @@ import { toast } from 'sonner';
 export default function AdminSettingsPage() {
   const { user } = useAuth();
   const [settings, setSettings] = useState({
-    hotelName: 'Famous Gate Hotel',
-    email: 'info@famousgate.com',
+    hotelName: 'Kyogong',
+    email: 'info@kyogong.com',
     phone: '+254 700 000 000',
-    website: 'www.famousgate.com',
+    website: 'www.kyogong.com',
     address: 'Bomet, Kenya',
     currency: 'KES',
     timezone: 'Africa/Nairobi',

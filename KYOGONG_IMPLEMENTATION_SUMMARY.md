@@ -464,4 +464,4 @@ For questions or issues:
 
 ---
 
-**Built with ❤️ for Famous Gates Hotels - Kyogong Branch**
+**Built with ❤️ for Kyogongs - Kyogong Branch**

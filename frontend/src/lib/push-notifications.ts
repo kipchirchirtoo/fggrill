@@ -4,19 +4,19 @@ export class PushNotificationManager {
 
     async initialize() {
         if (!('serviceWorker' in navigator)) {
-            console.warn('Service Workers not supported');
+            // console.warn('Service Workers not supported');
             return false;
         }
 
         if (!('PushManager' in window)) {
-            console.warn('Push notifications not supported');
+            // console.warn('Push notifications not supported');
             return false;
         }
 
         try {
             // Register service worker
             this.registration = await navigator.serviceWorker.register('/sw.js');
-            console.log('Service Worker registered:', this.registration);
+            // console.log('Service Worker registered:', this.registration);
             return true;
         } catch (error) {
             console.error('Service Worker registration failed:', error);
@@ -26,7 +26,7 @@ export class PushNotificationManager {
 
     async requestPermission(): Promise<boolean> {
         if (!('Notification' in window)) {
-            console.warn('Notifications not supported');
+            // console.warn('Notifications not supported');
             return false;
         }
 
@@ -42,7 +42,7 @@ export class PushNotificationManager {
         if (Notification.permission !== 'granted') {
             const granted = await this.requestPermission();
             if (!granted) {
-                console.warn('Notification permission denied');
+                // console.warn('Notification permission denied');
                 return;
             }
         }
@@ -60,7 +60,7 @@ export class PushNotificationManager {
 
     async testNotification() {
         await this.showNotification('Test Notification', {
-            body: 'This is a test notification from Famous Gates!',
+            body: 'This is a test notification from Famous Gates Hotels!',
             tag: 'test',
             data: { url: '/dashboard' }
         });

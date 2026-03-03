@@ -249,7 +249,7 @@ Authorization: Bearer <token>
 {
   "bank_name": "Equity Bank",
   "account_number": "0123456789",
-  "account_name": "Famous Gates Hotels - Main Branch",
+  "account_name": "Kyogongs - Main Branch",
   "account_type": "CURRENT",
   "currency": "KES",
   "opening_balance": 500000,
@@ -434,9 +434,9 @@ Authorization: Bearer <token>
 ### Sample Bank Accounts
 ```sql
 INSERT INTO bank_accounts (branch_id, bank_name, account_number, account_name, account_type, opening_balance, current_balance) VALUES
-(1, 'Equity Bank', '0123456789', 'Famous Gates Hotels - Main Branch', 'CURRENT', 500000, 500000),
-(1, 'KCB Bank', '9876543210', 'Famous Gates Hotels - Savings', 'SAVINGS', 1000000, 1000000),
-(2, 'Equity Bank', '0123456790', 'Famous Gates Hotels - Kyogong Branch', 'CURRENT', 300000, 300000);
+(1, 'Equity Bank', '0123456789', 'Kyogongs - Main Branch', 'CURRENT', 500000, 500000),
+(1, 'KCB Bank', '9876543210', 'Kyogongs - Savings', 'SAVINGS', 1000000, 1000000),
+(2, 'Equity Bank', '0123456790', 'Kyogongs - Kyogong Branch', 'CURRENT', 300000, 300000);
 ```
 
 ---

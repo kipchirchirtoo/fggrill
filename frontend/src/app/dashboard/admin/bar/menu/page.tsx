@@ -4,10 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { barAPI } from '@/lib/api';
-import { Beer, RefreshCw, Plus, Search, Edit2, Trash2, DollarSign } from 'lucide-react';
+import { barAPI, financeAPI } from '@/lib/api';
+import { Beer, RefreshCw, Plus, Search, Edit2, Trash2, DollarSign, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -22,14 +22,17 @@ interface DrinkItem {
     category_id: string;
     is_available: boolean;
     unit?: string;
+    branch_id?: number | null;
 }
 
 export default function AdminBarMenuPage() {
     const { user } = useAuth();
     const [items, setItems] = useState<DrinkItem[]>([]);
     const [categories, setCategories] = useState<any[]>([]);
+    const [branches, setBranches] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
     const [addModalOpen, setAddModalOpen] = useState(false);
     const [editModalOpen, setEditModalOpen] = useState(false);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -40,34 +43,44 @@ export default function AdminBarMenuPage() {
         description: '',
         price: 0,
         category_id: '',
-        unit: 'shot'
+        unit: 'shot',
+        branch_id: ''
     });
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [itemsRes, catsRes] = await Promise.all([
-                barAPI.getDrinks(),
-                barAPI.getCategories()
-            ]);
+            const promises = [
+                barAPI.getDrinks(undefined, undefined, true), // bypass cache
+                barAPI.getCategories(undefined, true) // bypass cache
+            ];
 
-            if (itemsRes.success) setItems(itemsRes.data || []);
-            if (catsRes.success) setCategories(catsRes.data || []);
+            if (user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER) {
+                promises.push(financeAPI.getBranches());
+            }
+
+            const results = await Promise.all(promises);
+            if (results[0].success) setItems(results[0].data || []);
+            if (results[1].success) setCategories(results[1].data || []);
+            if (results[2] && results[2].success) setBranches(results[2].data || []);
         } catch (error) {
             console.error('Error:', error);
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [user]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
-    const filteredItems = items.filter((i) =>
-        i.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        i.category?.name?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredItems = items.filter((i) => {
+        const matchesSearch = i.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            i.category?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesBranch = selectedBranchId === 'all' ||
+            (selectedBranchId === 'global' ? !i.branch_id : String(i.branch_id) === selectedBranchId);
+        return matchesSearch && matchesBranch;
+    });
 
-    const resetForm = () => setFormData({ name: '', description: '', price: 0, category_id: '', unit: 'shot' });
+    const resetForm = () => setFormData({ name: '', description: '', price: 0, category_id: '', unit: 'shot', branch_id: '' });
 
     const handleAddItem = async () => {
         if (!formData.name || !formData.price || !formData.category_id) {
@@ -95,7 +108,8 @@ export default function AdminBarMenuPage() {
             description: item.description || '',
             price: item.price,
             category_id: item.category_id || '',
-            unit: item.unit || 'shot'
+            unit: item.unit || 'shot',
+            branch_id: item.branch_id ? String(item.branch_id) : ''
         });
         setEditModalOpen(true);
     };
@@ -146,6 +160,12 @@ export default function AdminBarMenuPage() {
         }
     };
 
+    const getBranchName = (branchId?: number | null) => {
+        if (!branchId) return 'All Branches';
+        const branch = branches.find(b => b.id === branchId);
+        return branch ? branch.name : 'Unknown Branch';
+    };
+
     return (
         <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
             <DashboardLayout>
@@ -162,14 +182,32 @@ export default function AdminBarMenuPage() {
                     </div>
 
                     <IOSCard className="p-4">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
-                            <Input
-                                placeholder="Search drinks or categories..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-9"
-                            />
+                        <div className="flex flex-col md:flex-row gap-4">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
+                                <Input
+                                    placeholder="Search drinks or categories..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="pl-9"
+                                />
+                            </div>
+
+                            {branches.length > 0 && (
+                                <div className="md:w-64">
+                                    <select
+                                        value={selectedBranchId}
+                                        onChange={(e) => setSelectedBranchId(e.target.value)}
+                                        className="w-full p-2 border rounded-ios-lg bg-white h-10 text-sm"
+                                    >
+                                        <option value="all">All Branches</option>
+                                        <option value="global">Global Items</option>
+                                        {branches.map((branch) => (
+                                            <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                         </div>
                     </IOSCard>
 
@@ -195,6 +233,15 @@ export default function AdminBarMenuPage() {
                                             {item.is_available ? 'In Stock' : 'Out of Stock'}
                                         </IOSBadge>
                                     </div>
+
+                                    {/* Branch Indicator */}
+                                    {branches.length > 0 && (
+                                        <div className="flex items-center gap-1 text-xs text-gray-400 mb-3">
+                                            <MapPin className="h-3 w-3" />
+                                            {getBranchName(item.branch_id)}
+                                        </div>
+                                    )}
+
                                     <div className="flex items-center justify-between mt-4">
                                         <p className="font-bold text-lg flex items-center gap-1">
                                             <DollarSign className="h-4 w-4" />
@@ -221,89 +268,127 @@ export default function AdminBarMenuPage() {
 
                 {/* Add Modal */}
                 <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
-                    <DialogContent className="max-w-md">
+                    <DialogContent className="max-w-xl">
                         <DialogHeader><DialogTitle>Add New Drink</DialogTitle></DialogHeader>
-                        <div className="space-y-4 mt-4">
-                            <div>
-                                <label className="text-sm font-medium">Name *</label>
-                                <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
-                            </div>
-                            <div>
-                                <label className="text-sm font-medium">Description</label>
-                                <Input value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
+                        <DialogBody>
+                            <div className="space-y-4">
                                 <div>
-                                    <label className="text-sm font-medium">Price *</label>
-                                    <Input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} />
+                                    <label className="text-sm font-medium">Name *</label>
+                                    <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
                                 </div>
                                 <div>
-                                    <label className="text-sm font-medium">Unit (e.g. shot, bottle)</label>
-                                    <Input value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} />
+                                    <label className="text-sm font-medium">Description</label>
+                                    <Input value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
                                 </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-sm font-medium">Price *</label>
+                                        <Input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} />
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium">Unit (e.g. shot, bottle)</label>
+                                        <Input value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium">Category *</label>
+                                    <select
+                                        value={formData.category_id}
+                                        onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                                        className="w-full p-2 border rounded-ios-lg bg-white"
+                                    >
+                                        <option value="">Select category</option>
+                                        {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                                    </select>
+                                </div>
+
+                                {branches.length > 0 && (
+                                    <div>
+                                        <label className="text-sm font-medium">Branch</label>
+                                        <select
+                                            value={formData.branch_id}
+                                            onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })}
+                                            className="w-full p-2 border rounded-ios-lg bg-white"
+                                        >
+                                            <option value="">All Branches (Global)</option>
+                                            {branches.map((branch) => (
+                                                <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
+                                            ))}
+                                        </select>
+                                        <p className="text-xs text-gray-500 mt-1">Leave empty to make this item available to all branches.</p>
+                                    </div>
+                                )}
                             </div>
-                            <div>
-                                <label className="text-sm font-medium">Category *</label>
-                                <select
-                                    value={formData.category_id}
-                                    onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                                    className="w-full p-2 border rounded-ios-lg bg-white"
-                                >
-                                    <option value="">Select category</option>
-                                    {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
-                                </select>
-                            </div>
-                            <div className="flex gap-3 pt-2">
-                                <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                                <IOSButton onClick={handleAddItem} disabled={isSubmitting} className="flex-1">
-                                    {isSubmitting ? 'Adding...' : 'Add Drink'}
-                                </IOSButton>
-                            </div>
-                        </div>
+                        </DialogBody>
+                        <DialogFooter>
+                            <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
+                            <IOSButton onClick={handleAddItem} disabled={isSubmitting} className="flex-1">
+                                {isSubmitting ? 'Adding...' : 'Add Drink'}
+                            </IOSButton>
+                        </DialogFooter>
                     </DialogContent>
                 </Dialog>
 
                 {/* Edit Modal */}
                 <Dialog open={editModalOpen} onOpenChange={(open) => { setEditModalOpen(open); if (!open) setSelectedItem(null); }}>
-                    <DialogContent className="max-w-md">
+                    <DialogContent className="max-w-xl">
                         <DialogHeader><DialogTitle>Edit Drink</DialogTitle></DialogHeader>
-                        <div className="space-y-4 mt-4">
-                            <div>
-                                <label className="text-sm font-medium">Name *</label>
-                                <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
-                            </div>
-                            <div>
-                                <label className="text-sm font-medium">Description</label>
-                                <Input value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
+                        <DialogBody>
+                            <div className="space-y-4">
                                 <div>
-                                    <label className="text-sm font-medium">Price *</label>
-                                    <Input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} />
+                                    <label className="text-sm font-medium">Name *</label>
+                                    <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
                                 </div>
                                 <div>
-                                    <label className="text-sm font-medium">Unit</label>
-                                    <Input value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} />
+                                    <label className="text-sm font-medium">Description</label>
+                                    <Input value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
                                 </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-sm font-medium">Price *</label>
+                                        <Input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} />
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium">Unit</label>
+                                        <Input value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium">Category</label>
+                                    <select
+                                        value={formData.category_id}
+                                        onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                                        className="w-full p-2 border rounded-ios-lg bg-white"
+                                    >
+                                        <option value="">Select category</option>
+                                        {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                                    </select>
+                                </div>
+
+                                {branches.length > 0 && (
+                                    <div>
+                                        <label className="text-sm font-medium">Branch</label>
+                                        <select
+                                            value={formData.branch_id}
+                                            onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })}
+                                            className="w-full p-2 border rounded-ios-lg bg-white"
+                                        >
+                                            <option value="">All Branches (Global)</option>
+                                            {branches.map((branch) => (
+                                                <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
+                                            ))}
+                                        </select>
+                                        <p className="text-xs text-gray-500 mt-1">Move item to a specific branch or make global.</p>
+                                    </div>
+                                )}
                             </div>
-                            <div>
-                                <label className="text-sm font-medium">Category</label>
-                                <select
-                                    value={formData.category_id}
-                                    onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                                    className="w-full p-2 border rounded-ios-lg bg-white"
-                                >
-                                    <option value="">Select category</option>
-                                    {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
-                                </select>
-                            </div>
-                            <div className="flex gap-3 pt-2">
-                                <IOSButton variant="secondary" onClick={() => setEditModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                                <IOSButton onClick={handleUpdateItem} disabled={isSubmitting} className="flex-1">
-                                    {isSubmitting ? 'Updating...' : 'Update Drink'}
-                                </IOSButton>
-                            </div>
-                        </div>
+                        </DialogBody>
+                        <DialogFooter>
+                            <IOSButton variant="secondary" onClick={() => setEditModalOpen(false)} className="flex-1">Cancel</IOSButton>
+                            <IOSButton onClick={handleUpdateItem} disabled={isSubmitting} className="flex-1">
+                                {isSubmitting ? 'Updating...' : 'Update Drink'}
+                            </IOSButton>
+                        </DialogFooter>
                     </DialogContent>
                 </Dialog>
 
@@ -328,7 +413,7 @@ export default function AdminBarMenuPage() {
                         </div>
                     </DialogContent>
                 </Dialog>
-            </DashboardLayout>
-        </ProtectedRoute>
+            </DashboardLayout >
+        </ProtectedRoute >
     );
 }

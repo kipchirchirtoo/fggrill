@@ -1,4 +1,4 @@
-# Famous Gate Hotel Management System
+# Kyogong Management System
 
 A comprehensive, full-stack hotel management system built with modern technologies for efficient hotel operations, revenue management, and guest experience.
 
@@ -275,7 +275,7 @@ cd frontend && npm run build
 
 ## 📄 License
 
-This project is proprietary software for Famous Gate Hotel.
+This project is proprietary software for Kyogong.
 
 ## 🤝 Support
 
@@ -283,4 +283,4 @@ For support, contact the development team or create an issue in the repository.
 
 ---
 
-Built with ❤️ for Famous Gate Hotel
+Built with ❤️ for Kyogong

@@ -1,5 +1,5 @@
 /**
- * Date formatting utilities for Famous Gate Hotel
+ * Date formatting utilities for Kyogong
  * Format: dd/mm/yy (e.g., 27/11/24)
  */
 

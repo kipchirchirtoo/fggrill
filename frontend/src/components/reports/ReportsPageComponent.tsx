@@ -199,7 +199,7 @@ export function ReportsPageComponent({
       setBranches(branchData);
 
       // Log for debugging
-      console.log('Fetched branches:', branchData);
+      // console.log('Fetched branches:', branchData);
     } catch (error) {
       console.error('Error fetching branches:', error);
     }
@@ -282,7 +282,7 @@ export function ReportsPageComponent({
         branch_name: effectiveBranchName || 'All Branches'
       };
 
-      console.log('Generating report with filters:', filters);
+      // console.log('Generating report with filters:', filters);
 
       await reportsService.downloadReport(reportType, filters, format);
       toast.success(`${reportType.replace('_', ' ')} report downloaded successfully!`);
@@ -726,7 +726,7 @@ export function ReportsPageComponent({
                   <select
                     value={selectedBranch}
                     onChange={(e) => {
-                      console.log('Branch selector changed to:', e.target.value);
+                      // console.log('Branch selector changed to:', e.target.value);
                       setSelectedBranch(e.target.value);
                     }}
                     className="w-full px-3 py-2 border border-gray-200 rounded-ios-lg"

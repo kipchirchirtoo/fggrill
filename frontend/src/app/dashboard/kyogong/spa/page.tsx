@@ -7,7 +7,7 @@ export default function KyogongSpaPage() {
         <ProtectedRoute allowedRoles={[UserRole.KYOGONG_SPA_CASHIER, UserRole.SUPER_ADMIN]}>
             <KyogongPOSLayout
                 title="Spa & Wellness POS"
-                subtitle="Famous Gates Hotel – Kyogong Branch"
+                subtitle="Kyogong – Kyogong Branch"
                 serviceType="spa"
                 salesPointCode="SPA"
                 allowedRole={UserRole.KYOGONG_SPA_CASHIER}

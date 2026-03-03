@@ -33,7 +33,7 @@ async function updateHotelContactInfo() {
 
         console.log('\n🔧 Updating contact information for all branches...');
         console.log('   Phone: 0706782828');
-        console.log('   Email: famousgatesbmt@gmail.com\n');
+        console.log('   Email: kyogongsbmt@gmail.com\n');
 
         // Update all branches with the new contact info
         for (const branch of branches) {
@@ -41,13 +41,13 @@ async function updateHotelContactInfo() {
             const updatedSettings = {
                 ...currentSettings,
                 phone: '0706782828',
-                email: 'famousgatesbmt@gmail.com'
+                email: 'kyogongsbmt@gmail.com'
             };
 
             const { error: updateError } = await supabase
                 .from('branches')
                 .update({ 
-                    name: 'Famous Gates Hotels',
+                    name: 'Kyogongs',
                     settings: updatedSettings 
                 })
                 .eq('id', branch.id);
@@ -64,9 +64,9 @@ async function updateHotelContactInfo() {
         console.log('   1. Restart your application');
         console.log('   2. Print a test receipt to verify the changes');
         console.log('   3. The receipt should now show:');
-        console.log('      - Hotel Name: FAMOUS GATES HOTELS');
+        console.log('      - Hotel Name: KyogongS');
         console.log('      - Phone: 0706782828');
-        console.log('      - Email: famousgatesbmt@gmail.com');
+        console.log('      - Email: kyogongsbmt@gmail.com');
 
     } catch (error) {
         console.error('❌ Unexpected error:', error);

@@ -11,7 +11,7 @@ export default function ArchitectureDocs() {
                     <h1 className="text-3xl font-bold text-stone-900">System Architecture</h1>
                 </div>
                 <p className="text-lg text-stone-600 max-w-3xl">
-                    The Famous Gate Management System is built on a modern, distributed microservices architecture designed for high availability, scalability, and real-time responsiveness.
+                    The Kyogong Management System is built on a modern, distributed microservices architecture designed for high availability, scalability, and real-time responsiveness.
                 </p>
             </div>
 
