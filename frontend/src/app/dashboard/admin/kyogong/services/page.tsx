@@ -8,6 +8,7 @@ import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';
 import { ServiceFormModal } from '@/components/kyogong/ServiceFormModal';
 import { toast } from 'sonner';
+import { API_URL } from '@/lib/config';
 import {
     Plus, Search, Filter, RefreshCw,
     Edit2, Trash2, Power, PowerOff,
@@ -37,7 +38,7 @@ export default function DynamicServicesPage() {
         setIsLoading(true);
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/kyogong/dynamic-services`, {
+            const res = await fetch(`${API_URL}/api/kyogong/dynamic-services`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const data = await res.json();
@@ -59,7 +60,7 @@ export default function DynamicServicesPage() {
     const handleToggleStatus = async (service: DynamicService) => {
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/kyogong/dynamic-services/${service.id}`, {
+            const res = await fetch(`${API_URL}/api/kyogong/dynamic-services/${service.id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',

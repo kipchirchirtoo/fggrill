@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
 import { Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { API_URL } from '@/lib/config';
 
 interface ShiftCloserProps {
     shift: any;
@@ -36,7 +37,7 @@ export function ShiftCloser({ shift, onShiftClosed }: ShiftCloserProps) {
         setIsSubmitting(true);
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/kyogong/shifts/${shift.id}/close`, {
+            const res = await fetch(`${API_URL}/api/kyogong/shifts/${shift.id}/close`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',

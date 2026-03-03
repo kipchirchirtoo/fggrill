@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { X, Loader2, PlusCircle, MinusCircle } from 'lucide-react';
+import { API_URL } from '@/lib/config';
 
 interface PettyCashModalProps {
     shift: any;
@@ -39,7 +40,7 @@ export function PettyCashModal({ shift, onClose, onSaved }: PettyCashModalProps)
         setIsSubmitting(true);
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/kyogong/petty-cash`, {
+            const res = await fetch(`${API_URL}/api/kyogong/petty-cash`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Loader2, Plus, X as XIcon, ShoppingCart, CheckCircle, Printer } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
+import { API_URL } from '@/lib/config';
 
 interface DynamicService {
     id: number;
@@ -54,7 +55,7 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
         try {
             const token = localStorage.getItem('token');
             const query = serviceType ? `?service_type=${serviceType}&is_active=true` : '?is_active=true';
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/kyogong/dynamic-services${query}`, {
+            const res = await fetch(`${API_URL}/api/kyogong/dynamic-services${query}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const data = await res.json();
@@ -96,7 +97,7 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
         setIsSubmitting(true);
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/kyogong/shifts/${shift.id}/transactions`, {
+            const res = await fetch(`${API_URL}/api/kyogong/shifts/${shift.id}/transactions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({

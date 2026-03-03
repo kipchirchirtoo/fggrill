@@ -35,3 +35,54 @@ The Kyogong shift POS system endpoints are returning 404 errors when accessed fr
 3.3 WHEN the database tables for Kyogong (shifts, sales_points, etc.) are queried directly THEN the system SHALL CONTINUE TO return data correctly
 
 3.4 WHEN other middleware (protect, authorize) is applied to routes THEN the system SHALL CONTINUE TO function correctly for all routes
+
+
+## Root Cause Analysis
+
+The 404 errors were caused by Kyogong components using `process.env.NEXT_PUBLIC_API_URL` directly instead of importing the `API_URL` constant from `@/lib/config`. 
+
+The `config.ts` file has normalization logic that ensures the API URL is properly formatted with the correct protocol (http:// or https://). When components bypass this and use the raw environment variable, they can get malformed URLs.
+
+In production builds, if `NEXT_PUBLIC_API_URL` is set to just `api.hirall.com` (without protocol), the browser treats it as a relative path and concatenates it with the current page URL, resulting in malformed URLs like:
+`https://famousgate.hirall.com/dashboard/kyogong/api.hirall.com/api/kyogong/shifts/current`
+
+The backend routes were correctly configured and working - the issue was entirely on the frontend side with how the API URLs were being constructed.
+
+## Solution
+
+Updated all Kyogong components to import and use `API_URL` from `@/lib/config` instead of `process.env.NEXT_PUBLIC_API_URL`:
+
+1. `frontend/src/components/kyogong/KyogongPOSLayout.tsx` - Added import and replaced 2 API calls
+2. `frontend/src/components/kyogong/ShiftOpener.tsx` - Added import and replaced 2 API calls
+3. `frontend/src/components/kyogong/ShiftCloser.tsx` - Added import and replaced 1 API call
+4. `frontend/src/components/kyogong/SaleForm.tsx` - Added import and replaced 2 API calls
+5. `frontend/src/components/kyogong/PettyCashModal.tsx` - Added import and replaced 1 API call
+6. `frontend/src/components/kyogong/ServiceFormModal.tsx` - Added import and replaced 1 API call
+7. `frontend/src/app/dashboard/admin/kyogong/services/page.tsx` - Added import and replaced 2 API calls
+
+This ensures all API calls go through the proper URL normalization logic, which:
+- Adds the correct protocol (http:// or https://) if missing
+- Removes trailing slashes
+- Handles localhost vs production URLs correctly
+- Provides fallback to default production URLs when needed
+
+## Testing Instructions
+
+1. Start the backend dev server: `cd backend && npm run dev`
+2. Start the frontend dev server: `cd frontend && npm run dev`
+3. Navigate to the Kyogong POS pages (Spa, Executive Bar, Sports Bar, Reception)
+4. Verify that:
+   - Sales points load correctly
+   - Current shift status loads without 404 errors
+   - Shift opening works
+   - Transaction recording works
+   - Shift closing works
+   - No console errors about malformed URLs
+
+## Deployment Notes
+
+For production deployment, ensure `NEXT_PUBLIC_API_URL` is set to the full URL with protocol:
+- Correct: `NEXT_PUBLIC_API_URL=https://api.hirall.com`
+- Incorrect: `NEXT_PUBLIC_API_URL=api.hirall.com`
+
+However, even if the environment variable is set incorrectly, the normalization logic in `config.ts` will now handle it properly.

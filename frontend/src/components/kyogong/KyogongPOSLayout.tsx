@@ -8,6 +8,7 @@ import { ShiftCloser } from './ShiftCloser';
 import { SaleForm } from './SaleForm';
 import { PettyCashModal } from './PettyCashModal';
 import { toast } from 'sonner';
+import { API_URL } from '@/lib/config';
 import {
     Clock, DollarSign, TrendingUp, BarChart3,
     Receipt, Wallet, X, AlertCircle, Loader2,
@@ -50,7 +51,7 @@ export function KyogongPOSLayout({
         setShiftLoading(true);
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/kyogong/shifts/current`, {
+            const res = await fetch(`${API_URL}/api/kyogong/shifts/current`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const data = await res.json();
@@ -70,7 +71,7 @@ export function KyogongPOSLayout({
     const fetchTransactions = async (shiftId: string) => {
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/kyogong/shifts/${shiftId}/transactions`, {
+            const res = await fetch(`${API_URL}/api/kyogong/shifts/${shiftId}/transactions`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const data = await res.json();

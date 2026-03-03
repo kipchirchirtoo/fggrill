@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { X, Loader2, Save } from 'lucide-react';
 import { IOSButton } from '@/components/ui/ios-button';
+import { API_URL } from '@/lib/config';
 
 interface ServiceFormModalProps {
     service?: any;
@@ -43,8 +44,8 @@ export function ServiceFormModal({ service, onClose, onSaved }: ServiceFormModal
         try {
             const token = localStorage.getItem('token');
             const url = service
-                ? `${process.env.NEXT_PUBLIC_API_URL}/api/kyogong/dynamic-services/${service.id}`
-                : `${process.env.NEXT_PUBLIC_API_URL}/api/kyogong/dynamic-services`;
+                ? `${API_URL}/api/kyogong/dynamic-services/${service.id}`
+                : `${API_URL}/api/kyogong/dynamic-services`;
 
             const method = service ? 'PUT' : 'POST';
 

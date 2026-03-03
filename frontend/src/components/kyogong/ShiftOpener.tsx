@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { Loader2, DollarSign, Store } from 'lucide-react';
+import { API_URL } from '@/lib/config';
 
 interface SalesPoint {
     id: number;
@@ -37,7 +38,7 @@ export function ShiftOpener({ onShiftOpened }: ShiftOpenerProps) {
             // We need to add this endpoint to api.ts or use fetchAPI directly
             // Using fetchAPI for now as it might not be in api.ts yet
             const token = localStorage.getItem('token');
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/kyogong/sales-points?is_active=true`, {
+            const res = await fetch(`${API_URL}/api/kyogong/sales-points?is_active=true`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const data = await res.json();
@@ -83,7 +84,7 @@ export function ShiftOpener({ onShiftOpened }: ShiftOpenerProps) {
         setIsSubmitting(true);
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/kyogong/shifts/open`, {
+            const res = await fetch(`${API_URL}/api/kyogong/shifts/open`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
