@@ -108,7 +108,7 @@ export default function HREmployeesPage() {
             const missingUsers: Staff[] = rawUsers
                 .filter((u: any) => {
                     // Only include users who aren't drivers (already handled) without full profiles
-                    if (u.role === 'driver') return false;
+                    if (u.role === 'driver' || u.role === 'guest') return false;
 
                     const emailKey = (u.email || '').toLowerCase().trim();
                     const namePhoneKey = `${u.first_name || ''}|${u.last_name || ''}|${(u.phone_number || '')}`.toLowerCase().trim();
