@@ -373,14 +373,34 @@ function CashierPageContent() {
                 };
                 setTransactionHistory([newTxn, ...transactionHistory]);
 
-                // Refresh bill data
+                // Refresh bill data and unpaid bills list
+                await fetchUnpaidBills(); // Refresh unpaid bills first
+                
                 const refresh = await fetchAPI(`/cashier/bill/${identifier}`) as any;
                 if (refresh.success) {
-                    setBillData(refresh.data);
-                    setPaymentAmount(refresh.data.financials.balance.toString());
-                    setCustomerPhone('');
+                    // Check if bill is now fully paid
+                    const isFullyPaid = refresh.data.financials.balance <= 0 || refresh.data.payment_status === 'paid';
+                    
+                    if (isFullyPaid && !isPending) {
+                        // Clear the bill from view after successful payment
+                        setTimeout(() => {
+                            setBillData(null);
+                            setScanInput('');
+                            setPaymentAmount('');
+                            setCashGiven('');
+                            setMpesaCode('');
+                            setCustomerPhone('');
+                            setCustomerName('');
+                            toast.success('Payment complete! Bill cleared.');
+                        }, 1500);
+                    } else {
+                        // Partial payment or pending - keep bill visible with updated balance
+                        setBillData(refresh.data);
+                        setPaymentAmount(refresh.data.financials.balance.toString());
+                        setCustomerPhone('');
+                    }
+                    
                     syncProducts(); // Refresh local cache
-                    fetchUnpaidBills();
                 }
             }
         } catch (error: any) {
