@@ -134,6 +134,44 @@ function CashierPageContent() {
         }
     };
 
+    /**
+     * Verify that a bill has been removed from the unpaid bills list
+     * Uses retry logic with exponential backoff to handle database replication lag
+     * @param billNumber - The bill number to check
+     * @param maxAttempts - Maximum number of retry attempts (default: 5)
+     * @returns Object with removed status and number of attempts
+     */
+    const verifyBillRemoved = async (
+        billNumber: string,
+        maxAttempts: number = 5
+    ): Promise<{ removed: boolean; attempts: number }> => {
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            // Exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms
+            const delay = 100 * Math.pow(2, attempt - 1);
+            await new Promise(resolve => setTimeout(resolve, delay));
+
+            // Fetch fresh unpaid bills data
+            try {
+                const response = await fetchAPI('/cashier/unpaid-bills') as any;
+                if (response.success) {
+                    const stillUnpaid = response.data.some(
+                        (bill: any) => bill.bill_number === billNumber
+                    );
+
+                    if (!stillUnpaid) {
+                        console.log(`[Verification] Bill ${billNumber} removed after ${attempt} attempts`);
+                        return { removed: true, attempts: attempt };
+                    }
+                }
+            } catch (error) {
+                console.error(`[Verification] Attempt ${attempt} failed:`, error);
+            }
+        }
+
+        console.error(`[Verification] Bill ${billNumber} still present after ${maxAttempts} attempts`);
+        return { removed: false, attempts: maxAttempts };
+    };
+
     const fetchInsights = async () => {
         setIsInsightLoading(true);
         try {
@@ -329,6 +367,9 @@ function CashierPageContent() {
                     : (billData.type === 'unpaid_bill' ? billData.bill.bill_number : billData.booking.id));
             const methodKey = paymentMethod === 'mpesa' ? 'mpesa_manual' : (paymentMethod === 'card' ? 'card_manual' : 'cash');
 
+            // Detect if this is a Kyogong bill (pattern: PREFIX-YYYYMMDD-NNNN)
+            const isKyogongBill = /^[A-Z]+-\d{8}-\d{4}$/.test(identifier);
+
             const response = await fetchAPI('/cashier/pay', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -373,34 +414,69 @@ function CashierPageContent() {
                 };
                 setTransactionHistory([newTxn, ...transactionHistory]);
 
-                // Refresh bill data and unpaid bills list
-                await fetchUnpaidBills(); // Refresh unpaid bills first
-                
-                const refresh = await fetchAPI(`/cashier/bill/${identifier}`) as any;
-                if (refresh.success) {
-                    // Check if bill is now fully paid
-                    const isFullyPaid = refresh.data.financials.balance <= 0 || refresh.data.payment_status === 'paid';
-                    
-                    if (isFullyPaid && !isPending) {
-                        // Clear the bill from view after successful payment
-                        setTimeout(() => {
-                            setBillData(null);
-                            setScanInput('');
-                            setPaymentAmount('');
-                            setCashGiven('');
-                            setMpesaCode('');
-                            setCustomerPhone('');
-                            setCustomerName('');
-                            toast.success('Payment complete! Bill cleared.');
-                        }, 1500);
-                    } else {
-                        // Partial payment or pending - keep bill visible with updated balance
-                        setBillData(refresh.data);
-                        setPaymentAmount(refresh.data.financials.balance.toString());
+                // Handle Kyogong bills with verification retry logic
+                if (isKyogongBill && !isPending) {
+                    // Optimistic UI update: immediately remove from unpaid list
+                    setUnpaidBills(prev => 
+                        prev.filter(bill => bill.bill_number !== identifier)
+                    );
+
+                    // Verify bill removal with retry logic
+                    const verification = await verifyBillRemoved(identifier, 5);
+
+                    if (verification.removed) {
+                        console.log(`[Payment] Kyogong bill verified removed after ${verification.attempts} attempts`);
+                        toast.success(`Payment verified (${verification.attempts} ${verification.attempts === 1 ? 'attempt' : 'attempts'})`);
+                        
+                        // Clear bill from view
+                        setBillData(null);
+                        setScanInput('');
+                        setPaymentAmount('');
+                        setCashGiven('');
+                        setMpesaCode('');
                         setCustomerPhone('');
+                        setCustomerName('');
+                    } else {
+                        // Verification failed - show warning
+                        console.error(`[Payment] Kyogong bill verification failed for ${identifier}`);
+                        toast.warning(
+                            'Payment recorded but bill still showing. Please refresh manually.',
+                            { duration: 5000 }
+                        );
+                        
+                        // Final refresh attempt
+                        await fetchUnpaidBills();
                     }
+                } else {
+                    // Non-Kyogong bills: use existing logic
+                    await fetchUnpaidBills(); // Refresh unpaid bills first
                     
-                    syncProducts(); // Refresh local cache
+                    const refresh = await fetchAPI(`/cashier/bill/${identifier}`) as any;
+                    if (refresh.success) {
+                        // Check if bill is now fully paid
+                        const isFullyPaid = refresh.data.financials.balance <= 0 || refresh.data.payment_status === 'paid';
+                        
+                        if (isFullyPaid && !isPending) {
+                            // Clear the bill from view after successful payment
+                            setTimeout(() => {
+                                setBillData(null);
+                                setScanInput('');
+                                setPaymentAmount('');
+                                setCashGiven('');
+                                setMpesaCode('');
+                                setCustomerPhone('');
+                                setCustomerName('');
+                                toast.success('Payment complete! Bill cleared.');
+                            }, 1500);
+                        } else {
+                            // Partial payment or pending - keep bill visible with updated balance
+                            setBillData(refresh.data);
+                            setPaymentAmount(refresh.data.financials.balance.toString());
+                            setCustomerPhone('');
+                        }
+                        
+                        syncProducts(); // Refresh local cache
+                    }
                 }
             }
         } catch (error: any) {
