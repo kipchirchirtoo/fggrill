@@ -1,8 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    // Only use 'export' for production builds (Electron)
-    // In development, use standard Next.js server for dynamic routes
-    output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
+    // Only use 'export' for Electron builds, not for Vercel
+    // Vercel needs server-side rendering for dynamic routes
+    output: process.env.BUILD_FOR_ELECTRON === 'true' ? 'export' : undefined,
     typescript: {
         ignoreBuildErrors: true,
     },
