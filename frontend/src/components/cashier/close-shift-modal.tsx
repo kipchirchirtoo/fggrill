@@ -42,6 +42,13 @@ export interface CloseShiftData {
     restaurant_revenue?: number;
     bar_revenue?: number;
     other_revenue?: number;
+    // Kyogong services revenue
+    catering_revenue?: number;
+    spa_revenue?: number;
+    sports_bar_revenue?: number;
+    executive_bar_revenue?: number;
+    car_wash_revenue?: number;
+    cashier_station_revenue?: number;
     // Credit & bills
     credit_bills_taken?: number;
     credit_bills_count?: number;
@@ -60,6 +67,12 @@ export interface CloseShiftData {
     pool_tokens_na?: boolean;
     conference_na?: boolean;
     rooms_na?: boolean;
+    catering_na?: boolean;
+    spa_na?: boolean;
+    sports_bar_na?: boolean;
+    executive_bar_na?: boolean;
+    car_wash_na?: boolean;
+    cashier_station_na?: boolean;
     // Notes
     notes?: string;
 }
@@ -74,6 +87,12 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
         restaurant_revenue: 0,
         bar_revenue: 0,
         other_revenue: 0,
+        catering_revenue: 0,
+        spa_revenue: 0,
+        sports_bar_revenue: 0,
+        executive_bar_revenue: 0,
+        car_wash_revenue: 0,
+        cashier_station_revenue: 0,
         credit_bills_taken: 0,
         credit_bills_count: 0,
         credit_bills_details: [],
@@ -89,6 +108,12 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
         pool_tokens_na: false,
         conference_na: false,
         rooms_na: false,
+        catering_na: false,
+        spa_na: false,
+        sports_bar_na: false,
+        executive_bar_na: false,
+        car_wash_na: false,
+        cashier_station_na: false,
         notes: ''
     });
 
@@ -201,7 +226,13 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
             formData.rooms_na ? 0 : (formData.room_booking_revenue || 0),
             formData.restaurant_revenue || 0,
             formData.bar_revenue || 0,
-            formData.other_revenue || 0
+            formData.other_revenue || 0,
+            formData.catering_na ? 0 : (formData.catering_revenue || 0),
+            formData.spa_na ? 0 : (formData.spa_revenue || 0),
+            formData.sports_bar_na ? 0 : (formData.sports_bar_revenue || 0),
+            formData.executive_bar_na ? 0 : (formData.executive_bar_revenue || 0),
+            formData.car_wash_na ? 0 : (formData.car_wash_revenue || 0),
+            formData.cashier_station_na ? 0 : (formData.cashier_station_revenue || 0)
         ];
         return revenue.reduce((sum, val) => sum + val, 0);
     };
@@ -420,6 +451,162 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
                                         type="number"
                                         value={formData.bar_revenue || ''}
                                         onChange={(e) => updateField('bar_revenue', parseFloat(e.target.value) || 0)}
+                                        placeholder="0.00"
+                                        className="h-11 font-bold bg-white rounded-lg px-4"
+                                    />
+                                </div>
+
+                                {/* Catering */}
+                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
+                                            <UtensilsCrossed className="h-4 w-4 text-amber-500" />
+                                            Catering
+                                        </Label>
+                                        <div className="flex items-center gap-2">
+                                            <Checkbox
+                                                checked={formData.catering_na}
+                                                onCheckedChange={(checked) => updateField('catering_na', checked)}
+                                                className="border-stone-300"
+                                            />
+                                            <span className="text-[10px] font-bold text-stone-500 uppercase">N/A</span>
+                                        </div>
+                                    </div>
+                                    <Input
+                                        type="number"
+                                        disabled={formData.catering_na}
+                                        value={formData.catering_na ? '' : formData.catering_revenue || ''}
+                                        onChange={(e) => updateField('catering_revenue', parseFloat(e.target.value) || 0)}
+                                        placeholder="0.00"
+                                        className="h-11 font-bold bg-white rounded-lg px-4"
+                                    />
+                                </div>
+
+                                {/* Spa */}
+                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
+                                            <Waves className="h-4 w-4 text-teal-500" />
+                                            Spa
+                                        </Label>
+                                        <div className="flex items-center gap-2">
+                                            <Checkbox
+                                                checked={formData.spa_na}
+                                                onCheckedChange={(checked) => updateField('spa_na', checked)}
+                                                className="border-stone-300"
+                                            />
+                                            <span className="text-[10px] font-bold text-stone-500 uppercase">N/A</span>
+                                        </div>
+                                    </div>
+                                    <Input
+                                        type="number"
+                                        disabled={formData.spa_na}
+                                        value={formData.spa_na ? '' : formData.spa_revenue || ''}
+                                        onChange={(e) => updateField('spa_revenue', parseFloat(e.target.value) || 0)}
+                                        placeholder="0.00"
+                                        className="h-11 font-bold bg-white rounded-lg px-4"
+                                    />
+                                </div>
+
+                                {/* Sports Bar */}
+                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
+                                            <Wine className="h-4 w-4 text-green-500" />
+                                            Sports Bar
+                                        </Label>
+                                        <div className="flex items-center gap-2">
+                                            <Checkbox
+                                                checked={formData.sports_bar_na}
+                                                onCheckedChange={(checked) => updateField('sports_bar_na', checked)}
+                                                className="border-stone-300"
+                                            />
+                                            <span className="text-[10px] font-bold text-stone-500 uppercase">N/A</span>
+                                        </div>
+                                    </div>
+                                    <Input
+                                        type="number"
+                                        disabled={formData.sports_bar_na}
+                                        value={formData.sports_bar_na ? '' : formData.sports_bar_revenue || ''}
+                                        onChange={(e) => updateField('sports_bar_revenue', parseFloat(e.target.value) || 0)}
+                                        placeholder="0.00"
+                                        className="h-11 font-bold bg-white rounded-lg px-4"
+                                    />
+                                </div>
+
+                                {/* Executive Bar */}
+                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
+                                            <Wine className="h-4 w-4 text-violet-500" />
+                                            Executive Bar
+                                        </Label>
+                                        <div className="flex items-center gap-2">
+                                            <Checkbox
+                                                checked={formData.executive_bar_na}
+                                                onCheckedChange={(checked) => updateField('executive_bar_na', checked)}
+                                                className="border-stone-300"
+                                            />
+                                            <span className="text-[10px] font-bold text-stone-500 uppercase">N/A</span>
+                                        </div>
+                                    </div>
+                                    <Input
+                                        type="number"
+                                        disabled={formData.executive_bar_na}
+                                        value={formData.executive_bar_na ? '' : formData.executive_bar_revenue || ''}
+                                        onChange={(e) => updateField('executive_bar_revenue', parseFloat(e.target.value) || 0)}
+                                        placeholder="0.00"
+                                        className="h-11 font-bold bg-white rounded-lg px-4"
+                                    />
+                                </div>
+
+                                {/* Car Wash */}
+                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
+                                            <Waves className="h-4 w-4 text-sky-500" />
+                                            Car Wash
+                                        </Label>
+                                        <div className="flex items-center gap-2">
+                                            <Checkbox
+                                                checked={formData.car_wash_na}
+                                                onCheckedChange={(checked) => updateField('car_wash_na', checked)}
+                                                className="border-stone-300"
+                                            />
+                                            <span className="text-[10px] font-bold text-stone-500 uppercase">N/A</span>
+                                        </div>
+                                    </div>
+                                    <Input
+                                        type="number"
+                                        disabled={formData.car_wash_na}
+                                        value={formData.car_wash_na ? '' : formData.car_wash_revenue || ''}
+                                        onChange={(e) => updateField('car_wash_revenue', parseFloat(e.target.value) || 0)}
+                                        placeholder="0.00"
+                                        className="h-11 font-bold bg-white rounded-lg px-4"
+                                    />
+                                </div>
+
+                                {/* Cashier Station */}
+                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
+                                            <CreditCard className="h-4 w-4 text-slate-500" />
+                                            Cashier Station
+                                        </Label>
+                                        <div className="flex items-center gap-2">
+                                            <Checkbox
+                                                checked={formData.cashier_station_na}
+                                                onCheckedChange={(checked) => updateField('cashier_station_na', checked)}
+                                                className="border-stone-300"
+                                            />
+                                            <span className="text-[10px] font-bold text-stone-500 uppercase">N/A</span>
+                                        </div>
+                                    </div>
+                                    <Input
+                                        type="number"
+                                        disabled={formData.cashier_station_na}
+                                        value={formData.cashier_station_na ? '' : formData.cashier_station_revenue || ''}
+                                        onChange={(e) => updateField('cashier_station_revenue', parseFloat(e.target.value) || 0)}
                                         placeholder="0.00"
                                         className="h-11 font-bold bg-white rounded-lg px-4"
                                     />

@@ -161,24 +161,36 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
         }
     };
 
-    const handleEditOrder = (order: any) => {
-        // Logic: Add items to cart. 
-        // Optional: Cancel original order? Or just copy items?
-        // User request: "The first order is voided. A new correct order is created".
-        // So we load items, and user acts as if new.
+    const handleEditOrder = async (order: any) => {
+        // Populate the table number if it exists
+        if (order.table_number) {
+            setTableNumber(order.table_number);
+        }
+        
+        // Populate room number if it exists
+        if (order.room_number) {
+            setRoomNumber(order.room_number);
+            setOrderType('room_service');
+        }
+        
+        // Populate customer name if it exists
+        if (order.guest_name || order.customer_name) {
+            setCustomerName(order.guest_name || order.customer_name);
+        }
+        
+        // Set order type if available
+        if (order.order_type) {
+            setOrderType(order.order_type);
+        }
 
-        const newItems = order.items.map((item: any) => ({
-            id: item.menu_item_id || item.id, // Adaptation needed based on API response
-            name: item.name,
-            price: item.unit_price || item.price,
-            quantity: item.quantity,
-            category_id: 'unknown', // Might be missing
-            is_available: true
-        }));
-
-        setCart(prev => [...prev, ...newItems]);
+        // Store the order ID for later use when submitting
+        sessionStorage.setItem('editing_order_id', order.id);
+        
+        // CRITICAL FIX: Don't load existing items into cart
+        // This prevents duplication - only NEW items added by user will be sent to addItemsToOrder
+        setCart([]);
         setShowHistory(false);
-        toast.info('Items loaded to cart. Please modify and place new order.');
+        toast.info('Add new items to this order. Only new items will be added.');
     };
 
     const fetchData = useCallback(async () => {
@@ -327,17 +339,17 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
             const receiptNumber = orderData.order_number || orderData.id?.substring(0, 8);
             const dateStr = new Date(orderData.created_at || new Date()).toLocaleString();
             const items = (orderData.items || []).map((item: any) => ({
-                name: item.name,
+                name: item.name || item.menu_item?.name || 'Unknown Item',
                 quantity: item.quantity,
                 unit_price: item.unit_price || item.price,
                 total: (item.unit_price || item.price) * item.quantity
             }));
             const totalAmount = orderData.total || orderData.total_amount;
-            const b = activeBranch || { name: 'Kyogongs', location: 'Bomet, Kenya', settings: { phone: '0706782828', pin: '', email: 'kyogongsbmt@gmail.com' } };
+            const b = activeBranch || { name: 'Famous Gates Hotels', location: 'Bomet, Kenya', settings: { phone: '0706782828', pin: '', email: 'famousgatesbmt@gmail.com' } };
             const companyName = b.name.toUpperCase();
             const companyAddress = b.location;
             const companyPhone = b.settings?.phone || '0706782828';
-            const companyEmail = b.settings?.email || 'kyogongsbmt@gmail.com';
+            const companyEmail = b.settings?.email || 'famousgatesbmt@gmail.com';
 
             const receiptHtml = `
                 <html>
@@ -520,6 +532,37 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
 
         setIsSubmitting(true);
         try {
+            // Check if we're editing an existing order
+            const editingOrderId = sessionStorage.getItem('editing_order_id');
+            
+            if (editingOrderId) {
+                // We're editing an existing order - add items to it
+                const items = cart.map(item => ({
+                    menu_item_id: item.id,
+                    name: item.name,
+                    quantity: item.quantity,
+                    unit_price: item.price,
+                    price: item.price,
+                    notes: item.notes,
+                }));
+                
+                const res = await restaurantAPI.addItemsToOrder(editingOrderId, items);
+                
+                if (res.success) {
+                    toast.success('Order updated successfully!');
+                    sessionStorage.removeItem('editing_order_id');
+                    clearCart();
+                    onOrderCreated?.();
+                    fetchData(); // Refresh history
+                } else {
+                    throw new Error(res.message || 'Failed to update order');
+                }
+                
+                setIsSubmitting(false);
+                return;
+            }
+            
+            // Normal order creation flow
             if (isRestaurant) {
                 if (orderType === 'dine_in' && !tableNumber) {
                     toast.error('Please enter table number');

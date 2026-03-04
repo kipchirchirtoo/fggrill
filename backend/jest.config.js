@@ -13,9 +13,9 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1'
   },
-  setupFilesAfterEnv: ['<rootDir>/src/test/setup.ts'],
-  globalSetup: '<rootDir>/src/test/globalSetup.ts',
-  globalTeardown: '<rootDir>/src/test/globalTeardown.ts',
+  // setupFilesAfterEnv: ['<rootDir>/src/test/setup.ts'],
+  // globalSetup: '<rootDir>/src/test/globalSetup.ts',
+  // globalTeardown: '<rootDir>/src/test/globalTeardown.ts',
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'clover'],
   collectCoverageFrom: [

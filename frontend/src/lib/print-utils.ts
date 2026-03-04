@@ -4,11 +4,11 @@ export const printReservationInvoice = ({ reservation, branch, user }: {
     branch?: any,
     user?: any
 }) => {
-    const activeBranch = branch || { name: 'Kyogongs', location: 'Bomet, Kenya', settings: { phone: '0706782828', pin: 'P051503313Y', email: 'kyogongsbmt@gmail.com' } };
-    const companyName = (activeBranch.name || 'KyogongS').toUpperCase();
+    const activeBranch = branch || { name: 'Famous Gates Hotels', location: 'Bomet, Kenya', settings: { phone: '0706782828', pin: 'P051503313Y', email: 'famousgatesbmt@gmail.com' } };
+    const companyName = (activeBranch.name || 'FAMOUS GATES HOTELS').toUpperCase();
     const companyAddress = activeBranch.location || 'Bomet, Kenya';
     const companyPhone = activeBranch.settings?.phone || '0706782828';
-    const companyEmail = activeBranch.settings?.email || 'kyogongsbmt@gmail.com';
+    const companyEmail = activeBranch.settings?.email || 'famousgatesbmt@gmail.com';
     const companyPin = activeBranch.settings?.pin || 'P051503313Y';
 
     const invoiceNumber = reservation.confirmation_number || reservation.booking_number || `INV-${Date.now().toString(36).toUpperCase()}`;

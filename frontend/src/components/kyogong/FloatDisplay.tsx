@@ -34,8 +34,16 @@ export default function FloatDisplay({ shiftId, refreshTrigger = 0 }: FloatDispl
         }
       });
 
+      if (response.status === 404) {
+        // Shift not found - this is normal if no shift is open
+        setError('No active shift found');
+        setIsLoading(false);
+        return;
+      }
+
       if (!response.ok) {
-        throw new Error('Failed to fetch float data');
+        const result = await response.json();
+        throw new Error(result.message || 'Failed to fetch float data');
       }
 
       const result = await response.json();
@@ -85,18 +93,16 @@ export default function FloatDisplay({ shiftId, refreshTrigger = 0 }: FloatDispl
 
   if (error && !floatData) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
         <div className="flex items-start space-x-3">
-          <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+          <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
           <div className="flex-1">
-            <p className="text-sm font-medium text-red-800">Error loading float</p>
-            <p className="text-xs text-red-600 mt-1">{error}</p>
-            <button
-              onClick={handleRetry}
-              className="mt-2 text-xs text-red-700 hover:text-red-900 underline"
-            >
-              Retry
-            </button>
+            <p className="text-sm font-medium text-yellow-800">Float Unavailable</p>
+            <p className="text-xs text-yellow-700 mt-1">
+              {error === 'No active shift found' 
+                ? 'No active shift. Open a shift to track float.' 
+                : error}
+            </p>
           </div>
         </div>
       </div>

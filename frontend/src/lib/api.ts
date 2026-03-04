@@ -2308,6 +2308,20 @@ export const restaurantAPI = {
     }
     return fetchAPI<any>(`/restaurant/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
   },
+  addItemsToOrder: async (id: string, items: any[]) => {
+    // Intercept for C# Desktop App
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      return (window as any).electronAPI.sync.queue(
+        'pos:addItemsToOrder',
+        `/restaurant/orders/${id}/items`,
+        'POST',
+        { items },
+        0, // Branch ID handled by middleware/token
+        localStorage.getItem('token') || ''
+      );
+    }
+    return fetchAPI<any>(`/restaurant/orders/${id}/items`, { method: 'POST', body: JSON.stringify({ items }) });
+  },
   getTodayOrders: async (branchId?: number) => {
     // Intercept for C# Desktop App - OFFLINE FIRST
     if (typeof window !== 'undefined' && (window as any).electronAPI) {

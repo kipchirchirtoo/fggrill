@@ -188,11 +188,11 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
         }));
 
         const totalAmount = transactionData.total_amount;
-        const b = activeBranch || { name: 'Kyogongs', location: 'Bomet, Kenya', settings: { phone: '0706782828', pin: '', email: 'kyogongsbmt@gmail.com' } };
+        const b = activeBranch || { name: 'Famous Gates Hotels', location: 'Bomet, Kenya', settings: { phone: '0706782828', pin: '', email: 'famousgatesbmt@gmail.com' } };
         const companyName = b.name.toUpperCase();
         const companyAddress = b.location;
         const companyPhone = b.settings?.phone || '0706782828';
-        const companyEmail = b.settings?.email || 'kyogongsbmt@gmail.com';
+        const companyEmail = b.settings?.email || 'famousgatesbmt@gmail.com';
 
         const receiptHtml = `
             <html>
@@ -469,108 +469,94 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
                             </div>
                         </div>
 
-                        {/* Payment Method Selection */}
+                        {/* Payment Method Selection - Redirects to Cashier Station */}
                         <div className="space-y-2">
                             <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1.5 ml-1">
-                                Payment Method
+                                Select Payment Method
                             </label>
+                            <p className="text-[10px] text-stone-500 font-bold mb-3 ml-1">
+                                All payments are processed at the Main Cashier Station
+                            </p>
                             <div className="grid grid-cols-4 gap-2">
                                 <button
                                     type="button"
-                                    onClick={() => setPaymentMethod('CASH')}
-                                    className={`px-3 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 ${
-                                        paymentMethod === 'CASH'
-                                            ? 'bg-green-600 text-white shadow-lg shadow-green-200'
-                                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                                    }`}
+                                    onClick={() => {
+                                        // Store cart data in sessionStorage for cashier station
+                                        sessionStorage.setItem('kyogong_pending_sale', JSON.stringify({
+                                            cart,
+                                            customerName,
+                                            customerPhone,
+                                            serviceType,
+                                            shiftId: shift.id,
+                                            subtotal,
+                                            tax,
+                                            total
+                                        }));
+                                        // Redirect to cashier station with CASH payment method
+                                        window.location.href = '/dashboard/cashier?payment=CASH&source=kyogong';
+                                    }}
+                                    className="px-3 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 bg-green-600 text-white hover:bg-green-700 shadow-lg shadow-green-200 active:scale-95"
                                 >
                                     Cash
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setPaymentMethod('MPESA')}
-                                    className={`px-3 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 ${
-                                        paymentMethod === 'MPESA'
-                                            ? 'bg-green-600 text-white shadow-lg shadow-green-200'
-                                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                                    }`}
+                                    onClick={() => {
+                                        sessionStorage.setItem('kyogong_pending_sale', JSON.stringify({
+                                            cart,
+                                            customerName,
+                                            customerPhone,
+                                            serviceType,
+                                            shiftId: shift.id,
+                                            subtotal,
+                                            tax,
+                                            total
+                                        }));
+                                        window.location.href = '/dashboard/cashier?payment=MPESA&source=kyogong';
+                                    }}
+                                    className="px-3 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 bg-green-600 text-white hover:bg-green-700 shadow-lg shadow-green-200 active:scale-95"
                                 >
                                     M-Pesa
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setPaymentMethod('CARD')}
-                                    className={`px-3 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 ${
-                                        paymentMethod === 'CARD'
-                                            ? 'bg-green-600 text-white shadow-lg shadow-green-200'
-                                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                                    }`}
+                                    onClick={() => {
+                                        sessionStorage.setItem('kyogong_pending_sale', JSON.stringify({
+                                            cart,
+                                            customerName,
+                                            customerPhone,
+                                            serviceType,
+                                            shiftId: shift.id,
+                                            subtotal,
+                                            tax,
+                                            total
+                                        }));
+                                        window.location.href = '/dashboard/cashier?payment=CARD&source=kyogong';
+                                    }}
+                                    className="px-3 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-200 active:scale-95"
                                 >
                                     Card
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setPaymentMethod('BILL')}
-                                    className={`px-3 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 ${
-                                        paymentMethod === 'BILL'
-                                            ? 'bg-green-600 text-white shadow-lg shadow-green-200'
-                                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                                    }`}
+                                    onClick={() => {
+                                        sessionStorage.setItem('kyogong_pending_sale', JSON.stringify({
+                                            cart,
+                                            customerName,
+                                            customerPhone,
+                                            serviceType,
+                                            shiftId: shift.id,
+                                            subtotal,
+                                            tax,
+                                            total
+                                        }));
+                                        window.location.href = '/dashboard/cashier?payment=BILL&source=kyogong';
+                                    }}
+                                    className="px-3 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 bg-orange-600 text-white hover:bg-orange-700 shadow-lg shadow-orange-200 active:scale-95"
                                 >
                                     Bill
                                 </button>
                             </div>
-                        </div>
-
-                        {/* Customer Information */}
-                        <div className="space-y-3">
-                            <div>
-                                <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1.5 ml-1">Customer Name</label>
-                                <input
-                                    type="text"
-                                    value={customerName}
-                                    onChange={e => setCustomerName(e.target.value)}
-                                    placeholder="Enter customer name..."
-                                    className="w-full rounded-2xl border-stone-200 bg-stone-50/50 py-4 px-5 text-base font-medium placeholder:text-stone-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all duration-200"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1.5 ml-1">Phone Number (Optional)</label>
-                                <input
-                                    type="tel"
-                                    value={customerPhone}
-                                    onChange={e => setCustomerPhone(e.target.value)}
-                                    placeholder="Enter phone number..."
-                                    className="w-full rounded-2xl border-stone-200 bg-stone-50/50 py-4 px-5 text-base font-medium placeholder:text-stone-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all duration-200"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="pt-2">
-                            <button
-                                type="submit"
-                                disabled={isSubmitting}
-                                className="w-full bg-stone-900 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-black disabled:opacity-50 flex items-center justify-center gap-3 transition-all duration-300 shadow-xl shadow-stone-200 active:scale-[0.98]"
-                            >
-                                {isSubmitting ? (
-                                    <>
-                                        <Loader2 className="w-6 h-6 animate-spin" />
-                                        Processing...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Plus className="w-5 h-5" />
-                                        {paymentMethod === 'CASH' ? 'Process Cash Payment' : 
-                                         paymentMethod === 'BILL' ? 'Generate Bill' : 
-                                         `Process ${paymentMethod} Payment`}
-                                    </>
-                                )}
-                            </button>
-                            {paymentMethod === 'BILL' && (
-                                <p className="text-center text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-4">
-                                    Payments are processed at the Main Cashier Station
-                                </p>
-                            )}
                         </div>
                     </form>
                 )}

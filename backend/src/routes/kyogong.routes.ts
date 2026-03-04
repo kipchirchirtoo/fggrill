@@ -55,6 +55,9 @@ const router = express.Router();
 // All routes require authentication
 router.use(protect);
 
+// Log route registration for debugging
+console.log('[Kyogong Routes] Registering Kyogong routes...');
+
 // ============================================
 // SALES POINTS ROUTES
 // ============================================
@@ -145,6 +148,78 @@ router.get('/shifts',
   getShifts
 );
 
+// ============================================
+// FLOAT TRACKING ROUTES
+// IMPORTANT: These routes MUST be registered BEFORE the general /shifts/:id route
+// to prevent Express from matching /shifts/{id}/float to the :id parameter
+// ============================================
+
+console.log('[Kyogong Routes] Registering float tracking routes...');
+
+// Get current float for shift
+router.get('/shifts/:shift_id/float',
+  authorize([
+    UserRole.SUPER_ADMIN,
+    UserRole.CASHIER,
+    UserRole.RECEPTIONIST,
+    UserRole.BRANCH_ACCOUNTANT,
+    UserRole.ACCOUNTANT,
+    UserRole.AUDITOR,
+    UserRole.KYOGONG_SPA_CASHIER,
+    UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
+    UserRole.KYOGONG_SPORTS_BAR_CASHIER,
+    UserRole.KYOGONG_RECEPTION_CASHIER
+  ]),
+  getCurrentFloat
+);
+console.log('[Kyogong Routes] ✓ GET /shifts/:shift_id/float');
+
+// Manual float adjustment (supervisor only)
+router.post('/shifts/:shift_id/float/adjust',
+  authorize([
+    UserRole.SUPER_ADMIN,
+    UserRole.GENERAL_MANAGER,
+    UserRole.BRANCH_ACCOUNTANT,
+    UserRole.ACCOUNTANT
+  ]),
+  adjustFloat
+);
+
+// Get float history
+router.get('/shifts/:shift_id/float/history',
+  authorize([
+    UserRole.SUPER_ADMIN,
+    UserRole.CASHIER,
+    UserRole.RECEPTIONIST,
+    UserRole.BRANCH_ACCOUNTANT,
+    UserRole.ACCOUNTANT,
+    UserRole.AUDITOR,
+    UserRole.KYOGONG_SPA_CASHIER,
+    UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
+    UserRole.KYOGONG_SPORTS_BAR_CASHIER,
+    UserRole.KYOGONG_RECEPTION_CASHIER
+  ]),
+  getFloatHistory
+);
+
+// Export float history to CSV
+router.get('/shifts/:shift_id/float/history/export',
+  authorize([
+    UserRole.SUPER_ADMIN,
+    UserRole.BRANCH_ACCOUNTANT,
+    UserRole.ACCOUNTANT,
+    UserRole.AUDITOR
+  ]),
+  exportFloatHistory
+);
+console.log('[Kyogong Routes] ✓ GET /shifts/:shift_id/float/history/export');
+console.log('[Kyogong Routes] Float tracking routes registered successfully');
+
+// ============================================
+// SHIFT DETAIL AND MODIFICATION ROUTES
+// These routes use :id parameter and must come AFTER more specific routes
+// ============================================
+
 // Get shift details
 router.get('/shifts/:id',
   authorize([
@@ -196,66 +271,6 @@ router.put('/shifts/:id/flag',
     UserRole.ACCOUNTANT
   ]),
   flagShift
-);
-
-// ============================================
-// FLOAT TRACKING ROUTES
-// ============================================
-
-// Get current float for shift
-router.get('/shifts/:shift_id/float',
-  authorize([
-    UserRole.SUPER_ADMIN,
-    UserRole.CASHIER,
-    UserRole.RECEPTIONIST,
-    UserRole.BRANCH_ACCOUNTANT,
-    UserRole.ACCOUNTANT,
-    UserRole.AUDITOR,
-    UserRole.KYOGONG_SPA_CASHIER,
-    UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
-    UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
-  ]),
-  getCurrentFloat
-);
-
-// Manual float adjustment (supervisor only)
-router.post('/shifts/:shift_id/float/adjust',
-  authorize([
-    UserRole.SUPER_ADMIN,
-    UserRole.GENERAL_MANAGER,
-    UserRole.BRANCH_ACCOUNTANT,
-    UserRole.ACCOUNTANT
-  ]),
-  adjustFloat
-);
-
-// Get float history
-router.get('/shifts/:shift_id/float/history',
-  authorize([
-    UserRole.SUPER_ADMIN,
-    UserRole.CASHIER,
-    UserRole.RECEPTIONIST,
-    UserRole.BRANCH_ACCOUNTANT,
-    UserRole.ACCOUNTANT,
-    UserRole.AUDITOR,
-    UserRole.KYOGONG_SPA_CASHIER,
-    UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
-    UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
-  ]),
-  getFloatHistory
-);
-
-// Export float history to CSV
-router.get('/shifts/:shift_id/float/history/export',
-  authorize([
-    UserRole.SUPER_ADMIN,
-    UserRole.BRANCH_ACCOUNTANT,
-    UserRole.ACCOUNTANT,
-    UserRole.AUDITOR
-  ]),
-  exportFloatHistory
 );
 
 // ============================================
@@ -499,5 +514,7 @@ router.get('/pool-tokens',
   ]),
   getPoolTokensInventory
 );
+
+console.log('[Kyogong Routes] All Kyogong routes registered successfully');
 
 export default router;

@@ -743,7 +743,10 @@ export const getOrders = async (
       .select(`
       *,
       guest: users!guest_id(*),
-        items: restaurant_order_items(*)
+        items: restaurant_order_items(
+          *,
+          menu_item: restaurant_menu_items(*)
+        )
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(startIndex, startIndex + limit - 1);
@@ -761,10 +764,17 @@ export const getOrders = async (
     }
     if (req.query.date) {
       const date = req.query.date as string;
-      const startDate = `${date} T00:00:00`;
-      const endDate = `${date} T23: 59: 59`;
+      const startDate = `${date}T00:00:00`;
+      const endDate = `${date}T23:59:59`;
       query = query.gte('created_at', startDate).lte('created_at', endDate);
     }
+    // Handle from_date and to_date (used by frontend getMyOrders)
+    if (req.query.from_date && req.query.to_date) {
+      const fromDate = `${req.query.from_date}T00:00:00`;
+      const toDate = `${req.query.to_date}T23:59:59`;
+      query = query.gte('created_at', fromDate).lte('created_at', toDate);
+    }
+    // Handle startDate and endDate (legacy support)
     if (req.query.startDate && req.query.endDate) {
       query = query.gte('created_at', req.query.startDate).lte('created_at', req.query.endDate);
     }

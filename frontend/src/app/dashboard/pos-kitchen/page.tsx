@@ -147,14 +147,15 @@ export default function POSKitchenDashboard() {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       const isOfflineMode = token === 'offline-bridge-token';
 
-      if (!isOfflineMode && !user?.id) {
-        console.error('No user ID available for fetching orders');
-        setIsLoading(false);
-        return;
-      }
-
       // Build filters based on current tab and filter selections
       const filters: any = {};
+      
+      // Default to last 7 days of orders
+      const today = new Date();
+      const sevenDaysAgo = new Date(today);
+      sevenDaysAgo.setDate(today.getDate() - 7);
+      filters.from_date = sevenDaysAgo.toISOString().split('T')[0];
+      filters.to_date = today.toISOString().split('T')[0];
       
       // For history tab, apply status and waiter filters
       if (activeTab === 'recent') {
@@ -178,7 +179,7 @@ export default function POSKitchenDashboard() {
         restaurantAPI.getMyOrders(
           waiterFilter === 'all-orders' ? '' : (user?.id || 'offline-user'), 
           currentBranchId || undefined,
-          activeTab === 'recent' ? filters : undefined
+          filters // Always pass filters with date range
         ),
         restaurantAPI.getDailySales(currentBranchId || undefined),
       ]);
