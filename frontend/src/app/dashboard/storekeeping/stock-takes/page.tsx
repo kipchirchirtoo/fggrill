@@ -263,20 +263,31 @@ export default function StockTakesPage() {
   };
 
   const getStatusColor = (s: string) => ({
-    IN_PROGRESS: 'bg-[#F2F2F7] text-[#000000]',
-    COMPLETED: 'bg-[#F2F2F7] text-[#000000]',
-    CANCELLED: 'bg-[#F2F2F7] text-[#000000]'
+    draft: 'bg-blue-100 text-blue-800',
+    submitted: 'bg-yellow-100 text-yellow-800',
+    verified: 'bg-green-100 text-green-800',
+    approved: 'bg-green-100 text-green-800',
+    rejected: 'bg-red-100 text-red-800'
   }[s] || 'bg-gray-100 text-gray-800');
 
   const getStatusIcon = (s: string) => {
-    if (s === 'IN_PROGRESS') return <Clock className="h-4 w-4" />;
-    if (s === 'COMPLETED') return <CheckCircle className="h-4 w-4" />;
-    if (s === 'CANCELLED') return <XCircle className="h-4 w-4" />;
+    if (s === 'draft') return <Clock className="h-4 w-4" />;
+    if (s === 'submitted') return <Clock className="h-4 w-4" />;
+    if (s === 'verified' || s === 'approved') return <CheckCircle className="h-4 w-4" />;
+    if (s === 'rejected') return <XCircle className="h-4 w-4" />;
     return null;
   };
 
-  const inProgressCount = stockTakes.filter(t => t.status === 'IN_PROGRESS').length;
-  const completedCount = stockTakes.filter(t => t.status === 'COMPLETED').length;
+  const getStatusLabel = (s: string) => ({
+    draft: 'In Progress',
+    submitted: 'Pending Audit',
+    verified: 'Verified',
+    approved: 'Approved',
+    rejected: 'Rejected'
+  }[s] || s);
+
+  const inProgressCount = stockTakes.filter(t => t.status === 'draft').length;
+  const completedCount = stockTakes.filter(t => t.status === 'verified' || t.status === 'approved').length;
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER]}>
@@ -319,9 +330,11 @@ export default function StockTakesPage() {
                   className="w-full p-2 border rounded-ios-lg"
                 >
                   <option value="all">All Statuses</option>
-                  <option value="IN_PROGRESS">In Progress</option>
-                  <option value="COMPLETED">Completed</option>
-                  <option value="CANCELLED">Cancelled</option>
+                  <option value="draft">In Progress</option>
+                  <option value="submitted">Pending Audit</option>
+                  <option value="verified">Verified</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
                 </select>
               </div>
             </div>
@@ -359,7 +372,7 @@ export default function StockTakesPage() {
                         <td className="px-4 py-4 font-mono text-sm">{take.take_number}</td>
                         <td className="px-4 py-4">{take.branch?.name || 'Unknown'}</td>
                         <td className="px-4 py-4"><IOSBadge variant="light" color="secondary">{take.take_type}</IOSBadge></td>
-                        <td className="px-4 py-4"><IOSBadge className={getStatusColor(take.status)}><span className="flex items-center gap-1">{getStatusIcon(take.status)} {take.status}</span></IOSBadge></td>
+                        <td className="px-4 py-4"><IOSBadge className={getStatusColor(take.status)}><span className="flex items-center gap-1">{getStatusIcon(take.status)} {getStatusLabel(take.status)}</span></IOSBadge></td>
                         <td className="px-4 py-4">{take.total_items_counted}</td>
                         <td className="px-4 py-4">
                           {take.items_with_variance > 0 ? (
@@ -368,8 +381,8 @@ export default function StockTakesPage() {
                         </td>
                         <td className="px-4 py-4 text-sm text-gray-500">{formatDate(take.started_at)}</td>
                         <td className="px-4 py-4">
-                          <IOSButton size="sm" variant="outline" onClick={() => handleViewTake(take)} leftIcon={take.status === 'IN_PROGRESS' ? <Play /> : <Eye />}>
-                            {take.status === 'IN_PROGRESS' ? 'Continue' : 'View'}
+                          <IOSButton size="sm" variant="outline" onClick={() => handleViewTake(take)} leftIcon={take.status === 'draft' ? <Play /> : <Eye />}>
+                            {take.status === 'draft' ? 'Continue' : 'View'}
                           </IOSButton>
                         </td>
                       </tr>
@@ -466,7 +479,7 @@ export default function StockTakesPage() {
                           </td>
                           <td className="px-4 py-3 font-bold">{item.system_quantity}</td>
                           <td className="px-4 py-3">
-                            {selectedTake?.status === 'IN_PROGRESS' ? (
+                            {selectedTake?.status === 'draft' ? (
                               <Input
                                 type="number"
                                 defaultValue={item.counted_quantity || ''}
@@ -494,7 +507,7 @@ export default function StockTakesPage() {
                 </table>
               </div>
 
-              {selectedTake?.status === 'IN_PROGRESS' && (
+              {selectedTake?.status === 'draft' && (
                 <div className="flex justify-end gap-3 pt-4 border-t">
                   <IOSButton variant="outline" onClick={() => setIsViewModalOpen(false)} disabled={isSubmitting}>Save & Close</IOSButton>
                   <IOSButton className="bg-[#3C3C43] hover:bg-[#3C3C43]" onClick={handleCompleteTake} leftIcon={<CheckCircle />} disabled={isSubmitting}>

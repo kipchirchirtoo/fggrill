@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
+import { updateFloatOnTransaction } from './float-tracking.controller';
 
 /**
  * Create a new transaction within a shift
@@ -140,6 +141,18 @@ export const createTransaction = async (req: Request, res: Response) => {
 
     // Update shift totals - relying on DB trigger 'trigger_update_shift_totals'
     // for standard transaction recording. Manual RPC call removed to prevent double-counting.
+
+    // Update cash float if payment method is CASH
+    if (payment_method === 'CASH' && cash_amount > 0) {
+      try {
+        const changeGiven = Math.max(0, cash_amount - total_amount);
+        await updateFloatOnTransaction(shift_id, cash_amount, changeGiven, transaction.id);
+      } catch (floatError: any) {
+        console.error('Float update error:', floatError);
+        // Log error but don't fail the transaction
+        // The transaction is already saved, float can be adjusted manually if needed
+      }
+    }
 
     // Fetch complete transaction with items
     const { data: completeTransaction } = await supabase

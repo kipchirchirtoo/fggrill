@@ -28,6 +28,13 @@ import {
 } from '../controllers/kyogong/spa-services.controller';
 
 import {
+  getCurrentFloat,
+  adjustFloat,
+  getFloatHistory,
+  exportFloatHistory
+} from '../controllers/kyogong/float-tracking.controller';
+
+import {
   recordPettyCash,
   getPettyCashEntries,
   getPettyCashSummary,
@@ -189,6 +196,66 @@ router.put('/shifts/:id/flag',
     UserRole.ACCOUNTANT
   ]),
   flagShift
+);
+
+// ============================================
+// FLOAT TRACKING ROUTES
+// ============================================
+
+// Get current float for shift
+router.get('/shifts/:shift_id/float',
+  authorize([
+    UserRole.SUPER_ADMIN,
+    UserRole.CASHIER,
+    UserRole.RECEPTIONIST,
+    UserRole.BRANCH_ACCOUNTANT,
+    UserRole.ACCOUNTANT,
+    UserRole.AUDITOR,
+    UserRole.KYOGONG_SPA_CASHIER,
+    UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
+    UserRole.KYOGONG_SPORTS_BAR_CASHIER,
+    UserRole.KYOGONG_RECEPTION_CASHIER
+  ]),
+  getCurrentFloat
+);
+
+// Manual float adjustment (supervisor only)
+router.post('/shifts/:shift_id/float/adjust',
+  authorize([
+    UserRole.SUPER_ADMIN,
+    UserRole.GENERAL_MANAGER,
+    UserRole.BRANCH_ACCOUNTANT,
+    UserRole.ACCOUNTANT
+  ]),
+  adjustFloat
+);
+
+// Get float history
+router.get('/shifts/:shift_id/float/history',
+  authorize([
+    UserRole.SUPER_ADMIN,
+    UserRole.CASHIER,
+    UserRole.RECEPTIONIST,
+    UserRole.BRANCH_ACCOUNTANT,
+    UserRole.ACCOUNTANT,
+    UserRole.AUDITOR,
+    UserRole.KYOGONG_SPA_CASHIER,
+    UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
+    UserRole.KYOGONG_SPORTS_BAR_CASHIER,
+    UserRole.KYOGONG_RECEPTION_CASHIER
+  ]),
+  getFloatHistory
+);
+
+// Export float history to CSV
+router.get('/shifts/:shift_id/float/history/export',
+  authorize([
+    UserRole.SUPER_ADMIN,
+    UserRole.BRANCH_ACCOUNTANT,
+    UserRole.ACCOUNTANT,
+    UserRole.AUDITOR
+  ]),
+  exportFloatHistory
 );
 
 // ============================================

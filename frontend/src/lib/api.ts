@@ -438,6 +438,20 @@ export const storeAPI = {
       body: JSON.stringify(data),
     }),
   getIncomingDispatches: () => fetchAPI<any>('/store/incoming-dispatches'),
+  receiveDispatch: (id: string, data: {
+    items_received: Array<{
+      item_id: string;
+      quantity: number;
+      damaged?: number;
+      missing?: number;
+      note?: string;
+    }>;
+    notes?: string;
+  }) =>
+    fetchAPI<any>(`/store/dispatch-notes/${id}/confirm`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
   confirmDelivery: (id: string, data: {
     items_received: Array<{
       item_id: string;
@@ -507,6 +521,7 @@ export const storeAPI = {
   getStockTakeItems: (id: string) => fetchAPI<any>(`/store/stock-takes/${id}/items`),
   updateStockTakeItem: (id: string, data: { actual_quantity: number }) =>
     fetchAPI<any>(`/store/stock-take-items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  submitStockTakeToAuditor: (id: string) => fetchAPI<any>(`/store/stock-takes/${id}/submit`, { method: 'PUT' }),
   completeStockTake: (id: string) => fetchAPI<any>(`/store/stock-takes/${id}/complete`, { method: 'PUT' }),
 
   // Config
@@ -3774,6 +3789,72 @@ export const pettyCashAPI = {
     fetchAPI<any>(`/petty-cash/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status, remarks })
+    }),
+};
+
+// =====================================================
+// PAYMENTS VERIFICATION API
+// =====================================================
+
+export const paymentsVerificationAPI = {
+  // Get all payments with filters
+  getPayments: (params?: { 
+    branch_id?: number; 
+    status?: 'pending' | 'accountant_verified' | 'auditor_verified' | 'flagged' | 'void';
+    payment_method?: string;
+    start_date?: string;
+    end_date?: string;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.status) query.append('status', params.status);
+    if (params?.payment_method) query.append('payment_method', params.payment_method);
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/payments-verification?${query.toString()}`);
+  },
+
+  // Get single payment by ID
+  getPaymentById: (id: string) => 
+    fetchAPI<any>(`/payments-verification/${id}`),
+
+  // Get payment statistics
+  getPaymentStats: (params?: { branch_id?: number; start_date?: string; end_date?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    return fetchAPI<any>(`/payments-verification/stats?${query.toString()}`);
+  },
+
+  // Create new payment
+  createPayment: (data: {
+    branch_id?: number;
+    amount: number;
+    payment_method: 'Cash' | 'M-Pesa' | 'Card' | 'Bank Transfer' | 'Cheque' | 'Other';
+    reference_number?: string;
+    customer_name?: string;
+    bill_reference?: string;
+    bill_id?: string;
+    recorder_notes?: string;
+  }) => 
+    fetchAPI<any>('/payments-verification', { 
+      method: 'POST', 
+      body: JSON.stringify(data) 
+    }),
+
+  // Branch Accountant verifies payment
+  verifyByAccountant: (id: string, accountant_notes?: string) =>
+    fetchAPI<any>(`/payments-verification/${id}/verify-accountant`, {
+      method: 'PUT',
+      body: JSON.stringify({ accountant_notes })
+    }),
+
+  // Auditor verifies payment
+  verifyByAuditor: (id: string, auditor_status: 'approved' | 'flagged', auditor_notes?: string) =>
+    fetchAPI<any>(`/payments-verification/${id}/verify-auditor`, {
+      method: 'PUT',
+      body: JSON.stringify({ auditor_status, auditor_notes })
     }),
 };
 

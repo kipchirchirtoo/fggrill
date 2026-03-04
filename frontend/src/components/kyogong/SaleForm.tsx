@@ -6,6 +6,7 @@ import { Loader2, Plus, X as XIcon, ShoppingCart, CheckCircle, Printer } from 'l
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { API_URL } from '@/lib/config';
+import CashPaymentModal from './CashPaymentModal';
 
 interface DynamicService {
     id: number;
@@ -40,6 +41,9 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
     const [lastTransaction, setLastTransaction] = useState<any>(null);
+    const [showCashPayment, setShowCashPayment] = useState(false);
+    const [cashAmount, setCashAmount] = useState(0);
+    const [changeAmount, setChangeAmount] = useState(0);
     const { user } = useAuth();
     const { activeBranch } = useBranch();
 
@@ -90,8 +94,8 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
             : i).filter(i => i.quantity > 0));
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
         if (cart.length === 0) { toast.error('Add at least one service'); return; }
 
         setIsSubmitting(true);
@@ -111,20 +115,22 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
                     })),
                     customer_name: customerName || undefined,
                     customer_phone: customerPhone || undefined,
-                    payment_method: 'BILL',
-                    cash_amount: 0,
-                    mpesa_amount: 0,
-                    card_amount: 0
+                    payment_method: paymentMethod,
+                    cash_amount: paymentMethod === 'CASH' ? cashAmount : 0,
+                    mpesa_amount: paymentMethod === 'MPESA' ? total : 0,
+                    card_amount: paymentMethod === 'CARD' ? total : 0
                 })
             });
             const data = await res.json();
             if (data.success) {
-                toast.success('Bill generated successfully!');
+                toast.success(paymentMethod === 'CASH' ? 'Cash payment processed!' : 'Bill generated successfully!');
                 setSubmitted(true);
                 onTransactionCreated(data.data);
                 setCart([]);
                 setCustomerName('');
                 setCustomerPhone('');
+                setCashAmount(0);
+                setChangeAmount(0);
                 setLastTransaction(data.data);
 
                 // Auto-print bill
@@ -439,7 +445,14 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
                 </div>
 
                 {cart.length > 0 && (
-                    <form onSubmit={handleSubmit} className="space-y-3">
+                    <form onSubmit={(e) => {
+                        e.preventDefault();
+                        if (paymentMethod === 'CASH') {
+                            setShowCashPayment(true);
+                        } else {
+                            handleSubmit();
+                        }
+                    }} className="space-y-3">
                         {/* Totals */}
                         <div className="bg-stone-50/80 backdrop-blur-sm rounded-2xl p-5 border border-stone-100 space-y-2 mb-4">
                             <div className="flex justify-between text-stone-500 text-xs font-bold uppercase tracking-widest">
@@ -453,6 +466,59 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
                             <div className="flex justify-between items-center pt-3 border-t border-stone-200 mt-2">
                                 <span className="text-stone-900 font-black uppercase tracking-widest text-sm">Total</span>
                                 <span className="text-blue-600 font-black text-2xl">KES {total.toFixed(2)}</span>
+                            </div>
+                        </div>
+
+                        {/* Payment Method Selection */}
+                        <div className="space-y-2">
+                            <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1.5 ml-1">
+                                Payment Method
+                            </label>
+                            <div className="grid grid-cols-4 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setPaymentMethod('CASH')}
+                                    className={`px-3 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 ${
+                                        paymentMethod === 'CASH'
+                                            ? 'bg-green-600 text-white shadow-lg shadow-green-200'
+                                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                                    }`}
+                                >
+                                    Cash
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPaymentMethod('MPESA')}
+                                    className={`px-3 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 ${
+                                        paymentMethod === 'MPESA'
+                                            ? 'bg-green-600 text-white shadow-lg shadow-green-200'
+                                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                                    }`}
+                                >
+                                    M-Pesa
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPaymentMethod('CARD')}
+                                    className={`px-3 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 ${
+                                        paymentMethod === 'CARD'
+                                            ? 'bg-green-600 text-white shadow-lg shadow-green-200'
+                                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                                    }`}
+                                >
+                                    Card
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPaymentMethod('BILL')}
+                                    className={`px-3 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 ${
+                                        paymentMethod === 'BILL'
+                                            ? 'bg-green-600 text-white shadow-lg shadow-green-200'
+                                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                                    }`}
+                                >
+                                    Bill
+                                </button>
                             </div>
                         </div>
 
@@ -486,14 +552,42 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
                                 disabled={isSubmitting}
                                 className="w-full bg-stone-900 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-black disabled:opacity-50 flex items-center justify-center gap-3 transition-all duration-300 shadow-xl shadow-stone-200 active:scale-[0.98]"
                             >
-                                {isSubmitting ? <><Loader2 className="w-6 h-6 animate-spin" />Processing...</> : <><Plus className="w-5 h-5" /> Generate Bill</>}
+                                {isSubmitting ? (
+                                    <>
+                                        <Loader2 className="w-6 h-6 animate-spin" />
+                                        Processing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Plus className="w-5 h-5" />
+                                        {paymentMethod === 'CASH' ? 'Process Cash Payment' : 
+                                         paymentMethod === 'BILL' ? 'Generate Bill' : 
+                                         `Process ${paymentMethod} Payment`}
+                                    </>
+                                )}
                             </button>
-                            <p className="text-center text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-4">
-                                Payments are processed at the Main Cashier Station
-                            </p>
+                            {paymentMethod === 'BILL' && (
+                                <p className="text-center text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-4">
+                                    Payments are processed at the Main Cashier Station
+                                </p>
+                            )}
                         </div>
                     </form>
                 )}
+
+                {/* Cash Payment Modal */}
+                <CashPaymentModal
+                    isOpen={showCashPayment}
+                    onClose={() => setShowCashPayment(false)}
+                    billTotal={total}
+                    shiftId={shift.id}
+                    onPaymentComplete={(cash, change) => {
+                        setCashAmount(cash);
+                        setChangeAmount(change);
+                        setShowCashPayment(false);
+                        handleSubmit();
+                    }}
+                />
             </div>
         </div>
     );

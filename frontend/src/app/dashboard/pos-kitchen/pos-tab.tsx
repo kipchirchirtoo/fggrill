@@ -84,6 +84,8 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
   // Today's orders
   const [todayOrders, setTodayOrders] = useState<TodayOrder[]>([]);
   const [isGeneratingBill, setIsGeneratingBill] = useState<string | null>(null);
+  const [showRecallModal, setShowRecallModal] = useState(false);
+  const [selectedRecallOrder, setSelectedRecallOrder] = useState<TodayOrder | null>(null);
 
   // Waiters
   const [waiters, setWaiters] = useState<Waiter[]>([]);
@@ -386,6 +388,11 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
     } finally {
       setIsGeneratingBill(null);
     }
+  };
+
+  const handleRecallBill = (order: TodayOrder) => {
+    setSelectedRecallOrder(order);
+    setShowRecallModal(true);
   };
 
   const filteredItems = menuItems.filter(item => {
@@ -705,11 +712,220 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
                   <span>Clear</span>
                 </button>
               </div>
+
+              {/* Recall Bill Button */}
+              <button
+                onClick={() => setShowRecallModal(true)}
+                className="w-full bg-blue-600 text-white font-bold h-11 rounded-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                <RefreshCw className="h-4 w-4" />
+                <span>Recall Bill</span>
+              </button>
             </div>
           </div>
         </div>
 
       </div>
+
+      {/* Recall Bill Modal */}
+      {showRecallModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowRecallModal(false)}>
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Recall Bill - Today's Orders</h2>
+              <button
+                onClick={() => setShowRecallModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[calc(80vh-140px)]">
+              {todayOrders.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p className="text-sm">No orders found for today</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {todayOrders.map((order) => (
+                    <div
+                      key={order.id}
+                      className="bg-white border-2 border-gray-200 rounded-xl p-4 hover:border-blue-400 transition-all cursor-pointer"
+                      onClick={() => {
+                        handleRecallBill(order);
+                        setShowRecallModal(false);
+                      }}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <p className="font-bold text-gray-900">Order #{order.order_number}</p>
+                          <p className="text-sm text-gray-500">
+                            {order.order_type === 'dine_in' && order.table_number && `Table ${order.table_number}`}
+                            {order.order_type === 'room_service' && order.room_number && `Room ${order.room_number}`}
+                            {order.order_type === 'takeaway' && 'Takeaway'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-lg text-gray-900">KES {order.total.toLocaleString()}</p>
+                          <p className="text-xs text-gray-500">{new Date(order.created_at).toLocaleTimeString()}</p>
+                        </div>
+                      </div>
+
+                      {order.items && order.items.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                          <p className="text-xs font-semibold text-gray-500 mb-2">Items:</p>
+                          <div className="space-y-1">
+                            {order.items.slice(0, 3).map((item, idx) => (
+                              <p key={idx} className="text-sm text-gray-600">
+                                {item.quantity}x {item.name}
+                              </p>
+                            ))}
+                            {order.items.length > 3 && (
+                              <p className="text-xs text-gray-400">+{order.items.length - 3} more items</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-3 flex items-center justify-between">
+                        <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                          order.status === 'completed' ? 'bg-green-100 text-green-700' :
+                          order.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {order.status}
+                        </span>
+                        {order.waiter_name && (
+                          <p className="text-xs text-gray-500">Served by: {order.waiter_name}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => {
+                  fetchTodayOrders();
+                  toast.success('Orders refreshed');
+                }}
+                className="w-full bg-gray-200 text-gray-700 font-semibold h-11 rounded-xl hover:bg-gray-300 transition-colors flex items-center justify-center gap-2"
+              >
+                <RefreshCw className="h-4 w-4" />
+                <span>Refresh Orders</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Order Detail Modal (after recall) */}
+      {selectedRecallOrder && !showRecallModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedRecallOrder(null)}>
+          <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-blue-500 to-blue-600">
+              <h2 className="text-xl font-bold text-white">Order #{selectedRecallOrder.order_number}</h2>
+              <button
+                onClick={() => setSelectedRecallOrder(null)}
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5 text-white" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-500 font-semibold">Order Type</p>
+                  <p className="text-gray-900 capitalize">{selectedRecallOrder.order_type.replace('_', ' ')}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 font-semibold">Status</p>
+                  <p className="text-gray-900 capitalize">{selectedRecallOrder.status}</p>
+                </div>
+                {selectedRecallOrder.table_number && (
+                  <div>
+                    <p className="text-gray-500 font-semibold">Table</p>
+                    <p className="text-gray-900">{selectedRecallOrder.table_number}</p>
+                  </div>
+                )}
+                {selectedRecallOrder.room_number && (
+                  <div>
+                    <p className="text-gray-500 font-semibold">Room</p>
+                    <p className="text-gray-900">{selectedRecallOrder.room_number}</p>
+                  </div>
+                )}
+                {selectedRecallOrder.waiter_name && (
+                  <div className="col-span-2">
+                    <p className="text-gray-500 font-semibold">Served By</p>
+                    <p className="text-gray-900">{selectedRecallOrder.waiter_name}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-gray-200 pt-4">
+                <p className="text-sm font-semibold text-gray-700 mb-3">Order Items</p>
+                <div className="space-y-2">
+                  {selectedRecallOrder.items?.map((item, idx) => (
+                    <div key={idx} className="flex justify-between text-sm">
+                      <span className="text-gray-600">{item.quantity}x {item.name}</span>
+                      <span className="font-semibold text-gray-900">KES {(item.unit_price * item.quantity).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Subtotal (excl. VAT)</span>
+                  <span className="text-gray-900">KES {Math.round(selectedRecallOrder.total / 1.16).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">VAT (16%)</span>
+                  <span className="text-gray-900">KES {(selectedRecallOrder.total - Math.round(selectedRecallOrder.total / 1.16)).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
+                  <span className="text-gray-900">TOTAL</span>
+                  <span className="text-gray-900">KES {selectedRecallOrder.total.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 bg-gray-50 space-y-3">
+              <button
+                onClick={() => {
+                  handleGenerateBill(selectedRecallOrder);
+                  setSelectedRecallOrder(null);
+                }}
+                disabled={isGeneratingBill === selectedRecallOrder.id}
+                className="w-full bg-blue-600 text-white font-bold h-12 rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isGeneratingBill === selectedRecallOrder.id ? (
+                  <>
+                    <RefreshCw className="h-5 w-5 animate-spin" />
+                    <span>Generating...</span>
+                  </>
+                ) : (
+                  <>
+                    <FileText className="h-5 w-5" />
+                    <span>Generate Bill</span>
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setSelectedRecallOrder(null)}
+                className="w-full bg-gray-200 text-gray-700 font-semibold h-11 rounded-xl hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

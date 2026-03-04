@@ -17,7 +17,7 @@ import {
   UserCheck, Utensils, Wine, Receipt, CreditCard, PieChart, FileText,
   BookOpen, ChefHat, ShoppingCart, Wallet, Scale, AlertCircle, UtensilsCrossed, Trash2, Clock, Shield, Menu, X,
   Apple, Beer, Pencil, Database, User, ArrowDownLeft, ArrowUpRight, RefreshCw, ArrowRight, Calculator, Search,
-  SlidersHorizontal, LayoutDashboard
+  SlidersHorizontal, LayoutDashboard, Plus
 } from 'lucide-react';
 
 interface NavItemProps {
@@ -738,6 +738,13 @@ export function ConsolidatedNav() {
         icon={CreditCard}
         label="Payments"
         active={pathname.includes('/dashboard/branch-accounting/payments')}
+      />
+
+      <NavItem
+        href="/dashboard/branch-accounting/record-banking"
+        icon={Plus}
+        label="Record Banking"
+        active={pathname.includes('/dashboard/branch-accounting/record-banking')}
       />
 
       <NavItem

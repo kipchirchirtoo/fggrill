@@ -2173,7 +2173,21 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
       const user = bill.staff?.user;
       const firstName = Array.isArray(user) ? user[0]?.first_name : user?.first_name;
       const lastName = Array.isArray(user) ? user[0]?.last_name : user?.last_name;
-      const name = (firstName && lastName) ? `${firstName} ${lastName}` : 'Unknown Staff';
+      let name = (firstName && lastName) ? `${firstName} ${lastName}` : null;
+
+      // If no staff name from relationship, try to extract from description
+      if (!name && bill.description) {
+        // Try to extract name from patterns like "Shift Credit - Shift #XXX - NAME"
+        const match = bill.description.match(/- ([A-Z\s]+)$/);
+        if (match) {
+          name = match[1].trim();
+        }
+      }
+
+      // Final fallback
+      if (!name) {
+        name = 'Unknown Staff';
+      }
 
       unifiedRecords.push({
         id: bill.id,
@@ -2194,7 +2208,20 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
       const user = adv.staff?.user;
       const firstName = Array.isArray(user) ? user[0]?.first_name : user?.first_name;
       const lastName = Array.isArray(user) ? user[0]?.last_name : user?.last_name;
-      const name = (firstName && lastName) ? `${firstName} ${lastName}` : 'Unknown Staff';
+      let name = (firstName && lastName) ? `${firstName} ${lastName}` : null;
+
+      // If no staff name from relationship, try to extract from reason
+      if (!name && adv.reason) {
+        const match = adv.reason.match(/- ([A-Z\s]+)$/);
+        if (match) {
+          name = match[1].trim();
+        }
+      }
+
+      // Final fallback
+      if (!name) {
+        name = 'Unknown Staff';
+      }
 
       unifiedRecords.push({
         id: adv.id,
@@ -2215,7 +2242,20 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
       const user = loan.staff?.user;
       const firstName = Array.isArray(user) ? user[0]?.first_name : user?.first_name;
       const lastName = Array.isArray(user) ? user[0]?.last_name : user?.last_name;
-      const name = (firstName && lastName) ? `${firstName} ${lastName}` : 'Unknown Staff';
+      let name = (firstName && lastName) ? `${firstName} ${lastName}` : null;
+
+      // If no staff name from relationship, try to extract from reason
+      if (!name && loan.reason) {
+        const match = loan.reason.match(/- ([A-Z\s]+)$/);
+        if (match) {
+          name = match[1].trim();
+        }
+      }
+
+      // Final fallback
+      if (!name) {
+        name = 'Unknown Staff';
+      }
 
       unifiedRecords.push({
         id: loan.id,

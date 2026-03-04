@@ -18,10 +18,24 @@ export function StockTakeDetail({ stockTakeId, onBack, onComplete }: StockTakeDe
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [savingId, setSavingId] = useState<string | null>(null);
+    const [status, setStatus] = useState<string>('draft');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         loadItems();
+        loadStockTakeStatus();
     }, [stockTakeId]);
+
+    const loadStockTakeStatus = async () => {
+        try {
+            const res = await storeAPI.getStockTake(stockTakeId);
+            if (res.success && res.data) {
+                setStatus(res.data.status || 'draft');
+            }
+        } catch (error) {
+            console.error('Error loading stock take status:', error);
+        }
+    };
 
     const loadItems = async () => {
         setIsLoading(true);
@@ -57,19 +71,29 @@ export function StockTakeDetail({ stockTakeId, onBack, onComplete }: StockTakeDe
     };
 
     const handleComplete = async () => {
-        if (!confirm('Are you sure you want to complete this stock take? It will be sent to the Auditor for verification.')) return;
+        if (!confirm('Are you sure you want to submit this stock take to the Auditor? It will be automatically verified.')) return;
 
+        setIsSubmitting(true);
         try {
-            const res = await storeAPI.completeStockTake(stockTakeId);
+            const res = await storeAPI.submitStockTakeToAuditor(stockTakeId);
             if (res.success) {
-                toast.success('Stock take submitted to Auditor');
+                toast.success('Stock take submitted and verified successfully');
+                setStatus('verified');
+                // Refresh status after submission
+                await loadStockTakeStatus();
                 onComplete();
             } else {
-                toast.error(res.message || 'Failed to complete stock take');
+                toast.error(res.message || 'Failed to submit stock take');
             }
         } catch (error) {
-            toast.error('Error completing stock take');
+            toast.error('Error submitting stock take');
+        } finally {
+            setIsSubmitting(false);
         }
+    };
+
+    const shouldShowSubmitButton = () => {
+        return status !== 'submitted' && status !== 'verified';
     };
 
     const filteredItems = items.filter(item =>
@@ -83,8 +107,26 @@ export function StockTakeDetail({ stockTakeId, onBack, onComplete }: StockTakeDe
                 <div className="flex items-center gap-4">
                     <IOSButton variant="secondary" onClick={onBack} leftIcon={<ArrowLeft />}>Back</IOSButton>
                     <h2 className="text-xl font-bold">Recording Stock</h2>
+                    {status === 'verified' && (
+                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 flex items-center gap-1">
+                            <CheckCircle className="h-3 w-3" /> Verified
+                        </span>
+                    )}
+                    {status === 'submitted' && (
+                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            Pending Audit
+                        </span>
+                    )}
                 </div>
-                <IOSButton onClick={handleComplete} leftIcon={<CheckCircle />}>Submit to Auditor</IOSButton>
+                {shouldShowSubmitButton() && (
+                    <IOSButton 
+                        onClick={handleComplete} 
+                        leftIcon={<CheckCircle />}
+                        disabled={isSubmitting}
+                    >
+                        {isSubmitting ? 'Submitting...' : 'Submit to Auditor'}
+                    </IOSButton>
+                )}
             </div>
 
             <IOSCard className="p-4">

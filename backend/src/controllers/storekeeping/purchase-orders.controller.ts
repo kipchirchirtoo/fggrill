@@ -19,9 +19,6 @@ export const getPurchaseOrders = async (
             .select(`
         *,
         supplier:store_suppliers(id, name, supplier_code),
-        created_by_user:users!created_by_id(id, first_name, last_name),
-        approved_by_user:users!approved_by_id(id, first_name, last_name),
-        received_by_user:users!received_by_id(id, first_name, last_name),
         items:store_po_items(
           *,
           item:store_items(id, name, item_code, unit)
@@ -55,8 +52,7 @@ export const getPurchaseOrders = async (
         // Flatten labels for frontend
         const flattenedOrders = (orders || []).map(order => ({
             ...order,
-            supplier_name: order.supplier?.name || 'N/A',
-            created_by_name: order.created_by_user ? `${order.created_by_user.first_name} ${order.created_by_user.last_name}`.trim() : 'System'
+            supplier_name: order.supplier?.name || 'N/A'
         }));
 
         res.status(200).json({
@@ -86,9 +82,6 @@ export const getPurchaseOrder = async (
             .select(`
         *,
         supplier:store_suppliers(*),
-        created_by_user:users!created_by_id(id, first_name, last_name, email),
-        approved_by_user:users!approved_by_id(id, first_name, last_name, email),
-        received_by_user:users!received_by_id(id, first_name, last_name, email),
         items:store_po_items(
           *,
           item:store_items(id, name, item_code, unit, category)
@@ -105,7 +98,6 @@ export const getPurchaseOrder = async (
         const flattenedOrder = {
             ...order,
             supplier_name: order.supplier?.name || 'N/A',
-            created_by_name: order.created_by_user ? `${order.created_by_user.first_name} ${order.created_by_user.last_name}`.trim() : 'System',
             receiving_branch_name: 'Central Stores', // Fallback as column is missing
             items: (order.items || []).map((item: any) => ({
                 ...item,

@@ -35,6 +35,11 @@ export default function BranchSalesDetailPage() {
     });
 
     const fetchData = useCallback(async () => {
+        if (!branchId || branchId === 'static_export') {
+            setIsLoading(false);
+            return;
+        }
+        
         setIsLoading(true);
         try {
             const res = await auditAPI.verifySales({

@@ -5,7 +5,7 @@ import {
     createStockTake,
     completeStockTake
 } from '../controllers/storekeeping/resources.controller';
-import { updateStockTake } from '../controllers/stock-take.controller'; // Keep for now if resources doesn't have a generic update
+import { updateStockTake, submitStockTake } from '../controllers/stock-take.controller'; // Keep for now if resources doesn't have a generic update
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
 import { deleteStockTake } from '../controllers/stock-take.controller';
@@ -63,6 +63,17 @@ router.put('/:id',
         UserRole.AUDITOR
     ]),
     updateStockTake
+);
+
+// Submit stock take to auditor
+router.put('/:id/submit',
+    authorize([
+        UserRole.SUPER_ADMIN,
+        UserRole.GENERAL_MANAGER,
+        UserRole.BRANCH_MANAGER,
+        UserRole.BRANCH_ACCOUNTANT
+    ]),
+    submitStockTake
 );
 
 // Delete stock take

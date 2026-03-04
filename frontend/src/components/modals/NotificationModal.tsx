@@ -206,27 +206,27 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
       // Stock and Kitchen redirection: pivot between branch and central views
       if (fixedUrl.includes('/dashboard/store/requests/') ||
         fixedUrl.includes('/dashboard/branch-store/requests/') ||
-        fixedUrl.includes('/dashboard/branch-store/stock-takes/') ||
         fixedUrl.includes('/dashboard/branch-store/kitchen-usage/')) {
 
         // Determine if user is a central role
         const isCentralRole = user?.role === 'central_storekeeper' ||
           user?.role === 'super_admin' ||
-          user?.role === 'general_manager' ||
-          user?.role === 'auditor';
+          user?.role === 'general_manager';
 
         if (isCentralRole) {
           // Pivot branch URLs to the central equivalents
           fixedUrl = fixedUrl
             .replace('/dashboard/store/requests/', '/dashboard/central-store/requests/')
             .replace('/dashboard/branch-store/requests/', '/dashboard/central-store/requests/')
-            .replace('/dashboard/branch-store/stock-takes/', '/dashboard/central-store/inventory/') // Map stock takes to inventory for central audit
             .replace('/dashboard/branch-store/kitchen-usage/', '/dashboard/central-store/reports/'); // Map kitchen usage to reports
         } else {
           // Pivot old URLs to the modern branch view (if somehow still using them)
           fixedUrl = fixedUrl.replace('/dashboard/store/requests/', '/dashboard/branch-store/requests/');
         }
       }
+
+      // Note: Auditors can access branch-store stock-take detail pages for verification purposes
+      // Stock-take notifications use /dashboard/branch-store/stock-takes/${id} which is accessible to auditors
 
       window.location.href = fixedUrl;
     }

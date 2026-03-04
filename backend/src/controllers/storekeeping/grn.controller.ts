@@ -19,9 +19,7 @@ export const getGRNs = async (
             .select(`
                 *,
                 supplier:store_suppliers(id, name, supplier_code),
-                purchase_order:store_purchase_orders(id, po_number),
-                received_by_user:users!received_by_id(id, first_name, last_name),
-                approved_by_user:users!approved_by_id(id, first_name, last_name)
+                purchase_order:store_purchase_orders(id, po_number)
             `)
             .order('grn_date', { ascending: false });
 
@@ -63,8 +61,6 @@ export const getGRN = async (
                 *,
                 supplier:store_suppliers(*),
                 purchase_order:store_purchase_orders(*),
-                received_by_user:users!received_by_id(id, first_name, last_name, email),
-                approved_by_user:users!approved_by_id(id, first_name, last_name, email),
                 items:store_grn_items(
                     *,
                     item:store_items(id, name, item_code, unit, category)

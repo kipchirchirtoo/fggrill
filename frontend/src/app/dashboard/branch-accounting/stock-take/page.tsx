@@ -19,6 +19,35 @@ export default function BranchStockTakePage() {
     const [isLoading, setIsLoading] = useState(true);
     const [activeStockTakeId, setActiveStockTakeId] = useState<string | null>(null);
 
+    const getStatusBadge = (status: string) => {
+        const statusLower = status?.toLowerCase() || 'unknown';
+        
+        const statusConfig: Record<string, { color: string; label: string; icon: any }> = {
+            'verified': { color: 'bg-green-100 text-green-800', label: 'Verified', icon: CheckCircle },
+            'approved': { color: 'bg-green-100 text-green-800', label: 'Approved', icon: CheckCircle },
+            'submitted': { color: 'bg-yellow-100 text-yellow-800', label: 'Pending Audit', icon: AlertTriangle },
+            'pending': { color: 'bg-yellow-100 text-yellow-800', label: 'Pending Audit', icon: AlertTriangle },
+            'pending_audit': { color: 'bg-yellow-100 text-yellow-800', label: 'Pending Audit', icon: AlertTriangle },
+            'draft': { color: 'bg-blue-100 text-blue-800', label: 'In Progress', icon: Package },
+            'rejected': { color: 'bg-red-100 text-red-800', label: 'Rejected', icon: AlertTriangle },
+        };
+
+        const config = statusConfig[statusLower] || { 
+            color: 'bg-gray-100 text-gray-800', 
+            label: status.replace('_', ' '), 
+            icon: Package 
+        };
+
+        const Icon = config.icon;
+
+        return (
+            <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit ${config.color}`}>
+                <Icon className="h-3 w-3" />
+                {config.label}
+            </span>
+        );
+    };
+
     const fetchStockTakes = async () => {
         if (!activeBranchId) return;
         setIsLoading(true);
@@ -39,6 +68,13 @@ export default function BranchStockTakePage() {
 
     useEffect(() => {
         fetchStockTakes();
+        
+        // Set up polling for status updates every 30 seconds
+        const intervalId = setInterval(() => {
+            fetchStockTakes();
+        }, 30000);
+
+        return () => clearInterval(intervalId);
     }, [activeBranchId]);
 
     const handleCreateStockTake = async () => {
@@ -124,13 +160,7 @@ export default function BranchStockTakePage() {
                                                 </td>
                                                 <td className="px-6 py-4">{take.type || 'Regular'}</td>
                                                 <td className="px-6 py-4">
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${take.status?.toLowerCase() === 'completed' ? 'bg-green-100 text-green-800' :
-                                                            take.status?.toLowerCase() === 'pending' || take.status?.toLowerCase() === 'pending_audit' ? 'bg-yellow-100 text-yellow-800' :
-                                                                take.status?.toLowerCase() === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                                                                    'bg-gray-100 text-gray-800'
-                                                        }`}>
-                                                        {take.status === 'PENDING' || take.status === 'pending' ? 'Pending Audit' : (take.status || 'unknown').replace('_', ' ')}
-                                                    </span>
+                                                    {getStatusBadge(take.status)}
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     {(take.variance !== undefined && take.variance !== 0) || (take.total_variance_value !== undefined && take.total_variance_value !== 0) ? (
@@ -145,7 +175,7 @@ export default function BranchStockTakePage() {
                                                     )}
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
-                                                    {take.status === 'in_progress' ? (
+                                                    {take.status === 'draft' ? (
                                                         <button
                                                             onClick={() => setActiveStockTakeId(take.id)}
                                                             className="text-blue-600 hover:text-blue-800 font-medium flex items-center justify-end gap-1 w-full"

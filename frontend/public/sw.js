@@ -2,10 +2,9 @@
 const CACHE_NAME = 'fg-housekeeping-v4-stock-fix';
 const OFFLINE_URL = '/offline.html';
 
-// Resources to cache immediately
+// Resources to cache immediately (only truly static resources)
 const STATIC_RESOURCES = [
   '/',
-  '/dashboard/housekeeping',
   '/offline.html',
   '/manifest.json',
 ];
@@ -19,12 +18,20 @@ const CACHEABLE_API_ROUTES = [
   '/api/housekeeping/staff',
 ];
 
-// Install event - cache static resources
+// Install event - cache static resources (gracefully handle failures)
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
       console.log('[SW] Caching static resources');
-      return cache.addAll(STATIC_RESOURCES);
+      // Cache each resource individually so one failure doesn't block the rest
+      const results = await Promise.allSettled(
+        STATIC_RESOURCES.map((url) =>
+          cache.add(url).catch((err) => {
+            console.warn(`[SW] Failed to cache ${url}:`, err.message);
+          })
+        )
+      );
+      console.log('[SW] Static resource caching complete');
     })
   );
   self.skipWaiting();

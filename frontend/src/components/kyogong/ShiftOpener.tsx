@@ -133,7 +133,7 @@ export function ShiftOpener({ onShiftOpened }: ShiftOpenerProps) {
                         <select
                             value={selectedPointId}
                             onChange={(e) => setSelectedPointId(e.target.value)}
-                            className="w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors bg-white text-gray-900"
                             disabled={isLoadingPoints}
                         >
                             <option value="">Select Sales Point...</option>
@@ -150,15 +150,17 @@ export function ShiftOpener({ onShiftOpened }: ShiftOpenerProps) {
                             Opening Float (Cash)
                         </label>
                         <div className="relative">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <span className="text-gray-500">KES</span>
+                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <span className="text-gray-500 font-medium">KES</span>
                             </div>
                             <input
                                 type="number"
                                 value={openingFloat}
                                 onChange={(e) => setOpeningFloat(e.target.value)}
-                                className="pl-12 w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                                className="pl-14 pr-4 py-3 w-full rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors text-gray-900"
                                 placeholder="0.00"
+                                step="0.01"
+                                min="0"
                                 required
                             />
                         </div>
@@ -170,15 +172,17 @@ export function ShiftOpener({ onShiftOpened }: ShiftOpenerProps) {
                                 Opening Petty Cash
                             </label>
                             <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <span className="text-gray-500">KES</span>
+                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <span className="text-gray-500 font-medium">KES</span>
                                 </div>
                                 <input
                                     type="number"
                                     value={openingPettyCash}
                                     onChange={(e) => setOpeningPettyCash(e.target.value)}
-                                    className="pl-12 w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                                    className="pl-14 pr-4 py-3 w-full rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors text-gray-900"
                                     placeholder="0.00"
+                                    step="0.01"
+                                    min="0"
                                 />
                             </div>
                             <p className="text-xs text-gray-500 mt-1">

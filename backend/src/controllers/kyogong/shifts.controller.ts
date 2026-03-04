@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
+import { FloatHistoryService } from '../../services/kyogong/float-history.service';
 
 // Helper to map shift object to what frontend expects
 const mapShiftResponse = (shift: any) => {
@@ -84,12 +85,34 @@ export const openShift = async (req: Request, res: Response) => {
         start_time: now.toISOString(),
         opening_float: opening_cash_float,
         opening_petty_cash: opening_petty_cash || 0,
-        status: 'open'
+        status: 'open',
+        // Initialize float tracking fields
+        current_float: opening_cash_float,
+        expected_cash: opening_cash_float,
+        total_change_given: 0,
+        float_version: 0,
+        last_float_update: now.toISOString()
       })
       .select('*')
       .single();
 
     if (shiftError) throw shiftError;
+
+    // Record opening float in history
+    try {
+      await FloatHistoryService.recordFloatChange(
+        shift.id,
+        opening_cash_float,
+        opening_cash_float,
+        'OPENING',
+        undefined,
+        'Shift opened',
+        cashier_id
+      );
+    } catch (historyError: any) {
+      console.error('Float history error:', historyError);
+      // Don't fail shift opening if history recording fails
+    }
 
     // Assign staff if provided
     if (assigned_staff && Array.isArray(assigned_staff) && assigned_staff.length > 0) {

@@ -25,37 +25,120 @@ export default function UniversalSearchPage() {
     const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null);
 
     const handleFullInspection = () => {
-        if (!selectedResult) return;
+        if (!selectedResult) {
+            toast.error('Please select a result first');
+            return;
+        }
 
-        const { type, id } = selectedResult;
+        const { type, id, metadata } = selectedResult;
 
-        switch (type) {
-            case 'staff':
-                router.push(`/dashboard/hr/employees`);
-                break;
-            case 'order':
-                router.push(`/dashboard/auditor/revenue-oversight/details/${id}?type=restaurant_order`);
-                break;
-            case 'guest':
-                router.push(`/dashboard/branch-manager/guests/${id}`);
-                break;
-            case 'transaction':
-                router.push(`/dashboard/auditor/revenue-oversight/details/${id}?type=transaction`);
-                break;
-            case 'receipt':
-                router.push(`/dashboard/auditor/revenue-oversight/details/${id}?type=receipt`);
-                break;
-            case 'booking':
-                router.push(`/dashboard/branch-manager/reservations/${id}`);
-                break;
-            case 'payment':
-                router.push(`/dashboard/auditor/revenue-oversight/details/${id}?type=payment`);
-                break;
-            case 'bill':
-                router.push(`/dashboard/auditor/revenue-oversight/details/${id}?type=bill`);
-                break;
-            default:
-                toast.error('No specialized view available for this entity type');
+        try {
+            switch (type) {
+                case 'staff':
+                    // Navigate to staff audit page
+                    router.push(`/dashboard/auditor/staff-audit`);
+                    break;
+                    
+                case 'order':
+                case 'restaurant_order':
+                    // Navigate to auditor orders page or revenue oversight
+                    router.push(`/dashboard/auditor/orders`);
+                    break;
+                    
+                case 'guest':
+                case 'customer':
+                    // Navigate to reception guests page
+                    router.push(`/dashboard/reception/guests`);
+                    break;
+                    
+                case 'transaction':
+                case 'mpesa_transaction':
+                case 'payment_transaction':
+                    // Navigate to revenue oversight with transaction details
+                    router.push(`/dashboard/auditor/revenue-oversight`);
+                    break;
+                    
+                case 'receipt':
+                case 'payment_receipt':
+                    // Navigate to revenue oversight
+                    router.push(`/dashboard/auditor/revenue-oversight`);
+                    break;
+                    
+                case 'booking':
+                case 'reservation':
+                case 'room_booking':
+                    // Navigate to reception bookings
+                    router.push(`/dashboard/reception/bookings`);
+                    break;
+                    
+                case 'payment':
+                case 'bill_payment':
+                    // Navigate to revenue oversight
+                    router.push(`/dashboard/auditor/revenue-oversight`);
+                    break;
+                    
+                case 'bill':
+                case 'restaurant_bill':
+                case 'invoice':
+                    // Navigate to auditor invoices or revenue oversight
+                    router.push(`/dashboard/auditor/invoices`);
+                    break;
+                    
+                case 'supplier':
+                case 'supplier_invoice':
+                    // Navigate to procurement suppliers
+                    router.push(`/dashboard/procurement/suppliers`);
+                    break;
+                    
+                case 'stock_take':
+                case 'inventory':
+                    // Navigate to auditor stock page
+                    router.push(`/dashboard/auditor/stock`);
+                    break;
+                    
+                case 'purchase_order':
+                case 'purchase':
+                    // Navigate to auditor purchases
+                    router.push(`/dashboard/auditor/purchases`);
+                    break;
+                    
+                case 'shift':
+                case 'cashier_shift':
+                    // Navigate to shift verification
+                    router.push(`/dashboard/auditor/shift-verification`);
+                    break;
+                    
+                case 'kitchen_requisition':
+                case 'requisition':
+                    // Navigate to kitchen requisitions
+                    router.push(`/dashboard/auditor/kitchen-requisitions`);
+                    break;
+                    
+                case 'wastage':
+                case 'kitchen_wastage':
+                    // Navigate to kitchen wastage
+                    router.push(`/dashboard/auditor/kitchen-wastage`);
+                    break;
+                    
+                case 'sold_item':
+                case 'menu_item':
+                    // Navigate to sold items
+                    router.push(`/dashboard/auditor/sold-items`);
+                    break;
+                    
+                case 'ledger_entry':
+                case 'accounting':
+                    // Navigate to ledger
+                    router.push(`/dashboard/auditor/ledger`);
+                    break;
+                    
+                default:
+                    toast.error(`No inspection view available for ${type}`);
+                    console.log('Unknown entity type:', type, 'ID:', id);
+            }
+        } catch (error) {
+            console.error('Navigation error:', error);
+            toast.error('Failed to navigate to inspection view');
         }
     };
 

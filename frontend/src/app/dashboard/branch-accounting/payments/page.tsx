@@ -7,97 +7,163 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';
-import { CreditCard, Plus, Filter, Search, CheckCircle, XCircle, Clock, FileText, Download } from 'lucide-react';
+import { CreditCard, Plus, Filter, CheckCircle, XCircle, Clock, AlertTriangle, Eye, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
-import { financeAPI, searchAPI } from '@/lib/api';
+import { paymentsVerificationAPI } from '@/lib/api';
+import { PaymentDetailModal } from '@/components/modals/PaymentDetailModal';
 
-export default function BranchPaymentsPage() {
+export default function BranchPaymentsEnhancedPage() {
     const { user } = useAuth();
     const { activeBranchId } = useBranch();
-    const [activeTab, setActiveTab] = useState<'search' | 'confirmed' | 'pending' | 'void'>('search');
-    const [searchResults, setSearchResults] = useState<any[]>([]);
-    const [searchQuery, setSearchQuery] = useState('');
+    const [activeTab, setActiveTab] = useState<'pending' | 'accountant_verified' | 'auditor_verified' | 'flagged'>('pending');
+    const [payments, setPayments] = useState<any[]>([]);
+    const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(false);
+    const [selectedPayment, setSelectedPayment] = useState<any>(null);
+    const [showDetailModal, setShowDetailModal] = useState(false);
 
-    // Mock data for other tabs until DB is ready
-    const [confirmedPayments, setConfirmedPayments] = useState<any[]>([]);
-    const [pendingPayments, setPendingPayments] = useState<any[]>([]);
+    useEffect(() => {
+        if (activeBranchId) {
+            fetchPayments();
+            fetchStats();
+        }
+    }, [activeBranchId, activeTab]);
 
-    const handleSearch = async () => {
-        if (!searchQuery.trim()) return;
+    const fetchPayments = async () => {
         setLoading(true);
         try {
-            const response = await searchAPI.universalSearch(searchQuery);
-            if (response.success && response.data) {
-                // Filter specifically for payment-related items (orders, bookings, bills, transactions)
-                const paymentItems = response.data.filter((item: any) =>
-                    ['order', 'booking', 'bill', 'receipt', 'transaction'].includes(item.type)
-                ).map((item: any) => {
-                    // Extract amount, ensuring we handle both string and numeric types from backend
-                    let amountValue = item.metadata?.amount || 0;
-                    if (typeof amountValue === 'string') {
-                        amountValue = parseFloat(amountValue.replace(/[^0-9.]/g, '')) || 0;
-                    }
-
-                    return {
-                        id: item.id,
-                        type: item.type === 'transaction' ? 'Payment' : item.type.charAt(0).toUpperCase() + item.type.slice(1),
-                        reference: item.metadata?.order_number || item.metadata?.bill_number || item.metadata?.reference || item.title,
-                        amount: amountValue,
-                        customer: item.metadata?.guest_name || item.metadata?.customer_name || 'Walk-in',
-                        date: item.metadata?.created_at || item.metadata?.date || new Date().toISOString().split('T')[0],
-                        status: item.metadata?.payment_status || item.metadata?.status || 'Pending'
-                    };
-                });
-                setSearchResults(paymentItems);
-                if (paymentItems.length === 0) {
-                    toast.info('No payment records found matching your query');
-                }
+            const response = await paymentsVerificationAPI.getPayments({
+                branch_id: activeBranchId,
+                status: activeTab
+            });
+            if (response.success) {
+                setPayments(response.data || []);
             } else {
-                setSearchResults([]);
-                toast.info('No results found');
+                toast.error('Failed to fetch payments');
             }
-        } catch (error) {
-            console.error('Search error:', error);
-            toast.error('Failed to search payments');
+        } catch (error: any) {
+            console.error('Error fetching payments:', error);
+            toast.error(error.message || 'Failed to fetch payments');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleConfirmPayment = async (id: string) => {
-        // API call to confirm payment: financeAPI.confirmPayment(id)
-        toast.success('Payment confirmed and sent to Auditor');
-        // Update local state for demo
-        const item = searchResults.find(i => i.id === id);
-        if (item) {
-            setConfirmedPayments([...confirmedPayments, { ...item, status: 'Confirmed', confirmed_at: new Date().toISOString() }]);
-            setSearchResults(searchResults.filter(i => i.id !== id));
+    const fetchStats = async () => {
+        try {
+            const response = await paymentsVerificationAPI.getPaymentStats({
+                branch_id: activeBranchId
+            });
+            if (response.success) {
+                setStats(response.data);
+            }
+        } catch (error) {
+            console.error('Error fetching stats:', error);
+        }
+    };
+
+    const handleViewDetails = async (paymentId: string) => {
+        try {
+            const response = await paymentsVerificationAPI.getPaymentById(paymentId);
+            if (response.success) {
+                setSelectedPayment(response.data);
+                setShowDetailModal(true);
+            } else {
+                toast.error('Failed to load payment details');
+            }
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to load payment details');
+        }
+    };
+
+    const handlePaymentVerified = () => {
+        fetchPayments();
+        fetchStats();
+    };
+
+    const getStatusIcon = (status: string) => {
+        switch (status) {
+            case 'pending': return <Clock className="h-4 w-4" />;
+            case 'accountant_verified': return <CheckCircle className="h-4 w-4" />;
+            case 'auditor_verified': return <CheckCircle className="h-4 w-4" />;
+            case 'flagged': return <AlertTriangle className="h-4 w-4" />;
+            default: return <Clock className="h-4 w-4" />;
+        }
+    };
+
+    const getStatusColor = (status: string) => {
+        switch (status) {
+            case 'pending': return 'text-amber-600 bg-amber-100';
+            case 'accountant_verified': return 'text-blue-600 bg-blue-100';
+            case 'auditor_verified': return 'text-green-600 bg-green-100';
+            case 'flagged': return 'text-red-600 bg-red-100';
+            default: return 'text-gray-600 bg-gray-100';
         }
     };
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.BRANCH_ACCOUNTANT, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
+        <ProtectedRoute allowedRoles={[UserRole.BRANCH_ACCOUNTANT, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]}>
             <DashboardLayout>
                 <div className="space-y-6">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                                 <CreditCard className="h-6 w-6 text-blue-600" />
-                                Payments
+                                Payment Verification
                             </h1>
-                            <p className="text-gray-500">Record, search, and verify branch payments to send to Auditor.</p>
+                            <p className="text-gray-500">Verify and track all branch payments</p>
                         </div>
-                        {/* <IOSButton onClick={() => toast.info('New Payment Modal')} leftIcon={<Plus />}>Record Payment</IOSButton> */}
                     </div>
+
+                    {/* Statistics Cards */}
+                    {stats && (
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <IOSCard className="p-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="text-sm text-gray-500">Total Payments</div>
+                                        <div className="text-2xl font-bold text-gray-900">{stats.total_payments}</div>
+                                    </div>
+                                    <TrendingUp className="h-8 w-8 text-blue-600" />
+                                </div>
+                            </IOSCard>
+                            <IOSCard className="p-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="text-sm text-gray-500">Pending</div>
+                                        <div className="text-2xl font-bold text-amber-600">{stats.pending}</div>
+                                    </div>
+                                    <Clock className="h-8 w-8 text-amber-600" />
+                                </div>
+                            </IOSCard>
+                            <IOSCard className="p-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="text-sm text-gray-500">Verified</div>
+                                        <div className="text-2xl font-bold text-green-600">{stats.auditor_verified}</div>
+                                    </div>
+                                    <CheckCircle className="h-8 w-8 text-green-600" />
+                                </div>
+                            </IOSCard>
+                            <IOSCard className="p-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="text-sm text-gray-500">Total Amount</div>
+                                        <div className="text-xl font-bold text-gray-900">KES {stats.total_amount.toLocaleString()}</div>
+                                    </div>
+                                    <CreditCard className="h-8 w-8 text-blue-600" />
+                                </div>
+                            </IOSCard>
+                        </div>
+                    )}
 
                     {/* Tabs */}
                     <div className="flex border-b border-gray-200 overflow-x-auto">
                         {[
-                            { id: 'search', label: 'Search & Verify', icon: Search },
-                            { id: 'confirmed', label: 'Confirmed (Sent to Auditor)', icon: CheckCircle },
-                            { id: 'pending', label: 'Pending', icon: Clock },
-                            { id: 'void', label: 'Void/Unconfirmed', icon: XCircle },
+                            { id: 'pending', label: 'Pending Verification', icon: Clock, count: stats?.pending || 0 },
+                            { id: 'accountant_verified', label: 'Awaiting Auditor', icon: CheckCircle, count: stats?.accountant_verified || 0 },
+                            { id: 'auditor_verified', label: 'Approved', icon: CheckCircle, count: stats?.auditor_verified || 0 },
+                            { id: 'flagged', label: 'Flagged', icon: AlertTriangle, count: stats?.flagged || 0 },
                         ].map(tab => (
                             <button
                                 key={tab.id}
@@ -109,111 +175,98 @@ export default function BranchPaymentsPage() {
                             >
                                 <tab.icon className="h-4 w-4" />
                                 {tab.label}
+                                {tab.count > 0 && (
+                                    <span className="px-2 py-0.5 bg-gray-200 text-gray-700 rounded-full text-xs font-semibold">
+                                        {tab.count}
+                                    </span>
+                                )}
                             </button>
                         ))}
                     </div>
 
-                    <IOSCard className="p-0 min-h-[400px]">
-                        {activeTab === 'search' && (
-                            <div className="p-6">
-                                <div className="max-w-xl mx-auto mb-8">
-                                    <div className="relative">
-                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                                        <input
-                                            type="text"
-                                            placeholder="Search by Bill #, Receipt #, Guest Name, or Order ID..."
-                                            className="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
-                                            value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                                        />
-                                        <button
-                                            onClick={handleSearch}
-                                            disabled={loading}
-                                            className="absolute right-2 top-2 bottom-2 px-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
-                                        >
-                                            {loading ? 'Searching...' : 'Search'}
-                                        </button>
-                                    </div>
-                                    <p className="text-center text-gray-400 text-sm mt-2">
-                                        Search for branch payments, branch orders, hotel bookings, or conference bookings.
-                                    </p>
-                                </div>
-
-                                {searchResults.length > 0 ? (
-                                    <div className="space-y-4">
-                                        <h3 className="font-semibold text-gray-900">Search Results</h3>
-                                        {searchResults.map(result => (
-                                            <div key={result.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
-                                                <div className="flex items-start gap-4">
-                                                    <div className="p-2 bg-white rounded-md shadow-sm">
-                                                        <FileText className="h-6 w-6 text-blue-600" />
-                                                    </div>
-                                                    <div>
-                                                        <div className="font-medium text-gray-900">{result.type} #{result.reference}</div>
-                                                        <div className="text-sm text-gray-500">{result.customer} • {result.date}</div>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-4">
-                                                    <div className="text-right">
-                                                        <div className="font-bold text-gray-900">KES {result.amount.toLocaleString()}</div>
-                                                        <div className="text-xs text-amber-600 font-medium">{result.status}</div>
-                                                    </div>
-                                                    <IOSButton size="sm" onClick={() => handleConfirmPayment(result.id)}>Confirm Payment</IOSButton>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : searchQuery && !loading && (
-                                    <div className="text-center py-12 text-gray-500">
-                                        <Search className="h-12 w-12 mx-auto text-gray-300 mb-2" />
-                                        <p>No results found for "{searchQuery}"</p>
-                                    </div>
-                                )}
+                    {/* Payments Table */}
+                    <IOSCard className="p-0">
+                        {loading ? (
+                            <div className="text-center py-12 text-gray-500">Loading payments...</div>
+                        ) : payments.length === 0 ? (
+                            <div className="text-center py-12 text-gray-500">
+                                <Clock className="h-12 w-12 mx-auto text-gray-300 mb-2" />
+                                <p>No {activeTab.replace('_', ' ')} payments found</p>
                             </div>
-                        )}
-
-                        {activeTab === 'confirmed' && (
-                            <div className="p-0">
+                        ) : (
+                            <div className="overflow-x-auto">
                                 <table className="w-full text-sm text-left">
                                     <thead className="text-xs text-gray-500 uppercase bg-gray-50">
                                         <tr>
-                                            <th className="px-6 py-3">Reference</th>
-                                            <th className="px-6 py-3">Type</th>
+                                            <th className="px-6 py-3">Date</th>
                                             <th className="px-6 py-3">Customer</th>
+                                            <th className="px-6 py-3">Payment Method</th>
+                                            <th className="px-6 py-3">Reference</th>
                                             <th className="px-6 py-3 text-right">Amount</th>
-                                            <th className="px-6 py-3">Confirmed At</th>
+                                            <th className="px-6 py-3">Recorded By</th>
                                             <th className="px-6 py-3">Status</th>
+                                            <th className="px-6 py-3 text-center">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
-                                        {confirmedPayments.length === 0 ? (
-                                            <tr><td colSpan={6} className="py-12 text-center text-gray-500">No confirmed payments yet.</td></tr>
-                                        ) : (
-                                            confirmedPayments.map((item, idx) => (
-                                                <tr key={idx} className="hover:bg-gray-50">
-                                                    <td className="px-6 py-4 font-medium">{item.reference}</td>
-                                                    <td className="px-6 py-4">{item.type}</td>
-                                                    <td className="px-6 py-4">{item.customer}</td>
-                                                    <td className="px-6 py-4 text-right font-medium">KES {item.amount.toLocaleString()}</td>
-                                                    <td className="px-6 py-4 text-gray-500">{new Date(item.confirmed_at).toLocaleString()}</td>
-                                                    <td className="px-6 py-4"><span className="text-green-600 flex items-center gap-1"><CheckCircle className="h-3 w-3" /> Sent to Auditor</span></td>
-                                                </tr>
-                                            ))
-                                        )}
+                                        {payments.map((payment) => (
+                                            <tr key={payment.id} className="hover:bg-gray-50">
+                                                <td className="px-6 py-4 text-gray-500">
+                                                    {new Date(payment.recorded_at).toLocaleDateString()}
+                                                </td>
+                                                <td className="px-6 py-4 font-medium text-gray-900">
+                                                    {payment.customer_name || 'N/A'}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                                        {payment.payment_method}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-gray-600">
+                                                    {payment.reference_number || 'N/A'}
+                                                </td>
+                                                <td className="px-6 py-4 text-right font-bold text-gray-900">
+                                                    KES {parseFloat(payment.amount).toLocaleString()}
+                                                </td>
+                                                <td className="px-6 py-4 text-gray-600">
+                                                    {payment.recorded_by_user?.full_name || 'Unknown'}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit ${getStatusColor(payment.status)}`}>
+                                                        {getStatusIcon(payment.status)}
+                                                        {payment.status.replace('_', ' ')}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <IOSButton
+                                                        size="sm"
+                                                        onClick={() => handleViewDetails(payment.id)}
+                                                        leftIcon={<Eye />}
+                                                    >
+                                                        View
+                                                    </IOSButton>
+                                                </td>
+                                            </tr>
+                                        ))}
                                     </tbody>
                                 </table>
                             </div>
                         )}
-
-                        {(activeTab === 'pending' || activeTab === 'void') && (
-                            <div className="text-center py-20 text-gray-500">
-                                <Clock className="h-12 w-12 mx-auto text-gray-300 mb-2" />
-                                <p>No {activeTab} payments found.</p>
-                            </div>
-                        )}
                     </IOSCard>
                 </div>
+
+                {/* Payment Detail Modal */}
+                {showDetailModal && selectedPayment && (
+                    <PaymentDetailModal
+                        payment={selectedPayment}
+                        onClose={() => {
+                            setShowDetailModal(false);
+                            setSelectedPayment(null);
+                        }}
+                        onVerified={handlePaymentVerified}
+                        userRole={user?.role || ''}
+                    />
+                )}
             </DashboardLayout>
         </ProtectedRoute>
     );

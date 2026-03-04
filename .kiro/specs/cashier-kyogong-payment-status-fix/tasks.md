@@ -1,5 +1,30 @@
 # Implementation Plan
 
+## CRITICAL UPDATE - Root Cause Identified
+
+**FRONTEND FIX DEPLOYED BUT VERIFICATION FAILING**
+
+The frontend fix (Task 3) was successfully implemented and deployed with retry verification logic. However, production testing revealed the verification is ALWAYS failing because:
+
+**ROOT CAUSE**: Backend payment insertion is blocked by Row-Level Security (RLS) policy violation
+- Error: `new row violates row-level security policy for table "payments"` (code: 42501)
+- Impact: NO payments are being recorded in the `payments` table
+- Result: Frontend verification correctly detects that bills remain unpaid (because payment never succeeded)
+
+**WHAT'S WORKING**:
+- ✅ Frontend verification logic with retry (correctly detecting the issue)
+- ✅ Optimistic UI updates (working as designed)
+- ✅ Kyogong bill detection (working correctly)
+
+**WHAT'S NOT WORKING**:
+- ❌ Backend payment insertion (blocked by missing RLS policies)
+- ❌ The `payments` table has no RLS policies, blocking all authenticated user inserts
+- ❌ The `kyogong_transaction_id` column doesn't exist in `payments` table
+
+**FIX REQUIRED**: Task 4 adds the missing RLS policies and column to allow backend payment recording.
+
+---
+
 - [x] 1. Write bug condition exploration test
   - **Property 1: Fault Condition** - Kyogong Bill Remains in Unpaid List After Payment
   - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
@@ -114,7 +139,65 @@
     - Confirm all tests still pass after fix (no regressions)
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
 
-- [ ] 4. Checkpoint - Ensure all tests pass
+- [-] 4. Fix backend RLS policy for payments table (CRITICAL - Root Cause)
+  - **CRITICAL FINDING**: Frontend verification is failing because backend payment insertion is blocked by RLS policy
+  - **ERROR**: `new row violates row-level security policy for table "payments"` (code: 42501)
+  - **ROOT CAUSE**: The `payments` table has no RLS policies defined, blocking all inserts from authenticated users
+  - **IMPACT**: NO payments are being recorded in the database, causing verification to always fail
+
+  - [x] 4.1 Add kyogong_transaction_id column to payments table
+    - Create migration to add `kyogong_transaction_id UUID REFERENCES shift_transactions(id)` column
+    - Add index: `CREATE INDEX idx_payments_kyogong_transaction ON payments(kyogong_transaction_id)`
+    - This allows linking payments to Kyogong shift transactions
+    - _Requirements: Backend must support Kyogong payment recording_
+
+  - [x] 4.2 Enable RLS and create policies for payments table
+    - Enable RLS: `ALTER TABLE payments ENABLE ROW LEVEL SECURITY`
+    - Create policy for authenticated users to insert payments:
+      ```sql
+      CREATE POLICY "Authenticated users can create payments"
+      ON payments FOR INSERT
+      TO authenticated
+      WITH CHECK (true);
+      ```
+    - Create policy for users to view their own payments:
+      ```sql
+      CREATE POLICY "Users can view payments"
+      ON payments FOR SELECT
+      TO authenticated
+      USING (true);
+      ```
+    - Create policy for staff to update payment status:
+      ```sql
+      CREATE POLICY "Staff can update payments"
+      ON payments FOR UPDATE
+      TO authenticated
+      USING (
+        EXISTS (
+          SELECT 1 FROM users
+          WHERE id = auth.uid()
+          AND role IN ('SUPER_ADMIN', 'CASHIER', 'KYOGONG_CASHIER', 'RECEPTIONIST', 'BRANCH_ACCOUNTANT', 'ACCOUNTANT')
+        )
+      );
+      ```
+    - _Requirements: Backend payment insertion must succeed for Kyogong bills_
+
+  - [x] 4.3 Apply migration to production database
+    - Run migration script to add column and RLS policies
+    - Verify migration applied successfully
+    - Test payment insertion with authenticated user
+    - Verify no RLS policy violations in logs
+    - _Requirements: Production database must allow payment recording_
+
+  - [ ] 4.4 Verify backend payment processing works
+    - Test Kyogong payment API endpoint: POST `/cashier/pay` with Kyogong bill number
+    - Verify payment record is created in `payments` table with `kyogong_transaction_id`
+    - Verify `shift_transactions.payment_method` is updated from 'BILL' to 'CASH'/'MPESA'/'CARD'
+    - Verify `cashier_transactions` record is created
+    - Verify no RLS policy violations or errors in backend logs
+    - _Requirements: 2.1, 2.2, 2.3, 2.4_
+
+- [ ] 5. Checkpoint - Ensure all tests pass
   - Run all exploration tests (task 1) - should now PASS
   - Run all preservation tests (task 2) - should still PASS
   - Run full integration test: scan Kyogong bill → pay → verify removal → show receipt
@@ -124,4 +207,6 @@
   - Test manual refresh button works correctly
   - Test that non-Kyogong bills still work correctly (restaurant, bar, hotel, invoice)
   - Verify no console errors or warnings
+  - Verify payments are recorded in database
+  - Verify bills disappear from unpaid list after payment
   - Ensure all tests pass, ask the user if questions arise

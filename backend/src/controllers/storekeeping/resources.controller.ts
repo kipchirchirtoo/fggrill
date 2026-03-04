@@ -510,9 +510,7 @@ export const getStockTakes = async (req: Request, res: Response) => {
       .from('stock_counts')
       .select(`
         *,
-        branch:branches(id, name, code),
-        created_by_user:users(id, first_name, last_name),
-        counted_by_user:users(id, first_name, last_name)
+        branch:branches(id, name, code)
       `)
       .order('count_date', { ascending: false });
 
@@ -522,26 +520,40 @@ export const getStockTakes = async (req: Request, res: Response) => {
     const { data, error } = await query;
 
     if (error) throw error;
+    
+    // Manually fetch user details to avoid ambiguous relationship errors
+    const userIds = new Set<string>();
+    (data || []).forEach((item: any) => {
+      if (item.created_by) userIds.add(item.created_by);
+      if (item.counted_by) userIds.add(item.counted_by);
+    });
+
+    let usersMap: Record<string, any> = {};
+    if (userIds.size > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .in('id', Array.from(userIds));
+      
+      usersMap = (users || []).reduce((acc: any, user: any) => {
+        acc[user.id] = user;
+        return acc;
+      }, {});
+    }
 
     // Resolve names robustly
     const enrichedData = (data || []).map((item: any) => {
       let started_by_name = 'System';
       let completed_by_name = 'System';
 
-      const creator = item.created_by_user;
-      if (creator) {
-        const u = Array.isArray(creator) ? creator[0] : creator;
-        const fname = u.first_name || u.firstName;
-        const lname = u.last_name || u.lastName || '';
-        if (fname) started_by_name = `${fname} ${lname}`.trim();
+      if (item.created_by && usersMap[item.created_by]) {
+        const u = usersMap[item.created_by];
+        started_by_name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'System';
       }
 
-      const counter = item.counted_by_user;
-      if (counter) {
-        const u = Array.isArray(counter) ? counter[0] : counter;
-        const fname = u.first_name || u.firstName;
-        const lname = u.last_name || u.lastName || '';
-        if (fname) completed_by_name = `${fname} ${lname}`.trim();
+      if (item.counted_by && usersMap[item.counted_by]) {
+        const u = usersMap[item.counted_by];
+        completed_by_name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'System';
       }
 
       return {
@@ -570,9 +582,7 @@ export const getStockTake = async (req: Request, res: Response) => {
       .from('stock_counts')
       .select(`
         *,
-        branch:branches(id, name, code),
-        created_by_user:users(id, first_name, last_name),
-        counted_by_user:users(id, first_name, last_name)
+        branch:branches(id, name, code)
       `)
       .eq('id', id)
       .single();
@@ -582,6 +592,24 @@ export const getStockTake = async (req: Request, res: Response) => {
         return res.status(404).json({ success: false, message: 'Stock take not found' });
       }
       throw error;
+    }
+    
+    // Manually fetch user details to avoid ambiguous relationship errors
+    const userIds = new Set<string>();
+    if ((data as any).created_by) userIds.add((data as any).created_by);
+    if ((data as any).counted_by) userIds.add((data as any).counted_by);
+
+    let usersMap: Record<string, any> = {};
+    if (userIds.size > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .in('id', Array.from(userIds));
+      
+      usersMap = (users || []).reduce((acc: any, user: any) => {
+        acc[user.id] = user;
+        return acc;
+      }, {});
     }
 
     let totalVarianceValue = 0;
@@ -662,20 +690,14 @@ export const getStockTake = async (req: Request, res: Response) => {
     let started_by_name = 'System';
     let completed_by_name = 'System';
 
-    const creator = (data as any).created_by_user;
-    if (creator) {
-      const u = Array.isArray(creator) ? creator[0] : creator;
-      const fname = u.first_name || u.firstName;
-      const lname = u.last_name || u.lastName || '';
-      if (fname) started_by_name = `${fname} ${lname}`.trim();
+    if ((data as any).created_by && usersMap[(data as any).created_by]) {
+      const u = usersMap[(data as any).created_by];
+      started_by_name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'System';
     }
 
-    const counter = (data as any).counted_by_user;
-    if (counter) {
-      const u = Array.isArray(counter) ? counter[0] : counter;
-      const fname = u.first_name || u.firstName;
-      const lname = u.last_name || u.lastName || '';
-      if (fname) completed_by_name = `${fname} ${lname}`.trim();
+    if ((data as any).counted_by && usersMap[(data as any).counted_by]) {
+      const u = usersMap[(data as any).counted_by];
+      completed_by_name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'System';
     }
 
     const enrichedResult = {
@@ -861,10 +883,10 @@ export const completeStockTake = async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = (req as any).user?.id;
 
-    // Get the stock count and its items
+    // Get the stock count (without problematic joins)
     const { data: count, error: countError } = await supabase
       .from('stock_counts')
-      .select('*, items:stock_count_items(*, item:inventory_items(code))')
+      .select('*')
       .eq('id', id)
       .single();
 

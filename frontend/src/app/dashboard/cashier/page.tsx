@@ -1357,17 +1357,17 @@ function CashierPageContent() {
                                                     </div>
                                                     <div>
                                                         <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">
-                                                            {billData.type === 'hotel' ? 'Room' : (billData.type === 'pos' ? 'Source' : (billData.type === 'invoice' ? 'Reference' : (billData.type === 'kyogong' ? 'Service' : (billData.type === 'unpaid_bill' ? 'Reference' : 'Table'))))}
+                                                            {billData.type === 'hotel' ? 'Room' : (billData.type === 'pos' ? 'Source' : (billData.type === 'invoice' ? 'Ref' : (billData.type === 'kyogong' ? 'Type' : (billData.type === 'unpaid_bill' ? 'Ref' : 'Table'))))}
                                                         </p>
-                                                        <p className="font-bold text-stone-900">
+                                                        <p className="font-bold text-stone-900 text-sm truncate">
                                                             {billData.type === 'hotel'
                                                                 ? (billData.booking?.room_number || 'N/A')
                                                                 : (billData.type === 'pos'
-                                                                    ? 'POS Terminal'
+                                                                    ? 'POS'
                                                                     : (billData.type === 'invoice'
-                                                                        ? 'AR Invoice'
+                                                                        ? 'AR'
                                                                         : (billData.type === 'kyogong'
-                                                                            ? (billData.order?.service_category || 'Kyogong')
+                                                                            ? (billData.order?.service_category || 'Service')
                                                                             : (billData.type === 'unpaid_bill' ? (billData.bill?.room_number || 'N/A') : (billData.order?.table_number || 'N/A')))))}
                                                         </p>
                                                     </div>

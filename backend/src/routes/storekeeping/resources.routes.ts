@@ -9,6 +9,7 @@ import {
     createDriver,
     updateDriver,
     deleteDriver,
+    getSupplier,
     getSuppliers,
     createSupplier,
     updateSupplier,
@@ -44,6 +45,7 @@ router.route('/suppliers')
     .post(createSupplier);
 
 router.route('/suppliers/:id')
+    .get(getSupplier)
     .put(updateSupplier)
     .delete(deleteSupplier);
 

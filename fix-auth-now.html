@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix Auth Issues - Hirall</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #e74c3c;
+            margin-top: 0;
+        }
+        .step {
+            background: #ecf0f1;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            border-left: 4px solid #3498db;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        button.danger {
+            background: #e74c3c;
+        }
+        button.danger:hover {
+            background: #c0392b;
+        }
+        button.success {
+            background: #27ae60;
+        }
+        button.success:hover {
+            background: #229954;
+        }
+        .output {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .success-msg {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        .error-msg {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚨 Fix Authentication Issues</h1>
+        
+        <div class="step">
+            <h3>Step 1: Clear All Auth Data</h3>
+            <p>This will remove all stored tokens and user data from your browser.</p>
+            <button class="danger" onclick="clearAuthData()">Clear Auth Data</button>
+        </div>
+
+        <div class="step">
+            <h3>Step 2: Check Current State</h3>
+            <p>See what's currently stored in your browser.</p>
+            <button onclick="checkCurrentState()">Check State</button>
+        </div>
+
+        <div class="step">
+            <h3>Step 3: Test Backend Connection</h3>
+            <p>Verify the backend API is reachable.</p>
+            <button onclick="testBackend()">Test Backend</button>
+        </div>
+
+        <div class="step">
+            <h3>Step 4: Go to Login</h3>
+            <p>After clearing data, go to login page for a fresh start.</p>
+            <button class="success" onclick="goToLogin()">Go to Login Page</button>
+        </div>
+
+        <div id="output" class="output" style="display: none;"></div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            output.style.display = 'block';
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error-msg' : type === 'success' ? 'success-msg' : '';
+            output.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clearAuthData() {
+            log('🧹 Clearing authentication data...', 'info');
+            
+            // Clear localStorage
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.includes('token') || key.includes('user') || key.includes('auth') || key.includes('session')) {
+                    keysToRemove.push(key);
+                }
+            }
+            
+            keysToRemove.forEach(key => {
+                localStorage.removeItem(key);
+                log(`   Removed: ${key}`, 'info');
+            });
+
+            // Clear sessionStorage
+            sessionStorage.clear();
+            log('   Cleared sessionStorage', 'info');
+
+            // Clear cookies
+            document.cookie.split(";").forEach(function(c) { 
+                document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+            });
+            log('   Cleared cookies', 'info');
+
+            log('✅ All auth data cleared!', 'success');
+            log('👉 Now click "Go to Login Page" to start fresh', 'info');
+        }
+
+        function checkCurrentState() {
+            log('🔍 Checking current state...', 'info');
+            
+            // Check localStorage
+            log('📦 LocalStorage:', 'info');
+            const token = localStorage.getItem('token');
+            const user = localStorage.getItem('user');
+            const activeBranch = localStorage.getItem('activeBranchId');
+            
+            if (token) {
+                log(`   Token: ${token.substring(0, 20)}...`, 'info');
+            } else {
+                log('   Token: Not found', 'error');
+            }
+            
+            if (user) {
+                try {
+                    const userData = JSON.parse(user);
+                    log(`   User: ${userData.email || 'Unknown'} (${userData.role || 'No role'})`, 'info');
+                } catch (e) {
+                    log('   User: Invalid JSON', 'error');
+                }
+            } else {
+                log('   User: Not found', 'error');
+            }
+            
+            if (activeBranch) {
+                log(`   Active Branch: ${activeBranch}`, 'info');
+            }
+
+            // Check cookies
+            log('🍪 Cookies:', 'info');
+            if (document.cookie) {
+                log(`   ${document.cookie}`, 'info');
+            } else {
+                log('   No cookies found', 'info');
+            }
+        }
+
+        async function testBackend() {
+            log('🌐 Testing backend connection...', 'info');
+            
+            const apiUrl = 'https://api.hirall.com';
+            
+            try {
+                // Test 1: Health check (if available)
+                log(`   Testing: ${apiUrl}/api/auth/login`, 'info');
+                const response = await fetch(`${apiUrl}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({})
+                });
+                
+                log(`   Response: ${response.status} ${response.statusText}`, 'info');
+                
+                if (response.status === 400) {
+                    log('✅ Backend is responding (400 = missing credentials, which is expected)', 'success');
+                } else if (response.status === 401) {
+                    log('✅ Backend is responding (401 = invalid credentials, which is expected)', 'success');
+                } else {
+                    log(`⚠️ Unexpected status: ${response.status}`, 'error');
+                }
+                
+                // Test 2: Try /me endpoint with invalid token
+                log(`   Testing: ${apiUrl}/api/auth/me`, 'info');
+                const meResponse = await fetch(`${apiUrl}/api/auth/me`, {
+                    headers: {
+                        'Authorization': 'Bearer invalid-token'
+                    }
+                });
+                
+                log(`   Response: ${meResponse.status} ${meResponse.statusText}`, 'info');
+                
+                if (meResponse.status === 401) {
+                    log('✅ Backend auth is working (correctly rejecting invalid tokens)', 'success');
+                } else {
+                    log(`⚠️ Unexpected status: ${meResponse.status}`, 'error');
+                }
+                
+            } catch (error) {
+                log(`❌ Backend connection failed: ${error.message}`, 'error');
+                log('   This could mean:', 'error');
+                log('   - Backend server is down', 'error');
+                log('   - Network connectivity issues', 'error');
+                log('   - CORS configuration problems', 'error');
+            }
+        }
+
+        function goToLogin() {
+            log('🚀 Redirecting to login page...', 'success');
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 1000);
+        }
+
+        // Auto-check state on load
+        window.addEventListener('load', () => {
+            log('🔧 Auth Fix Tool Loaded', 'success');
+            log('👉 Follow the steps above to fix authentication issues', 'info');
+        });
+    </script>
+</body>
+</html>

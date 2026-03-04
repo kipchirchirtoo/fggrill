@@ -69,6 +69,7 @@ import cateringBookingsRoutes from './catering-bookings.routes';
 import payrollAdjustmentsRoutes from './payroll-adjustments.routes';
 import statutoryDeductionsRoutes from './statutory-deductions.routes';
 import performanceRoutes from './performance.routes';
+import paymentsRoutes from './payments.routes';
 
 const router = express.Router();
 
@@ -153,6 +154,7 @@ router.use('/catering-bookings', cateringBookingsRoutes);
 router.use('/payroll-adjustments', payrollAdjustmentsRoutes);
 router.use('/payroll-statutory', statutoryDeductionsRoutes);
 router.use('/performance', performanceRoutes);
+router.use('/payments-verification', paymentsRoutes);
 
 // Email booking endpoints (public - no auth required)
 router.post('/email/send-booking/:bookingId', sendBookingEmail);

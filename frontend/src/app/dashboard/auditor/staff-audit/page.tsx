@@ -3,11 +3,18 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
-import { Loader2, Calendar, FileText, Download, User, DollarSign, CreditCard, Banknote } from 'lucide-react';
+import { Loader2, Calendar, FileText, Download, User, DollarSign, CreditCard, Banknote, FileDown, FileSpreadsheet } from 'lucide-react';
 import { format } from 'date-fns';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { UserRole } from '@/lib/auth-context';
+import { 
+    exportTransactionsPDF, 
+    exportSummaryPDF, 
+    exportTransactionsCSV, 
+    exportSummaryCSV,
+    downloadFile 
+} from '@/lib/staff-audit-export';
 
 interface StaffAuditRecord {
     id: string;
@@ -43,6 +50,8 @@ export default function StaffAuditPage() {
     const [viewMode, setViewMode] = useState<'transactions' | 'summary'>('transactions');
     const [branches, setBranches] = useState<any[]>([]);
     const [staffList, setStaffList] = useState<any[]>([]);
+    const [isExporting, setIsExporting] = useState(false);
+    const [showExportMenu, setShowExportMenu] = useState(false);
 
     useEffect(() => {
         fetchInitialData();
@@ -51,6 +60,18 @@ export default function StaffAuditPage() {
     useEffect(() => {
         fetchAuditData();
     }, [startDate, endDate, selectedBranch, selectedStaff]);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            if (showExportMenu && !target.closest('.export-menu-container')) {
+                setShowExportMenu(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showExportMenu]);
 
     const fetchInitialData = async () => {
         try {
@@ -113,6 +134,61 @@ export default function StaffAuditPage() {
     const totalAdvances = summary.reduce((sum, item) => sum + item.total_advances, 0);
     const totalLoans = summary.reduce((sum, item) => sum + item.total_loans, 0);
 
+    const handleExport = async (exportFormat: 'pdf' | 'csv') => {
+        setIsExporting(true);
+        setShowExportMenu(false);
+        
+        try {
+            const branchName = selectedBranch === 'all' 
+                ? 'All Branches' 
+                : branches.find(b => b.id === selectedBranch)?.name || 'Unknown Branch';
+            
+            const staffName = selectedStaff === 'all'
+                ? 'All Staff'
+                : staffList.find(s => s.id === selectedStaff)
+                    ? `${staffList.find(s => s.id === selectedStaff)?.first_name} ${staffList.find(s => s.id === selectedStaff)?.last_name}`
+                    : 'Unknown Staff';
+
+            const options = {
+                startDate,
+                endDate,
+                selectedBranch,
+                selectedStaff,
+                branchName,
+                staffName
+            };
+
+            if (viewMode === 'transactions') {
+                if (exportFormat === 'pdf') {
+                    const doc = await exportTransactionsPDF(records, options);
+                    const pdfBlob = doc.output('blob');
+                    downloadFile(pdfBlob, `staff-audit-transactions-${format(new Date(), 'yyyy-MM-dd')}.pdf`, 'pdf');
+                    toast.success('PDF exported successfully');
+                } else {
+                    const csvContent = exportTransactionsCSV(records);
+                    downloadFile(csvContent, `staff-audit-transactions-${format(new Date(), 'yyyy-MM-dd')}.csv`, 'csv');
+                    toast.success('CSV exported successfully');
+                }
+            } else {
+                if (exportFormat === 'pdf') {
+                    const doc = await exportSummaryPDF(summary, options);
+                    const pdfBlob = doc.output('blob');
+                    downloadFile(pdfBlob, `staff-audit-summary-${format(new Date(), 'yyyy-MM-dd')}.pdf`, 'pdf');
+                    toast.success('PDF exported successfully');
+                } else {
+                    const csvContent = exportSummaryCSV(summary);
+                    downloadFile(csvContent, `staff-audit-summary-${format(new Date(), 'yyyy-MM-dd')}.csv`, 'csv');
+                    toast.success('CSV exported successfully');
+                }
+            }
+        } catch (error) {
+            console.error('Export failed:', error);
+            toast.error('Failed to export data');
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
     return (
         <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN]}>
             <DashboardLayout>
@@ -135,10 +211,43 @@ export default function StaffAuditPage() {
                             >
                                 Staff Summary
                             </button>
-                            <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
-                                <Download size={16} />
-                                Export
-                            </button>
+                            <div className="relative export-menu-container">
+                                <button 
+                                    onClick={() => setShowExportMenu(!showExportMenu)}
+                                    disabled={isExporting || (records.length === 0 && summary.length === 0)}
+                                    className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isExporting ? (
+                                        <>
+                                            <Loader2 size={16} className="animate-spin" />
+                                            Exporting...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Download size={16} />
+                                            Export
+                                        </>
+                                    )}
+                                </button>
+                                {showExportMenu && !isExporting && (
+                                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+                                        <button
+                                            onClick={() => handleExport('pdf')}
+                                            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 rounded-t-lg"
+                                        >
+                                            <FileDown size={16} className="text-red-600" />
+                                            <span>Export as PDF</span>
+                                        </button>
+                                        <button
+                                            onClick={() => handleExport('csv')}
+                                            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 rounded-b-lg border-t border-gray-100"
+                                        >
+                                            <FileSpreadsheet size={16} className="text-green-600" />
+                                            <span>Export as CSV</span>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
 

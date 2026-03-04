@@ -22,12 +22,7 @@ export const getShiftLogs = async (
 
         let query = supabase
             .from('cashier_shift_logs')
-            .select(`
-                *,
-                cashier:users!cashier_id(first_name, last_name),
-                reconciler:users!reconciled_by(first_name, last_name),
-                verifier:users!verified_by(first_name, last_name)
-            `)
+            .select('*')
             .order('shift_start', { ascending: false });
 
         // Filter by branch
@@ -81,12 +76,7 @@ export const getShiftLog = async (
 
         const { data: shift, error: shiftError } = await supabase
             .from('cashier_shift_logs')
-            .select(`
-                *,
-                cashier:users!cashier_id(first_name, last_name),
-                reconciler:users!reconciled_by(first_name, last_name),
-                verifier:users!verified_by(first_name, last_name)
-            `)
+            .select('*')
             .eq('id', id)
             .single();
 

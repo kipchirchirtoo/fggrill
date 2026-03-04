@@ -1013,8 +1013,7 @@ export const processCashierPayment = async (
                             payment_method: method.toUpperCase(),
                             cash_amount: method === 'cash' ? amount : 0,
                             mpesa_amount: method === 'mpesa' ? amount : 0,
-                            card_amount: method === 'card' ? amount : 0,
-                            updated_at: new Date().toISOString()
+                            card_amount: method === 'card' ? amount : 0
                         })
                         .eq('id', transaction.id);
 
@@ -2757,7 +2756,6 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
                 *,
                 branch:branches(id, name),
                 cashier:users!cashier_id(id, first_name, last_name, email),
-                auditor:users!auditor_id(id, first_name, last_name, email),
                 lines:cashier_logbook_lines!logbook_id(id, section, customer_name, amount, reference)
             `)
             .eq('status', status)
