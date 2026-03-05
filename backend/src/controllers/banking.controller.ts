@@ -235,9 +235,9 @@ export const getBankingTransactions = async (
 };
 
 /**
- * @desc    Approve banking transaction
+ * @desc    Approve or reject banking transaction
  * @route   PUT /api/banking/transactions/:id/approve
- * @access  Private (Senior Accountant/Manager)
+ * @access  Private (Senior Accountant/Manager/Auditor)
  */
 export const approveBankingTransaction = async (
     req: Request,
@@ -246,13 +246,16 @@ export const approveBankingTransaction = async (
 ): Promise<void> => {
     try {
         const { id } = req.params;
-        const { notes } = req.body;
+        const { notes, action } = req.body;
         const approved_by = req.user?.id;
+
+        // Determine status based on action
+        const status = action === 'reject' ? 'REJECTED' : 'APPROVED';
 
         const { data: transaction, error } = await supabase
             .from('banking_transactions')
             .update({
-                status: 'APPROVED',
+                status,
                 approved_by,
                 approved_at: new Date().toISOString(),
                 notes: notes || null,
@@ -271,11 +274,11 @@ export const approveBankingTransaction = async (
 
         res.status(200).json({
             success: true,
-            message: 'Transaction approved successfully',
+            message: `Transaction ${action === 'reject' ? 'rejected' : 'approved'} successfully`,
             data: transaction
         });
 
-        logger.info(`Banking transaction approved: ${id}`);
+        logger.info(`Banking transaction ${action === 'reject' ? 'rejected' : 'approved'}: ${id}`);
     } catch (error) {
         next(error);
     }

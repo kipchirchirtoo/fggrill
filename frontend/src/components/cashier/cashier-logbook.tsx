@@ -144,7 +144,11 @@ export function CashierLogbook({ type }: { type?: string }) {
                         </span>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                        <div>
+                            <p className="text-xs text-stone-500 font-bold uppercase">Cashier</p>
+                            <p className="font-bold text-stone-900">{currentShift.cashier_name || (user ? `${user.firstName} ${user.lastName}` : 'Unknown')}</p>
+                        </div>
                         <div>
                             <p className="text-xs text-stone-500 font-bold uppercase">Started</p>
                             <p className="font-bold text-stone-900">{new Date(currentShift.shift_start).toLocaleTimeString()}</p>
@@ -214,7 +218,11 @@ export function CashierLogbook({ type }: { type?: string }) {
                                             {shift.status.toUpperCase()}
                                         </span>
                                     </div>
-                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                                    <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
+                                        <div>
+                                            <p className="text-xs text-stone-500">Cashier</p>
+                                            <p className="font-bold">{shift.cashier_name || 'Unknown'}</p>
+                                        </div>
                                         <div>
                                             <p className="text-xs text-stone-500">Date</p>
                                             <p className="font-bold">{new Date(shift.shift_start).toLocaleDateString()}</p>

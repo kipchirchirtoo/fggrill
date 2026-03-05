@@ -1,79 +1,102 @@
-# Auditor Search "Full Inspection" Routes - Complete Fix ✅
+# Auditor Search Full Inspection 404 Fix
 
 ## Problem
+When auditors used the Universal Search feature and clicked "Full Inspection" on search results, they encountered 404 errors because the navigation was trying to access routes that don't exist.
 
-When using the Auditor Search feature and clicking "Full Inspection" on search results, the system was throwing errors because navigation routes were incorrect or didn't exist.
+## Root Cause
+The `handleFullInspection` function in the auditor search page was navigating to incorrect routes:
+- **Guest/Customer results**: Tried to navigate to `/dashboard/reception/guests` (auditors don't have access to reception module)
+- **Booking/Reservation results**: Tried to navigate to `/dashboard/reception/bookings` (auditors don't have access to reception module)
+- **Supplier results**: Tried to navigate to `/dashboard/procurement/suppliers` (auditors don't have direct procurement access)
 
-## Solution
+These routes either don't exist or are not accessible to auditors.
 
-Completely updated the `handleFullInspection` function with comprehensive route mappings for all possible entity types that can be searched.
+## Solution Implemented
 
-## Complete Route Mappings
+### Updated Navigation Routes (`frontend/src/app/dashboard/auditor/search/page.tsx`)
 
-| Entity Type | Navigation Target | Description |
-|-------------|------------------|-------------|
-| **Staff & HR** |
-| staff | `/dashboard/auditor/staff-audit` | Staff audit page |
-| **Orders & Sales** |
-| order, restaurant_order | `/dashboard/auditor/orders` | Orders audit page |
-| sold_item, menu_item | `/dashboard/auditor/sold-items` | Sold items tracking |
-| **Guests & Bookings** |
-| guest, customer | `/dashboard/reception/guests` | Guest management |
-| booking, reservation, room_booking | `/dashboard/reception/bookings` | Bookings management |
-| **Financial Transactions** |
-| transaction, mpesa_transaction, payment_transaction | `/dashboard/auditor/revenue-oversight` | Revenue oversight |
-| receipt, payment_receipt | `/dashboard/auditor/revenue-oversight` | Revenue oversight |
-| payment, bill_payment | `/dashboard/auditor/revenue-oversight` | Revenue oversight |
-| bill, restaurant_bill, invoice | `/dashboard/auditor/invoices` | Invoices audit |
-| ledger_entry, accounting | `/dashboard/auditor/ledger` | Ledger audit |
-| **Procurement & Inventory** |
-| supplier, supplier_invoice | `/dashboard/procurement/suppliers` | Supplier management |
-| stock_take, inventory | `/dashboard/auditor/stock` | Stock audit |
-| purchase_order, purchase | `/dashboard/auditor/purchases` | Purchases audit |
-| **Kitchen Operations** |
-| kitchen_requisition, requisition | `/dashboard/auditor/kitchen-requisitions` | Kitchen requisitions |
-| wastage, kitchen_wastage | `/dashboard/auditor/kitchen-wastage` | Kitchen wastage tracking |
-| **Shifts** |
-| shift, cashier_shift | `/dashboard/auditor/shift-verification` | Shift verification |
+Fixed the `handleFullInspection` function to navigate to correct auditor-accessible routes:
 
-## Features
+**Changes Made**:
 
-1. **Comprehensive Coverage**: Handles 30+ entity types across all system modules
-2. **Error Handling**: Try-catch block prevents crashes
-3. **User Feedback**: Clear error messages for unknown entity types
-4. **Validation**: Checks if result is selected before navigation
-5. **Logging**: Console logs unknown entity types for debugging
+1. **Guest/Customer Results** → Changed from `/dashboard/reception/guests` to `/dashboard/auditor/revenue-oversight`
+   - Auditors review guest transactions through revenue oversight, not direct guest management
 
-## Error Handling
+2. **Booking/Reservation Results** → Changed from `/dashboard/reception/bookings` to `/dashboard/auditor/revenue-oversight`
+   - Auditors review booking revenue through revenue oversight module
 
-- **No Selection**: Shows error "Please select a result first"
-- **Unknown Type**: Shows error "No inspection view available for {type}"
-- **Navigation Failure**: Shows error "Failed to navigate to inspection view"
-- **Debug Logging**: Logs unknown entity types with ID for troubleshooting
+3. **Supplier/Supplier Invoice Results** → Changed from `/dashboard/procurement/suppliers` to `/dashboard/auditor/purchases`
+   - Auditors review supplier invoices through the purchases module
 
-## Testing Checklist
+4. **Removed template literals** → Changed from `` `path` `` to `'path'` for consistency
 
-Test each entity type:
+## Available Auditor Routes
+The following routes are confirmed to exist and are accessible to auditors:
 
-- [ ] Staff search → Staff audit page
-- [ ] Order search → Orders page
-- [ ] Guest search → Guests page
-- [ ] Booking search → Bookings page
-- [ ] Transaction search → Revenue oversight
-- [ ] Receipt search → Revenue oversight
-- [ ] Payment search → Revenue oversight
-- [ ] Bill/Invoice search → Invoices page
-- [ ] Supplier search → Suppliers page
-- [ ] Stock take search → Stock audit page
-- [ ] Purchase order search → Purchases page
-- [ ] Kitchen requisition search → Kitchen requisitions
-- [ ] Wastage search → Kitchen wastage
-- [ ] Shift search → Shift verification
-- [ ] Sold item search → Sold items page
-- [ ] Ledger entry search → Ledger page
+- `/dashboard/auditor/staff-audit` - Staff audit and accountability
+- `/dashboard/auditor/orders` - Restaurant and bar orders
+- `/dashboard/auditor/revenue-oversight` - Revenue reconciliation and oversight
+- `/dashboard/auditor/invoices` - Invoice verification
+- `/dashboard/auditor/purchases` - Purchase orders and supplier invoices
+- `/dashboard/auditor/stock` - Stock takes and inventory
+- `/dashboard/auditor/shift-verification` - Cashier shift verification
+- `/dashboard/auditor/kitchen-requisitions` - Kitchen requisition review
+- `/dashboard/auditor/kitchen-wastage` - Kitchen wastage tracking
+- `/dashboard/auditor/sold-items` - Sold items analytics
+- `/dashboard/auditor/ledger` - Accounting ledger
+- `/dashboard/auditor/banking` - Banking transactions
+- `/dashboard/auditor/kitchen-usage` - Kitchen usage tracking
+
+## Entity Type Mapping
+
+| Search Result Type | Navigation Route |
+|-------------------|------------------|
+| staff | /dashboard/auditor/staff-audit |
+| order, restaurant_order | /dashboard/auditor/orders |
+| guest, customer | /dashboard/auditor/revenue-oversight |
+| transaction, mpesa_transaction, payment_transaction | /dashboard/auditor/revenue-oversight |
+| receipt, payment_receipt | /dashboard/auditor/revenue-oversight |
+| booking, reservation, room_booking | /dashboard/auditor/revenue-oversight |
+| payment, bill_payment | /dashboard/auditor/revenue-oversight |
+| bill, restaurant_bill, invoice | /dashboard/auditor/invoices |
+| supplier, supplier_invoice | /dashboard/auditor/purchases |
+| stock_take, inventory | /dashboard/auditor/stock |
+| purchase_order, purchase | /dashboard/auditor/purchases |
+| shift, cashier_shift | /dashboard/auditor/shift-verification |
+| kitchen_requisition, requisition | /dashboard/auditor/kitchen-requisitions |
+| wastage, kitchen_wastage | /dashboard/auditor/kitchen-wastage |
+| sold_item, menu_item | /dashboard/auditor/sold-items |
+| ledger_entry, accounting | /dashboard/auditor/ledger |
+
+## Testing Steps
+
+1. Navigate to Auditor Dashboard → Universal Search
+2. Search for any entity (e.g., staff name, order ID, M-Pesa code)
+3. Select a search result from the list
+4. Click "Full Inspection" button
+5. Verify navigation works without 404 errors
+6. Test different entity types:
+   - Staff member → Should go to staff-audit
+   - Order → Should go to orders
+   - Guest/Customer → Should go to revenue-oversight
+   - Booking → Should go to revenue-oversight
+   - Supplier → Should go to purchases
+   - Stock take → Should go to stock
+   - Shift → Should go to shift-verification
+
+## Files Modified
+- `frontend/src/app/dashboard/auditor/search/page.tsx`
 
 ## Status
+✅ COMPLETE - Full Inspection navigation now works correctly for all entity types, routing to appropriate auditor-accessible pages.
 
-✅ **COMPLETE** - All entity types now have proper route mappings
-✅ **NO ERRORS** - All diagnostics passed
-✅ **COMPREHENSIVE** - Covers all searchable entity types in the system
+## User Roles with Access
+- AUDITOR
+- SUPER_ADMIN
+- GENERAL_MANAGER
+
+## Notes
+- Auditors don't have direct access to reception or procurement modules
+- All guest and booking-related inspections are routed through revenue oversight
+- All supplier-related inspections are routed through purchases module
+- This maintains proper role-based access control while providing full audit capabilities

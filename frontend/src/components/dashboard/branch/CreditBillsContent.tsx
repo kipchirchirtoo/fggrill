@@ -33,18 +33,29 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
 
     const loadStaff = async () => {
         try {
-            const res = await api.staff.getStaff({
-                status: 'active',
-                branchId: branchId || undefined
-            });
+            const params: any = {
+                status: 'active'
+            };
+            
+            // Only add branchId if it's not null
+            if (branchId) {
+                params.branchId = branchId;
+            }
+
+            const res = await api.staff.getStaff(params);
 
             if (res.success && Array.isArray(res.data)) {
                 setStaffList(res.data);
             } else if (Array.isArray(res)) {
                 setStaffList(res);
+            } else {
+                console.error('Unexpected staff response format:', res);
+                setStaffList([]);
             }
         } catch (error) {
             console.error('Failed to load staff', error);
+            toast.error('Failed to load staff members');
+            setStaffList([]);
         }
     };
 

@@ -1030,8 +1030,40 @@ export default function BranchPurchasesPage() {
                     </DialogBody>
                     <DialogFooter className="flex justify-between items-center">
                         <div className="flex gap-2">
-                            <IOSButton size="sm" variant="outline" onClick={() => downloadInvoicePDF(viewInvoice)} leftIcon={<Download />}>Download</IOSButton>
-                            <IOSButton size="sm" variant="outline" onClick={() => printInvoicePDF(viewInvoice)} leftIcon={<Printer />}>Print</IOSButton>
+                            <IOSButton 
+                                size="sm" 
+                                variant="outline" 
+                                onClick={async () => {
+                                    if (viewInvoice) {
+                                        try {
+                                            await downloadInvoicePDF(viewInvoice);
+                                        } catch (error) {
+                                            console.error('Error downloading invoice:', error);
+                                            toast.error('Failed to download invoice PDF');
+                                        }
+                                    }
+                                }} 
+                                leftIcon={<Download />}
+                            >
+                                Download
+                            </IOSButton>
+                            <IOSButton 
+                                size="sm" 
+                                variant="outline" 
+                                onClick={async () => {
+                                    if (viewInvoice) {
+                                        try {
+                                            await printInvoicePDF(viewInvoice);
+                                        } catch (error) {
+                                            console.error('Error printing invoice:', error);
+                                            toast.error('Failed to print invoice PDF');
+                                        }
+                                    }
+                                }} 
+                                leftIcon={<Printer />}
+                            >
+                                Print
+                            </IOSButton>
                         </div>
                         <IOSButton variant="outline" onClick={() => setIsViewInvoiceOpen(false)}>Close</IOSButton>
                     </DialogFooter>

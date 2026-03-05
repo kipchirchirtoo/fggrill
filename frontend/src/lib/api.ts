@@ -521,7 +521,7 @@ export const storeAPI = {
   getStockTakeItems: (id: string) => fetchAPI<any>(`/store/stock-takes/${id}/items`),
   updateStockTakeItem: (id: string, data: { actual_quantity: number }) =>
     fetchAPI<any>(`/store/stock-take-items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  submitStockTakeToAuditor: (id: string) => fetchAPI<any>(`/store/stock-takes/${id}/submit`, { method: 'PUT' }),
+  submitStockTakeToAuditor: (id: string) => fetchAPI<any>(`/stock-takes/${id}/submit`, { method: 'PUT' }),
   completeStockTake: (id: string) => fetchAPI<any>(`/store/stock-takes/${id}/complete`, { method: 'PUT' }),
 
   // Config

@@ -101,6 +101,20 @@ export default function AuditorDashboard() {
             badge: 'Live'
         },
         {
+            title: 'Banking Review',
+            desc: 'Approve banking transactions',
+            icon: Building2,
+            href: '/dashboard/auditor/banking',
+            badge: 'New'
+        },
+        {
+            title: 'Invoice Verification',
+            desc: 'Review & verify invoices',
+            icon: FileText,
+            href: '/dashboard/auditor/invoices',
+            badge: 'New'
+        },
+        {
             title: 'Order Tracking',
             desc: 'Branch requisition audit',
             icon: ShoppingCart,

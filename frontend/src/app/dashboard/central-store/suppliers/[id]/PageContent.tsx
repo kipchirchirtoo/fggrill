@@ -90,7 +90,7 @@ export default function SupplierDetailPage() {
 
     // Export Form Data
     const [exportDates, setExportDates] = useState({
-        start_date: '',
+        start_date: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString().split('T')[0], // Default to 3 months ago
         end_date: new Date().toISOString().split('T')[0]
     });
 
@@ -145,17 +145,28 @@ export default function SupplierDetailPage() {
 
     const handleExportStatement = async () => {
         try {
-            toast.info('Generating statement...');
-            await accountingAPI.exportSupplierStatement({
+            if (!exportDates.start_date || !exportDates.end_date) {
+                toast.error('Please select both start and end dates');
+                return;
+            }
+
+            toast.info('Generating supplier statement...');
+            const result = await accountingAPI.exportSupplierStatement({
                 supplier_id: id as string,
                 start_date: exportDates.start_date,
                 end_date: exportDates.end_date
             });
+
+            if (result && result.success === false) {
+                throw new Error(result.message || 'Export failed');
+            }
+
             setExportModalOpen(false);
-            toast.success('Download started');
+            toast.success('Statement downloaded successfully');
         } catch (error) {
             console.error('Export Error:', error);
-            toast.error('Failed to export statement');
+            const errorMessage = error instanceof Error ? error.message : 'Failed to export statement';
+            toast.error(errorMessage);
         }
     };
 
@@ -788,19 +799,39 @@ export default function SupplierDetailPage() {
                     <Dialog open={exportModalOpen} onOpenChange={setExportModalOpen}>
                         <DialogContent>
                             <DialogHeader>
-                                <DialogTitle>Export Supplier Statement</DialogTitle>
+                                <DialogTitle>Export Supplier Statement - {supplier.name}</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-4 py-4">
                                 <div className="space-y-2">
-                                    <Label>Start Date (Optional)</Label>
-                                    <Input type="date" value={exportDates.start_date} onChange={e => setExportDates({ ...exportDates, start_date: e.target.value })} />
-                                    <p className="text-xs text-stone-500">Leave blank for all history</p>
+                                    <Label>Start Date</Label>
+                                    <Input 
+                                        type="date" 
+                                        value={exportDates.start_date} 
+                                        onChange={e => setExportDates({ ...exportDates, start_date: e.target.value })} 
+                                        max={exportDates.end_date}
+                                    />
+                                    <p className="text-xs text-stone-500">Transactions from this date onwards</p>
                                 </div>
                                 <div className="space-y-2">
                                     <Label>End Date</Label>
-                                    <Input type="date" value={exportDates.end_date} onChange={e => setExportDates({ ...exportDates, end_date: e.target.value })} />
+                                    <Input 
+                                        type="date" 
+                                        value={exportDates.end_date} 
+                                        onChange={e => setExportDates({ ...exportDates, end_date: e.target.value })} 
+                                        min={exportDates.start_date}
+                                        max={new Date().toISOString().split('T')[0]}
+                                    />
+                                    <p className="text-xs text-stone-500">Transactions up to this date</p>
                                 </div>
                             </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setExportModalOpen(false)}>Cancel</Button>
+                                <Button onClick={handleExportStatement}>
+                                    <Download className="h-4 w-4 mr-2" /> Export PDF
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                             <DialogFooter>
                                 <Button variant="outline" onClick={() => setExportModalOpen(false)}>Cancel</Button>
                                 <Button onClick={handleExportStatement}>Download PDF</Button>
