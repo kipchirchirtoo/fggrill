@@ -832,12 +832,6 @@ export default function SupplierDetailPage() {
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>
-                            <DialogFooter>
-                                <Button variant="outline" onClick={() => setExportModalOpen(false)}>Cancel</Button>
-                                <Button onClick={handleExportStatement}>Download PDF</Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
                 </div>
             </DashboardLayout>
         </ProtectedRoute>
