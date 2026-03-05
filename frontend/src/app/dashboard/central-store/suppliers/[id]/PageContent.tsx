@@ -158,7 +158,7 @@ export default function SupplierDetailPage() {
             });
 
             if (result && result.success === false) {
-                throw new Error(result.message || 'Export failed');
+                throw new Error((result as any).message || 'Export failed');
             }
 
             setExportModalOpen(false);
@@ -267,28 +267,32 @@ export default function SupplierDetailPage() {
 
     if (loading) {
         return (
-            <DashboardLayout>
-                <div className="p-8 flex items-center justify-center h-[60vh]">
-                    <div className="text-stone-400 flex flex-col items-center gap-2">
-                        <RefreshCw className="h-8 w-8 animate-spin" />
-                        <p className="text-sm font-medium">Loading compliance records...</p>
+            <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.PROCUREMENT, UserRole.CENTRAL_STOREKEEPER, UserRole.AUDITOR]}>
+                <DashboardLayout>
+                    <div className="p-8 flex items-center justify-center h-[60vh]">
+                        <div className="text-stone-400 flex flex-col items-center gap-2">
+                            <RefreshCw className="h-8 w-8 animate-spin" />
+                            <p className="text-sm font-medium">Loading compliance records...</p>
+                        </div>
                     </div>
-                </div>
-            </DashboardLayout>
+                </DashboardLayout>
+            </ProtectedRoute>
         );
     }
 
     if (!supplier) {
         return (
-            <DashboardLayout>
-                <div className="p-8 text-center">
-                    <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-                    <h2 className="text-xl font-bold text-stone-800">Supplier Not Found</h2>
-                    <IOSButton variant="secondary" className="mt-4" onClick={() => window.history.back()}>
-                        <ArrowLeft className="h-4 w-4 mr-2" /> Back to List
-                    </IOSButton>
-                </div>
-            </DashboardLayout>
+            <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.PROCUREMENT, UserRole.CENTRAL_STOREKEEPER, UserRole.AUDITOR]}>
+                <DashboardLayout>
+                    <div className="p-8 text-center">
+                        <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+                        <h2 className="text-xl font-bold text-stone-800">Supplier Not Found</h2>
+                        <IOSButton variant="secondary" className="mt-4" onClick={() => window.history.back()}>
+                            <ArrowLeft className="h-4 w-4 mr-2" /> Back to List
+                        </IOSButton>
+                    </div>
+                </DashboardLayout>
+            </ProtectedRoute>
         );
     }
 
