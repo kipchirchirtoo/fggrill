@@ -77,7 +77,7 @@ export const generateDispatchPDF = async (dispatch: DispatchData) => {
     doc.setFontSize(10);
     doc.setTextColor(100);
     cursorY += 15;
-    doc.text('Kyogong GRILL & LOUNGE', 190, cursorY + 15, { align: 'right' });
+    doc.text('FamousGate Hotels', 190, cursorY + 15, { align: 'right' });
     cursorY += 5;
     doc.text('Central Warehouse & Logistics', 190, cursorY + 15, { align: 'right' });
     cursorY += 5;
@@ -199,7 +199,7 @@ export const generateDispatchPDF = async (dispatch: DispatchData) => {
         doc.setFontSize(8);
         doc.setTextColor(150);
         doc.text(`Printed on: ${new Date().toLocaleString()}`, margin, 285);
-        doc.text(`Kyogong - Delivery Note | Page ${i} of ${pageCount}`, 105, 285, { align: 'center' });
+        doc.text(`FamousGate Hotels - Delivery Note | Page ${i} of ${pageCount}`, 105, 285, { align: 'center' });
     }
 
     return doc;

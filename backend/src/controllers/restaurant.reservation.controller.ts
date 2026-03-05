@@ -15,11 +15,7 @@ export const getReservations = async (
 
     let query = supabase
       .from('restaurant_reservations')
-      .select(`
-        *,
-        customer:restaurant_customers(*),
-        table:restaurant_tables(*)
-      `)
+      .select('*')
       .order('reservation_date', { ascending: true })
       .order('reservation_time', { ascending: true });
 
@@ -53,11 +49,7 @@ export const getReservationById = async (
   try {
     const { data: reservation, error } = await supabase
       .from('restaurant_reservations')
-      .select(`
-        *,
-        customer:restaurant_customers(*),
-        table:restaurant_tables(*,section:restaurant_sections(*))
-      `)
+      .select('*')
       .eq('id', req.params.id)
       .single();
 

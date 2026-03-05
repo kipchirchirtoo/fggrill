@@ -23,8 +23,7 @@ import { IOSCard } from '@/components/ui/ios-card';
 import { downloadPurchaseOrderPDF, printPurchaseOrderPDF } from '@/lib/purchase-order-pdf';
 import { downloadInvoicePDF, printInvoicePDF } from '@/lib/invoice-pdf';
 import { procurementAPI, storeAPI } from '@/lib/api';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+import { API_URL } from '@/lib/config';
 
 interface InvoiceItem {
     id?: string;
@@ -58,8 +57,8 @@ interface Invoice {
 interface PurchaseOrder {
     id: string;
     po_number: string;
-    supplier_id: number;
-    supplier?: { id: number; name: string; contact_person?: string };
+    supplier_id: string; // UUID
+    supplier?: { id: string; name: string; contact_person?: string };
     status: string;
     total_amount: number;
     expected_delivery?: string;
@@ -71,25 +70,27 @@ interface PurchaseOrder {
 
 interface POItem {
     id?: string;
-    item_id: number;
-    item?: { id: number; name: string; sku: string };
+    item_id: string; // UUID
+    item?: { id: string; name: string; sku: string };
     quantity: number;
     unit_price: number;
     total: number;
 }
 
 interface Supplier {
-    id: number;
+    id: string; // UUID
     name: string;
     contact_person?: string;
     phone?: string;
 }
 
 interface StoreItem {
-    id: number;
-    name: string;
-    sku: string;
+    sku: string; // Primary key
+    description: string;
+    category?: string;
     cost_price?: number;
+    retail_price?: number;
+    quantity?: number;
 }
 
 export default function BranchPurchasesPage() {
@@ -150,7 +151,11 @@ export default function BranchPurchasesPage() {
             if (ordersRes.success) setOrders(ordersRes.data || []);
             if (invoicesRes.success) setInvoices(invoicesRes.data || []);
             if (suppliersRes.success) setSuppliers(suppliersRes.data || []);
-            if (itemsRes.success) setItems(itemsRes.data || []);
+            if (itemsRes.success) {
+                console.log('Items fetched:', itemsRes.data);
+                console.log('First item structure:', itemsRes.data?.[0]);
+                setItems(itemsRes.data || []);
+            }
         } catch (error) {
             console.error('Error:', error);
         } finally {
@@ -161,22 +166,44 @@ export default function BranchPurchasesPage() {
     const handleCreateOrder = async () => {
         try {
             const token = localStorage.getItem('token');
+            
+            // Validate form data before sending
+            if (!formData.supplier_id) {
+                toast.error('Please select a supplier');
+                return;
+            }
+            
+            const validItems = formData.items.filter(i => i.item_id && i.quantity > 0 && i.unit_price > 0);
+            if (validItems.length === 0) {
+                toast.error('Please add at least one valid item');
+                return;
+            }
+            
+            const payload = {
+                supplier_id: formData.supplier_id,
+                expected_delivery_date: formData.expected_delivery,
+                special_instructions: formData.notes,
+                items: validItems.map(i => ({
+                    item_id: i.item_id,
+                    quantity: i.quantity,
+                    unit_price: i.unit_price,
+                    vat_rate: i.vat_rate || 16
+                }))
+            };
+            
+            console.log('Creating PO with payload:', payload);
+            
             const response = await fetch(`${API_URL}/api/procurement/purchase-orders`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    ...formData,
-                    items: formData.items.filter(i => i.item_id).map(i => ({
-                        item_id: parseInt(i.item_id),
-                        quantity: i.quantity,
-                        unit_price: i.unit_price,
-                        total: i.quantity * i.unit_price
-                    }))
-                })
+                body: JSON.stringify(payload)
             });
+
+            const data = await response.json();
+            console.log('Response:', response.status, data);
 
             if (response.ok) {
                 toast.success('Purchase order created');
@@ -184,10 +211,12 @@ export default function BranchPurchasesPage() {
                 setFormData({ supplier_id: '', expected_delivery: '', notes: '', items: [{ _id: Math.random().toString(36).substr(2, 9), item_id: '', quantity: 1, unit_price: 0, vat_rate: 16 }] });
                 fetchData();
             } else {
-                const err = await response.json();
-                toast.error(err.error || 'Failed to create order');
+                const errorMsg = data.error || data.message || 'Failed to create order';
+                console.error('Error creating PO:', errorMsg, data);
+                toast.error(errorMsg);
             }
         } catch (error) {
+            console.error('Exception creating PO:', error);
             toast.error('Failed to create order');
         }
     };
@@ -555,7 +584,9 @@ export default function BranchPurchasesPage() {
                                                         value={item.item_id}
                                                         onChange={(e) => {
                                                             const val = e.target.value;
-                                                            const selectedItem = items.find(it => it.id === parseInt(val));
+                                                            console.log('Selected item SKU:', val);
+                                                            const selectedItem = items.find(it => it.sku === val);
+                                                            console.log('Found item:', selectedItem);
                                                             setFormData(prev => ({
                                                                 ...prev,
                                                                 items: prev.items.map((it, i) => i === index ? { ...it, item_id: val, unit_price: selectedItem?.cost_price || 0 } : it)
@@ -565,7 +596,7 @@ export default function BranchPurchasesPage() {
                                                     >
                                                         <option key="select-item-placeholder" value="">Select Item</option>
                                                         {items.map((it) => (
-                                                            <option key={it.id} value={it.id}>{it.name} ({it.sku})</option>
+                                                            <option key={it.sku} value={it.sku}>{it.description} ({it.sku})</option>
                                                         ))}
                                                     </select>
                                                 </div>

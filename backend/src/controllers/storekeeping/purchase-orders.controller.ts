@@ -135,8 +135,67 @@ export const createPurchaseOrder = async (
 
         const userId = req.user?.id;
 
+        // Enhanced validation and logging
+        console.log('=== CREATE PURCHASE ORDER DEBUG ===');
+        console.log('User ID:', userId);
+        console.log('Supplier ID:', supplier_id, 'Type:', typeof supplier_id);
+        console.log('Items count:', items?.length);
+        console.log('Items:', JSON.stringify(items, null, 2));
+
         if (!supplier_id || !items || items.length === 0) {
             throw new AppError('Supplier and items are required', 400);
+        }
+
+        // Validate UUID format for supplier_id
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(supplier_id)) {
+            throw new AppError('Invalid supplier ID format', 400);
+        }
+
+        // Handle item IDs - could be UUID or SKU
+        const resolvedItems = [...items];
+        const skusToResolve = items
+            .filter((item: any) => !uuidRegex.test(item.item_id))
+            .map((item: any) => item.item_id);
+
+        if (skusToResolve.length > 0) {
+            console.log('Resolving SKUs to UUIDs:', skusToResolve);
+            // Try to resolve from store_items using both sku and item_code fields
+            const { data: storeItems, error: resolveError } = await supabase
+                .from('store_items')
+                .select('id, item_code, sku')
+                .or(`item_code.in.(${skusToResolve.join(',')}),sku.in.(${skusToResolve.join(',')})`);
+
+            if (resolveError) {
+                console.error('Error resolving SKUs:', resolveError);
+                throw new AppError('Error resolving item identifiers', 500);
+            }
+
+            // Build map using both item_code and sku as keys
+            const skuToIdMap = (storeItems || []).reduce((acc: any, item: any) => {
+                if (item.item_code) acc[item.item_code] = item.id;
+                if (item.sku) acc[item.sku] = item.id;
+                return acc;
+            }, {});
+
+            console.log('SKU to ID map:', skuToIdMap);
+
+            for (const item of resolvedItems) {
+                if (!uuidRegex.test(item.item_id)) {
+                    const resolvedId = skuToIdMap[item.item_id];
+                    if (!resolvedId) {
+                        throw new AppError(`Item not found with SKU: ${item.item_id}`, 400);
+                    }
+                    item.item_id = resolvedId;
+                }
+            }
+        }
+
+        // Final validation to ensure all item_ids are now UUIDs
+        for (const item of resolvedItems) {
+            if (!uuidRegex.test(item.item_id)) {
+                throw new AppError(`Invalid item ID format after resolution: ${item.item_id}`, 400);
+            }
         }
 
         // Generate PO number using database function
@@ -145,40 +204,55 @@ export const createPurchaseOrder = async (
 
         if (numberError) {
             logger.error('Error generating PO number:', numberError);
+            console.error('PO Number generation error:', JSON.stringify(numberError, null, 2));
             throw new AppError('Failed to generate PO number', 500);
         }
 
+        console.log('Generated PO number:', po_number);
+
         // Calculate totals based on item-level VAT rates
-        const subtotal = items.reduce((sum: number, item: any) =>
+        const subtotal = resolvedItems.reduce((sum: number, item: any) =>
             sum + (item.quantity * item.unit_price), 0);
-        const tax_amount = items.reduce((sum: number, item: any) =>
+        const tax_amount = resolvedItems.reduce((sum: number, item: any) =>
             sum + (item.quantity * item.unit_price * ((item.vat_rate || 0) / 100)), 0);
         const total_amount = subtotal + tax_amount;
+
+        console.log('Calculated totals - Subtotal:', subtotal, 'Tax:', tax_amount, 'Total:', total_amount);
+
+        // Prepare PO data
+        const poData = {
+            po_number,
+            supplier_id,
+            created_by_id: userId || null, // Allow null if user ID is not available
+            po_date: po_date || new Date().toISOString().split('T')[0],
+            expected_delivery_date: expected_delivery_date || null,
+            special_instructions: special_instructions || null,
+            subtotal,
+            tax_amount,
+            total_amount,
+            status: 'draft',
+            payment_terms: payment_terms || 'credit_30_days',
+            delivery_terms: delivery_terms || null
+        };
+
+        console.log('PO Data to insert:', JSON.stringify(poData, null, 2));
 
         // Create purchase order
         const { data: newPO, error: poError } = await supabase
             .from('store_purchase_orders')
-            .insert({
-                po_number,
-                supplier_id,
-                created_by_id: userId,
-                po_date: po_date || new Date().toISOString().split('T')[0],
-                expected_delivery_date,
-                special_instructions,
-                subtotal,
-                tax_amount,
-                total_amount,
-                status: 'draft',
-                payment_terms,
-                delivery_terms
-            })
+            .insert(poData)
             .select()
             .single();
 
-        if (poError) throw poError;
+        if (poError) {
+            console.error('PO Insert error:', JSON.stringify(poError, null, 2));
+            throw poError;
+        }
+
+        console.log('PO created successfully:', newPO.id);
 
         // Insert PO items with item-level VAT
-        const poItems = items.map((item: any) => ({
+        const poItems = resolvedItems.map((item: any) => ({
             po_id: newPO.id,
             item_id: item.item_id,
             quantity_ordered: item.quantity,
@@ -188,11 +262,19 @@ export const createPurchaseOrder = async (
             tax_amount: (item.quantity * item.unit_price) * ((item.vat_rate || 0) / 100)
         }));
 
+        console.log('PO Items to insert:', JSON.stringify(poItems, null, 2));
+
         const { error: itemsError } = await supabase
             .from('store_po_items')
             .insert(poItems);
 
-        if (itemsError) throw itemsError;
+        if (itemsError) {
+            console.error('PO Items insert error:', JSON.stringify(itemsError, null, 2));
+            throw itemsError;
+        }
+
+        console.log('PO Items inserted successfully');
+        console.log('=== END DEBUG ===');
 
         res.status(201).json({
             success: true,
@@ -200,6 +282,7 @@ export const createPurchaseOrder = async (
         });
     } catch (error) {
         logger.error('Error creating purchase order:', error);
+        console.error('FULL ERROR DETAILS:', JSON.stringify(error, null, 2));
         next(error);
     }
 };
@@ -331,8 +414,37 @@ export const updatePurchaseOrder = async (
             throw new AppError('Only draft or pending purchase orders can be updated', 400);
         }
 
+        // Handle item IDs - could be UUID or SKU
+        const resolvedItems = [...items];
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const skusToResolve = items
+            .filter((item: any) => !uuidRegex.test(item.item_id))
+            .map((item: any) => item.item_id);
+
+        if (skusToResolve.length > 0) {
+            const { data: storeItems, error: resolveError } = await supabase
+                .from('store_items')
+                .select('id, item_code')
+                .in('item_code', skusToResolve);
+
+            if (resolveError) throw new AppError('Error resolving item identifiers', 500);
+
+            const skuToIdMap = (storeItems || []).reduce((acc: any, item: any) => {
+                acc[item.item_code] = item.id;
+                return acc;
+            }, {});
+
+            for (const item of resolvedItems) {
+                if (!uuidRegex.test(item.item_id)) {
+                    const resolvedId = skuToIdMap[item.item_id];
+                    if (!resolvedId) throw new AppError(`Item not found with SKU: ${item.item_id}`, 400);
+                    item.item_id = resolvedId;
+                }
+            }
+        }
+
         // Calculate totals
-        const subtotal = items.reduce((sum: number, item: any) =>
+        const subtotal = resolvedItems.reduce((sum: number, item: any) =>
             sum + (item.quantity * item.unit_price), 0);
         const tax_amount = subtotal * 0.16;
         const total_amount = subtotal + tax_amount;
@@ -365,7 +477,7 @@ export const updatePurchaseOrder = async (
             .eq('po_id', id);
 
         // Insert new items
-        const poItems = items.map((item: any) => ({
+        const poItems = resolvedItems.map((item: any) => ({
             po_id: id,
             item_id: item.item_id,
             quantity_ordered: item.quantity,

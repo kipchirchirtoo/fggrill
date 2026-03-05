@@ -18,7 +18,7 @@ export const POSReceipt: React.FC<ReceiptProps> = (props) => {
         name: "Kyogongs",
         address: "Bomet, Kenya",
         phone: "0706 782 828",
-        email: "kyogongsbmt@gmail.com",
+        email: "famousgatesbmt@gmail.com",
         pin: "P051234567Z"
     };
 

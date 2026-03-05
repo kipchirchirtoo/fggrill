@@ -19,7 +19,10 @@ import {
     Filter,
     FileText,
     Download,
-    Printer
+    Printer,
+    Eye,
+    DollarSign,
+    Users
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { downloadInvoicePDF, printInvoicePDF } from '@/lib/invoice-pdf';
@@ -236,6 +239,14 @@ function BookingList({ type, records, loading, onConfirm, onCancel }: {
     onConfirm: (id: string) => void,
     onCancel: (id: string) => void
 }) {
+    const [selectedBooking, setSelectedBooking] = useState<any>(null);
+    const [showDetailsModal, setShowDetailsModal] = useState(false);
+
+    const handleViewDetails = (record: any) => {
+        setSelectedBooking(record);
+        setShowDetailsModal(true);
+    };
+
     if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
     if (records.length === 0) return (
         <Card className="border-dashed">
@@ -250,80 +261,300 @@ function BookingList({ type, records, loading, onConfirm, onCancel }: {
     );
 
     return (
-        <div className="grid grid-cols-1 gap-4">
-            {records.map((record) => (
-                <Card key={record.id} className="overflow-hidden hover:border-indigo-200 transition-colors">
-                    <div className="flex flex-col md:flex-row md:items-center p-4 gap-4">
-                        <div className="flex items-center gap-3 min-w-[200px]">
-                            <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/30 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                                <User className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                    {type === 'hotel' ? record.guest_name : (record.guest_name || record.customer_name)}
-                                </p>
-                                <div className="flex items-center text-xs text-slate-500 mt-0.5">
-                                    <Phone className="w-3 h-3 mr-1" />
-                                    {record.guest_phone || record.phone || 'N/A'}
+        <>
+            <div className="grid grid-cols-1 gap-4">
+                {records.map((record) => (
+                    <Card key={record.id} className="overflow-hidden hover:border-indigo-200 transition-colors">
+                        <div className="flex flex-col md:flex-row md:items-center p-4 gap-4">
+                            <div className="flex items-center gap-3 min-w-[200px]">
+                                <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/30 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                                    <User className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                        {type === 'hotel' ? record.guest_name : (record.guest_name || record.customer_name)}
+                                    </p>
+                                    <div className="flex items-center text-xs text-slate-500 mt-0.5">
+                                        <Phone className="w-3 h-3 mr-1" />
+                                        {record.guest_phone || record.phone || 'N/A'}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <div className="flex-1 grid grid-cols-2 md:grid-cols-3 gap-4">
-                            <div>
-                                <p className="text-xs text-slate-500 uppercase font-semibold">
-                                    {type === 'hotel' ? 'Room' : 'Table/Guests'}
-                                </p>
-                                <p className="text-sm">
-                                    {type === 'hotel' ? record.room_number : `${record.table_number || 'TBD'} (${record.number_of_guests || record.guests} guests)`}
-                                </p>
+                            <div className="flex-1 grid grid-cols-2 md:grid-cols-3 gap-4">
+                                <div>
+                                    <p className="text-xs text-slate-500 uppercase font-semibold">
+                                        {type === 'hotel' ? 'Room' : 'Table/Guests'}
+                                    </p>
+                                    <p className="text-sm">
+                                        {type === 'hotel' ? record.room_number : `${record.table_number || 'TBD'} (${record.party_size || record.number_of_guests || record.guests} guests)`}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-slate-500 uppercase font-semibold">
+                                        {type === 'hotel' ? 'Check-in' : 'Date/Time'}
+                                    </p>
+                                    <p className="text-sm">
+                                        {type === 'hotel'
+                                            ? format(new Date(record.check_in), 'MMM dd, yyyy')
+                                            : `${format(new Date(record.reservation_date), 'MMM dd, yyyy')} ${record.reservation_time || ''}`}
+                                    </p>
+                                </div>
+                                <div className="hidden md:block">
+                                    <p className="text-xs text-slate-500 uppercase font-semibold">Status</p>
+                                    <Badge
+                                        variant="secondary"
+                                        className={getStatusStyles(record.status)}
+                                    >
+                                        {record.status}
+                                    </Badge>
+                                </div>
                             </div>
-                            <div>
-                                <p className="text-xs text-slate-500 uppercase font-semibold">
-                                    {type === 'hotel' ? 'Check-in' : 'Date/Time'}
-                                </p>
-                                <p className="text-sm">
-                                    {type === 'hotel'
-                                        ? format(new Date(record.check_in), 'MMM dd, yyyy')
-                                        : format(new Date(record.reservation_date), 'MMM dd, yyyy HH:mm')}
-                                </p>
-                            </div>
-                            <div className="hidden md:block">
-                                <p className="text-xs text-slate-500 uppercase font-semibold">Status</p>
-                                <Badge
-                                    variant="secondary"
-                                    className={getStatusStyles(record.status)}
-                                >
-                                    {record.status}
-                                </Badge>
-                            </div>
-                        </div>
 
-                        <div className="flex items-center gap-2 justify-end">
-                            {record.status === 'pending' && (
-                                <Button
-                                    size="sm"
-                                    onClick={() => onConfirm(record.id)}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                                >
-                                    <CheckCircle2 className="w-4 h-4 mr-1" /> Confirm
-                                </Button>
-                            )}
-                            {['pending', 'confirmed'].includes(record.status) && (
+                            <div className="flex items-center gap-2 justify-end">
                                 <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => onCancel(record.id)}
-                                    className="text-rose-600 border-rose-200 hover:bg-rose-50"
+                                    onClick={() => handleViewDetails(record)}
+                                    className="text-indigo-600 border-indigo-200 hover:bg-indigo-50"
                                 >
-                                    <XCircle className="w-4 h-4 mr-1" /> Cancel
+                                    <Eye className="w-4 h-4 mr-1" /> View Details
                                 </Button>
-                            )}
+                                {record.status === 'pending' && (
+                                    <Button
+                                        size="sm"
+                                        onClick={() => onConfirm(record.id)}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    >
+                                        <CheckCircle2 className="w-4 h-4 mr-1" /> Confirm
+                                    </Button>
+                                )}
+                                {['pending', 'confirmed'].includes(record.status) && (
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => onCancel(record.id)}
+                                        className="text-rose-600 border-rose-200 hover:bg-rose-50"
+                                    >
+                                        <XCircle className="w-4 h-4 mr-1" /> Cancel
+                                    </Button>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                </Card>
-            ))}
-        </div>
+                    </Card>
+                ))}
+            </div>
+
+            {/* Booking Details Modal */}
+            <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                    <DialogHeader className="flex-shrink-0">
+                        <DialogTitle className="text-2xl font-bold">
+                            {type === 'hotel' ? 'Hotel Booking Details' : 'Restaurant Reservation Details'}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Complete information about this booking
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {selectedBooking && (
+                        <div className="space-y-6 py-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100 dark:scrollbar-thumb-slate-600 dark:scrollbar-track-slate-800">
+                            {/* Guest Information */}
+                            <div className="space-y-3">
+                                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                                    <User className="w-5 h-5 text-indigo-600" />
+                                    Guest Information
+                                </h3>
+                                <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
+                                    <div>
+                                        <p className="text-xs text-slate-500 uppercase font-semibold">Name</p>
+                                        <p className="text-sm font-medium">{selectedBooking.guest_name || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500 uppercase font-semibold">Phone</p>
+                                        <p className="text-sm">{selectedBooking.guest_phone || selectedBooking.phone || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500 uppercase font-semibold">Email</p>
+                                        <p className="text-sm">{selectedBooking.guest_email || selectedBooking.email || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500 uppercase font-semibold">ID Number</p>
+                                        <p className="text-sm">{selectedBooking.id_number || 'N/A'}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Booking Details */}
+                            <div className="space-y-3">
+                                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                                    {type === 'hotel' ? <Hotel className="w-5 h-5 text-indigo-600" /> : <Utensils className="w-5 h-5 text-indigo-600" />}
+                                    {type === 'hotel' ? 'Booking Details' : 'Reservation Details'}
+                                </h3>
+                                <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
+                                    {type === 'hotel' ? (
+                                        <>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Booking Number</p>
+                                                <p className="text-sm font-medium">{selectedBooking.booking_number || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Room Number</p>
+                                                <p className="text-sm">{selectedBooking.room_number || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Check-in</p>
+                                                <p className="text-sm">{selectedBooking.check_in ? format(new Date(selectedBooking.check_in), 'MMM dd, yyyy') : 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Check-out</p>
+                                                <p className="text-sm">{selectedBooking.check_out ? format(new Date(selectedBooking.check_out), 'MMM dd, yyyy') : 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Number of Guests</p>
+                                                <p className="text-sm">{selectedBooking.number_of_guests || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Room Type</p>
+                                                <p className="text-sm">{selectedBooking.room_type || 'N/A'}</p>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Reservation Number</p>
+                                                <p className="text-sm font-medium">{selectedBooking.reservation_number || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Party Size</p>
+                                                <p className="text-sm">{selectedBooking.party_size || selectedBooking.number_of_guests || 'N/A'} guests</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Date</p>
+                                                <p className="text-sm">{selectedBooking.reservation_date ? format(new Date(selectedBooking.reservation_date), 'MMM dd, yyyy') : 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Time</p>
+                                                <p className="text-sm">{selectedBooking.reservation_time || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Table</p>
+                                                <p className="text-sm">{selectedBooking.table_number || 'Not assigned'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Section Preference</p>
+                                                <p className="text-sm">{selectedBooking.section_preference || 'None'}</p>
+                                            </div>
+                                        </>
+                                    )}
+                                    <div className="col-span-2">
+                                        <p className="text-xs text-slate-500 uppercase font-semibold">Status</p>
+                                        <Badge variant="secondary" className={getStatusStyles(selectedBooking.status)}>
+                                            {selectedBooking.status}
+                                        </Badge>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Payment Information */}
+                            {(selectedBooking.total_amount || selectedBooking.deposit_amount) && (
+                                <div className="space-y-3">
+                                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                                        <DollarSign className="w-5 h-5 text-indigo-600" />
+                                        Payment Information
+                                    </h3>
+                                    <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
+                                        {selectedBooking.total_amount && (
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Total Amount</p>
+                                                <p className="text-sm font-medium">KES {selectedBooking.total_amount.toLocaleString()}</p>
+                                            </div>
+                                        )}
+                                        {selectedBooking.deposit_amount && (
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Deposit</p>
+                                                <p className="text-sm">KES {selectedBooking.deposit_amount.toLocaleString()}</p>
+                                            </div>
+                                        )}
+                                        {selectedBooking.payment_status && (
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Payment Status</p>
+                                                <p className="text-sm">{selectedBooking.payment_status}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Special Requests */}
+                            {(selectedBooking.special_requests || selectedBooking.special_occasion || selectedBooking.dietary_restrictions) && (
+                                <div className="space-y-3">
+                                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Additional Information</h3>
+                                    <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg space-y-3">
+                                        {selectedBooking.special_occasion && (
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Special Occasion</p>
+                                                <p className="text-sm">{selectedBooking.special_occasion}</p>
+                                            </div>
+                                        )}
+                                        {selectedBooking.dietary_restrictions && (
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Dietary Restrictions</p>
+                                                <p className="text-sm">{Array.isArray(selectedBooking.dietary_restrictions) ? selectedBooking.dietary_restrictions.join(', ') : selectedBooking.dietary_restrictions}</p>
+                                            </div>
+                                        )}
+                                        {selectedBooking.special_requests && (
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Special Requests</p>
+                                                <p className="text-sm">{selectedBooking.special_requests}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Timestamps */}
+                            <div className="space-y-3">
+                                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                                    <Clock className="w-5 h-5 text-indigo-600" />
+                                    Timestamps
+                                </h3>
+                                <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg text-xs">
+                                    <div>
+                                        <p className="text-slate-500 uppercase font-semibold">Created</p>
+                                        <p>{selectedBooking.created_at ? format(new Date(selectedBooking.created_at), 'MMM dd, yyyy HH:mm') : 'N/A'}</p>
+                                    </div>
+                                    {selectedBooking.confirmed_at && (
+                                        <div>
+                                            <p className="text-slate-500 uppercase font-semibold">Confirmed</p>
+                                            <p>{format(new Date(selectedBooking.confirmed_at), 'MMM dd, yyyy HH:mm')}</p>
+                                        </div>
+                                    )}
+                                    {selectedBooking.cancelled_at && (
+                                        <div>
+                                            <p className="text-slate-500 uppercase font-semibold">Cancelled</p>
+                                            <p>{format(new Date(selectedBooking.cancelled_at), 'MMM dd, yyyy HH:mm')}</p>
+                                        </div>
+                                    )}
+                                    {selectedBooking.cancellation_reason && (
+                                        <div className="col-span-2">
+                                            <p className="text-slate-500 uppercase font-semibold">Cancellation Reason</p>
+                                            <p>{selectedBooking.cancellation_reason}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowDetailsModal(false)}>
+                            Close
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </>
     );
 }
 

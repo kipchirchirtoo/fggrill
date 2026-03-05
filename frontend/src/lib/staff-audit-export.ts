@@ -68,7 +68,7 @@ export const exportTransactionsPDF = async (
 
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text('Kyogong GRILL & LOUNGE', 190, cursorY + 20, { align: 'right' });
+    doc.text('FamousGate Hotels', 190, cursorY + 20, { align: 'right' });
     doc.text('Bomet, Kenya', 190, cursorY + 25, { align: 'right' });
     doc.text('0706782828', 190, cursorY + 30, { align: 'right' });
 
@@ -169,7 +169,7 @@ export const exportTransactionsPDF = async (
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(150);
-        doc.text('Kyogong Grill & Lounge - Staff Audit System', 105, 285, { align: 'center' });
+        doc.text('FamousGate Hotels - Staff Audit System', 105, 285, { align: 'center' });
         doc.text(`Page ${i} of ${pageCount}`, 190, 285, { align: 'right' });
     }
 
@@ -206,7 +206,7 @@ export const exportSummaryPDF = async (
 
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text('Kyogong GRILL & LOUNGE', 190, cursorY + 20, { align: 'right' });
+    doc.text('FamousGate Hotels', 190, cursorY + 20, { align: 'right' });
     doc.text('Bomet, Kenya', 190, cursorY + 25, { align: 'right' });
     doc.text('0706782828', 190, cursorY + 30, { align: 'right' });
 
@@ -296,7 +296,7 @@ export const exportSummaryPDF = async (
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(150);
-        doc.text('Kyogong Grill & Lounge - Staff Audit System', 105, 285, { align: 'center' });
+        doc.text('FamousGate Hotels - Staff Audit System', 105, 285, { align: 'center' });
         doc.text(`Page ${i} of ${pageCount}`, 190, 285, { align: 'right' });
     }
 

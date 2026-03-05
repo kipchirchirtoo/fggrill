@@ -5,9 +5,12 @@ import autoTable from 'jspdf-autotable';
 interface POItem {
     item?: { name: string };
     item_id?: number | string;
-    quantity: number;
+    item_name?: string;
+    quantity?: number;
+    quantity_ordered?: number;
     unit_price: number;
     total?: number;
+    total_price?: number;
 }
 
 interface PurchaseOrderData {
@@ -29,6 +32,12 @@ interface PurchaseOrderData {
         name: string;
         address?: string;
         phone?: string;
+        email?: string;
+    };
+    created_by?: {
+        id?: string;
+        full_name?: string;
+        name?: string;
         email?: string;
     };
 }
@@ -62,13 +71,13 @@ export const generatePurchaseOrderPDF = async (po: PurchaseOrderData) => {
     doc.setFontSize(10);
     doc.setTextColor(100);
     cursorY += 15;
-    doc.text(po.branch?.name || 'Kyogong GRILL & LOUNGE', 190, cursorY, { align: 'right' });
+    doc.text(po.branch?.name || 'FamousGate Hotels', 190, cursorY, { align: 'right' });
     cursorY += 5;
     doc.text(po.branch?.address || 'Bomet, Kenya', 190, cursorY, { align: 'right' });
     cursorY += 5;
     doc.text(po.branch?.phone || '0706782828', 190, cursorY, { align: 'right' });
     cursorY += 5;
-    doc.text(po.branch?.email || 'kyogongsbmt@gmail.com', 190, cursorY, { align: 'right' });
+    doc.text(po.branch?.email || 'famousgatesbmt@gmail.com', 190, cursorY, { align: 'right' });
 
     cursorY = 60;
     doc.setDrawColor(200);
@@ -102,12 +111,17 @@ export const generatePurchaseOrderPDF = async (po: PurchaseOrderData) => {
 
     // 4. Items Table
     const tableData = (po.items || []).map(item => {
-        const qty = Number(item.quantity) || 0;
+        // Handle both quantity_ordered (from DB) and quantity (from form)
+        const qty = Number(item.quantity_ordered || item.quantity) || 0;
         const price = Number(item.unit_price) || 0;
-        const total = qty * price;
+        // Use total_price from DB if available, otherwise calculate
+        const total = Number(item.total_price) || (qty * price);
+
+        // Get item name from nested item object or fallback
+        const itemName = item.item?.name || item.item_name || `Item #${item.item_id}`;
 
         return [
-            item.item?.name || `Item #${item.item_id}`,
+            itemName,
             qty,
             new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(price).replace('KES', 'Ksh'),
             new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(total).replace('KES', 'Ksh')
@@ -179,7 +193,7 @@ export const generatePurchaseOrderPDF = async (po: PurchaseOrderData) => {
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(150);
-        doc.text('Kyogong Grill & Lounge - Procurement System', 105, 285, { align: 'center' });
+        doc.text('FamousGate Hotels - Procurement System', 105, 285, { align: 'center' });
         doc.text(`Page ${i} of ${pageCount}`, 190, 285, { align: 'right' });
     }
 

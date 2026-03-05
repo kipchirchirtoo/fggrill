@@ -47,11 +47,11 @@ export const generateEmployeePDF = async (staff: StaffMember[], options: PDFOpti
     doc.setFontSize(10);
     doc.setTextColor(100);
     cursorY += 15;
-    doc.text('Kyogong GRILL & LOUNGE', 190, cursorY + 15, { align: 'right' });
+    doc.text('FamousGate Hotels', 190, cursorY + 15, { align: 'right' });
     cursorY += 5;
     doc.text('Human Resources Department', 190, cursorY + 15, { align: 'right' });
     cursorY += 5;
-    doc.text('Bomet, Kenya | HR@hirall.com', 190, cursorY + 15, { align: 'right' });
+    doc.text('Bomet, Kenya | 0706782828', 190, cursorY + 15, { align: 'right' });
 
     cursorY = 75;
     doc.setDrawColor(200);
@@ -122,7 +122,7 @@ export const generateEmployeePDF = async (staff: StaffMember[], options: PDFOpti
         doc.setFontSize(8);
         doc.setTextColor(150);
         doc.text(`Printed on: ${new Date().toLocaleString()}`, margin, 285);
-        doc.text(`Kyogong - HR Registry | Page ${i} of ${pageCount}`, 105, 285, { align: 'center' });
+        doc.text(`FamousGate Hotels - HR Registry | Page ${i} of ${pageCount}`, 105, 285, { align: 'center' });
     }
 
     return doc;
