@@ -242,11 +242,125 @@ export default function Home() {
         }}
       />
       <Head>
-        <title>FamousGate Hotels — Luxury Stay & Fine Dining</title>
-        <meta name="description" content="Experience the pinnacle of hospitality at FamousGate Hotels. Premium rooms, world-class dining, and elegant event spaces." />
+        <title>FamousGate Hotels — Luxury Stay & Fine Dining in Nairobi, Kenya</title>
+        <meta name="description" content="Experience the pinnacle of hospitality at FamousGate Hotels. Premium rooms, world-class dining, and elegant event spaces in Nairobi, Kenya. Book your luxury stay today." />
+        <meta name="keywords" content="luxury hotels Nairobi, FamousGate Hotels, premium accommodation Kenya, fine dining Nairobi, hotel booking Kenya, luxury stay Nairobi, conference facilities Kenya, wedding venues Nairobi, corporate events Kenya, boutique hotels Nairobi" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/logo_official.png" />
+        
+        {/* Open Graph / Facebook */}
+        <meta property="og:title" content="FamousGate Hotels — Luxury Stay & Fine Dining in Nairobi" />
+        <meta property="og:description" content="Experience world-class hospitality with premium rooms, gourmet dining, and exceptional service. Book your luxury stay at FamousGate Hotels today." />
+        <meta property="og:image" content="https://famousgatehotels.com/hero-bg.jpg" />
+        <meta property="og:url" content="https://famousgatehotels.com/" />
+        <meta property="og:type" content="website" />
+        
+        {/* Twitter Card */}
+        <meta name="twitter:title" content="FamousGate Hotels — Luxury Stay & Fine Dining" />
+        <meta name="twitter:description" content="Experience world-class hospitality with premium rooms, gourmet dining, and exceptional service in Nairobi, Kenya." />
+        <meta name="twitter:image" content="https://famousgatehotels.com/hero-bg.jpg" />
+        
+        {/* Structured Data - Organization */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Organization",
+              "name": "FamousGate Hotels",
+              "url": "https://famousgatehotels.com",
+              "logo": "https://famousgatehotels.com/logo_official.png",
+              "description": "Luxury hotel chain offering premium accommodations, fine dining, and event spaces in Kenya",
+              "address": {
+                "@type": "PostalAddress",
+                "addressCountry": "KE",
+                "addressLocality": "Nairobi"
+              },
+              "contactPoint": {
+                "@type": "ContactPoint",
+                "telephone": "+254-706-782828",
+                "contactType": "customer service",
+                "email": "famousgatesbmt@gmail.com",
+                "availableLanguage": ["English", "Swahili"]
+              },
+              "sameAs": [
+                "https://www.facebook.com/famousgate",
+                "https://www.instagram.com/famousgateshotel/",
+                "https://www.tiktok.com/@famousgateshotel"
+              ]
+            })
+          }}
+        />
+        
+        {/* Structured Data - Hotel */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Hotel",
+              "name": "FamousGate Hotels",
+              "image": "https://famousgatehotels.com/hero-bg.jpg",
+              "description": "Experience the pinnacle of hospitality at FamousGate Hotels. Premium rooms, world-class dining, and elegant event spaces.",
+              "address": {
+                "@type": "PostalAddress",
+                "addressCountry": "KE",
+                "addressLocality": "Nairobi"
+              },
+              "telephone": "+254-706-782828",
+              "email": "famousgatesbmt@gmail.com",
+              "priceRange": "KES 5,000 - 15,000",
+              "starRating": {
+                "@type": "Rating",
+                "ratingValue": "5"
+              },
+              "amenityFeature": [
+                { "@type": "LocationFeatureSpecification", "name": "Free WiFi" },
+                { "@type": "LocationFeatureSpecification", "name": "Restaurant" },
+                { "@type": "LocationFeatureSpecification", "name": "Room Service" },
+                { "@type": "LocationFeatureSpecification", "name": "Conference Facilities" },
+                { "@type": "LocationFeatureSpecification", "name": "Parking" },
+                { "@type": "LocationFeatureSpecification", "name": "Air Conditioning" }
+              ],
+              "checkinTime": "14:00",
+              "checkoutTime": "11:00"
+            })
+          }}
+        />
+        
+        {/* Structured Data - LocalBusiness */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "LocalBusiness",
+              "name": "FamousGate Hotels",
+              "image": "https://famousgatehotels.com/hero-bg.jpg",
+              "url": "https://famousgatehotels.com",
+              "telephone": "+254-706-782828",
+              "email": "famousgatesbmt@gmail.com",
+              "address": {
+                "@type": "PostalAddress",
+                "addressCountry": "KE",
+                "addressLocality": "Nairobi"
+              },
+              "geo": {
+                "@type": "GeoCoordinates",
+                "latitude": "-1.286389",
+                "longitude": "36.817223"
+              },
+              "openingHoursSpecification": {
+                "@type": "OpeningHoursSpecification",
+                "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+                "opens": "00:00",
+                "closes": "23:59"
+              },
+              "priceRange": "KES 5,000 - 15,000"
+            })
+          }}
+        />
       </Head>
 
       {/* ===== NAVIGATION ===== */}
