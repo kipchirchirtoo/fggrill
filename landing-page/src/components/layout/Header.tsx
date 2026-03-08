@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 interface HeaderProps {
   className?: string;
@@ -19,33 +20,41 @@ export default function Header({ className = '' }: HeaderProps) {
     setMenuOpen(false);
   };
 
+  const navItems = [
+    { label: 'About', href: '/about' },
+    { label: 'Dining', href: '/dining' },
+    { label: 'Events', href: '/events' },
+    { label: 'Hotels', href: '/hotels' },
+    { label: 'Reservations', href: '/reservations' },
+  ];
+
   return (
     <nav className={`lp-nav${scrolled ? ' lp-nav--scrolled' : ''} ${className}`}>
       <div className="lp-nav__inner">
         {/* Brand */}
-        <a href="#top" className="lp-nav__brand">
+        <Link href="/" className="lp-nav__brand">
           <img src="/fglogo.png" alt="FamousGate Logo" className="lp-nav__logo" />
           <div className="lp-nav__brand-text">
             <span className="lp-nav__brand-fg">FAMOUSGATE</span>
             <span className="lp-nav__brand-grill">HOTELS</span>
           </div>
-        </a>
+        </Link>
 
         {/* Desktop links */}
         <ul className="lp-nav__links">
-          {['Experience', 'Dining', 'Events', 'Branches', 'Reservations'].map((item) => (
-            <li key={item}>
-              <a href={`#${item.toLowerCase()}`} className="lp-nav__link">
-                {item}
-              </a>
+          {navItems.map((item) => (
+            <li key={item.label}>
+              <Link href={item.href} className="lp-nav__link">
+                {item.label}
+              </Link>
             </li>
           ))}
         </ul>
 
         {/* CTA */}
-        <a href="#reservations" className="lp-nav__cta">
+        <Link href="/reservations" className="lp-nav__cta">
           Book Your Stay
-        </a>
+        </Link>
 
         {/* Hamburger */}
         <button
@@ -63,23 +72,23 @@ export default function Header({ className = '' }: HeaderProps) {
       {/* Mobile menu */}
       {menuOpen && (
         <div className="lp-mobile-menu">
-          {['Experience', 'Dining', 'Events', 'Branches', 'Reservations'].map((item) => (
-            <a
-              key={item}
-              href={`#${item.toLowerCase()}`}
+          {navItems.map((item) => (
+            <Link
+              key={item.label}
+              href={item.href}
               className="lp-mobile-menu__link"
               onClick={handleLinkClick}
             >
-              {item}
-            </a>
+              {item.label}
+            </Link>
           ))}
-          <a
-            href="#reservations"
+          <Link
+            href="/reservations"
             className="lp-mobile-menu__cta"
             onClick={handleLinkClick}
           >
             Book Your Stay
-          </a>
+          </Link>
         </div>
       )}
     </nav>
