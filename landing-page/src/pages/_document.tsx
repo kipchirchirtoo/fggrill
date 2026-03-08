@@ -16,6 +16,7 @@ export default function Document() {
         <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
         <meta name="googlebot" content="index, follow" />
         <link rel="canonical" href="https://famousgatehotels.com" />
+        <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
         
         {/* Open Graph / Facebook */}
         <meta property="og:type" content="website" />
