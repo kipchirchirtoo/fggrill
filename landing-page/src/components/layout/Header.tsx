@@ -25,7 +25,7 @@ export default function Header({ className = '' }: HeaderProps) {
     { label: 'Dining', href: '/dining' },
     { label: 'Events', href: '/events' },
     { label: 'Hotels', href: '/hotels' },
-    { label: 'Reservations', href: '/reservations' },
+    { label: 'Reservations', href: '/#reservations' },
   ];
 
   return (
@@ -52,7 +52,7 @@ export default function Header({ className = '' }: HeaderProps) {
         </ul>
 
         {/* CTA */}
-        <Link href="/reservations" className="lp-nav__cta">
+        <Link href="/#reservations" className="lp-nav__cta">
           Book Your Stay
         </Link>
 
@@ -83,7 +83,7 @@ export default function Header({ className = '' }: HeaderProps) {
             </Link>
           ))}
           <Link
-            href="/reservations"
+            href="/#reservations"
             className="lp-mobile-menu__cta"
             onClick={handleLinkClick}
           >
