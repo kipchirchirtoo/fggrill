@@ -2,6 +2,7 @@ import { Booking, BookingStatus } from '../models/Booking';
 import { Room, RoomStatus } from '../models/Room';
 import { Folio } from '../models/Folio';
 import { emailService } from './email.service';
+import { brevoEmailService } from './brevo-email.service';
 import { emailAutomationService } from './emailAutomation.service';
 import { barcodeGeneratorService } from './barcodeGenerator.service';
 import { supabase } from '../config/database';
@@ -65,7 +66,7 @@ class BookingService {
   async checkAvailability(
     checkInDate: string,
     checkOutDate: string,
-    roomTypeId: string,
+    roomTypeId?: string,
     branchId?: string
   ): Promise<{ available: boolean; availableRooms: any[] }> {
     try {
@@ -80,13 +81,12 @@ class BookingService {
 
       const bookedIds = (booked || []).map(b => b.room_id);
 
-      // Query rooms that are NOT booked and NOT in maintenance
-      // Use neq for each status instead of .not('in', ...) to avoid parsing issues
+      // Query rooms that are NOT booked and are available for booking
+      // Only include rooms with status 'available' or 'cleaning' (same as search endpoint)
       let roomQuery = supabase
         .from('rooms')
         .select('*')
-        .neq('status', 'maintenance')
-        .neq('status', 'out_of_order');
+        .in('status', ['available', 'cleaning']);
 
       if (branchId) {
         roomQuery = roomQuery.eq('branch_id', branchId);
@@ -233,10 +233,12 @@ class BookingService {
   async createBooking(bookingRequest: BookingRequest): Promise<Booking> {
     try {
       // 1. Check availability
+      // If a specific roomId is provided, don't filter by roomTypeId in availability check
+      // This ensures the specific room is included in the availability results
       const availability = await this.checkAvailability(
         bookingRequest.checkInDate,
         bookingRequest.checkOutDate,
-        bookingRequest.roomTypeId,
+        bookingRequest.roomId ? undefined : bookingRequest.roomTypeId, // Only filter by type if no specific room requested
         bookingRequest.branchId
       );
 
@@ -455,30 +457,43 @@ class BookingService {
       // Get room and room type details
       const { data: room } = await supabase
         .from('rooms')
-        .select('room_number, room_type:room_types(name)')
+        .select('room_number, room_type:room_types(name), branch:branches(name)')
         .eq('id', booking.roomId)
         .single();
 
+      // Get branch details if not in room query
+      let branchName = 'Famous Gate Hotel';
+      if (room?.branch) {
+        branchName = (room.branch as any).name || branchName;
+      } else if (booking.branchId) {
+        const { data: branch } = await supabase
+          .from('branches')
+          .select('name')
+          .eq('id', booking.branchId)
+          .single();
+        if (branch) branchName = branch.name;
+      }
+
       const bookingDetails = {
-        id: booking.id,
-        confirmation_number: booking.confirmationNumber,
-        guest_name: `${guestInfo.firstName} ${guestInfo.lastName}`,
-        check_in: booking.checkInDate,
-        check_out: booking.checkOutDate,
-        room_number: room?.room_number || 'TBA',
-        room_type: room?.room_type ? (room.room_type as any).name || 'Standard' : 'Standard',
-        adults: booking.adults,
-        children: booking.children,
-        total_amount: booking.totalAmount,
-        special_requests: booking.specialRequests,
-        meal_plan: booking.mealPlan
+        confirmationNumber: booking.confirmationNumber,
+        firstName: guestInfo.firstName,
+        lastName: guestInfo.lastName,
+        email: guestInfo.email,
+        phone: guestInfo.phone || 'N/A',
+        checkInDate: booking.checkInDate.toISOString().split('T')[0],
+        checkOutDate: booking.checkOutDate.toISOString().split('T')[0],
+        roomType: room?.room_type ? (room.room_type as any).name || 'Standard Room' : 'Standard Room',
+        guests: `${booking.adults} Adult${booking.adults > 1 ? 's' : ''}${booking.children > 0 ? `, ${booking.children} Child${booking.children > 1 ? 'ren' : ''}` : ''}`,
+        totalAmount: booking.totalAmount,
+        branchName: branchName
       };
 
-      await emailService.sendBookingConfirmation(guestInfo.email, bookingDetails);
-      logger.info(`Booking confirmation email sent to ${guestInfo.email}`);
+      // Use Brevo API for landing page bookings (more reliable than SMTP)
+      await brevoEmailService.sendLandingBookingConfirmation(guestInfo.email, bookingDetails);
+      logger.info(`✅ Booking confirmation email sent to ${guestInfo.email} via Brevo API`);
 
     } catch (error) {
-      logger.error('Error sending confirmation email:', error);
+      logger.error('❌ Error sending confirmation email:', error);
       // Don't throw error - booking should still succeed even if email fails
     }
   }

@@ -1,0 +1,3 @@
+﻿src/pages/api/send-confirmation.ts(5,31): error TS2339: Property 'TransactionalEmailsApi' does not exist on type 'typeof import("C:/Users/user/Desktop/fggrill/landing-page/node_modules/@getbrevo/brevo/dist/cjs/index")'.
+src/pages/api/send-confirmation.ts(7,11): error TS2339: Property 'TransactionalEmailsApiApiKeys' does not exist on type 'typeof import("C:/Users/user/Desktop/fggrill/landing-page/node_modules/@getbrevo/brevo/dist/cjs/index")'.
+src/pages/api/send-confirmation.ts(26,41): error TS2339: Property 'SendSmtpEmail' does not exist on type 'typeof import("C:/Users/user/Desktop/fggrill/landing-page/node_modules/@getbrevo/brevo/dist/cjs/index")'.

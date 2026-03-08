@@ -8,7 +8,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { storeAPI, auditAPI, auditorReportsAPI } from '@/lib/api';
-import { TrendingDown, RefreshCw, Plus, Package, Calendar, User, Clock, FileText, Tag, ChevronRight, X, FileDown, Activity, AlertTriangle } from 'lucide-react';
+import { TrendingDown, RefreshCw, Plus, Package, Calendar, User, Clock, FileText, Tag, ChevronRight, X, FileDown, Activity, AlertTriangle, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -59,11 +59,15 @@ function formatTime(dateStr?: string): string {
 
 export default function BranchStockOutPage() {
   const { user } = useAuth();
-  // console.log('[BranchStockOutPage] UserRole.AUDITOR:', UserRole.AUDITOR, 'User Role:', user?.role);
   const searchParams = useSearchParams();
   const branchId = useMemo(() => {
-    const id = searchParams.get('branch_id');
-    return id ? parseInt(id) : (user?.branch_id || undefined);
+    try {
+      const id = searchParams?.get('branch_id');
+      return id ? parseInt(id) : (user?.branch_id || undefined);
+    } catch (error) {
+      console.error('Error reading search params:', error);
+      return user?.branch_id || undefined;
+    }
   }, [searchParams, user?.branch_id]);
 
   const [records, setRecords] = useState<StockMovement[]>([]);
@@ -78,12 +82,10 @@ export default function BranchStockOutPage() {
     try {
       const response = await storeAPI.getStockMovements({ branch_id: branchId });
       if (response.success) {
-        // Filter for stock out movements (could be 'STOCK_OUT' or 'out')
         const stockOuts = (response.data || []).filter(
           (m: any) => m.movement_type === 'STOCK_OUT' || m.movement_type === 'out'
         );
 
-        // Resolve performed_by UUIDs to names
         const uuids = Array.from(new Set(
           stockOuts.map((m: any) => m.performed_by).filter((v: string) => v && UUID_REGEX.test(v))
         ));
@@ -192,8 +194,8 @@ export default function BranchStockOutPage() {
       });
       toast.dismiss();
       toast.success("Record verified successfully");
-      fetchRecords(); // Refresh data
-      setSelectedRecord(null); // Close modal
+      fetchRecords();
+      setSelectedRecord(null);
     } catch (error) {
       console.error(error);
       toast.dismiss();
@@ -323,7 +325,6 @@ export default function BranchStockOutPage() {
           )}
         </div>
 
-        {/* Detail Dialog */}
         <Dialog open={!!selectedRecord} onOpenChange={(open) => { if (!open) setSelectedRecord(null); }}>
           <DialogContent className="max-w-md">
             <DialogHeader>
@@ -444,7 +445,6 @@ export default function BranchStockOutPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Issue Stock Dialog */}
         <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader><DialogTitle>Issue Stock</DialogTitle></DialogHeader>

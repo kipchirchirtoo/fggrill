@@ -1,7 +1,9 @@
 import nodemailer from 'nodemailer';
+import axios from 'axios';
 import { logger } from '../utils/logger';
 import { emailTemplates } from '../utils/emailTemplates';
 import { enterpriseEmailTemplates } from '../utils/emailTemplates.enterprise';
+import { landingEmailTemplates } from '../utils/emailTemplates.landing';
 import { barcodeGeneratorService } from './barcodeGenerator.service';
 
 interface EmailOptions {
@@ -41,8 +43,12 @@ class EmailService {
 
   async sendEmail(options: EmailOptions): Promise<void> {
     try {
+      // Ensure FROM email is properly set and verified in Brevo
+      const fromEmail = process.env.SMTP_FROM_EMAIL || 'info@famousgatehotels.com';
+      const fromName = process.env.SMTP_FROM_NAME || 'Famous Gates Hotels';
+      
       const mailOptions = {
-        from: `${process.env.SMTP_FROM_NAME || 'FG Grill Hotel'} <${process.env.SMTP_FROM_EMAIL}>`,
+        from: `${fromName} <${fromEmail}>`,
         to: options.to,
         subject: options.subject,
         html: options.html,
@@ -50,11 +56,18 @@ class EmailService {
         attachments: options.attachments
       };
 
+      logger.info(`Sending email from ${fromName} <${fromEmail}> to ${options.to}`);
       await this.transporter.sendMail(mailOptions);
-      logger.info(`Email sent to ${options.to}`);
+      logger.info(`Email sent successfully to ${options.to}`);
     } catch (error: any) {
       logger.error('Error sending email:', error);
-      throw new Error('Email could not be sent');
+      logger.error('Email error details:', {
+        code: error.code,
+        command: error.command,
+        response: error.response,
+        responseCode: error.responseCode
+      });
+      throw new Error(`Email could not be sent: ${error.message}`);
     }
   }
 
@@ -215,6 +228,119 @@ class EmailService {
         }
       ]
     });
+  }
+
+  async sendLandingBookingConfirmation(email: string, details: any): Promise<void> {
+    try {
+      const { landingEmailTemplates } = await import('../utils/emailTemplates.landing');
+
+      // PDF generation is not available yet - send email without PDF attachment
+      logger.info(`Sending booking confirmation email to ${email} (PDF attachment not available)`);
+
+      const html = landingEmailTemplates.bookingConfirmation({
+        guestName: `${details.firstName} ${details.lastName}`,
+        confirmationNumber: details.confirmationNumber,
+        checkInDate: details.checkInDate,
+        checkOutDate: details.checkOutDate,
+        roomType: details.roomType,
+        guests: details.guests,
+        totalAmount: details.totalAmount,
+        hotelName: details.branchName || 'Famous Gate Hotel',
+        hotelAddress: 'P.O. Box 123, Bomet, Kenya',
+        hotelPhone: '+254 700 000 000',
+        hotelEmail: 'info@famousgatehotels.com'
+      });
+
+      await this.sendEmail({
+        to: email,
+        subject: `Booking Confirmation - ${details.branchName || 'Famous Gate Hotel'}`,
+        html
+      });
+      
+      logger.info(`Booking confirmation email sent successfully to ${email}`);
+    } catch (error: any) {
+      logger.error('Error sending landing booking confirmation:', error);
+      throw error;
+    }
+  }
+
+  async sendLandingReservationRequest(email: string, details: any): Promise<void> {
+    const { landingEmailTemplates } = await import('../utils/emailTemplates.landing');
+    const html = landingEmailTemplates.reservationRequest({
+      guestName: `${details.firstName} ${details.lastName}`,
+      reservationId: details.reservationId,
+      checkInDate: details.checkInDate,
+      checkOutDate: details.checkOutDate,
+      roomType: details.roomType,
+      guests: details.guests,
+      totalAmount: details.totalAmount,
+      paymentLink: details.paymentLink,
+      hotelName: details.branchName || 'Famous Gate Hotel',
+      hotelAddress: 'P.O. Box 123, Bomet, Kenya',
+      hotelPhone: '+254 700 000 000',
+      hotelEmail: 'info@famousgatehotels.com'
+    });
+
+    await this.sendEmail({
+      to: email,
+      subject: `Reservation Request Pending - ${details.branchName || 'Famous Gate Hotel'}`,
+      html
+    });
+  }
+
+  async sendLandingPromotion(recipients: any[], details: any): Promise<void> {
+    const { landingEmailTemplates } = await import('../utils/emailTemplates.landing');
+    for (const recipient of recipients) {
+      try {
+        const html = landingEmailTemplates.promotion({
+          guestName: recipient.name || 'Valued Guest',
+          promoTitle: details.promoTitle,
+          promoHeadline: details.promoHeadline || 'Limited Time Offer',
+          promoDescription: details.promoDescription,
+          promoCode: details.promoCode,
+          discountPercentage: details.discountPercentage,
+          validUntil: details.validUntil,
+          bookingLink: details.bookingLink,
+          hotelName: 'Famous Gate Hotel',
+          hotelAddress: 'P.O. Box 123, Bomet, Kenya'
+        });
+
+        await this.sendEmail({
+          to: recipient.email,
+          subject: details.promoTitle,
+          html
+        });
+      } catch (e: any) {
+        logger.error(`Failed to send promo to ${recipient.email}: ${e.message}`);
+      }
+    }
+  }
+
+  async sendLandingNewsletter(recipients: any[], details: any): Promise<void> {
+    const { landingEmailTemplates } = await import('../utils/emailTemplates.landing');
+    for (const recipient of recipients) {
+      try {
+        const html = landingEmailTemplates.newsletter({
+          guestName: recipient.name || 'Subscriber',
+          issueDate: details.issueDate,
+          newsletterTitle: details.newsletterTitle,
+          featuredArticle: details.featuredArticle,
+          secondaryArticles: details.secondaryArticles || [],
+          bookingLink: details.bookingLink,
+          hotelName: 'Famous Gate Hotel',
+          hotelAddress: 'P.O. Box 123, Bomet, Kenya',
+          hotelPhone: '+254 700 000 000'
+        });
+
+        await this.sendEmail({
+          to: recipient.email,
+          subject: details.newsletterTitle,
+          html
+        });
+      } catch (e: any) {
+        logger.error(`Failed to send newsletter to ${recipient.email}: ${e.message}`);
+      }
+    }
   }
 
   async testConnection(): Promise<boolean> {

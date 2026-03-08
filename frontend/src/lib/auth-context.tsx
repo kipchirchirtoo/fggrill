@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
@@ -65,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [mounted]);
 
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
       if (typeof window === 'undefined') {
         setIsLoading(false);
@@ -134,9 +134,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const login = async (email: string, password: string): Promise<void> => {
+  const login = useCallback(async (email: string, password: string): Promise<void> => {
     if (isLoading) return;
     setIsLoading(true);
 
@@ -184,9 +184,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [router]);
 
-  const posLogin = async (pin: string, redirectTo?: string): Promise<void> => {
+  const posLogin = useCallback(async (pin: string, redirectTo?: string): Promise<void> => {
     if (isLoading) return;
     setIsLoading(true);
 
@@ -234,9 +234,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [router]);
 
-  const logout = async (redirectTo: string = '/login') => {
+  const logout = useCallback(async (redirectTo: string = '/login') => {
     try {
       await api.auth.logout();
     } catch (error) {
@@ -248,7 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       toast.info('Logged out successfully');
       router.push(redirectTo);
     }
-  };
+  }, [router]);
 
   const redirectToDashboard = (role: UserRole, isCentral?: boolean) => {
     const roleRedirects: Record<UserRole, string> = {
@@ -306,7 +306,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     posLogin,
     logout,
     checkAuth
-  }), [user, isLoading]);
+  }), [user, isLoading, login, posLogin, logout, checkAuth]);
 
   return (
     <AuthContext.Provider value={authValue}>

@@ -1,0 +1,13 @@
+﻿--- Centralized API Integration Test ---
+
+Testing: Booking Confirmation (with PDF)...
+Γ£à Success: Status 200
+   Message: Booking confirmation email sent successfully
+
+Testing: Reservation Request...
+Γ£à Success: Status 200
+   Message: Reservation request email sent successfully
+
+Testing: Newsletter...
+Γ£à Success: Status 200
+   Message: Newsletter emails sent successfully

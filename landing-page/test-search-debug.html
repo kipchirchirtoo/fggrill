@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Landing Page Search Debug</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #fff; }
+        button { padding: 10px 20px; margin: 10px 0; background: #d4af37; border: none; cursor: pointer; font-size: 16px; }
+        button:hover { background: #b8941f; }
+        .result { margin: 10px 0; padding: 10px; background: #2a2a2a; border-left: 3px solid #d4af37; }
+        .error { border-left-color: #ef4444; }
+        .success { border-left-color: #10b981; }
+        pre { white-space: pre-wrap; word-wrap: break-word; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Landing Page Search Debug</h1>
+    
+    <h2>Step 1: Test API Connection</h2>
+    <button onclick="testAPI()">Test API Health</button>
+    <div id="api-result"></div>
+
+    <h2>Step 2: Test Branches</h2>
+    <button onclick="testBranches()">Fetch Branches</button>
+    <div id="branches-result"></div>
+
+    <h2>Step 3: Test Room Search</h2>
+    <label>Branch ID: <input id="branchId" value="2" /></label><br>
+    <label>Check-In: <input id="checkIn" type="date" value="2026-03-10" /></label><br>
+    <label>Check-Out: <input id="checkOut" type="date" value="2026-03-12" /></label><br>
+    <button onclick="testSearch()">Search Rooms</button>
+    <div id="search-result"></div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/api';
+
+        async function testAPI() {
+            const result = document.getElementById('api-result');
+            result.innerHTML = '<p>Testing...</p>';
+            try {
+                const res = await fetch(`${API_BASE}/health`);
+                const data = await res.json();
+                result.innerHTML = `<div class="result success"><strong>✓ API Connected</strong><pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+            } catch (err) {
+                result.innerHTML = `<div class="result error"><strong>✗ API Failed</strong><pre>${err.message}</pre></div>`;
+            }
+        }
+
+        async function testBranches() {
+            const result = document.getElementById('branches-result');
+            result.innerHTML = '<p>Fetching branches...</p>';
+            try {
+                const res = await fetch(`${API_BASE}/system/branches`);
+                const data = await res.json();
+                const branches = data.data || data;
+                result.innerHTML = `<div class="result success"><strong>✓ Found ${branches.length} branches</strong><pre>${JSON.stringify(branches, null, 2)}</pre></div>`;
+            } catch (err) {
+                result.innerHTML = `<div class="result error"><strong>✗ Branches Failed</strong><pre>${err.message}</pre></div>`;
+            }
+        }
+
+        async function testSearch() {
+            const result = document.getElementById('search-result');
+            const branchId = document.getElementById('branchId').value;
+            const checkIn = document.getElementById('checkIn').value;
+            const checkOut = document.getElementById('checkOut').value;
+
+            result.innerHTML = '<p>Searching rooms...</p>';
+            try {
+                const url = `${API_BASE}/bookings/available?branch_id=${branchId}&checkIn=${checkIn}&checkOut=${checkOut}`;
+                console.log('Fetching:', url);
+                
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                console.log('Response:', data);
+                
+                const rooms = data.data || data;
+                const count = Array.isArray(rooms) ? rooms.length : 0;
+                
+                if (count > 0) {
+                    result.innerHTML = `<div class="result success">
+                        <strong>✓ Found ${count} available rooms!</strong>
+                        <pre>${JSON.stringify(rooms, null, 2)}</pre>
+                    </div>`;
+                } else {
+                    result.innerHTML = `<div class="result error">
+                        <strong>✗ No rooms found</strong>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>`;
+                }
+            } catch (err) {
+                result.innerHTML = `<div class="result error"><strong>✗ Search Failed</strong><pre>${err.message}</pre></div>`;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth, UserRole, hasRole } from '@/lib/auth-context';
 import { Loader2 } from 'lucide-react';
@@ -20,6 +20,10 @@ export function ProtectedRoute({
   const router = useRouter();
   const pathname = usePathname();
 
+  // Stabilize the roles array — a literal array like [UserRole.X, UserRole.Y]
+  // is a new object every render, so we derive a stable string key instead.
+  const rolesKey = useMemo(() => allowedRoles.join(','), [allowedRoles]);
+
   useEffect(() => {
     if (!isLoading) {
       if (requireAuth && !user) {
@@ -27,15 +31,16 @@ export function ProtectedRoute({
         return;
       }
 
-      if (allowedRoles.length > 0 && user) {
-        const isAllowed = hasRole(user, allowedRoles);
-        if (!isAllowed) {
+      if (rolesKey && user) {
+        const roles = rolesKey.split(',') as UserRole[];
+        if (!hasRole(user, roles)) {
           router.push('/unauthorized');
           return;
         }
       }
     }
-  }, [user, isLoading, requireAuth, allowedRoles, router, pathname]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isLoading, requireAuth, rolesKey, router, pathname]);
 
   if (isLoading) {
     return (
@@ -49,7 +54,7 @@ export function ProtectedRoute({
   }
 
   if (requireAuth && !user) return null;
-  if (allowedRoles.length > 0 && user && !hasRole(user, allowedRoles)) return null;
+  if (rolesKey && user && !hasRole(user, rolesKey.split(',') as UserRole[])) return null;
 
   return <>{children}</>;
 }
