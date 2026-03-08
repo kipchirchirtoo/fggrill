@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 export default function TestPage() {
   return (
     <div style={{ padding: '50px', fontFamily: 'Arial', backgroundColor: '#f0f0f0', minHeight: '100vh' }}>
@@ -16,7 +18,7 @@ export default function TestPage() {
           <li>Open browser DevTools (F12)</li>
           <li>Check the Console tab for errors</li>
           <li>Check the Network tab for failed requests</li>
-          <li>Try visiting <a href="/" style={{ color: '#d4af37' }}>the home page</a> again</li>
+          <li>Try visiting <Link href="/" style={{ color: '#d4af37' }}>the home page</Link> again</li>
           <li>Try a hard refresh (Ctrl+Shift+R or Cmd+Shift+R)</li>
         </ol>
       </div>
