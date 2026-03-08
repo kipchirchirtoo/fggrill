@@ -43,9 +43,9 @@ export default function About() {
                 that exceeds expectations.
               </p>
               <p className="lp-about-content__text">
-                With multiple locations across Nairobi, we offer convenient access to the city's business districts, 
+                With multiple locations across Nairobi, we offer convenient access to the city&apos;s business districts, 
                 cultural attractions, and entertainment venues. Each of our hotels is designed to provide a sanctuary 
-                of comfort and elegance, whether you're traveling for business or leisure.
+                of comfort and elegance, whether you&apos;re traveling for business or leisure.
               </p>
             </div>
 
