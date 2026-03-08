@@ -628,16 +628,25 @@ export default function Home() {
                       <li className="lp-room-card__feature"><span>✦</span> Smart TV</li>
                       <li className="lp-room-card__feature"><span>✦</span> Minibar</li>
                     </ul>
-                    <button
-                      className="lp-btn lp-btn--primary"
-                      style={{ width: '100%' }}
-                      onClick={() => {
-                        setSelectedRoom(room);
-                        setShowModal(true);
-                      }}
-                    >
-                      Reserve This Room
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.75rem' }}>
+                      <button
+                        className="lp-btn lp-btn--outline"
+                        style={{ flex: 1, textAlign: 'center' }}
+                        onClick={() => setShowGallery(true)}
+                      >
+                        View Room
+                      </button>
+                      <button
+                        className="lp-btn lp-btn--primary"
+                        style={{ flex: 1 }}
+                        onClick={() => {
+                          setSelectedRoom(room);
+                          setShowModal(true);
+                        }}
+                      >
+                        Reserve This Room
+                      </button>
+                    </div>
                   </div>
                 </Reveal>
               ))}
