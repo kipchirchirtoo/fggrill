@@ -6,11 +6,7 @@ interface GalleryModalProps {
   children: React.ReactNode;
 }
 
-export const GalleryModal: React.FC<GalleryModalProps> = ({
-  isOpen,
-  onClose,
-  children,
-}) => {
+export const GalleryModal: React.FC<GalleryModalProps> = () => {
   // Component implementation will be added in subsequent tasks
   return null;
 };

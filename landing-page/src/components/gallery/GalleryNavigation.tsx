@@ -8,13 +8,7 @@ interface GalleryNavigationProps {
   onClose: () => void;
 }
 
-export const GalleryNavigation: React.FC<GalleryNavigationProps> = ({
-  currentIndex,
-  totalImages,
-  onNext,
-  onPrevious,
-  onClose,
-}) => {
+export const GalleryNavigation: React.FC<GalleryNavigationProps> = () => {
   // Component implementation will be added in subsequent tasks
   return null;
 };

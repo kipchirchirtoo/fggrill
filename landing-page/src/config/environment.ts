@@ -16,6 +16,10 @@ export const config = {
     isDevelopment: process.env.NODE_ENV === 'development',
     isProduction: process.env.NODE_ENV === 'production',
   },
+  cache: {
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    cacheTime: 10 * 60 * 1000, // 10 minutes
+  },
   features: {
     enableAnalytics: process.env.NEXT_PUBLIC_ENABLE_ANALYTICS === 'true',
     enableDebugMode: process.env.NEXT_PUBLIC_DEBUG_MODE === 'true',

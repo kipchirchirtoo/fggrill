@@ -7,12 +7,7 @@ interface GalleryThumbnailsProps {
   visible: boolean;
 }
 
-export const GalleryThumbnails: React.FC<GalleryThumbnailsProps> = ({
-  images,
-  currentIndex,
-  onSelectImage,
-  visible,
-}) => {
+export const GalleryThumbnails: React.FC<GalleryThumbnailsProps> = () => {
   // Component implementation will be added in subsequent tasks
   return null;
 };

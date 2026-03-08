@@ -8,13 +8,7 @@ interface GalleryImageProps {
   onError?: () => void;
 }
 
-export const GalleryImage: React.FC<GalleryImageProps> = ({
-  src,
-  alt,
-  isLoading = false,
-  onLoad,
-  onError,
-}) => {
+export const GalleryImage: React.FC<GalleryImageProps> = () => {
   // Component implementation will be added in subsequent tasks
   return null;
 };

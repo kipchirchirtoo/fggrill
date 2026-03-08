@@ -59,7 +59,6 @@ export default function Home() {
   const [guests, setGuests] = useState('1');
   const [availableRooms, setAvailableRooms] = useState<any[]>([]);
   const [allRooms, setAllRooms] = useState<any[]>([]);
-  const [loadingRooms, setLoadingRooms] = useState(false);
   const [searching, setSearching] = useState(false);
   const [booking, setBooking] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
@@ -91,7 +90,6 @@ export default function Home() {
 
     // Load all available rooms for browsing
     const loadAllRooms = async () => {
-      setLoadingRooms(true);
       try {
         // Get rooms for next 7 days as default
         const today = new Date();
@@ -110,8 +108,6 @@ export default function Home() {
         setAllRooms(data || []);
       } catch (err) {
         console.error('Failed to load rooms:', err);
-      } finally {
-        setLoadingRooms(false);
       }
     };
     loadAllRooms();
