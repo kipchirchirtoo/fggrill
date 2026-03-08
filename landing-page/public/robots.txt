@@ -1,5 +1,9 @@
-# https://www.robotstxt.org/robotstxt.html
+# Allow all search engines to crawl the site
 User-agent: *
 Allow: /
 
-Sitemap: https://famousgateshotels.com/sitemap.xml
+# Sitemap location
+Sitemap: https://famousgatehotels.com/sitemap.xml
+
+# Disallow admin or private pages if any
+Disallow: /api/
