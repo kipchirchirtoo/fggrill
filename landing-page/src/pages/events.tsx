@@ -125,7 +125,7 @@ export default function Events() {
 
       <Footer />
 
-      <style jsx>{`
+      <style>{`
         .lp-events-hero {
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           padding: 120px 0 80px;

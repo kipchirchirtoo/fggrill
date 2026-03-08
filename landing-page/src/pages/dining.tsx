@@ -106,7 +106,7 @@ export default function Dining() {
 
       <Footer />
 
-      <style jsx>{`
+      <style>{`
         .lp-dining-hero {
           background: linear-gradient(135deg, #8b4513 0%, #654321 100%);
           padding: 120px 0 80px;

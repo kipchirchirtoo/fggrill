@@ -88,7 +88,7 @@ export default function About() {
 
       <Footer />
 
-      <style jsx>{`
+      <style>{`
         .lp-about-hero {
           background: linear-gradient(135deg, #d4af37 0%, #aa8a2e 100%);
           padding: 120px 0 80px;
