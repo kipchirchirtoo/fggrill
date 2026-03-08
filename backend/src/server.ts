@@ -88,6 +88,14 @@ initializeApp().then(({ app, httpServer }) => {
         allowedOrigins.push(process.env.FRONTEND_URL);
       }
 
+      // Add landing page URLs from env if they exist
+      if (process.env.LANDING_PAGE_URL) {
+        allowedOrigins.push(process.env.LANDING_PAGE_URL);
+      }
+      if (process.env.LANDING_PAGE_PRODUCTION_URL) {
+        allowedOrigins.push(process.env.LANDING_PAGE_PRODUCTION_URL);
+      }
+
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
@@ -99,6 +107,11 @@ initializeApp().then(({ app, httpServer }) => {
 
       // Allow any subdomain of hirall.com
       if (origin.match(/^https:\/\/([a-z0-9-]+\.)*hirall\.com$/)) {
+        return callback(null, true);
+      }
+
+      // Allow famousgatehotels.com and its subdomains
+      if (origin.match(/^https:\/\/(www\.)?famousgatehotels\.com$/)) {
         return callback(null, true);
       }
 
