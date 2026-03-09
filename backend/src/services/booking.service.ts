@@ -232,18 +232,51 @@ class BookingService {
    */
   async createBooking(bookingRequest: BookingRequest): Promise<Booking> {
     try {
-      // 1. Check availability
-      // If a specific roomId is provided, don't filter by roomTypeId in availability check
-      // This ensures the specific room is included in the availability results
-      const availability = await this.checkAvailability(
-        bookingRequest.checkInDate,
-        bookingRequest.checkOutDate,
-        bookingRequest.roomId ? undefined : bookingRequest.roomTypeId, // Only filter by type if no specific room requested
-        bookingRequest.branchId
-      );
+      let selectedRoom: any;
 
-      if (!availability.available) {
-        throw new AppError('No rooms available for selected dates', 400);
+      if (bookingRequest.roomId) {
+        // 1a. Specific room requested: directly verify it's not booked for the dates
+        // This avoids the issue where the room may have status 'reserved'/'occupied'
+        // but is still logically bookable for FUTURE dates
+        const { data: room, error: roomError } = await supabase
+          .from('rooms')
+          .select('*')
+          .eq('id', bookingRequest.roomId)
+          .single();
+
+        if (roomError || !room) {
+          throw new AppError('Requested room not found', 404);
+        }
+
+        // Check if the room is already booked for the requested dates
+        const { data: conflictingBookings } = await supabase
+          .from('reservations')
+          .select('id')
+          .eq('room_id', bookingRequest.roomId)
+          .not('status', 'in', `(${BookingStatus.CANCELLED},${BookingStatus.CHECKED_OUT})`)
+          .lt('check_in_date', bookingRequest.checkOutDate)
+          .gt('check_out_date', bookingRequest.checkInDate);
+
+        if (conflictingBookings && conflictingBookings.length > 0) {
+          throw new AppError('Requested room is not available for selected dates', 400);
+        }
+
+        selectedRoom = room;
+        logger.info(`Direct room verification passed for room: ${room.room_number} (${room.id})`);
+      } else {
+        // 1b. No specific room: use general availability check
+        const availability = await this.checkAvailability(
+          bookingRequest.checkInDate,
+          bookingRequest.checkOutDate,
+          bookingRequest.roomTypeId,
+          bookingRequest.branchId
+        );
+
+        if (!availability.available) {
+          throw new AppError('No rooms available for selected dates', 400);
+        }
+
+        selectedRoom = availability.availableRooms[0];
       }
 
       // 2. Create or find guest
@@ -264,19 +297,6 @@ class BookingService {
         bookingRequest.children,
         bookingRequest.mealPlan
       );
-
-      // 5. Select a room (specific room if provided, otherwise first available)
-      let selectedRoom;
-      if (bookingRequest.roomId) {
-        // Check if the specific room is available
-        selectedRoom = availability.availableRooms.find(room => room.id === bookingRequest.roomId);
-        if (!selectedRoom) {
-          throw new AppError('Requested room is not available for selected dates', 400);
-        }
-      } else {
-        // Select first available room
-        selectedRoom = availability.availableRooms[0];
-      }
 
       // 6. Create booking
       const booking = new Booking({

@@ -20,7 +20,8 @@ class BarcodeGeneratorService {
   private pythonServiceUrl: string;
 
   constructor() {
-    this.pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
+    // Hardcoded Python service URL for landing page bookings
+    this.pythonServiceUrl = 'https://services.hirall.com';
   }
 
   /**
