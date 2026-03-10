@@ -2585,13 +2585,16 @@ class BrandedPDFGenerator:
         room_number = data.get('room_number', '')
         nights = data.get('nights', 1)
         
+        booking_id = data.get('booking_id', 'N/A')
+        
         details_data = [
             [Paragraph(f"<b>{guest_name}</b>", self.styles['Normal'])],
             [Paragraph(f"{guest_phone}", self.styles['Normal'])],
             [Spacer(1, 10)],
+            [Paragraph(f"<b>Booking ID:</b> {booking_id}", self.styles['Normal'])],
             [Paragraph(f"Room {room_number}", self.styles['Normal'])],
             [Spacer(1, 10)],
-            [Paragraph(f"{nights} nights", self.styles['Normal'])],
+            [Paragraph(f"{nights} nights stay", self.styles['Normal'])],
         ]
         
         details_table = Table(details_data, colWidths=[6*inch])

@@ -417,7 +417,7 @@ function CashierPageContent() {
                 // Handle Kyogong bills with verification retry logic
                 if (isKyogongBill && !isPending) {
                     // Optimistic UI update: immediately remove from unpaid list
-                    setUnpaidBills(prev => 
+                    setUnpaidBills(prev =>
                         prev.filter(bill => bill.bill_number !== identifier)
                     );
 
@@ -427,7 +427,7 @@ function CashierPageContent() {
                     if (verification.removed) {
                         console.log(`[Payment] Kyogong bill verified removed after ${verification.attempts} attempts`);
                         toast.success(`Payment verified (${verification.attempts} ${verification.attempts === 1 ? 'attempt' : 'attempts'})`);
-                        
+
                         // Clear bill from view
                         setBillData(null);
                         setScanInput('');
@@ -443,19 +443,19 @@ function CashierPageContent() {
                             'Payment recorded but bill still showing. Please refresh manually.',
                             { duration: 5000 }
                         );
-                        
+
                         // Final refresh attempt
                         await fetchUnpaidBills();
                     }
                 } else {
                     // Non-Kyogong bills: use existing logic
                     await fetchUnpaidBills(); // Refresh unpaid bills first
-                    
+
                     const refresh = await fetchAPI(`/cashier/bill/${identifier}`) as any;
                     if (refresh.success) {
                         // Check if bill is now fully paid
                         const isFullyPaid = refresh.data.financials.balance <= 0 || refresh.data.payment_status === 'paid';
-                        
+
                         if (isFullyPaid && !isPending) {
                             // Clear the bill from view after successful payment
                             setTimeout(() => {
@@ -474,7 +474,7 @@ function CashierPageContent() {
                             setPaymentAmount(refresh.data.financials.balance.toString());
                             setCustomerPhone('');
                         }
-                        
+
                         syncProducts(); // Refresh local cache
                     }
                 }
@@ -864,11 +864,11 @@ function CashierPageContent() {
                     amount_paid: billData.financials.amount_paid,
                     change_amount: 0
                 };
-            } else if (billData.type === 'hotel') {
+            } else if (billData.type === 'hotel' && billData.booking) {
                 // Hotel bill
                 receiptData = {
                     receipt_type: 'invoice' as const,
-                    invoice_number: billData.booking.id.slice(0, 8).toUpperCase(),
+                    invoice_number: billData.booking.id?.slice(0, 8).toUpperCase() || 'N/A',
                     date: new Date().toISOString(),
                     customer_name: billData.booking.guest_name,
                     room_number: billData.booking.room_number,
@@ -882,7 +882,7 @@ function CashierPageContent() {
                     subtotal: subtotal,
                     tax: vatAmount,
                     amount: totalAmount,
-                    notes: `Stay from ${new Date(billData.booking.check_in).toLocaleDateString()} to ${new Date(billData.booking.check_out).toLocaleDateString()}`
+                    notes: `Stay from ${billData.booking.check_in ? new Date(billData.booking.check_in).toLocaleDateString() : 'N/A'} to ${billData.booking.check_out ? new Date(billData.booking.check_out).toLocaleDateString() : 'N/A'}`
                 };
             } else if (billData.type === 'invoice') {
                 receiptData = {
@@ -1377,15 +1377,15 @@ function CashierPageContent() {
                                                             <p className="font-bold text-stone-900 capitalize">{billData.invoice.status}</p>
                                                         </div>
                                                     )}
-                                                    {billData.type === 'hotel' && (
+                                                    {billData.type === 'hotel' && billData.booking && (
                                                         <>
                                                             <div>
                                                                 <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">Check In</p>
-                                                                <p className="font-bold text-stone-900">{new Date(billData.booking.check_in).toLocaleDateString()}</p>
+                                                                <p className="font-bold text-stone-900">{billData.booking.check_in ? new Date(billData.booking.check_in).toLocaleDateString() : 'N/A'}</p>
                                                             </div>
                                                             <div>
                                                                 <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tight">Check Out</p>
-                                                                <p className="font-bold text-stone-900">{new Date(billData.booking.check_out).toLocaleDateString()}</p>
+                                                                <p className="font-bold text-stone-900">{billData.booking.check_out ? new Date(billData.booking.check_out).toLocaleDateString() : 'N/A'}</p>
                                                             </div>
                                                         </>
                                                     )}

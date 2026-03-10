@@ -22,6 +22,7 @@ import { PYTHON_API_URL } from '@/lib/config';
 
 interface Booking {
   id: string;
+  confirmation_number: string;
   room_id: string;
   room_number: string;
   room_type: string;
@@ -88,8 +89,8 @@ function CheckInModal({
         <DialogHeader className="p-8 pb-4 border-b border-gray-100/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-stone-900 rounded-2xl shadow-lg ring-4 ring-stone-50">
-                <LogIn className="h-6 w-6 text-white" />
+              <div className="p-3 bg-indigo-50 rounded-2xl ring-4 ring-indigo-50/50">
+                <LogIn className="h-6 w-6 text-indigo-600" />
               </div>
               <div>
                 <DialogTitle className="text-2xl font-black text-stone-900 tracking-tight flex items-center gap-2">
@@ -115,7 +116,7 @@ function CheckInModal({
             <div className="absolute -inset-1 bg-gradient-to-r from-stone-200 to-stone-50 rounded-[2rem] blur opacity-25 group-hover:opacity-40 transition duration-1000"></div>
             <div className="relative p-6 bg-white border border-stone-100 rounded-[2rem] shadow-sm flex items-center justify-between">
               <div className="flex items-center gap-5">
-                <div className="w-16 h-16 rounded-3xl bg-stone-900 flex items-center justify-center text-white text-2xl font-black shadow-xl ring-4 ring-stone-50">
+                <div className="w-16 h-16 rounded-3xl bg-stone-100 flex items-center justify-center text-stone-600 text-2xl font-black ring-4 ring-stone-50">
                   {(booking.guest_name || 'GU').split(' ').map(n => n?.[0] || '').join('').slice(0, 2) || 'GU'}
                 </div>
                 <div>
@@ -158,24 +159,24 @@ function CheckInModal({
             </div>
           </div>
 
-          {/* Financial Ledger */}
-          <div className="p-8 bg-stone-900 rounded-[2rem] shadow-2xl relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-4 opacity-10 transform scale-150 transition-transform group-hover:scale-[1.7] duration-700">
-              <CreditCard className="h-24 w-24 text-white" />
+          {/* Financial Ledger - Minimal Light Theme */}
+          <div className="p-8 bg-white border border-stone-200 rounded-[2rem] shadow-sm relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-5 transform scale-150 transition-transform group-hover:scale-[1.7] duration-700">
+              <CreditCard className="h-24 w-24 text-stone-900" />
             </div>
             <div className="relative space-y-4">
-              <div className="flex justify-between items-center text-stone-400">
+              <div className="flex justify-between items-center text-stone-500">
                 <span className="text-xs font-black uppercase tracking-widest">Total Valuation</span>
-                <span className="text-sm font-black text-white">KES {booking.total_amount?.toLocaleString()}</span>
+                <span className="text-sm font-bold text-stone-900">KES {booking.total_amount?.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between items-center text-stone-400">
+              <div className="flex justify-between items-center text-stone-500">
                 <span className="text-xs font-black uppercase tracking-widest">Pre-Paid Amount</span>
-                <span className="text-sm font-black text-emerald-400">- KES {booking.amount_paid?.toLocaleString()}</span>
+                <span className="text-sm font-bold text-emerald-600">- KES {booking.amount_paid?.toLocaleString()}</span>
               </div>
-              <div className="pt-4 border-t border-white/10 flex justify-between items-end">
+              <div className="pt-4 border-t border-stone-100 flex justify-between items-end">
                 <div>
-                  <p className="text-[10px] font-black text-stone-500 uppercase tracking-[0.2em] mb-1">Outstanding Balance</p>
-                  <p className="text-3xl font-black text-white tracking-tighter">
+                  <p className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] mb-1">Outstanding Balance</p>
+                  <p className="text-3xl font-black text-stone-900 tracking-tighter">
                     KES {balance.toLocaleString()}
                   </p>
                 </div>
@@ -211,7 +212,7 @@ function CheckInModal({
           <IOSButton
             onClick={handleCheckIn}
             disabled={isSubmitting}
-            className="flex-[1.5] h-14 bg-stone-900 hover:bg-stone-800 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:bg-stone-400"
+            className="flex-[1.5] h-14 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest rounded-2xl shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:bg-stone-300"
           >
             {isSubmitting ? (
               <>
@@ -264,7 +265,7 @@ function CheckOutModal({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          booking_id: booking.id,
+          booking_id: booking.confirmation_number || booking.id,
           guest_name: booking.guest_name,
           guest_phone: booking.guest_phone,
           room_number: booking.room_number,
@@ -353,8 +354,8 @@ function CheckOutModal({
         <DialogHeader className="p-8 pb-4 border-b border-gray-100/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-stone-900 rounded-2xl shadow-lg ring-4 ring-stone-50">
-                <LogOut className="h-6 w-6 text-white" />
+              <div className="p-3 bg-stone-100 rounded-2xl ring-4 ring-stone-50">
+                <LogOut className="h-6 w-6 text-stone-900" />
               </div>
               <div>
                 <DialogTitle className="text-2xl font-black text-stone-900 tracking-tight flex items-center gap-2">
@@ -380,7 +381,7 @@ function CheckOutModal({
             <div className="absolute -inset-1 bg-gradient-to-r from-stone-200 to-stone-50 rounded-[2rem] blur opacity-25 group-hover:opacity-40 transition duration-1000"></div>
             <div className="relative p-6 bg-white border border-stone-100 rounded-[2rem] shadow-sm flex items-center justify-between">
               <div className="flex items-center gap-5">
-                <div className="w-16 h-16 rounded-3xl bg-stone-900 flex items-center justify-center text-white text-2xl font-black shadow-xl ring-4 ring-stone-50">
+                <div className="w-16 h-16 rounded-3xl bg-stone-100 flex items-center justify-center text-stone-600 text-2xl font-black ring-4 ring-stone-50">
                   {(booking.guest_name || 'GU').split(' ').map(n => n?.[0] || '').join('').slice(0, 2) || 'GU'}
                 </div>
                 <div>
@@ -395,19 +396,19 @@ function CheckOutModal({
             </div>
           </div>
 
-          {/* Financial Ledger */}
-          <div className="p-8 bg-stone-900 rounded-[2rem] shadow-2xl relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-4 opacity-10 transform scale-150 transition-transform group-hover:scale-[1.7] duration-700 pointer-events-none">
-              <DollarSign className="h-24 w-24 text-white" />
+          {/* Financial Ledger - Minimal Light Theme */}
+          <div className="p-8 bg-white border border-stone-200 rounded-[2rem] shadow-sm relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-5 transform scale-150 transition-transform group-hover:scale-[1.7] duration-700 pointer-events-none">
+              <DollarSign className="h-24 w-24 text-stone-900" />
             </div>
             <div className="relative space-y-5">
-              <div className="flex justify-between items-center pb-4 border-b border-white/10">
-                <span className="text-xs font-black text-stone-400 uppercase tracking-widest">Base Valuation</span>
-                <span className="text-base font-black text-white">KES {booking.total_amount?.toLocaleString()}</span>
+              <div className="flex justify-between items-center pb-4 border-b border-stone-100">
+                <span className="text-xs font-black text-stone-500 uppercase tracking-widest">Base Valuation</span>
+                <span className="text-base font-bold text-stone-900">KES {booking.total_amount?.toLocaleString()}</span>
               </div>
 
               <div className="flex justify-between items-center group/input">
-                <span className="text-xs font-black text-stone-400 uppercase tracking-widest flex items-center gap-2">
+                <span className="text-xs font-black text-stone-500 uppercase tracking-widest flex items-center gap-2">
                   <PlusCircle className="h-3 w-3" /> Additional Charges
                 </span>
                 <div className="relative">
@@ -416,21 +417,21 @@ function CheckOutModal({
                     type="number"
                     value={additionalCharges || ''}
                     onChange={(e) => setAdditionalCharges(Number(e.target.value) || 0)}
-                    className="w-36 h-10 bg-white/10 border-white/20 text-white font-bold text-right pl-12 rounded-xl focus-visible:ring-emerald-500/50 focus-visible:border-emerald-500/50 transition-all placeholder:text-stone-500"
+                    className="w-36 h-10 bg-stone-50 border-stone-200 text-stone-900 font-bold text-right pl-12 rounded-xl focus-visible:ring-stone-400/50 focus-visible:border-stone-400 transition-all placeholder:text-stone-400"
                     placeholder="0"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-between items-center text-stone-400">
+              <div className="flex justify-between items-center text-stone-500">
                 <span className="text-xs font-black uppercase tracking-widest">Pre-Paid Assets</span>
-                <span className="text-base font-black text-emerald-400">- KES {booking.amount_paid?.toLocaleString()}</span>
+                <span className="text-base font-bold text-emerald-600">- KES {booking.amount_paid?.toLocaleString()}</span>
               </div>
 
-              <div className="pt-6 border-t border-white/10 flex justify-between items-end">
+              <div className="pt-6 border-t border-stone-100 flex justify-between items-end">
                 <div>
-                  <p className="text-[10px] font-black text-stone-500 uppercase tracking-[0.2em] mb-1">Final Settlement Balance</p>
-                  <p className="text-4xl font-black text-white tracking-tighter">
+                  <p className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] mb-1">Final Settlement Balance</p>
+                  <p className="text-4xl font-black text-stone-900 tracking-tighter">
                     KES {balance.toLocaleString()}
                   </p>
                 </div>
@@ -484,7 +485,7 @@ function CheckOutModal({
           <IOSButton
             onClick={handleCheckOut}
             disabled={isSubmitting}
-            className="h-14 bg-stone-900 hover:bg-stone-800 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:bg-stone-400"
+            className="h-14 bg-stone-900 hover:bg-stone-800 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:bg-stone-300"
           >
             {isSubmitting ? (
               <>
@@ -519,7 +520,7 @@ export default function CheckInPage() {
   const fetchBookings = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await bookingsAPI.getBookings({ branch_id: user?.branch_id });
+      const response = await bookingsAPI.getBookings({ branch_id: user?.branch_id ?? undefined });
       if (response.success) {
         setBookings(response.data || []);
       }

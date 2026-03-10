@@ -127,12 +127,14 @@ export const getBillDetails = async (
                 data: {
                     type: 'hotel',
                     source: 'reservations',
-                    order: {
+                    booking: {
                         id: reservation.id,
                         order_number: reservation.confirmation_number,
                         guest_name: reservation.guest_name || 'Guest',
                         room_number: reservation.room?.room_number || reservation.room_number,
                         status: reservation.status,
+                        check_in: reservation.check_in_date || reservation.check_in,
+                        check_out: reservation.check_out_date || reservation.check_out,
                         items: [{
                             name: `Accommodation Services (${reservation.room_type || 'Room'})`,
                             quantity: 1,
