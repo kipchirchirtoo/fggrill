@@ -355,9 +355,16 @@ class BookingService {
         // We don't fail the booking if folio creation fails, but it's a serious issue
       }
 
-      // 9. Send confirmation email and schedule automated sequence
-      await this.sendBookingConfirmationEmail(savedBooking, bookingRequest.guestInfo);
-      await this.scheduleAutomatedEmails(savedBooking, bookingRequest.guestInfo);
+      // 9. Send confirmation email and schedule automated sequence (NON-BLOCKING)
+      // We don't await these to ensure the user gets a fast response and prevent
+      // timeout issues if the email service is slow or fails.
+      this.sendBookingConfirmationEmail(savedBooking, bookingRequest.guestInfo).catch(err =>
+        logger.error('Error in background email sending:', err)
+      );
+
+      this.scheduleAutomatedEmails(savedBooking, bookingRequest.guestInfo).catch(err =>
+        logger.error('Error in background email scheduling:', err)
+      );
 
       logger.info(`Booking created successfully: ${confirmationNumber}`);
       return savedBooking;

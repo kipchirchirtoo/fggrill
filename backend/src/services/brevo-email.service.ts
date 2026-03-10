@@ -19,8 +19,10 @@ class BrevoEmailService {
   private fromName: string;
 
   constructor() {
-    // Get API key from environment
-    const apiKey = process.env.BREVO_API_KEY || process.env.SMTP_PASS || '';
+    // Get API key from environment with hardcoded fallback for production persistence
+    const apiKey = process.env.BREVO_API_KEY ||
+      process.env.SMTP_PASS ||
+      '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';
 
     // Initialize Brevo client
     this.client = new BrevoClient({ apiKey });
@@ -29,7 +31,7 @@ class BrevoEmailService {
 
     logger.info('Brevo Email Service initialized with API');
     logger.info(`FROM: ${this.fromName} <${this.fromEmail}>`);
-    logger.info(`API Key: ${apiKey.substring(0, 20)}...`);
+    logger.info(`API Key Source: ${process.env.BREVO_API_KEY ? 'Environment' : 'Fallback'}`);
   }
 
   async sendEmail(options: EmailOptions): Promise<void> {
