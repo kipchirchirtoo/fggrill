@@ -19,19 +19,17 @@ class BrevoEmailService {
   private fromName: string;
 
   constructor() {
-    // Get API key from environment with hardcoded fallback for production persistence
-    // We strictly use BREVO_API_KEY or the fallback, ignoring SMTP_PASS which may be invalid.
-    const apiKey = process.env.BREVO_API_KEY ||
-      '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';
+    // HARDCODED API key — the Render env var BREVO_API_KEY is set to an OLD invalid key
+    // which overrides any fallback. We must use the correct key directly.
+    const apiKey = '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';
 
     // Initialize Brevo client
     this.client = new BrevoClient({ apiKey });
-    this.fromEmail = process.env.SMTP_FROM_EMAIL || 'info@famousgateshotels.com';
-    this.fromName = process.env.SMTP_FROM_NAME || 'FamousGate Hotels';
+    this.fromEmail = 'info@famousgateshotels.com';
+    this.fromName = 'FamousGate Hotels';
 
-    logger.info('Brevo Email Service initialized with API');
+    logger.info('Brevo Email Service initialized with HARDCODED API key');
     logger.info(`FROM: ${this.fromName} <${this.fromEmail}>`);
-    logger.info(`API Key Source: ${process.env.BREVO_API_KEY ? 'Environment' : 'Fallback'}`);
   }
 
   async sendEmail(options: EmailOptions): Promise<void> {
