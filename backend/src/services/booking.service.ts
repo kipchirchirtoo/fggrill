@@ -75,7 +75,7 @@ class BookingService {
       const { data: booked } = await supabase
         .from('reservations')
         .select('room_id')
-        .not('status', 'in', `(${BookingStatus.CANCELLED},${BookingStatus.CHECKED_OUT})`)
+        .not('status', 'in', [BookingStatus.CANCELLED, BookingStatus.CHECKED_OUT])
         .lt('check_in_date', checkOutDate)
         .gt('check_out_date', checkInDate);
 
@@ -99,9 +99,7 @@ class BookingService {
 
       // Exclude booked rooms
       if (bookedIds.length > 0) {
-        // Correctly format array for 'not in' filter
-        const bookedIdsList = `(${bookedIds.map(id => `"${id}"`).join(',')})`;
-        roomQuery = roomQuery.not('id', 'in', bookedIdsList);
+        roomQuery = roomQuery.not('id', 'in', bookedIds);
       }
 
       const { data: availableRooms, error } = await roomQuery;
@@ -253,7 +251,7 @@ class BookingService {
           .from('reservations')
           .select('id')
           .eq('room_id', bookingRequest.roomId)
-          .not('status', 'in', `(${BookingStatus.CANCELLED},${BookingStatus.CHECKED_OUT})`)
+          .not('status', 'in', [BookingStatus.CANCELLED, BookingStatus.CHECKED_OUT])
           .lt('check_in_date', bookingRequest.checkOutDate)
           .gt('check_out_date', bookingRequest.checkInDate);
 

@@ -101,8 +101,9 @@ class BrevoEmailService {
       let pdfAttachment;
       try {
         logger.info(`📄 Fetching PDF invoice from Python service...`);
+        const pdfServiceUrl = process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL || 'https://services.hirall.com';
         const pdfResponse = await axios.post(
-          'http://localhost:5001/api/reports/generate/branded-pdf',
+          `${pdfServiceUrl}/api/reports/generate/branded-pdf`,
           {
             confirmationNumber: details.confirmationNumber,
             guestName: `${details.firstName} ${details.lastName}`,
