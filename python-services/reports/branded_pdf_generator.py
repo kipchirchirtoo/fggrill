@@ -3879,9 +3879,9 @@ class BrandedPDFGenerator:
         
         for item in items:
             desc = item.get('description', 'Item')
-            qty = float(item.get('quantity', 0))
-            price = float(item.get('unit_price', 0))
-            total = float(item.get('total', qty * price))
+            qty = float(item.get('quantity', 0) or 0)
+            price = float(item.get('unit_price', 0) or 0)
+            total = float(item.get('total', 0) or (qty * price))
             subtotal += total
             
             items_data.append([
@@ -3892,7 +3892,7 @@ class BrandedPDFGenerator:
             ])
         
         # 4. Totals Calculation
-        tax_rate = float(data.get('tax_rate', 0)) # percentage
+        tax_rate = float(data.get('tax_rate', 0) or 0) # percentage
         tax_amount = subtotal * (tax_rate / 100)
         total_amount = subtotal + tax_amount
         

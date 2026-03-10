@@ -128,6 +128,10 @@ class BrevoEmailService {
         logger.info(`✅ PDF invoice generated successfully`);
       } catch (pdfError: any) {
         logger.error('⚠️ Failed to generate PDF invoice:', pdfError.message);
+        if (pdfError.response) {
+          logger.error('Python service response:', pdfError.response.data);
+          logger.error('Python service status:', pdfError.response.status);
+        }
         logger.warn('Continuing to send email without PDF attachment');
         // Continue without PDF attachment
       }

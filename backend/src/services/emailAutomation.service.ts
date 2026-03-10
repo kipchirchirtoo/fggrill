@@ -43,7 +43,7 @@ class EmailAutomationService {
         special_requests: bookingData.specialRequests
       };
 
-      const response = await fetch(`${this.pythonServiceUrl}/schedule-booking-emails`, {
+      const response = await fetch(`${this.pythonServiceUrl}/api/email/schedule-booking-emails`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -123,7 +123,7 @@ class EmailAutomationService {
         booking_data: bookingData
       };
 
-      const response = await fetch(`${this.pythonServiceUrl}/send-immediate-email`, {
+      const response = await fetch(`${this.pythonServiceUrl}/api/email/send-immediate-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -149,7 +149,7 @@ class EmailAutomationService {
    */
   async getEmailStatus(bookingId: string): Promise<any[]> {
     try {
-      const response = await fetch(`${this.pythonServiceUrl}/email-status/${bookingId}`);
+      const response = await fetch(`${this.pythonServiceUrl}/api/email/email-status/${bookingId}`);
 
       if (!response.ok) {
         throw new Error(`Python service error: ${response.statusText}`);
@@ -243,7 +243,7 @@ class EmailAutomationService {
    */
   async testConnection(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.pythonServiceUrl}/health`);
+      const response = await fetch(`${this.pythonServiceUrl}/api/email/health`);
       return response.ok;
     } catch (error) {
       logger.error('Python service connection failed:', error);

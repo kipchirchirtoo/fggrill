@@ -125,10 +125,17 @@ def generate_booking_invoice(booking_data):
     elements.append(reservation_table)
     elements.append(Spacer(1, 0.3*inch))
     
+    # Safely handle total amount
+    try:
+        total_val = booking_data.get('totalAmount', 0)
+        total_amount = float(total_val) if total_val is not None else 0.0
+    except (ValueError, TypeError):
+        total_amount = 0.0
+
     # Amount Section
     elements.append(Paragraph("Payment Summary", section_style))
     amount_data = [
-        ['Total Amount:', f"KES {booking_data.get('totalAmount', 0):,.2f}"],
+        ['Total Amount:', f"KES {total_amount:,.2f}"],
     ]
     amount_table = Table(amount_data, colWidths=[2*inch, 4*inch])
     amount_table.setStyle(TableStyle([
