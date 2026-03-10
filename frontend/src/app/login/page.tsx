@@ -24,6 +24,8 @@ export default function LoginPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [rememberMe, setRememberMe] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
 
   useEffect(() => {
     setMounted(true);
@@ -33,6 +35,9 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting || isLoading) return;
+
+    setIsSubmitting(true);
     setErrors({});
 
     if (!formData.email) {
@@ -52,6 +57,8 @@ export default function LoginPage() {
       await login(formData.email, formData.password);
     } catch (error: any) {
       setErrors({ general: error.message || 'Invalid email or password' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -199,10 +206,10 @@ export default function LoginPage() {
                   whileHover={{ scale: 1.01 }}
                   whileTap={{ scale: 0.98 }}
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || isSubmitting}
                   className="w-full h-14 bg-stone-900 hover:bg-stone-800 disabled:bg-stone-400 text-white font-black text-sm uppercase tracking-widest rounded-2xl transition-all flex items-center justify-center gap-3 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.3)] hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] disabled:shadow-none"
                 >
-                  {isLoading ? (
+                  {isLoading || isSubmitting ? (
                     <>
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span>Authorizing Portal</span>

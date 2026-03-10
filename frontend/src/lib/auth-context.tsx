@@ -49,7 +49,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // Auth Provider Component
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
 
@@ -76,6 +76,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const cachedUser = localStorage.getItem('user');
 
       if (token) {
+        setIsLoading(true);
+
         if (cachedUser) {
           try {
             const parsedUser = JSON.parse(cachedUser);
