@@ -2552,10 +2552,10 @@ class BrandedPDFGenerator:
         
         # Company info
         company_info = [
-            Paragraph("<b>Kyogong & LOUNGE</b>", self.styles['Normal']),
-            Paragraph("Main Highway, Nairobi, Kenya", self.styles['SmallText']),
-            Paragraph("Tel: +254 700 000 000", self.styles['SmallText']),
-            Paragraph("Email: accounts@kyogong.co.ke", self.styles['SmallText']),
+            Paragraph("<b>FamousGate Hotels</b>", self.styles['Normal']),
+            Paragraph("Bomet, Kenya", self.styles['SmallText']),
+            Paragraph("Tel: +254706782828", self.styles['SmallText']),
+            Paragraph("Email: famousgatebmt@gmail.com", self.styles['SmallText']),
         ]
         
         header_data = []
