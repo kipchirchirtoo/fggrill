@@ -44,9 +44,9 @@ class EmailService {
   async sendEmail(options: EmailOptions): Promise<void> {
     try {
       // Ensure FROM email is properly set and verified in Brevo
-      const fromEmail = process.env.SMTP_FROM_EMAIL || 'info@famousgatehotels.com';
-      const fromName = process.env.SMTP_FROM_NAME || 'Famous Gates Hotels';
-      
+      const fromEmail = process.env.SMTP_FROM_EMAIL || 'info@famousgateshotels.com';
+      const fromName = process.env.SMTP_FROM_NAME || 'FamousGate Hotels';
+
       const mailOptions = {
         from: `${fromName} <${fromEmail}>`,
         to: options.to,
@@ -256,7 +256,7 @@ class EmailService {
         subject: `Booking Confirmation - ${details.branchName || 'Famous Gate Hotel'}`,
         html
       });
-      
+
       logger.info(`Booking confirmation email sent successfully to ${email}`);
     } catch (error: any) {
       logger.error('Error sending landing booking confirmation:', error);

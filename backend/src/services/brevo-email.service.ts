@@ -21,10 +21,10 @@ class BrevoEmailService {
   constructor() {
     // Get API key from environment
     const apiKey = process.env.BREVO_API_KEY || process.env.SMTP_PASS || '';
-    
+
     // Initialize Brevo client
     this.client = new BrevoClient({ apiKey });
-    this.fromEmail = process.env.SMTP_FROM_EMAIL || 'info@famousgatehotels.com';
+    this.fromEmail = process.env.SMTP_FROM_EMAIL || 'info@famousgateshotels.com';
     this.fromName = process.env.SMTP_FROM_NAME || 'FamousGate Hotels';
 
     logger.info('Brevo Email Service initialized with API');
@@ -62,7 +62,7 @@ class BrevoEmailService {
       }
 
       const result = await this.client.transactionalEmails.sendTransacEmail(emailData);
-      
+
       logger.info(`✅ Email sent successfully via Brevo API to ${options.to}`);
       logger.info(`Message ID: ${result.messageId}`);
     } catch (error: any) {
@@ -136,7 +136,7 @@ class BrevoEmailService {
         html,
         attachment: pdfAttachment
       });
-      
+
       logger.info(`✅ Booking confirmation email sent successfully to ${email}`);
     } catch (error: any) {
       logger.error('❌ Error sending landing booking confirmation:', error);
