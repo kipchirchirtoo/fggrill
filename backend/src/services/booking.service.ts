@@ -99,7 +99,9 @@ class BookingService {
 
       // Exclude booked rooms
       if (bookedIds.length > 0) {
-        roomQuery = roomQuery.not('id', 'in', bookedIds);
+        // PostgREST requires comma separated values in parentheses for 'in'
+        const bookedList = `(${bookedIds.map(id => `"${id}"`).join(',')})`;
+        roomQuery = roomQuery.not('id', 'in', bookedList);
       }
 
       const { data: availableRooms, error } = await roomQuery;
@@ -251,7 +253,7 @@ class BookingService {
           .from('reservations')
           .select('id')
           .eq('room_id', bookingRequest.roomId)
-          .not('status', 'in', [BookingStatus.CANCELLED, BookingStatus.CHECKED_OUT])
+          .not('status', 'in', `(${BookingStatus.CANCELLED},${BookingStatus.CHECKED_OUT})`)
           .lt('check_in_date', bookingRequest.checkOutDate)
           .gt('check_out_date', bookingRequest.checkInDate);
 
