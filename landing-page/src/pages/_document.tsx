@@ -1,4 +1,5 @@
 import { Html, Head, Main, NextScript } from 'next/document';
+import Script from 'next/script';
 
 export default function Document() {
   return (
@@ -12,32 +13,32 @@ export default function Document() {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="FamousGate Hotels" />
-        
+
         {/* SEO Meta Tags */}
         <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
         <meta name="googlebot" content="index, follow" />
         <link rel="canonical" href="https://famousgatehotels.com" />
         <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
-        
+
         {/* Open Graph / Facebook */}
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="FamousGate Hotels" />
         <meta property="og:locale" content="en_US" />
-        
+
         {/* Twitter */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:site" content="@famousgateshotels" />
-        
+
         {/* Geo Tags */}
         <meta name="geo.region" content="KE" />
         <meta name="geo.placename" content="Nairobi" />
         <meta name="geo.position" content="-1.286389;36.817223" />
         <meta name="ICBM" content="-1.286389, 36.817223" />
-        
+
         {/* Contact Information */}
         <meta name="contact" content="famousgatesbmt@gmail.com" />
         <meta name="author" content="FamousGate Hotels" />
-        
+
         {/* Fonts */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -49,6 +50,18 @@ export default function Document() {
       <body>
         <Main />
         <NextScript />
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-XZSYKGF1Q5"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-XZSYKGF1Q5');
+          `}
+        </Script>
       </body>
     </Html>
   );
