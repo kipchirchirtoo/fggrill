@@ -25,7 +25,7 @@ class BrevoEmailService {
 
     // Initialize Brevo client
     this.client = new BrevoClient({ apiKey });
-    this.fromEmail = 'info@famousgateshotels.com';
+    this.fromEmail = 'info@famousgatehotels.com'; // Fixed typo: removed 's' after gate
     this.fromName = 'FamousGate Hotels';
 
     logger.info('Brevo Email Service initialized with HARDCODED API key');
