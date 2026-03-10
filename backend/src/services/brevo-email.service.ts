@@ -19,9 +19,9 @@ class BrevoEmailService {
   private fromName: string;
 
   constructor() {
-    // HARDCODED API key — the Render env var BREVO_API_KEY is set to an OLD invalid key
+    // HARDCODED API key - the Render env var BREVO_API_KEY is set to an OLD invalid key
     // which overrides any fallback. We must use the correct key directly.
-    const apiKey = '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';
+    const apiKey = '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';
 
     // Initialize Brevo client
     this.client = new BrevoClient({ apiKey });
@@ -67,6 +67,7 @@ class BrevoEmailService {
       logger.info(`Message ID: ${result.messageId}`);
     } catch (error: any) {
       logger.error('❌ Error sending email via Brevo API:', error);
+      console.error('RAW BREVO ERROR:', JSON.stringify(error, null, 2));
       logger.error('Error details:', {
         message: error.message,
         body: error.body

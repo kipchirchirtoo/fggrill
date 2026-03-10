@@ -4,27 +4,27 @@
  */
 
 export const landingEmailTemplates = {
-    /**
-     * Generates the HTML string for a Booking Confirmation email.
-     */
-    bookingConfirmation: (data: {
-        guestName: string;
-        confirmationNumber: string;
-        checkInDate: string;
-        checkOutDate: string;
-        roomType: string;
-        guests: number;
-        totalAmount: number;
-        hotelName: string;
-        hotelAddress: string;
-        hotelPhone: string;
-        hotelEmail: string;
-    }) => {
-      // Generate barcode URL
-      const barcodeUrl = `https://barcode.tec-it.com/barcode.ashx?data=${data.confirmationNumber}&code=Code128&translate-esc=on&dpi=96&imagetype=Gif`;
-      const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      
-      return `
+  /**
+   * Generates the HTML string for a Booking Confirmation email.
+   */
+  bookingConfirmation: (data: {
+    guestName: string;
+    confirmationNumber: string;
+    checkInDate: string;
+    checkOutDate: string;
+    roomType: string;
+    guests: number;
+    totalAmount: number;
+    hotelName: string;
+    hotelAddress: string;
+    hotelPhone: string;
+    hotelEmail: string;
+  }) => {
+    // Generate barcode URL
+    const barcodeUrl = `https://barcode.tec-it.com/barcode.ashx?data=${data.confirmationNumber}&code=Code128&translate-esc=on&dpi=96&imagetype=Gif`;
+    const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+    return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -384,8 +384,8 @@ export const landingEmailTemplates = {
       <!-- Reservation Details -->
       <div class="section-title">Reservation Details</div>
       <ul class="detail-list">
-        <li><span class="detail-label">Guest Name:</span> <span class="detail-value">${data.guestName}</span></li>
-        <li><span class="detail-label">Number of Guests:</span> <span class="detail-value">${data.guests} guest${data.guests > 1 ? 's' : ''}</span></li>
+        <li><span class="detail-label">Guest Name:</span> <span class="detail-value">${data.guestName || 'Valued Guest'}</span></li>
+        <li><span class="detail-label">Number of Guests:</span> <span class="detail-value">${data.guests || 1} guest${Number(data.guests || 1) > 1 ? 's' : ''}</span></li>
         <li><span class="detail-label">Room Type:</span> <span class="detail-value">${data.roomType}</span></li>
         <li><span class="detail-label">Check-in Date:</span> <span class="detail-value">${data.checkInDate}</span></li>
         <li><span class="detail-label">Check-out Date:</span> <span class="detail-value">${data.checkOutDate}</span></li>
@@ -394,7 +394,7 @@ export const landingEmailTemplates = {
       <!-- Amount -->
       <div class="amount-section">
         <div class="amount-label">Total Amount</div>
-        <div class="amount-value">KES ${data.totalAmount.toLocaleString()}</div>
+        <div class="amount-value">KES ${Number(data.totalAmount || 0).toLocaleString()}</div>
       </div>
       
       <!-- Check-in Information -->
@@ -455,25 +455,25 @@ export const landingEmailTemplates = {
 </body>
 </html>
 `;
-    },
+  },
 
-    /**
-     * Generates the HTML string for a Reservation Request email.
-     */
-    reservationRequest: (data: {
-        guestName: string;
-        reservationId: string;
-        checkInDate: string;
-        checkOutDate: string;
-        roomType: string;
-        guests: number;
-        totalAmount: number;
-        paymentLink: string;
-        hotelName: string;
-        hotelAddress: string;
-        hotelPhone: string;
-        hotelEmail: string;
-    }) => `
+  /**
+   * Generates the HTML string for a Reservation Request email.
+   */
+  reservationRequest: (data: {
+    guestName: string;
+    reservationId: string;
+    checkInDate: string;
+    checkOutDate: string;
+    roomType: string;
+    guests: number;
+    totalAmount: number;
+    paymentLink: string;
+    hotelName: string;
+    hotelAddress: string;
+    hotelPhone: string;
+    hotelEmail: string;
+  }) => `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -518,7 +518,7 @@ export const landingEmailTemplates = {
         <div class="row"><div class="label">Reservation ID</div><div class="value">${data.reservationId}</div></div>
         <div class="row"><div class="label">Dates</div><div class="value">${data.checkInDate} &mdash; ${data.checkOutDate}</div></div>
         <div class="row"><div class="label">Accommodations</div><div class="value">${data.roomType}<br><span style="font-size: 13px; color: #64748b; font-weight: normal;">${data.guests} Guest${data.guests > 1 ? 's' : ''}</span></div></div>
-        <div class="total-row"><div class="total-label">Amount Due</div><div class="total-value">KSH ${data.totalAmount.toLocaleString()}</div></div>
+        <div class="total-row"><div class="total-label">Amount Due</div><div class="total-value">KSH ${Number(data.totalAmount || 0).toLocaleString()}</div></div>
       </div>
       <div class="action-container">
         <a href="${data.paymentLink}" class="btn">Proceed to Payment &rarr;</a>
@@ -535,22 +535,22 @@ export const landingEmailTemplates = {
 </html>
 `,
 
-    /**
-     * Generates the HTML string for a Promotional offer email.
-     */
-    promotion: (data: {
-        guestName: string;
-        promoTitle: string;
-        promoHeadline: string;
-        promoDescription: string;
-        promoCode: string;
-        discountPercentage: string;
-        validUntil: string;
-        bookingLink: string;
-        hotelName: string;
-        hotelAddress: string;
-        heroImageUrl?: string;
-    }) => `
+  /**
+   * Generates the HTML string for a Promotional offer email.
+   */
+  promotion: (data: {
+    guestName: string;
+    promoTitle: string;
+    promoHeadline: string;
+    promoDescription: string;
+    promoCode: string;
+    discountPercentage: string;
+    validUntil: string;
+    bookingLink: string;
+    hotelName: string;
+    hotelAddress: string;
+    heroImageUrl?: string;
+  }) => `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -593,30 +593,30 @@ export const landingEmailTemplates = {
 </html>
 `,
 
-    /**
-     * Generates the HTML string for a Luxury Hotel Newsletter email.
-     */
-    newsletter: (data: {
-        guestName: string;
-        issueDate: string;
-        newsletterTitle: string;
-        featuredArticle: {
-            title: string;
-            description: string;
-            imageUrl: string;
-            readMoreLink: string;
-        };
-        secondaryArticles: Array<{
-            title: string;
-            description: string;
-            imageUrl: string;
-            readMoreLink: string;
-        }>;
-        bookingLink: string;
-        hotelName: string;
-        hotelAddress: string;
-        hotelPhone: string;
-    }) => `
+  /**
+   * Generates the HTML string for a Luxury Hotel Newsletter email.
+   */
+  newsletter: (data: {
+    guestName: string;
+    issueDate: string;
+    newsletterTitle: string;
+    featuredArticle: {
+      title: string;
+      description: string;
+      imageUrl: string;
+      readMoreLink: string;
+    };
+    secondaryArticles: Array<{
+      title: string;
+      description: string;
+      imageUrl: string;
+      readMoreLink: string;
+    }>;
+    bookingLink: string;
+    hotelName: string;
+    hotelAddress: string;
+    hotelPhone: string;
+  }) => `
 <!DOCTYPE html>
 <html lang="en">
 <head>
