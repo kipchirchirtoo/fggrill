@@ -295,7 +295,7 @@ export const printReservationInvoice = ({ reservation, branch, user }: {
                         </div>
                         <div class="sig-block">
                             <div class="sig-line" style="position: relative;">
-                                <div style="position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); font-family: 'Brush Script MT', cursive; font-size: 24px; color: rgba(0,0,128,0.7); pointer-events: none;">kyogongs</div>
+                                <div style="position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); font-family: 'Brush Script MT', cursive; font-size: 24px; color: rgba(0,0,128,0.7); pointer-events: none;">FamousGateHotels</div>
                             </div>
                             <div class="sig-label">FOR ${companyName}</div>
                         </div>

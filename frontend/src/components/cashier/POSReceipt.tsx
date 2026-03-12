@@ -15,7 +15,7 @@ export const POSReceipt: React.FC<ReceiptProps> = (props) => {
 
     // Default business info if not provided
     const businessInfo = props.businessInfo || {
-        name: "Kyogongs",
+        name: "FamousGateHotels",
         address: "Bomet, Kenya",
         phone: "0706 782 828",
         email: "famousgatesbmt@gmail.com",

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -13,7 +14,8 @@ import { bookingsAPI, roomsAPI, guestAPI } from '@/lib/api';
 import {
   LogIn, LogOut, Search, RefreshCw, Calendar, Clock, User, Bed,
   CheckCircle, XCircle, AlertTriangle, Phone, Mail, CreditCard,
-  FileText, DollarSign, Users, Building2, ArrowRight, Printer, PlusCircle
+  FileText, DollarSign, Users, Building2, ArrowRight, Printer, PlusCircle,
+  Smartphone, Banknote
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -246,6 +248,8 @@ function CheckOutModal({
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [additionalCharges, setAdditionalCharges] = useState(0);
+  const [showPaymentMethods, setShowPaymentMethods] = useState(false);
+  const router = useRouter();
 
   const [isPrinting, setIsPrinting] = useState(false);
 
@@ -297,13 +301,20 @@ function CheckOutModal({
     }
   };
 
+  const handleNavigateToCashier = (method: string) => {
+    const bookingId = booking.confirmation_number || booking.id;
+    router.push(`/dashboard/cashier?billId=${bookingId}&method=${method}`);
+  };
+
   const handleCheckOut = async () => {
     if (balance > 0) {
-      if (!confirm(`Guest has outstanding balance of KES ${balance.toLocaleString()}. Proceed with checkout?`)) {
-        return;
-      }
+      setShowPaymentMethods(true);
+      return;
     }
+    handleManualCheckOut();
+  };
 
+  const handleManualCheckOut = async () => {
     setIsSubmitting(true);
     try {
       // 1. Perform ML-based Anomaly Detection
@@ -443,7 +454,7 @@ function CheckOutModal({
           </div>
 
           {/* Warnings */}
-          {balance > 0 && (
+          {balance > 0 && !showPaymentMethods && (
             <div className="p-5 bg-amber-50/50 border border-amber-100 rounded-[1.5rem] flex items-center gap-4">
               <div className="p-3 bg-amber-100 rounded-2xl">
                 <AlertTriangle className="h-6 w-6 text-amber-600" />
@@ -454,47 +465,92 @@ function CheckOutModal({
               </div>
             </div>
           )}
+
+          {/* Payment Method Selector */}
+          {showPaymentMethods && (
+            <div className="p-6 bg-stone-50 border border-stone-200 rounded-[2rem] space-y-4 animate-in fade-in slide-in-from-bottom-4">
+              <div className="flex items-center gap-2 mb-2">
+                <DollarSign className="h-4 w-4 text-stone-900" />
+                <p className="text-[10px] font-black text-stone-900 uppercase tracking-widest">Select Settlement Method</p>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <button
+                  onClick={() => handleNavigateToCashier('mpesa')}
+                  className="p-4 bg-white border border-stone-200 rounded-2xl hover:border-emerald-500 hover:bg-emerald-50/30 transition-all flex flex-col items-center gap-2 group"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                    <Smartphone size={18} />
+                  </div>
+                  <span className="text-[10px] font-black uppercase text-stone-600">M-Pesa</span>
+                </button>
+                <button
+                  onClick={() => handleNavigateToCashier('cash')}
+                  className="p-4 bg-white border border-stone-200 rounded-2xl hover:border-stone-900 hover:bg-stone-50/50 transition-all flex flex-col items-center gap-2 group"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-stone-100 flex items-center justify-center text-stone-600 group-hover:bg-stone-900 group-hover:text-white transition-all">
+                    <Banknote size={18} />
+                  </div>
+                  <span className="text-[10px] font-black uppercase text-stone-600">Cash</span>
+                </button>
+                <button
+                  onClick={() => handleNavigateToCashier('card')}
+                  className="p-4 bg-white border border-stone-200 rounded-2xl hover:border-blue-500 hover:bg-blue-50/30 transition-all flex flex-col items-center gap-2 group"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                    <CreditCard size={18} />
+                  </div>
+                  <span className="text-[10px] font-black uppercase text-stone-600">Card</span>
+                </button>
+              </div>
+              <button
+                onClick={() => setShowPaymentMethods(false)}
+                className="w-full py-2 text-[10px] font-black uppercase text-stone-400 hover:text-stone-600 transition-colors"
+              >
+                Go Back
+              </button>
+            </div>
+          )}
         </div>
 
-        <div className="p-8 bg-stone-50 border-t border-stone-100 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="p-8 bg-stone-50 border-t border-stone-100 flex flex-wrap md:flex-nowrap gap-4">
           <IOSButton
             variant="outline"
             onClick={onClose}
-            className="h-14 rounded-2xl border-stone-200 text-stone-600 font-black uppercase tracking-widest hover:bg-stone-100"
+            className="flex-1 h-14 rounded-2xl border-stone-200 text-stone-600 font-black uppercase tracking-tight hover:bg-stone-100 text-[10px]"
           >
             Cancel
           </IOSButton>
           <IOSButton
             variant="outline"
-            className="h-14 rounded-2xl border-stone-200 text-stone-900 font-black uppercase tracking-widest hover:bg-stone-100 shadow-sm flex items-center justify-center gap-2"
+            className="flex-[1.2] h-14 rounded-2xl border-stone-200 text-stone-900 font-black uppercase tracking-tight hover:bg-stone-100 shadow-sm flex items-center justify-center gap-2 text-[10px]"
             onClick={handlePrintBill}
             disabled={isPrinting}
           >
             {isPrinting ? (
               <>
                 <RefreshCw className="h-4 w-4 animate-spin" />
-                Processing...
+                Wait...
               </>
             ) : (
               <>
                 <Printer className="h-4 w-4" />
-                Generate Bill
+                Invoice
               </>
             )}
           </IOSButton>
           <IOSButton
-            onClick={handleCheckOut}
-            disabled={isSubmitting}
-            className="h-14 bg-stone-900 hover:bg-stone-800 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:bg-stone-300"
+            onClick={balance > 0 ? handleCheckOut : handleManualCheckOut}
+            disabled={isSubmitting || (balance > 0 && showPaymentMethods)}
+            className="flex-[1.5] h-14 bg-stone-900 hover:bg-stone-800 text-white font-black uppercase tracking-tight rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:bg-stone-300 text-[10px]"
           >
             {isSubmitting ? (
               <>
                 <RefreshCw className="h-5 w-5 animate-spin" />
-                Authorizing...
+                Auth...
               </>
             ) : (
               <>
-                Finalize Departure
+                {balance > 0 ? 'Checkout' : 'Checkout'}
                 <LogOut className="h-5 w-5" />
               </>
             )}

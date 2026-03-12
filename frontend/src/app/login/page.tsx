@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 
 export default function LoginPage() {
-  const { login, isLoading } = useAuth();
+  const { login, isAuthenticating } = useAuth();
   const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -35,7 +35,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting || isLoading) return;
+    if (isSubmitting || isAuthenticating) return;
 
     setIsSubmitting(true);
     setErrors({});
@@ -206,10 +206,10 @@ export default function LoginPage() {
                   whileHover={{ scale: 1.01 }}
                   whileTap={{ scale: 0.98 }}
                   type="submit"
-                  disabled={isLoading || isSubmitting}
+                  disabled={isAuthenticating || isSubmitting}
                   className="w-full h-14 bg-stone-900 hover:bg-stone-800 disabled:bg-stone-400 text-white font-black text-sm uppercase tracking-widest rounded-2xl transition-all flex items-center justify-center gap-3 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.3)] hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] disabled:shadow-none"
                 >
-                  {isLoading || isSubmitting ? (
+                  {isAuthenticating || isSubmitting ? (
                     <>
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span>Authorizing Portal</span>

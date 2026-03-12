@@ -29,7 +29,7 @@ router.delete('/:id', authorize([UserRole.SUPER_ADMIN]), deleteRoom);
 // Admin, Manager, and Housekeeping routes
 router.patch(
   '/:id/status',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HOUSEKEEPING]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HOUSEKEEPING, UserRole.RECEPTIONIST]),
   updateRoomStatus
 );
 

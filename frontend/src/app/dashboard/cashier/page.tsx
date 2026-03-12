@@ -120,6 +120,45 @@ function CashierPageContent() {
         };
     }, [isOffline]);
 
+    // Handle auto-loading of bills from query parameters (integration with CheckOutModal)
+    useEffect(() => {
+        const billId = searchParams.get('billId');
+        const method = searchParams.get('method');
+
+        if (billId) {
+            setScanInput(billId);
+            // Simulate lookup - we call directly the logic instead of relying on the form submit event
+            const lookupBill = async () => {
+                setIsLoading(true);
+                try {
+                    const response = await fetchAPI(`/cashier/bill/${billId}`) as any;
+                    if (response.success) {
+                        setBillData(response.data);
+                        setPaymentAmount(response.data.financials.balance.toString());
+                        toast.success('Bill auto-retrieved');
+
+                        if (method) {
+                            setPaymentFlowChoice(method as any);
+                            setPaymentMethod(method === 'mpesa' ? 'mpesa' : (method === 'card' ? 'card' : 'cash'));
+
+                            if (method === 'mpesa') {
+                                handleAutoMpesaSearch(response.data.financials.balance);
+                            }
+                        }
+                    } else {
+                        toast.error('Bill not found via auto-lookup');
+                    }
+                } catch (error: any) {
+                    toast.error(error.message || 'Failed to auto-fetch bill');
+                } finally {
+                    setIsLoading(false);
+                    setScanInput('');
+                }
+            };
+            lookupBill();
+        }
+    }, [searchParams]);
+
     const fetchUnpaidBills = async () => {
         setIsUnpaidLoading(true);
         try {

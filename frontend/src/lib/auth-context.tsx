@@ -37,6 +37,7 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
+  isAuthenticating: boolean;
   login: (email: string, password: string) => Promise<void>;
   posLogin: (pin: string, redirectTo?: string) => Promise<void>;
   logout: (redirectTo?: string) => void;
@@ -50,6 +51,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
 
@@ -139,8 +141,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string): Promise<void> => {
-    if (isLoading) return;
-    setIsLoading(true);
+    if (isAuthenticating) return;
+    setIsAuthenticating(true);
 
     try {
       const res = await api.auth.login({ email, password });
@@ -189,8 +191,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [router]);
 
   const posLogin = useCallback(async (pin: string, redirectTo?: string): Promise<void> => {
-    if (isLoading) return;
-    setIsLoading(true);
+    if (isAuthenticating) return;
+    setIsAuthenticating(true);
 
     try {
       const res = await api.auth.posLogin(pin);
@@ -304,6 +306,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const authValue = React.useMemo(() => ({
     user,
     isLoading,
+    isAuthenticating,
     login,
     posLogin,
     logout,

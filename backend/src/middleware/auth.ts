@@ -161,7 +161,7 @@ export const authorize = (roles: UserRole[]) => {
     if (!allowedRoles.includes(userRole)) {
       res.status(403).json({
         success: false,
-        message: `User role ${req.user.role} is not authorized to access this route`
+        message: `User role ${req.user.role} is not authorized to access this route. Expected one of: ${roles.join(', ')}`
       });
       return;
     }
