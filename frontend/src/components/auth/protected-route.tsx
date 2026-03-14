@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth, UserRole, hasRole } from '@/lib/auth-context';
 import { Loader2 } from 'lucide-react';
@@ -19,13 +19,18 @@ export function ProtectedRoute({
   const { user, isLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Stabilize the roles array — a literal array like [UserRole.X, UserRole.Y]
   // is a new object every render, so we derive a stable string key instead.
   const rolesKey = useMemo(() => allowedRoles.join(','), [allowedRoles]);
 
   useEffect(() => {
-    if (!isLoading) {
+    if (mounted && !isLoading) {
       if (requireAuth && !user) {
         router.push('/terminal');
         return;
@@ -40,9 +45,9 @@ export function ProtectedRoute({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isLoading, requireAuth, rolesKey, router, pathname]);
+  }, [mounted, user, isLoading, requireAuth, rolesKey, router, pathname]);
 
-  if (isLoading) {
+  if (!mounted || isLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="flex flex-col items-center space-y-4">

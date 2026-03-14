@@ -50,7 +50,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // Auth Provider Component
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [mounted, setMounted] = useState(false);
   const router = useRouter();

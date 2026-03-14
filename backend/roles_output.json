@@ -1,0 +1,44 @@
+[
+  {
+    "role": "pos_kitchen"
+  },
+  {
+    "role": "cashier"
+  },
+  {
+    "role": "hr_manager"
+  },
+  {
+    "role": "guest"
+  },
+  {
+    "role": "kyogong_sports_bar_cashier"
+  },
+  {
+    "role": "kyogong_spa_cashier"
+  },
+  {
+    "role": "branch_storekeeper"
+  },
+  {
+    "role": "kitchen"
+  },
+  {
+    "role": "branch_manager"
+  },
+  {
+    "role": "super_admin"
+  },
+  {
+    "role": "branch_accountant"
+  },
+  {
+    "role": "receptionist"
+  },
+  {
+    "role": "auditor"
+  },
+  {
+    "role": "central_storekeeper"
+  }
+]
