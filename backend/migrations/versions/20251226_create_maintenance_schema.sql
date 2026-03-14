@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS maintenance_tasks (
   title VARCHAR(200) NOT NULL,
   asset_id UUID REFERENCES maintenance_assets(id),
   location VARCHAR(100),
+  room_number VARCHAR(20), -- For hotel room-specific maintenance
+  branch_id INTEGER REFERENCES branches(id), -- Link to branch
   description TEXT,
   reported_by_id UUID REFERENCES users(id),
   reported_at TIMESTAMPTZ DEFAULT NOW(),

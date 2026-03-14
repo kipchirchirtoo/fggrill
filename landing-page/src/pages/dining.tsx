@@ -1,22 +1,33 @@
+import { SEO } from '@/components/SEO';
 import Head from 'next/head';
 import { Header, Footer } from '@/components/layout';
 
 export default function Dining() {
   return (
     <>
+      <SEO
+        title="Dining - FamousGate Hotels | Fine Dining in Nairobi"
+        description="Experience exquisite cuisine at FamousGate Hotels. Our restaurants offer fine dining with local and international flavors in elegant settings."
+        url="https://famousgatehotels.com/dining"
+        breadcrumbs={[
+          { name: "Dining", item: "/dining" }
+        ]}
+        schemaList={[
+          JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Restaurant",
+            "name": "FamousGate Hotels Dining",
+            "sameAs": "https://famousgatehotels.com",
+            "address": {
+              "@type": "PostalAddress",
+              "addressLocality": "Nairobi",
+              "addressCountry": "KE"
+            }
+          })
+        ]}
+      />
       <Head>
-        <title>Dining - FamousGate Hotels | Fine Dining in Nairobi</title>
-        <meta name="description" content="Experience exquisite cuisine at FamousGate Hotels. Our restaurants offer fine dining with local and international flavors in elegant settings." />
         <meta name="keywords" content="fine dining nairobi, restaurant famousgate, hotel dining kenya, luxury restaurant nairobi" />
-        
-        {/* Open Graph */}
-        <meta property="og:title" content="Dining - FamousGate Hotels" />
-        <meta property="og:description" content="Experience exquisite cuisine at FamousGate Hotels. Fine dining with local and international flavors." />
-        <meta property="og:url" content="https://famousgatehotels.com/dining" />
-        
-        {/* Twitter Card */}
-        <meta name="twitter:title" content="Dining - FamousGate Hotels" />
-        <meta name="twitter:description" content="Experience exquisite cuisine at FamousGate Hotels. Fine dining with local and international flavors." />
       </Head>
 
       <Header />
@@ -38,7 +49,7 @@ export default function Dining() {
             <div className="lp-dining-intro">
               <h2 className="lp-section__title">A Feast for the Senses</h2>
               <p className="lp-dining-intro__text">
-                Our restaurants combine exceptional cuisine with elegant ambiance, creating unforgettable dining experiences. 
+                Our restaurants combine exceptional cuisine with elegant ambiance, creating unforgettable dining experiences.
                 From traditional Kenyan dishes to international favorites, every meal is crafted with passion and precision.
               </p>
             </div>
@@ -48,7 +59,7 @@ export default function Dining() {
                 <div className="lp-dining-card__image">🍽️</div>
                 <h3 className="lp-dining-card__title">Fine Dining Restaurant</h3>
                 <p className="lp-dining-card__text">
-                  Experience gourmet cuisine in an elegant setting. Our signature restaurant offers a carefully curated menu 
+                  Experience gourmet cuisine in an elegant setting. Our signature restaurant offers a carefully curated menu
                   featuring the finest local and international ingredients.
                 </p>
                 <ul className="lp-dining-card__features">
@@ -62,7 +73,7 @@ export default function Dining() {
                 <div className="lp-dining-card__image">☕</div>
                 <h3 className="lp-dining-card__title">Café & Lounge</h3>
                 <p className="lp-dining-card__text">
-                  Relax in our comfortable café and lounge area. Perfect for casual meetings, afternoon tea, 
+                  Relax in our comfortable café and lounge area. Perfect for casual meetings, afternoon tea,
                   or simply unwinding with a premium coffee.
                 </p>
                 <ul className="lp-dining-card__features">
@@ -76,7 +87,7 @@ export default function Dining() {
                 <div className="lp-dining-card__image">🍹</div>
                 <h3 className="lp-dining-card__title">Bar & Cocktails</h3>
                 <p className="lp-dining-card__text">
-                  Enjoy expertly crafted cocktails and premium spirits in our sophisticated bar. 
+                  Enjoy expertly crafted cocktails and premium spirits in our sophisticated bar.
                   The perfect spot for evening drinks and socializing.
                 </p>
                 <ul className="lp-dining-card__features">
@@ -90,7 +101,7 @@ export default function Dining() {
                 <div className="lp-dining-card__image">🥘</div>
                 <h3 className="lp-dining-card__title">Room Service</h3>
                 <p className="lp-dining-card__text">
-                  Enjoy our full menu from the comfort of your room. Our 24-hour room service ensures 
+                  Enjoy our full menu from the comfort of your room. Our 24-hour room service ensures
                   you can dine whenever you desire.
                 </p>
                 <ul className="lp-dining-card__features">

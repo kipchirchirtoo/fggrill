@@ -29,7 +29,7 @@ export default function Header({ className = '' }: HeaderProps) {
   ];
 
   return (
-    <nav className={`lp-nav${scrolled ? ' lp-nav--scrolled' : ''} ${className}`}>
+    <header className={`lp-nav${scrolled ? ' lp-nav--scrolled' : ''} ${className}`}>
       <div className="lp-nav__inner">
         {/* Brand */}
         <Link href="/" className="lp-nav__brand">
@@ -41,15 +41,17 @@ export default function Header({ className = '' }: HeaderProps) {
         </Link>
 
         {/* Desktop links */}
-        <ul className="lp-nav__links">
-          {navItems.map((item) => (
-            <li key={item.label}>
-              <Link href={item.href} className="lp-nav__link">
-                {item.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <nav aria-label="Main Navigation">
+          <ul className="lp-nav__links">
+            {navItems.map((item) => (
+              <li key={item.label}>
+                <Link href={item.href} className="lp-nav__link">
+                  {item.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
 
         {/* CTA */}
         <Link href="/#reservations" className="lp-nav__cta">
@@ -91,6 +93,6 @@ export default function Header({ className = '' }: HeaderProps) {
           </Link>
         </div>
       )}
-    </nav>
+    </header>
   );
 }

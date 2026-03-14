@@ -1,4 +1,5 @@
 import Head from 'next/head';
+import { SEO } from '@/components/SEO';
 import { useState, useEffect, useRef } from 'react';
 import { hotelsService } from '@/services/hotels.service';
 import { bookingService } from '@/services/booking.service';
@@ -95,15 +96,15 @@ export default function Home() {
         const today = new Date();
         const nextWeek = new Date(today);
         nextWeek.setDate(today.getDate() + 7);
-        
+
         const checkInStr = today.toISOString().split('T')[0];
         const checkOutStr = nextWeek.toISOString().split('T')[0];
-        
+
         const data = await bookingService.searchAvailableRooms({
           checkIn: checkInStr,
           checkOut: checkOutStr
         });
-        
+
         console.log('🏨 Loaded all rooms:', data);
         setAllRooms(data || []);
       } catch (err) {
@@ -130,7 +131,7 @@ export default function Home() {
 
       console.log('✅ Search response:', data);
       console.log('📊 Number of rooms:', Array.isArray(data) ? data.length : 'NOT AN ARRAY');
-      
+
       setAvailableRooms(data);
       if (data.length === 0) {
         toast.error('No rooms available for these dates.');
@@ -241,27 +242,17 @@ export default function Home() {
           },
         }}
       />
+      <SEO
+        title="FamousGate Hotels — Luxury Stay & Fine Dining in Nairobi, Kenya"
+        description="Experience the pinnacle of hospitality at FamousGate Hotels. Premium rooms, world-class dining, and elegant event spaces in Nairobi, Kenya. Book your luxury stay today."
+        breadcrumbs={[]}
+      />
       <Head>
-        <title>FamousGate Hotels — Luxury Stay & Fine Dining in Nairobi, Kenya</title>
-        <meta name="description" content="Experience the pinnacle of hospitality at FamousGate Hotels. Premium rooms, world-class dining, and elegant event spaces in Nairobi, Kenya. Book your luxury stay today." />
         <meta name="keywords" content="luxury hotels Nairobi, FamousGate Hotels, premium accommodation Kenya, fine dining Nairobi, hotel booking Kenya, luxury stay Nairobi, conference facilities Kenya, wedding venues Nairobi, corporate events Kenya, boutique hotels Nairobi" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/logo_official.png" />
-        
-        {/* Open Graph / Facebook */}
-        <meta property="og:title" content="FamousGate Hotels — Luxury Stay & Fine Dining in Nairobi" />
-        <meta property="og:description" content="Experience world-class hospitality with premium rooms, gourmet dining, and exceptional service. Book your luxury stay at FamousGate Hotels today." />
-        <meta property="og:image" content="https://famousgatehotels.com/hero-bg.jpg" />
-        <meta property="og:url" content="https://famousgatehotels.com/" />
-        <meta property="og:type" content="website" />
-        
-        {/* Twitter Card */}
-        <meta name="twitter:title" content="FamousGate Hotels — Luxury Stay & Fine Dining" />
-        <meta name="twitter:description" content="Experience world-class hospitality with premium rooms, gourmet dining, and exceptional service in Nairobi, Kenya." />
-        <meta name="twitter:image" content="https://famousgatehotels.com/hero-bg.jpg" />
-        
-        {/* Structured Data - Organization */}
+
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -292,7 +283,7 @@ export default function Home() {
             })
           }}
         />
-        
+
         {/* Structured Data - Hotel */}
         <script
           type="application/ld+json"
@@ -328,7 +319,7 @@ export default function Home() {
             })
           }}
         />
-        
+
         {/* Structured Data - LocalBusiness */}
         <script
           type="application/ld+json"

@@ -699,10 +699,10 @@ function CashierPageContent() {
                             total_amount: total,
                             mpesa_code: mpesaCode,
                             businessInfo: {
-                                name: 'Kyogongs',
+                                name: 'FamousGateHotels',
                                 address: 'Bomet, Kenya',
                                 phone: '0706782828',
-                                email: 'kyogongsbmt@gmail.com'
+                                email: 'famous-gates-hotelsbmt@gmail.com'
                             }
                         });
                         setShowReceipt(true);
@@ -728,10 +728,10 @@ function CashierPageContent() {
                         items: [...cart],
                         total_amount: total,
                         businessInfo: {
-                            name: 'Kyogong',
-                            address: 'Kericho, Kenya',
-                            phone: '+254 700 000 000',
-                            email: 'info@kyogong.co.ke'
+                            name: 'FamousGateHotels',
+                            address: 'Bomet, Kenya',
+                            phone: '0706782828',
+                            email: 'famous-gates-hotelsbmt@gmail.com'
                         }
                     });
                     setShowReceipt(true);

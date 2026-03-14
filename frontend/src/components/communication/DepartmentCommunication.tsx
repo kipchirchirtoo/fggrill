@@ -110,7 +110,7 @@ export function DepartmentCommunication({
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeRequests, setActiveRequests] = useState<DepartmentRequest[]>([]);
-  
+
   // Form state
   const [selectedDepartment, setSelectedDepartment] = useState<keyof typeof DEPARTMENT_CONFIG | null>(null);
   const [selectedRequestType, setSelectedRequestType] = useState('');
@@ -159,7 +159,7 @@ export function DepartmentCommunication({
         assigned_to: r.assigned_to?.name || r.assigned_to
       }));
 
-      setActiveRequests([...hkRequests, ...maintRequests].sort((a, b) => 
+      setActiveRequests([...hkRequests, ...maintRequests].sort((a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       ));
     } catch (error) {
@@ -230,7 +230,7 @@ export function DepartmentCommunication({
   return (
     <>
       {/* Quick Action Button */}
-      <IOSButton 
+      <IOSButton
         onClick={() => setIsOpen(true)}
         className="bg-[#3C3C43] hover:bg-[#000000] text-white"
         leftIcon={<MessageSquare className="h-4 w-4" />}
@@ -292,7 +292,7 @@ export function DepartmentCommunication({
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
             {/* Department Selection */}
             {!selectedDepartment ? (
               <div className="grid grid-cols-2 gap-3">
@@ -342,11 +342,10 @@ export function DepartmentCommunication({
                         <button
                           key={type.id}
                           onClick={() => setSelectedRequestType(type.id)}
-                          className={`px-3 py-1.5 rounded-ios-lg text-sm font-medium transition-all ${
-                            selectedRequestType === type.id 
-                              ? 'bg-[#3C3C43] text-white' 
+                          className={`px-3 py-1.5 rounded-ios-lg text-sm font-medium transition-all ${selectedRequestType === type.id
+                              ? 'bg-[#3C3C43] text-white'
                               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
+                            }`}
                         >
                           {type.label}
                         </button>
@@ -382,11 +381,10 @@ export function DepartmentCommunication({
                         <button
                           key={opt.value}
                           onClick={() => setPriority(opt.value as any)}
-                          className={`px-3 py-1.5 rounded-ios-lg text-sm font-medium transition-all ${
-                            priority === opt.value 
-                              ? opt.color + ' ring-2 ring-offset-1 ring-gray-400' 
+                          className={`px-3 py-1.5 rounded-ios-lg text-sm font-medium transition-all ${priority === opt.value
+                              ? opt.color + ' ring-2 ring-offset-1 ring-gray-400'
                               : 'bg-gray-100 text-gray-600'
-                          }`}
+                            }`}
                         >
                           {opt.label}
                         </button>
@@ -411,7 +409,7 @@ export function DepartmentCommunication({
                     <IOSButton variant="outline" className="flex-1 border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]" onClick={() => { resetForm(); setIsOpen(false); }}>
                       Cancel
                     </IOSButton>
-                    <IOSButton 
+                    <IOSButton
                       className="flex-1 bg-[#3C3C43] hover:bg-[#000000] text-white"
                       onClick={handleSubmitRequest}
                       disabled={isSubmitting || !roomNumber}

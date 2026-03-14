@@ -1,22 +1,32 @@
+import { SEO } from '@/components/SEO';
 import Head from 'next/head';
 import { Header, Footer } from '@/components/layout';
 
 export default function Events() {
   return (
     <>
+      <SEO
+        title="Events & Conferences - FamousGate Hotels | Nairobi Event Venues"
+        description="Host your events at FamousGate Hotels. We offer versatile venues for weddings, conferences, meetings, and celebrations in Nairobi."
+        url="https://famousgatehotels.com/events"
+        breadcrumbs={[
+          { name: "Events", item: "/events" }
+        ]}
+        schemaList={[
+          JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "EventVenue",
+            "name": "FamousGate Hotels Events",
+            "address": {
+              "@type": "PostalAddress",
+              "addressLocality": "Nairobi",
+              "addressCountry": "KE"
+            }
+          })
+        ]}
+      />
       <Head>
-        <title>Events & Conferences - FamousGate Hotels | Nairobi Event Venues</title>
-        <meta name="description" content="Host your events at FamousGate Hotels. We offer versatile venues for weddings, conferences, meetings, and celebrations in Nairobi." />
         <meta name="keywords" content="event venues nairobi, conference halls kenya, wedding venues nairobi, meeting rooms famousgate" />
-        
-        {/* Open Graph */}
-        <meta property="og:title" content="Events & Conferences - FamousGate Hotels" />
-        <meta property="og:description" content="Host your events at FamousGate Hotels. Versatile venues for weddings, conferences, and celebrations." />
-        <meta property="og:url" content="https://famousgatehotels.com/events" />
-        
-        {/* Twitter Card */}
-        <meta name="twitter:title" content="Events & Conferences - FamousGate Hotels" />
-        <meta name="twitter:description" content="Host your events at FamousGate Hotels. Versatile venues for weddings, conferences, and celebrations." />
       </Head>
 
       <Header />
@@ -38,7 +48,7 @@ export default function Events() {
             <div className="lp-events-intro">
               <h2 className="lp-section__title">Your Vision, Our Expertise</h2>
               <p className="lp-events-intro__text">
-                From intimate gatherings to grand celebrations, FamousGate Hotels provides the perfect setting for your special events. 
+                From intimate gatherings to grand celebrations, FamousGate Hotels provides the perfect setting for your special events.
                 Our experienced team ensures every detail is flawlessly executed, creating memories that last a lifetime.
               </p>
             </div>
@@ -48,7 +58,7 @@ export default function Events() {
                 <div className="lp-event-card__icon">💍</div>
                 <h3 className="lp-event-card__title">Weddings</h3>
                 <p className="lp-event-card__text">
-                  Celebrate your special day in elegant surroundings. Our wedding packages include everything you need 
+                  Celebrate your special day in elegant surroundings. Our wedding packages include everything you need
                   for a perfect celebration, from ceremony to reception.
                 </p>
                 <ul className="lp-event-card__features">
@@ -64,7 +74,7 @@ export default function Events() {
                 <div className="lp-event-card__icon">🎤</div>
                 <h3 className="lp-event-card__title">Conferences</h3>
                 <p className="lp-event-card__text">
-                  State-of-the-art conference facilities equipped with modern technology. Perfect for corporate events, 
+                  State-of-the-art conference facilities equipped with modern technology. Perfect for corporate events,
                   seminars, and business meetings of any size.
                 </p>
                 <ul className="lp-event-card__features">
@@ -80,7 +90,7 @@ export default function Events() {
                 <div className="lp-event-card__icon">🎉</div>
                 <h3 className="lp-event-card__title">Private Parties</h3>
                 <p className="lp-event-card__text">
-                  Host memorable celebrations in our versatile event spaces. From birthdays to anniversaries, 
+                  Host memorable celebrations in our versatile event spaces. From birthdays to anniversaries,
                   we create the perfect atmosphere for your special occasion.
                 </p>
                 <ul className="lp-event-card__features">
@@ -96,7 +106,7 @@ export default function Events() {
                 <div className="lp-event-card__icon">🤝</div>
                 <h3 className="lp-event-card__title">Corporate Meetings</h3>
                 <p className="lp-event-card__text">
-                  Professional meeting rooms designed for productivity. Ideal for board meetings, training sessions, 
+                  Professional meeting rooms designed for productivity. Ideal for board meetings, training sessions,
                   and team building events.
                 </p>
                 <ul className="lp-event-card__features">

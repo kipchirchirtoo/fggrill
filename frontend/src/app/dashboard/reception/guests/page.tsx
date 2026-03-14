@@ -135,15 +135,15 @@ function GuestFormModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
             {guest ? 'Edit Guest' : 'New Guest Registration'}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-4 mt-4">
+        <div className="grid grid-cols-2 gap-4 mt-4 overflow-y-auto flex-1 pr-2">
           <div>
             <label className="text-sm font-medium">First Name *</label>
             <Input
@@ -262,7 +262,7 @@ function GuestFormModal({
           </div>
         </div>
 
-        <div className="flex gap-3 mt-6">
+        <div className="flex gap-3 mt-6 flex-shrink-0 pt-4 border-t">
           <IOSButton variant="outline" onClick={onClose} className="flex-1 border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]">
             Cancel
           </IOSButton>
@@ -320,8 +320,8 @@ function GuestDetailsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
             Guest Profile
@@ -333,7 +333,7 @@ function GuestDetailsModal({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6 mt-4">
+        <div className="space-y-6 mt-4 overflow-y-auto flex-1 pr-2">
           {/* Basic Info */}
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2 p-4 bg-[#F2F2F7] rounded-xl border border-[rgba(60,60,67,0.12)]">
@@ -427,6 +427,8 @@ export default function GuestsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterVIP, setFilterVIP] = useState<boolean | null>(null);
+  const [filterCheckedIn, setFilterCheckedIn] = useState<boolean | null>(null); // Changed to null to show all by default
+  const [activeBookings, setActiveBookings] = useState<any[]>([]);
 
   // Modals
   const [formModalOpen, setFormModalOpen] = useState(false);
@@ -440,13 +442,22 @@ export default function GuestsPage() {
       if (response.success) {
         setGuests(response.data || []);
       }
+
+      // Fetch active bookings (checked-in guests)
+      const bookingsResponse = await bookingsAPI.getBookings();
+      if (bookingsResponse.success) {
+        const checkedInBookings = (bookingsResponse.data || []).filter(
+          (b: any) => b.status === 'checked_in' || b.status === 'checked-in'
+        );
+        setActiveBookings(checkedInBookings);
+      }
     } catch (error) {
       console.error('Error fetching guests:', error);
       toast.error('Failed to load guests');
     } finally {
       setIsLoading(false);
     }
-  }, [searchQuery]);
+  }, [searchQuery, user?.branch_id]);
 
   useEffect(() => {
     fetchGuests();
@@ -458,6 +469,16 @@ export default function GuestsPage() {
 
   const filteredGuests = guests.filter((guest) => {
     if (filterVIP !== null && guest.isVip !== filterVIP) return false;
+    
+    // Filter by checked-in status
+    if (filterCheckedIn !== null) {
+      const isCheckedIn = activeBookings.some(
+        (booking) => booking.guest_id === guest.id || booking.guestId === guest.id
+      );
+      if (filterCheckedIn && !isCheckedIn) return false;
+      if (!filterCheckedIn && isCheckedIn) return false;
+    }
+    
     return true;
   });
 
@@ -509,6 +530,7 @@ export default function GuestsPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
               { label: 'Total Guests', value: guests.length, icon: Users, color: 'text-gray-600', bg: 'bg-gray-50' },
+              { label: 'Checked In', value: activeBookings.length, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50' },
               { label: 'VIP Guests', value: guests.filter(g => g.isVip).length, icon: Star, color: 'text-amber-600', bg: 'bg-amber-50' },
               {
                 label: 'New This Month', value: guests.filter(g => {
@@ -517,16 +539,15 @@ export default function GuestsPage() {
                   return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
                 }).length, icon: User, color: 'text-blue-600', bg: 'bg-blue-50'
               },
-              { label: 'Returning Guests', value: guests.filter(g => (g.totalStays || 0) > 1).length, icon: History, color: 'text-emerald-600', bg: 'bg-emerald-50' },
             ].map((stat) => (
               <IOSCard key={stat.label} className="p-4 border-none shadow-sm bg-white">
-                <div className="flex items-center gap-4">
-                  <div className={`p-3 rounded-xl ${stat.bg}`}>
-                    <stat.icon className={`h-6 w-6 ${stat.color}`} />
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-xl ${stat.bg}`}>
+                    <stat.icon className={`h-5 w-5 ${stat.color}`} />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500 font-medium">{stat.label}</p>
                     <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                    <p className="text-xs text-gray-500 font-medium">{stat.label}</p>
                   </div>
                 </div>
               </IOSCard>
@@ -551,26 +572,30 @@ export default function GuestsPage() {
               </div>
               <div className="flex gap-2">
                 <IOSButton
-                  className={filterVIP === null ? 'bg-[#3C3C43] text-white' : 'border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]'}
+                  className={filterCheckedIn === null ? 'bg-[#3C3C43] text-white' : 'border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]'}
+                  variant={filterCheckedIn === null ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setFilterVIP(null)}
+                  onClick={() => setFilterCheckedIn(null)}
                 >
                   All
                 </IOSButton>
                 <IOSButton
-                  className={filterVIP === true ? 'bg-[#3C3C43] text-white' : 'border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]'}
+                  className={filterCheckedIn === true ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]'}
+                  variant={filterCheckedIn === true ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setFilterVIP(true)}
+                  onClick={() => setFilterCheckedIn(true)}
+                  leftIcon={<CheckCircle className="h-3 w-3" />}
+                >
+                  Checked In
+                </IOSButton>
+                <IOSButton
+                  className={filterVIP === true ? 'bg-amber-600 text-white hover:bg-amber-700' : 'border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]'}
+                  variant={filterVIP === true ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFilterVIP(filterVIP === true ? null : true)}
                   leftIcon={<Star className="h-3 w-3" />}
                 >
                   VIP
-                </IOSButton>
-                <IOSButton
-                  className={filterVIP === false ? 'bg-[#3C3C43] text-white' : 'border-[rgba(60,60,67,0.12)] text-[#3C3C43] hover:bg-[#F2F2F7]'}
-                  size="sm"
-                  onClick={() => setFilterVIP(false)}
-                >
-                  Regular
                 </IOSButton>
               </div>
             </div>
@@ -603,16 +628,38 @@ export default function GuestsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {filteredGuests.map((guest) => (
+                    {filteredGuests.map((guest) => {
+                      const isCheckedIn = activeBookings.some(
+                        (booking) => booking.guest_id === guest.id || booking.guestId === guest.id
+                      );
+                      const guestBooking = activeBookings.find(
+                        (booking) => booking.guest_id === guest.id || booking.guestId === guest.id
+                      );
+                      
+                      return (
                       <tr key={guest.id} className="hover:bg-gray-50">
                         <td className="p-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-[#3C3C43] flex items-center justify-center text-white font-medium">
+                            <div className={`w-10 h-10 rounded-full ${isCheckedIn ? 'bg-emerald-600' : 'bg-[#3C3C43]'} flex items-center justify-center text-white font-medium relative`}>
                               {(guest.firstName || 'G')[0]}{(guest.lastName || 'U')[0]}
+                              {isCheckedIn && (
+                                <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center">
+                                  <CheckCircle className="h-3 w-3 text-white" />
+                                </div>
+                              )}
                             </div>
                             <div>
-                              <p className="font-medium">{guest.firstName} {guest.lastName}</p>
-                              <p className="text-sm text-gray-500">{guest.nationality || 'N/A'}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium">{guest.firstName} {guest.lastName}</p>
+                                {isCheckedIn && (
+                                  <IOSBadge variant="light" color="success" className="text-xs">
+                                    In-House
+                                  </IOSBadge>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-500">
+                                {guestBooking ? `Room ${guestBooking.room_number}` : guest.nationality || 'N/A'}
+                              </p>
                             </div>
                           </div>
                         </td>
@@ -648,7 +695,8 @@ export default function GuestsPage() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    );
+                    })}
                   </tbody>
                 </table>
               </div>

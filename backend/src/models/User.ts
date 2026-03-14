@@ -66,7 +66,7 @@ export enum UserRole {
   PAYROLL_CLERK = 'payroll_clerk',
   CASHIER = 'cashier',
 
-  // Kyogong Branch Cashiers
+  // FamousGateHotels Cashiers
   KYOGONG_SPA_CASHIER = 'kyogong_spa_cashier',
   KYOGONG_EXECUTIVE_BAR_CASHIER = 'kyogong_executive_bar_cashier',
   KYOGONG_SPORTS_BAR_CASHIER = 'kyogong_sports_bar_cashier',

@@ -1,3 +1,4 @@
+import { SEO } from '@/components/SEO';
 import Head from 'next/head';
 import { Header, Footer } from '@/components/layout';
 import { HotelList } from '@/components/hotel';
@@ -49,82 +50,43 @@ export default function HotelsPage() {
 
   return (
     <>
+      <SEO
+        title="Our Hotels & Locations — FamousGate Hotels in Kenya"
+        description="Discover all FamousGate Hotels locations across Kenya. Premium accommodations, world-class dining, and exceptional service. Find your perfect luxury hotel destination."
+        url="https://famousgatehotels.com/hotels"
+        breadcrumbs={[
+          { name: "Hotels", item: "/hotels" }
+        ]}
+        schemaList={[
+          JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            "name": "FamousGate Hotels Locations",
+            "description": "All FamousGate Hotels locations across Kenya",
+            "numberOfItems": hotels.length,
+            "itemListElement": hotels.map((hotel, index) => ({
+              "@type": "ListItem",
+              "position": index + 1,
+              "item": {
+                "@type": "Hotel",
+                "name": hotel.name,
+                "description": hotel.description,
+                "address": {
+                  "@type": "PostalAddress",
+                  "addressLocality": hotel.location,
+                  "addressCountry": "KE"
+                },
+                "telephone": hotel.contactInfo.phone,
+                "email": hotel.contactInfo.email
+              }
+            }))
+          })
+        ]}
+      />
       <Head>
-        <title>Our Hotels & Locations — FamousGate Hotels in Kenya</title>
-        <meta
-          name="description"
-          content="Discover all FamousGate Hotels locations across Kenya. Premium accommodations, world-class dining, and exceptional service. Find your perfect luxury hotel destination."
-        />
         <meta name="keywords" content="FamousGate Hotels locations, luxury hotels Kenya, hotel branches Kenya, premium hotels Nairobi, boutique hotels Kenya, hotel destinations Kenya" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
-        
-        {/* Open Graph / Facebook */}
-        <meta property="og:title" content="Our Hotels & Locations — FamousGate Hotels" />
-        <meta property="og:description" content="Discover all FamousGate Hotels locations. Premium accommodations, world-class dining, and exceptional service across Kenya." />
-        <meta property="og:image" content="https://famousgatehotels.com/rooms-bg.jpg" />
-        <meta property="og:url" content="https://famousgatehotels.com/hotels" />
-        <meta property="og:type" content="website" />
-        
-        {/* Twitter Card */}
-        <meta name="twitter:title" content="Our Hotels & Locations — FamousGate Hotels" />
-        <meta name="twitter:description" content="Discover all FamousGate Hotels locations across Kenya. Premium accommodations and exceptional service." />
-        <meta name="twitter:image" content="https://famousgatehotels.com/rooms-bg.jpg" />
-        
-        {/* Structured Data - BreadcrumbList */}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "BreadcrumbList",
-              "itemListElement": [
-                {
-                  "@type": "ListItem",
-                  "position": 1,
-                  "name": "Home",
-                  "item": "https://famousgatehotels.com/"
-                },
-                {
-                  "@type": "ListItem",
-                  "position": 2,
-                  "name": "Hotels",
-                  "item": "https://famousgatehotels.com/hotels"
-                }
-              ]
-            })
-          }}
-        />
-        
-        {/* Structured Data - ItemList for Hotels */}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "ItemList",
-              "name": "FamousGate Hotels Locations",
-              "description": "All FamousGate Hotels locations across Kenya",
-              "numberOfItems": hotels.length,
-              "itemListElement": hotels.map((hotel, index) => ({
-                "@type": "ListItem",
-                "position": index + 1,
-                "item": {
-                  "@type": "Hotel",
-                  "name": hotel.name,
-                  "description": hotel.description,
-                  "address": {
-                    "@type": "PostalAddress",
-                    "addressLocality": hotel.location,
-                    "addressCountry": "KE"
-                  },
-                  "telephone": hotel.contactInfo.phone,
-                  "email": hotel.contactInfo.email
-                }
-              }))
-            })
-          }}
-        />
       </Head>
 
       <Header />

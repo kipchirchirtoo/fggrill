@@ -11,21 +11,53 @@ export const getTasks = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { data, error } = await supabase
+    // Apply filters from query params
+    let query = supabase
       .from('maintenance_tasks')
-      .select(`
-        *,
-        assigned_to:users!assigned_to_id (*),
-        reported_by:users!reported_by_id (*),
-        verified_by:users!verified_by_id (*)
-      `)
+      .select('*')
       .order('created_at', { ascending: false });
+
+    if (req.query.branch_id) {
+      query = query.eq('branch_id', req.query.branch_id);
+    }
+
+    if (req.query.status) {
+      query = query.eq('status', req.query.status);
+    }
+
+    const { data: tasks, error } = await query;
 
     if (error) throw error;
 
+    // Fetch related users separately to avoid schema cache issues
+    const userIds = new Set<string>();
+    tasks?.forEach(task => {
+      if (task.assigned_to_id) userIds.add(task.assigned_to_id);
+      if (task.reported_by_id) userIds.add(task.reported_by_id);
+      if (task.verified_by_id) userIds.add(task.verified_by_id);
+    });
+
+    let usersMap = new Map();
+    if (userIds.size > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, full_name, email, role')
+        .in('id', Array.from(userIds));
+
+      usersMap = new Map(users?.map(u => [u.id, u]) || []);
+    }
+
+    // Attach user data to tasks
+    const enrichedTasks = tasks?.map(task => ({
+      ...task,
+      assigned_to: task.assigned_to_id ? usersMap.get(task.assigned_to_id) : null,
+      reported_by: task.reported_by_id ? usersMap.get(task.reported_by_id) : null,
+      verified_by: task.verified_by_id ? usersMap.get(task.verified_by_id) : null
+    }));
+
     res.status(200).json({
       success: true,
-      data
+      data: enrichedTasks
     });
   } catch (error) {
     next(error);
@@ -41,19 +73,14 @@ export const getTask = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { data, error } = await supabase
+    const { data: task, error } = await supabase
       .from('maintenance_tasks')
-      .select(`
-        *,
-        assigned_to:users!assigned_to_id (*),
-        reported_by:users!reported_by_id (*),
-        verified_by:users!verified_by_id (*)
-      `)
+      .select('*')
       .eq('id', req.params.id)
       .single();
 
     if (error) throw error;
-    if (!data) {
+    if (!task) {
       res.status(404).json({
         success: false,
         message: 'Task not found'
@@ -61,9 +88,33 @@ export const getTask = async (
       return;
     }
 
+    // Fetch related users separately
+    const userIds = new Set<string>();
+    if (task.assigned_to_id) userIds.add(task.assigned_to_id);
+    if (task.reported_by_id) userIds.add(task.reported_by_id);
+    if (task.verified_by_id) userIds.add(task.verified_by_id);
+
+    let usersMap = new Map();
+    if (userIds.size > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, full_name, email, role')
+        .in('id', Array.from(userIds));
+
+      usersMap = new Map(users?.map(u => [u.id, u]) || []);
+    }
+
+    // Attach user data to task
+    const enrichedTask = {
+      ...task,
+      assigned_to: task.assigned_to_id ? usersMap.get(task.assigned_to_id) : null,
+      reported_by: task.reported_by_id ? usersMap.get(task.reported_by_id) : null,
+      verified_by: task.verified_by_id ? usersMap.get(task.verified_by_id) : null
+    };
+
     res.status(200).json({
       success: true,
-      data
+      data: enrichedTask
     });
   } catch (error) {
     next(error);

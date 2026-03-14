@@ -50,19 +50,22 @@ export default function ReceptionHousekeepingPage() {
     try {
       // Fetch housekeeping tasks
       const tasksRes = await housekeepingAPI.getTasks({ status: 'pending', branch_id: user?.branch_id || undefined });
-      const tasksData = tasksRes.data || tasksRes.tasks || tasksRes || [];
+      // Handle nested data structure from backend
+      const tasksData = tasksRes.data?.tasks || tasksRes.tasks || tasksRes.data || tasksRes || [];
       setTasks(Array.isArray(tasksData) ? tasksData : []);
 
       // Fetch room grid for status
       const roomsRes = await housekeepingAPI.getRoomGrid(user?.branch_id?.toString());
-      const roomsData = roomsRes.data || roomsRes.rooms || roomsRes || [];
+      // Backend returns { data: { rooms: [...], floors: [...], roomsByFloor: {...} } }
+      const roomsData = roomsRes.data?.rooms || roomsRes.rooms || roomsRes.data || roomsRes || [];
       setRoomStatuses(Array.isArray(roomsData) ? roomsData.map((r: any) => ({
-        room_number: r.room_number,
-        status: r.cleaning_status || r.status || 'clean',
-        last_cleaned: r.last_cleaned
+        room_number: r.roomNumber || r.room_number,
+        status: r.status || r.hk_status || r.cleaning_status || 'clean',
+        last_cleaned: r.lastCleaned || r.last_cleaned_at || r.last_cleaned
       })) : []);
     } catch (error) {
       console.error('Error fetching data:', error);
+      toast.error('Failed to load housekeeping data');
     } finally {
       setIsLoading(false);
     }

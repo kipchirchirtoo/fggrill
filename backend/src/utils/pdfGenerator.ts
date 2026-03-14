@@ -61,7 +61,7 @@ export const generatePayslipPDF = (data: PayslipData): Promise<Buffer> => {
         }
 
         // Company Information (Top Right)
-        doc.fillColor(PRIMARY).fontSize(16).font('Helvetica-Bold').text('Famous Gates Hotels', 120, 40, { align: 'right' });
+        doc.fillColor(PRIMARY).fontSize(16).font('Helvetica-Bold').text('FamousGateHotels', 120, 40, { align: 'right' });
         doc.fontSize(10).font('Helvetica').text(data.company_address || 'Bomet, Kenya', { align: 'right' });
         doc.text(`Email: ${data.company_email || 'famous-gates-hotelsbmt@gmail.com'}`, { align: 'right' });
         doc.text('Tel: 0706 782 828', { align: 'right' });

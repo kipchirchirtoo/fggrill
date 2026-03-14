@@ -40,7 +40,9 @@ router.use(authorize([
   UserRole.GENERAL_MANAGER,
   UserRole.BRANCH_MANAGER,
   UserRole.MAINTENANCE,
-  UserRole.HOUSEKEEPING
+  UserRole.HOUSEKEEPING,
+  UserRole.RECEPTIONIST,
+  UserRole.FRONT_DESK_SUPERVISOR
 ]));
 
 router.route('/tasks')

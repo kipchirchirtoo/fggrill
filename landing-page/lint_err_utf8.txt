@@ -1,0 +1,322 @@
+﻿
+> famousgate-hotels-landing-page@1.0.0 lint
+> next lint
+
+node.exe : 
+At line:1 char:1
++ & "C:\Program Files\
+nodejs/node.exe" 
+"C:\Program 
+Files\nodejs/node_mo 
+...
++ ~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+~~~~~
+    + CategoryInfo    
+          : NotSpeci  
+  fied: (:String) [   
+ ], RemoteExceptio    
+n
+    + FullyQualifiedE 
+   rrorId : NativeCo  
+  mmandError
+ 
+./src/components/galle
+ry/ImageGallery.tsx
+227:9  Warning: Using 
+`<img>` could result 
+in slower LCP and 
+higher bandwidth. 
+Consider using 
+`<Image />` from 
+`next/image` to 
+automatically 
+optimize images. This 
+may incur additional 
+usage or cost from 
+your provider. See: ht
+tps://nextjs.org/docs/
+messages/no-img-elemen
+t  @next/next/no-img-e
+lement
+261:15  Warning: 
+Using `<img>` could 
+result in slower LCP 
+and higher bandwidth. 
+Consider using 
+`<Image />` from 
+`next/image` to 
+automatically 
+optimize images. This 
+may incur additional 
+usage or cost from 
+your provider. See: ht
+tps://nextjs.org/docs/
+messages/no-img-elemen
+t  @next/next/no-img-e
+lement
+
+./src/components/layou
+t/Header.tsx
+36:11  Warning: Using 
+`<img>` could result 
+in slower LCP and 
+higher bandwidth. 
+Consider using 
+`<Image />` from 
+`next/image` to 
+automatically 
+optimize images. This 
+may incur additional 
+usage or cost from 
+your provider. See: ht
+tps://nextjs.org/docs/
+messages/no-img-elemen
+t  @next/next/no-img-e
+lement
+
+./src/hooks/useHotels.
+ts
+25:47  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+38:61  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+51:48  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+
+./src/pages/discover/t
+op-10-luxury-hotels-in
+-kenya.tsx
+90:25  Warning: Using 
+`<img>` could result 
+in slower LCP and 
+higher bandwidth. 
+Consider using 
+`<Image />` from 
+`next/image` to 
+automatically 
+optimize images. This 
+may incur additional 
+usage or cost from 
+your provider. See: ht
+tps://nextjs.org/docs/
+messages/no-img-elemen
+t  @next/next/no-img-e
+lement
+92:197  Error: `'` 
+can be escaped with 
+`&apos;`, `&lsquo;`, 
+`&#39;`, `&rsquo;`.  r
+eact/no-unescaped-enti
+ties
+115:74  Error: `'` 
+can be escaped with 
+`&apos;`, `&lsquo;`, 
+`&#39;`, `&rsquo;`.  r
+eact/no-unescaped-enti
+ties
+
+./src/pages/hotels.tsx
+20:22  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+21:19  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+
+./src/pages/index.tsx
+61:56  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+62:44  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+65:52  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+83:79  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+210:19  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+420:17  Warning: 
+Using `<img>` could 
+result in slower LCP 
+and higher bandwidth. 
+Consider using 
+`<Image />` from 
+`next/image` to 
+automatically 
+optimize images. This 
+may incur additional 
+usage or cost from 
+your provider. See: ht
+tps://nextjs.org/docs/
+messages/no-img-elemen
+t  @next/next/no-img-e
+lement
+928:46  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+935:34  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+
+./src/services/api-cli
+ent.ts
+208:32  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+210:29  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+222:32  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+224:29  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+236:32  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+238:29  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+250:32  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+252:29  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+264:32  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+266:29  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+
+./src/services/booking
+.service.ts
+266:13  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+268:38  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+276:87  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+281:24  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+
+./src/services/email.s
+ervice.ts
+43:23  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+44:25  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+
+./src/services/hotels.
+service.ts
+16:48  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+17:24  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+23:62  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+25:24  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+31:49  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+32:24  Warning: 
+Unexpected any. 
+Specify a different 
+type.  @typescript-esl
+int/no-explicit-any
+
+info  - Need to 
+disable some ESLint 
+rules? Learn more 
+here: https://nextjs.o
+rg/docs/basic-features
+/eslint#disabling-rule
+s

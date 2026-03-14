@@ -1,5 +1,5 @@
 /**
- * Unified API Service for Kyogong Management System
+ * Unified API Service for FamousGateHotels Management System
  * All API calls should go through this service for consistency
  */
 
@@ -3812,8 +3812,8 @@ export const pettyCashAPI = {
 
 export const paymentsVerificationAPI = {
   // Get all payments with filters
-  getPayments: (params?: { 
-    branch_id?: number; 
+  getPayments: (params?: {
+    branch_id?: number;
     status?: 'pending' | 'accountant_verified' | 'auditor_verified' | 'flagged' | 'void';
     payment_method?: string;
     start_date?: string;
@@ -3829,7 +3829,7 @@ export const paymentsVerificationAPI = {
   },
 
   // Get single payment by ID
-  getPaymentById: (id: string) => 
+  getPaymentById: (id: string) =>
     fetchAPI<any>(`/payments-verification/${id}`),
 
   // Get payment statistics
@@ -3851,10 +3851,10 @@ export const paymentsVerificationAPI = {
     bill_reference?: string;
     bill_id?: string;
     recorder_notes?: string;
-  }) => 
-    fetchAPI<any>('/payments-verification', { 
-      method: 'POST', 
-      body: JSON.stringify(data) 
+  }) =>
+    fetchAPI<any>('/payments-verification', {
+      method: 'POST',
+      body: JSON.stringify(data)
     }),
 
   // Branch Accountant verifies payment

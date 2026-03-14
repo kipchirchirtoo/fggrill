@@ -17,11 +17,9 @@ export default function Document() {
         {/* SEO Meta Tags */}
         <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
         <meta name="googlebot" content="index, follow" />
-        <link rel="canonical" href="https://famousgatehotels.com" />
         <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
 
-        {/* Open Graph / Facebook */}
-        <meta property="og:type" content="website" />
+        {/* Global Open Graph Defaults (can be overridden) */}
         <meta property="og:site_name" content="FamousGate Hotels" />
         <meta property="og:locale" content="en_US" />
 

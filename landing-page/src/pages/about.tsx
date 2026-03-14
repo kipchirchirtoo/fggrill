@@ -1,22 +1,28 @@
+import { SEO } from '@/components/SEO';
 import Head from 'next/head';
 import { Header, Footer } from '@/components/layout';
 
 export default function About() {
   return (
     <>
+      <SEO
+        title="About Us - FamousGate Hotels | Luxury Accommodation in Nairobi"
+        description="Discover FamousGate Hotels - your premier destination for luxury accommodation in Nairobi, Kenya. Experience world-class hospitality and comfort."
+        url="https://famousgatehotels.com/about"
+        breadcrumbs={[
+          { name: "About Us", item: "/about" }
+        ]}
+        schemaList={[
+          JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "AboutPage",
+            "name": "About FamousGate Hotels",
+            "description": "At FamousGate Hotels, we redefine luxury hospitality in Nairobi."
+          })
+        ]}
+      />
       <Head>
-        <title>About Us - FamousGate Hotels | Luxury Accommodation in Nairobi</title>
-        <meta name="description" content="Discover FamousGate Hotels - your premier destination for luxury accommodation in Nairobi, Kenya. Experience world-class hospitality and comfort." />
         <meta name="keywords" content="about famousgate hotels, luxury hotels nairobi, hotel experience kenya, hospitality nairobi" />
-        
-        {/* Open Graph */}
-        <meta property="og:title" content="About Us - FamousGate Hotels" />
-        <meta property="og:description" content="Discover FamousGate Hotels - your premier destination for luxury accommodation in Nairobi, Kenya." />
-        <meta property="og:url" content="https://famousgatehotels.com/about" />
-        
-        {/* Twitter Card */}
-        <meta name="twitter:title" content="About Us - FamousGate Hotels" />
-        <meta name="twitter:description" content="Discover FamousGate Hotels - your premier destination for luxury accommodation in Nairobi, Kenya." />
       </Head>
 
       <Header />
@@ -38,13 +44,13 @@ export default function About() {
             <div className="lp-about-content">
               <h2 className="lp-section__title">Welcome to FamousGate Hotels</h2>
               <p className="lp-about-content__text">
-                At FamousGate Hotels, we redefine luxury hospitality in Nairobi. Our commitment to excellence 
-                ensures every guest experiences unparalleled comfort, world-class amenities, and personalized service 
+                At FamousGate Hotels, we redefine luxury hospitality in Nairobi. Our commitment to excellence
+                ensures every guest experiences unparalleled comfort, world-class amenities, and personalized service
                 that exceeds expectations.
               </p>
               <p className="lp-about-content__text">
-                With multiple locations across Nairobi, we offer convenient access to the city&apos;s business districts, 
-                cultural attractions, and entertainment venues. Each of our hotels is designed to provide a sanctuary 
+                With multiple locations across Nairobi, we offer convenient access to the city&apos;s business districts,
+                cultural attractions, and entertainment venues. Each of our hotels is designed to provide a sanctuary
                 of comfort and elegance, whether you&apos;re traveling for business or leisure.
               </p>
             </div>

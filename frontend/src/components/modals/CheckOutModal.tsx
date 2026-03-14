@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   X, Search, CheckCircle, User, Bed, Calendar,
-  Clock, DollarSign, FileText, LogOut
+  Clock, DollarSign, FileText, LogOut,
+  Smartphone, CreditCard, Banknote
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { bookingsAPI, folioAPI } from '@/lib/api';
@@ -102,7 +103,7 @@ export function CheckOutModal({ isOpen, onClose, initialData }: CheckOutModalPro
         const folio = folioRes.data?.folio || folioRes.folio || folioRes.data || folioRes;
         totalAmount = folio?.total_charges ?? folio?.totalCharges ?? 0;
         balance = folio?.balance ?? 0;
-      } catch {}
+      } catch { }
 
       setSelectedStay({
         id: found.id,
@@ -227,21 +228,46 @@ export function CheckOutModal({ isOpen, onClose, initialData }: CheckOutModalPro
                 />
               </div>
 
-              {/* Actions */}
-              <div className="flex justify-end pt-4 border-t">
-                <button
-                  onClick={handleCheckOut}
-                  disabled={!selectedStay.isPaid}
-                  className={`px-6 py-2 rounded-ios-lg flex items-center gap-2 ${
-                    selectedStay.isPaid 
-                      ? 'bg-green-600 text-white hover:bg-green-700' 
-                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  <LogOut className="h-4 w-4" />
-                  Complete Check-Out
-                </button>
-              </div>
+              {/* Payment Actions - Only show if there is a balance */}
+              {!selectedStay.isPaid ? (
+                <div className="space-y-3 pt-4 border-t">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Settle Outstanding Balance</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <button
+                      onClick={() => window.location.href = `/dashboard/cashier?billId=${selectedStay.id}&method=mpesa`}
+                      className="flex flex-col items-center justify-center gap-2 p-4 bg-green-50 text-green-700 rounded-xl hover:bg-green-100 transition-colors border border-green-200"
+                    >
+                      <Smartphone className="h-6 w-6" />
+                      <span className="text-xs font-bold">M-PESA</span>
+                    </button>
+                    <button
+                      onClick={() => window.location.href = `/dashboard/cashier?billId=${selectedStay.id}&method=card`}
+                      className="flex flex-col items-center justify-center gap-2 p-4 bg-blue-50 text-blue-700 rounded-xl hover:bg-blue-100 transition-colors border border-blue-200"
+                    >
+                      <CreditCard className="h-6 w-6" />
+                      <span className="text-xs font-bold">CARD</span>
+                    </button>
+                    <button
+                      onClick={() => window.location.href = `/dashboard/cashier?billId=${selectedStay.id}&method=cash`}
+                      className="flex flex-col items-center justify-center gap-2 p-4 bg-orange-50 text-orange-700 rounded-xl hover:bg-orange-100 transition-colors border border-orange-200"
+                    >
+                      <Banknote className="h-6 w-6" />
+                      <span className="text-xs font-bold">CASH</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Checkout Action - Only if paid */
+                <div className="flex justify-end pt-4 border-t">
+                  <button
+                    onClick={handleCheckOut}
+                    className="w-full py-4 bg-green-600 text-white rounded-xl flex items-center justify-center gap-2 hover:bg-green-700 shadow-lg shadow-green-200 transition-all font-bold text-lg"
+                  >
+                    <LogOut className="h-6 w-6" />
+                    Complete Check-Out
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
