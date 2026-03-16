@@ -64,7 +64,8 @@ import {
   createStockRequest,
   reviewStockRequest,
   approveStockRequest,
-  rejectStockRequest
+  rejectStockRequest,
+  getBranchPerformance
 } from '../controllers/storekeeping/stock-requests.controller';
 
 import {
@@ -223,6 +224,7 @@ const auditorRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.A
 router.post('/stock-requests', authorize(branchRoles), createStockRequest);
 router.get('/stock-requests', authorize(branchRoles), getStockRequests);
 router.get('/stock-requests/pending', authorize(centralRoles), getPendingRequests);
+router.get('/stock-requests/branch-performance/:branchId', authorize(auditorRoles), getBranchPerformance);
 router.get('/stock-requests/:id', authorize(branchRoles), getStockRequest);
 router.put('/stock-requests/:id/review', authorize(auditorRoles), reviewStockRequest);
 router.put('/stock-requests/:id/approve', authorize(auditorRoles), approveStockRequest);
